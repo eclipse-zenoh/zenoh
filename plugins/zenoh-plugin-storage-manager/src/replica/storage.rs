@@ -22,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::ZBuf;
-use zenoh::encoding::EncodingMapping;
+use zenoh::encoding::{DefaultEncodingMapping, EncodingMapping};
 use zenoh::prelude::r#async::*;
 use zenoh::query::ConsolidationMode;
 use zenoh::time::{Timestamp, NTP64};
@@ -694,7 +694,8 @@ fn construct_update(data: String) -> Update {
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).encoding(DefaultEncoder::parse(result.2.as_str()).unwrap()); // @TODO: remove the unwrap()
+    let value =
+        Value::new(payload).encoding(DefaultEncodingMapping::parse(result.2.as_str()).unwrap()); // @TODO: remove the unwrap()
     let data = StoredData {
         value,
         timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()

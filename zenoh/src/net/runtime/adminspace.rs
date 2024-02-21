@@ -22,7 +22,7 @@ use crate::prelude::{
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
-use crate::DefaultEncoder;
+use crate::DefaultEncoding;
 use async_std::task;
 use log::{error, trace};
 use serde_json::json;
@@ -734,7 +734,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             if let Err(e) = query.reply(Ok(Sample::new(
                                 key_expr,
-                                Value::from(response.value).encoding(DefaultEncoder::TEXT_PLAIN),
+                                Value::from(response.value).encoding(DefaultEncoding::TEXT_PLAIN),
                             )))
                             .res()
                             {

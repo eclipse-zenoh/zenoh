@@ -14,7 +14,7 @@
 use crate::admin;
 use crate::config::Config;
 use crate::config::Notifier;
-use crate::encoding::DefaultEncoder;
+use crate::encoding::DefaultEncoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
@@ -2270,7 +2270,7 @@ impl Primitives for Session {
                             },
                             None => Value {
                                 payload: ZBuf::empty(),
-                                encoding: DefaultEncoder::EMPTY,
+                                encoding: DefaultEncoding::EMPTY,
                             },
                         };
                         let replier_id = match e.ext_sinfo {

@@ -17,7 +17,7 @@ use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use zenoh_result::ZResult;
 
 use crate::buffers::ZBuf;
-use crate::encoding::{Decoder, DefaultEncoder, Encoder};
+use crate::encoding::{Decoder, DefaultEncoding, Encoder};
 use crate::prelude::{Encoding, SplitBuffer};
 
 /// A zenoh Value.
@@ -62,9 +62,9 @@ impl Value {
     }
 }
 
-// Provide some facilities in the Rust API to encode/decode [`Value`] with an `Encoder`.
+/// Provide some facilities specific to the Rust API to encode/decode a [`Value`] with an `Encoder`.
 impl Value {
-    /// Encode an object of type `T` as a [`Value`] using the [`DefaultEncoder`].
+    /// Encode an object of type `T` as a [`Value`] using the [`DefaultEncoding`].
     ///
     /// ```rust
     /// use zenoh::value::Value;
@@ -76,9 +76,9 @@ impl Value {
     /// ```
     pub fn encode<T>(t: T) -> Self
     where
-        DefaultEncoder: Encoder<T>,
+        DefaultEncoding: Encoder<T>,
     {
-        DefaultEncoder::encode(t)
+        DefaultEncoding::encode(t)
     }
 
     /// Encode an object of type `T` as a [`Value`] using a provided [`Encoder`].
@@ -122,7 +122,7 @@ impl Value {
         M::encode(t)
     }
 
-    /// Decode an object of type `T` from a [`Value`] using the [`DefaultEncoder`].
+    /// Decode an object of type `T` from a [`Value`] using the [`DefaultEncoding`].
     ///
     /// ```rust
     /// use zenoh::value::Value;
@@ -134,9 +134,9 @@ impl Value {
     /// ```
     pub fn decode<T>(&self) -> ZResult<T>
     where
-        DefaultEncoder: Decoder<T>,
+        DefaultEncoding: Decoder<T>,
     {
-        DefaultEncoder::decode(self)
+        DefaultEncoding::decode(self)
     }
 
     /// Decode an object of type `T` from a [`Value`] using a provided [`Encoder`].
@@ -181,10 +181,10 @@ impl Value {
     }
 }
 
-/// Build a [`Value`] from any type `T` supported by the [`DefaultEncoder`].
+/// Build a [`Value`] from any type `T` supported by the [`DefaultEncoding`].
 impl<T> From<T> for Value
 where
-    DefaultEncoder: Encoder<T>,
+    DefaultEncoding: Encoder<T>,
 {
     fn from(t: T) -> Self {
         Value::encode(t)

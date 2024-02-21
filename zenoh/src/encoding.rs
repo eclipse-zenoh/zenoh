@@ -31,15 +31,9 @@ pub trait EncodingMapping {
         S: Into<String>;
 }
 
-/// Default encoder provided with Zenoh to facilitate the encoding and decoding
-/// of Values in the Rust API. Please note that Zenoh does not impose any
-/// encoding and users are free to use any encoder they like.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct DefaultEncoder;
+pub struct DefaultEncodingMapping;
 
-pub struct DefaultMapping;
-
-impl DefaultMapping {
+impl DefaultEncodingMapping {
     pub const EMPTY: EncodingPrefix = 0;
     pub const APP_OCTET_STREAM: EncodingPrefix = 1;
     pub const APP_CUSTOM: EncodingPrefix = 2;
@@ -61,30 +55,6 @@ impl DefaultMapping {
     pub const IMAGE_JPEG: EncodingPrefix = 18;
     pub const IMAGE_PNG: EncodingPrefix = 19;
     pub const IMAGE_GIF: EncodingPrefix = 20;
-}
-
-impl DefaultEncoder {
-    pub const EMPTY: Encoding = Encoding::new(DefaultMapping::EMPTY);
-    pub const APP_OCTET_STREAM: Encoding = Encoding::new(DefaultMapping::APP_OCTET_STREAM);
-    pub const APP_CUSTOM: Encoding = Encoding::new(2);
-    pub const TEXT_PLAIN: Encoding = Encoding::new(3);
-    pub const APP_PROPERTIES: Encoding = Encoding::new(4);
-    pub const APP_JSON: Encoding = Encoding::new(5);
-    pub const APP_SQL: Encoding = Encoding::new(6);
-    pub const APP_INTEGER: Encoding = Encoding::new(7);
-    pub const APP_FLOAT: Encoding = Encoding::new(8);
-    pub const APP_XML: Encoding = Encoding::new(9);
-    pub const APP_XHTML_XML: Encoding = Encoding::new(10);
-    pub const APP_XWWW_FORM_URLENCODED: Encoding = Encoding::new(11);
-    pub const TEXT_JSON: Encoding = Encoding::new(12);
-    pub const TEXT_HTML: Encoding = Encoding::new(13);
-    pub const TEXT_XML: Encoding = Encoding::new(14);
-    pub const TEXT_CSS: Encoding = Encoding::new(15);
-    pub const TEXT_CSV: Encoding = Encoding::new(16);
-    pub const TEXT_JAVASCRIPT: Encoding = Encoding::new(17);
-    pub const IMAGE_JPEG: Encoding = Encoding::new(18);
-    pub const IMAGE_PNG: Encoding = Encoding::new(19);
-    pub const IMAGE_GIF: Encoding = Encoding::new(20);
 
     // A perfect hashmap for fast lookup of prefixes
     pub(super) const KNOWN_PREFIX: phf::OrderedMap<EncodingPrefix, &'static str> = phf_ordered_map! {
@@ -137,45 +107,76 @@ impl DefaultEncoder {
     };
 }
 
-impl EncodingMapping for DefaultEncoder {
-    // Given a numeric prefix ID returns its string representation
-    fn prefix_to_str(&self, p: zenoh_protocol::core::EncodingPrefix) -> &'static str {
+impl EncodingMapping for DefaultEncodingMapping {
+    /// Given a numeric prefix ID returns its string representation
+    fn prefix_to_str(&self, p: EncodingPrefix) -> &'static str {
         match Self::KNOWN_PREFIX.get(&p) {
             Some(p) => p,
             None => "unknown",
         }
     }
 
-    // Given the string representation of a prefix returns its prefix ID.
-    // Empty is returned in case the prefix is unknown.
-    fn str_to_prefix(&self, s: &str) -> zenoh_protocol::core::EncodingPrefix {
+    /// Given the string representation of a prefix returns its prefix ID.
+    /// Empty is returned in case the prefix is unknown.
+    fn str_to_prefix(&self, s: &str) -> EncodingPrefix {
         match Self::KNOWN_STRING.get(s) {
             Some(p) => *p,
-            None => Self::EMPTY.prefix(),
+            None => Self::EMPTY,
         }
     }
 
-    // Parse a string into a valid Encoding. This functions performs the necessary
-    // prefix mapping and suffix substring when parsing the input.
+    /// Parse a string into a valid Encoding. This functions performs the necessary
+    /// prefix mapping and suffix substring when parsing the input.
     fn parse<S>(t: S) -> ZResult<Encoding>
     where
         S: Into<String>,
     {
         fn _parse(mut t: String) -> ZResult<Encoding> {
             if t.is_empty() {
-                return Ok(DefaultEncoder::EMPTY);
+                return Ok(DefaultEncoding::EMPTY);
             }
 
             // Skip empty string mapping
-            for (s, p) in DefaultEncoder::KNOWN_STRING.entries().skip(1) {
+            for (s, p) in DefaultEncodingMapping::KNOWN_STRING.entries().skip(1) {
                 if let Some(i) = t.find(s) {
                     return Encoding::new(*p).with_suffix(t.split_off(i + s.len()));
                 }
             }
-            DefaultEncoder::EMPTY.with_suffix(t.to_string())
+            DefaultEncoding::EMPTY.with_suffix(t)
         }
         _parse(t.into())
     }
+}
+
+/// Default encoder provided with Zenoh to facilitate the encoding and decoding
+/// of Values in the Rust API. Please note that Zenoh does not impose any
+/// encoding and users are free to use any encoder they like.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DefaultEncoding;
+
+impl DefaultEncoding {
+    pub const EMPTY: Encoding = Encoding::new(DefaultEncodingMapping::EMPTY);
+    pub const APP_OCTET_STREAM: Encoding = Encoding::new(DefaultEncodingMapping::APP_OCTET_STREAM);
+    pub const APP_CUSTOM: Encoding = Encoding::new(DefaultEncodingMapping::APP_CUSTOM);
+    pub const TEXT_PLAIN: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_PLAIN);
+    pub const APP_PROPERTIES: Encoding = Encoding::new(DefaultEncodingMapping::APP_PROPERTIES);
+    pub const APP_JSON: Encoding = Encoding::new(DefaultEncodingMapping::APP_JSON);
+    pub const APP_SQL: Encoding = Encoding::new(DefaultEncodingMapping::APP_SQL);
+    pub const APP_INTEGER: Encoding = Encoding::new(DefaultEncodingMapping::APP_INTEGER);
+    pub const APP_FLOAT: Encoding = Encoding::new(DefaultEncodingMapping::APP_FLOAT);
+    pub const APP_XML: Encoding = Encoding::new(DefaultEncodingMapping::APP_XML);
+    pub const APP_XHTML_XML: Encoding = Encoding::new(DefaultEncodingMapping::APP_XHTML_XML);
+    pub const APP_XWWW_FORM_URLENCODED: Encoding =
+        Encoding::new(DefaultEncodingMapping::APP_XWWW_FORM_URLENCODED);
+    pub const TEXT_JSON: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_JSON);
+    pub const TEXT_HTML: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_HTML);
+    pub const TEXT_XML: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_XML);
+    pub const TEXT_CSS: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_CSS);
+    pub const TEXT_CSV: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_CSV);
+    pub const TEXT_JAVASCRIPT: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_JAVASCRIPT);
+    pub const IMAGE_JPEG: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_JPEG);
+    pub const IMAGE_PNG: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_PNG);
+    pub const IMAGE_GIF: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_GIF);
 }
 
 // Encoder
@@ -188,18 +189,18 @@ pub trait Decoder<T> {
 }
 
 // Bytes conversion
-impl Encoder<ZBuf> for DefaultEncoder {
+impl Encoder<ZBuf> for DefaultEncoding {
     fn encode(t: ZBuf) -> Value {
         Value {
             payload: t,
-            encoding: DefaultEncoder::APP_OCTET_STREAM,
+            encoding: DefaultEncoding::APP_OCTET_STREAM,
         }
     }
 }
 
-impl Decoder<ZBuf> for DefaultEncoder {
+impl Decoder<ZBuf> for DefaultEncoding {
     fn decode(v: &Value) -> ZResult<ZBuf> {
-        if v.encoding == DefaultEncoder::APP_OCTET_STREAM {
+        if v.encoding == DefaultEncoding::APP_OCTET_STREAM {
             Ok(v.payload.clone())
         } else {
             Err(zerror!("{:?} can not be converted into String", v).into())
@@ -207,32 +208,32 @@ impl Decoder<ZBuf> for DefaultEncoder {
     }
 }
 
-impl Encoder<Vec<u8>> for DefaultEncoder {
+impl Encoder<Vec<u8>> for DefaultEncoding {
     fn encode(t: Vec<u8>) -> Value {
         Self::encode(ZBuf::from(t))
     }
 }
 
-impl Encoder<&[u8]> for DefaultEncoder {
+impl Encoder<&[u8]> for DefaultEncoding {
     fn encode(t: &[u8]) -> Value {
         Self::encode(t.to_vec())
     }
 }
 
-impl Decoder<Vec<u8>> for DefaultEncoder {
+impl Decoder<Vec<u8>> for DefaultEncoding {
     fn decode(v: &Value) -> ZResult<Vec<u8>> {
         let v: ZBuf = Self::decode(v)?;
         Ok(v.contiguous().to_vec())
     }
 }
 
-impl<'a> Encoder<Cow<'a, [u8]>> for DefaultEncoder {
+impl<'a> Encoder<Cow<'a, [u8]>> for DefaultEncoding {
     fn encode(t: Cow<'a, [u8]>) -> Value {
         Self::encode(ZBuf::from(t.to_vec()))
     }
 }
 
-impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoder {
+impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoding {
     fn decode(v: &Value) -> ZResult<Cow<'a, [u8]>> {
         let v: Vec<u8> = Self::decode(v)?;
         Ok(Cow::Owned(v))
@@ -240,24 +241,24 @@ impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoder {
 }
 
 // String
-impl Encoder<String> for DefaultEncoder {
+impl Encoder<String> for DefaultEncoding {
     fn encode(s: String) -> Value {
         Value {
             payload: ZBuf::from(s.into_bytes()),
-            encoding: DefaultEncoder::TEXT_PLAIN,
+            encoding: DefaultEncoding::TEXT_PLAIN,
         }
     }
 }
 
-impl Encoder<&str> for DefaultEncoder {
+impl Encoder<&str> for DefaultEncoding {
     fn encode(s: &str) -> Value {
         Self::encode(s.to_string())
     }
 }
 
-impl Decoder<String> for DefaultEncoder {
+impl Decoder<String> for DefaultEncoding {
     fn decode(v: &Value) -> ZResult<String> {
-        if v.encoding == DefaultEncoder::TEXT_PLAIN {
+        if v.encoding == DefaultEncoding::TEXT_PLAIN {
             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
         } else {
             Err(zerror!("{:?} can not be converted into String", v).into())
@@ -265,13 +266,13 @@ impl Decoder<String> for DefaultEncoder {
     }
 }
 
-impl<'a> Encoder<Cow<'a, str>> for DefaultEncoder {
+impl<'a> Encoder<Cow<'a, str>> for DefaultEncoding {
     fn encode(s: Cow<'a, str>) -> Value {
         Self::encode(s.to_string())
     }
 }
 
-impl<'a> Decoder<Cow<'a, str>> for DefaultEncoder {
+impl<'a> Decoder<Cow<'a, str>> for DefaultEncoding {
     fn decode(v: &Value) -> ZResult<Cow<'a, str>> {
         let v: String = Self::decode(v)?;
         Ok(Cow::Owned(v))
@@ -279,7 +280,7 @@ impl<'a> Decoder<Cow<'a, str>> for DefaultEncoder {
 }
 
 // Sample
-impl Encoder<Sample> for DefaultEncoder {
+impl Encoder<Sample> for DefaultEncoding {
     fn encode(t: Sample) -> Value {
         t.value
     }
@@ -288,7 +289,7 @@ impl Encoder<Sample> for DefaultEncoder {
 // Integers
 macro_rules! impl_int {
     ($t:ty, $encoding:expr) => {
-        impl Encoder<$t> for DefaultEncoder {
+        impl Encoder<$t> for DefaultEncoding {
             fn encode(t: $t) -> Value {
                 Value {
                     payload: ZBuf::from(t.to_string().into_bytes()),
@@ -297,13 +298,13 @@ macro_rules! impl_int {
             }
         }
 
-        impl Encoder<&$t> for DefaultEncoder {
+        impl Encoder<&$t> for DefaultEncoding {
             fn encode(t: &$t) -> Value {
                 Self::encode(*t)
             }
         }
 
-        impl Decoder<$t> for DefaultEncoder {
+        impl Decoder<$t> for DefaultEncoding {
             fn decode(v: &Value) -> ZResult<$t> {
                 if v.encoding == $encoding {
                     let v: $t = std::str::from_utf8(&v.payload.contiguous())
@@ -319,41 +320,41 @@ macro_rules! impl_int {
     };
 }
 
-impl_int!(u8, DefaultEncoder::APP_INTEGER);
-impl_int!(u16, DefaultEncoder::APP_INTEGER);
-impl_int!(u32, DefaultEncoder::APP_INTEGER);
-impl_int!(u64, DefaultEncoder::APP_INTEGER);
-impl_int!(usize, DefaultEncoder::APP_INTEGER);
+impl_int!(u8, DefaultEncoding::APP_INTEGER);
+impl_int!(u16, DefaultEncoding::APP_INTEGER);
+impl_int!(u32, DefaultEncoding::APP_INTEGER);
+impl_int!(u64, DefaultEncoding::APP_INTEGER);
+impl_int!(usize, DefaultEncoding::APP_INTEGER);
 
-impl_int!(i8, DefaultEncoder::APP_INTEGER);
-impl_int!(i16, DefaultEncoder::APP_INTEGER);
-impl_int!(i32, DefaultEncoder::APP_INTEGER);
-impl_int!(i64, DefaultEncoder::APP_INTEGER);
-impl_int!(isize, DefaultEncoder::APP_INTEGER);
+impl_int!(i8, DefaultEncoding::APP_INTEGER);
+impl_int!(i16, DefaultEncoding::APP_INTEGER);
+impl_int!(i32, DefaultEncoding::APP_INTEGER);
+impl_int!(i64, DefaultEncoding::APP_INTEGER);
+impl_int!(isize, DefaultEncoding::APP_INTEGER);
 
 // Floats
-impl_int!(f32, DefaultEncoder::APP_FLOAT);
-impl_int!(f64, DefaultEncoder::APP_FLOAT);
+impl_int!(f32, DefaultEncoding::APP_FLOAT);
+impl_int!(f64, DefaultEncoding::APP_FLOAT);
 
 // JSON
-impl Encoder<&serde_json::Value> for DefaultEncoder {
+impl Encoder<&serde_json::Value> for DefaultEncoding {
     fn encode(t: &serde_json::Value) -> Value {
         Value {
             payload: ZBuf::from(t.to_string().into_bytes()),
-            encoding: DefaultEncoder::APP_JSON,
+            encoding: DefaultEncoding::APP_JSON,
         }
     }
 }
 
-impl Encoder<serde_json::Value> for DefaultEncoder {
+impl Encoder<serde_json::Value> for DefaultEncoding {
     fn encode(t: serde_json::Value) -> Value {
         Self::encode(&t)
     }
 }
 
-impl Decoder<serde_json::Value> for DefaultEncoder {
+impl Decoder<serde_json::Value> for DefaultEncoding {
     fn decode(v: &Value) -> ZResult<serde_json::Value> {
-        if v.encoding == DefaultEncoder::APP_JSON || v.encoding == DefaultEncoder::TEXT_JSON {
+        if v.encoding == DefaultEncoding::APP_JSON || v.encoding == DefaultEncoding::TEXT_JSON {
             let r: serde_json::Value = serde::Deserialize::deserialize(
                 &mut serde_json::Deserializer::from_slice(&v.payload.contiguous()),
             )
@@ -366,24 +367,24 @@ impl Decoder<serde_json::Value> for DefaultEncoder {
 }
 
 // Properties
-impl Encoder<&Properties> for DefaultEncoder {
+impl Encoder<&Properties> for DefaultEncoding {
     fn encode(t: &Properties) -> Value {
         Value {
             payload: ZBuf::from(t.to_string().into_bytes()),
-            encoding: DefaultEncoder::APP_PROPERTIES,
+            encoding: DefaultEncoding::APP_PROPERTIES,
         }
     }
 }
 
-impl Encoder<Properties> for DefaultEncoder {
+impl Encoder<Properties> for DefaultEncoding {
     fn encode(t: Properties) -> Value {
         Self::encode(&t)
     }
 }
 
-impl Decoder<Properties> for DefaultEncoder {
+impl Decoder<Properties> for DefaultEncoding {
     fn decode(v: &Value) -> ZResult<Properties> {
-        if v.encoding == DefaultEncoder::APP_PROPERTIES {
+        if v.encoding == DefaultEncoding::APP_PROPERTIES {
             let ps = Properties::from(
                 std::str::from_utf8(&v.payload.contiguous()).map_err(|e| zerror!("{}", e))?,
             );
@@ -396,17 +397,17 @@ impl Decoder<Properties> for DefaultEncoder {
 
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
-impl Encoder<Arc<SharedMemoryBuf>> for DefaultEncoder {
+impl Encoder<Arc<SharedMemoryBuf>> for DefaultEncoding {
     fn encode(t: Arc<SharedMemoryBuf>) -> Value {
         Value {
             payload: t.into(),
-            encoding: DefaultEncoder::APP_OCTET_STREAM,
+            encoding: DefaultEncoding::APP_OCTET_STREAM,
         }
     }
 }
 
 #[cfg(feature = "shared-memory")]
-impl Encoder<Box<SharedMemoryBuf>> for DefaultEncoder {
+impl Encoder<Box<SharedMemoryBuf>> for DefaultEncoding {
     fn encode(t: Box<SharedMemoryBuf>) -> Value {
         let smb: Arc<SharedMemoryBuf> = t.into();
         Self::encode(smb)
@@ -414,11 +415,11 @@ impl Encoder<Box<SharedMemoryBuf>> for DefaultEncoder {
 }
 
 #[cfg(feature = "shared-memory")]
-impl Encoder<SharedMemoryBuf> for DefaultEncoder {
+impl Encoder<SharedMemoryBuf> for DefaultEncoding {
     fn encode(t: SharedMemoryBuf) -> Value {
         Value {
             payload: t.into(),
-            encoding: DefaultEncoder::APP_OCTET_STREAM,
+            encoding: DefaultEncoding::APP_OCTET_STREAM,
         }
     }
 }

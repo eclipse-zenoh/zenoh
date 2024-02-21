@@ -21,7 +21,7 @@ use zenoh_protocol::core::{Encoding, EncodingPrefix};
 
 impl LCodec<&Encoding> for Zenoh080 {
     fn w_len(self, x: &Encoding) -> usize {
-        1 + self.w_len(x.suffix())
+        self.w_len(x.prefix()) + self.w_len(x.suffix())
     }
 }
 
@@ -34,6 +34,7 @@ where
     fn write(self, writer: &mut W, x: &Encoding) -> Self::Output {
         let zodec = Zenoh080Bounded::<EncodingPrefix>::new();
         zodec.write(&mut *writer, x.prefix())?;
+        let zodec = Zenoh080Bounded::<u8>::new();
         zodec.write(&mut *writer, x.suffix())?;
         Ok(())
     }
@@ -48,6 +49,7 @@ where
     fn read(self, reader: &mut R) -> Result<Encoding, Self::Error> {
         let zodec = Zenoh080Bounded::<EncodingPrefix>::new();
         let prefix: EncodingPrefix = zodec.read(&mut *reader)?;
+        let zodec = Zenoh080Bounded::<u8>::new();
         let suffix: String = zodec.read(&mut *reader)?;
 
         let mut encoding: Encoding = Encoding::new(prefix);
