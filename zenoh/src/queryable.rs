@@ -225,7 +225,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     },
                     payload: ResponseBody::Reply(zenoh::Reply {
                         timestamp: data_info.timestamp,
-                        encoding: data_info.encoding.unwrap_or_default().into(),
+                        encoding: data_info.encoding.unwrap_or_default(),
                         ext_sinfo: if data_info.source_id.is_some() || data_info.source_sn.is_some()
                         {
                             Some(zenoh::reply::ext::SourceInfoType {
@@ -269,7 +269,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,
                             payload: payload.payload,
-                            encoding: payload.encoding.into(),
+                            encoding: payload.encoding,
                         }),
                         code: 0, // TODO
                     }),

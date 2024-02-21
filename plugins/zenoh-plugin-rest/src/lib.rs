@@ -27,6 +27,7 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
+use zenoh::encoding::EncodingMapping;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::properties::Properties;
@@ -49,19 +50,19 @@ const RAW_KEY: &str = "_raw";
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
-        p if p.starts_with(Encoding::TEXT_PLAIN)
-            || p.starts_with(Encoding::APP_XWWW_FORM_URLENCODED) =>
+        p if p.starts_with(DefaultEncoder::TEXT_PLAIN)
+            || p.starts_with(DefaultEncoder::APP_XWWW_FORM_URLENCODED) =>
         {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
-        p if p.starts_with(Encoding::APP_PROPERTIES) => {
+        p if p.starts_with(DefaultEncoder::APP_PROPERTIES) => {
             // convert to Json string for special characters escaping
             serde_json::json!(*Properties::from(value.to_string())).to_string()
         }
-        p if p.starts_with(Encoding::APP_JSON)
-            || p.starts_with(Encoding::APP_INTEGER)
-            || p.starts_with(Encoding::APP_FLOAT) =>
+        p if p.starts_with(DefaultEncoder::APP_JSON)
+            || p.starts_with(DefaultEncoder::APP_INTEGER)
+            || p.starts_with(DefaultEncoder::APP_FLOAT) =>
         {
             value.to_string()
         }
@@ -403,7 +404,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         let mut query = req.state().0.get(&selector).consolidation(consolidation);
         if !body.is_empty() {
             let encoding = match req.content_type() {
-                Some(m) => match Encoding::try_from(m.to_string()) {
+                Some(m) => match DefaultEncoder::parse(m.to_string().as_str()) {
                     Ok(e) => e,
                     Err(e) => {
                         return Ok(response(
@@ -452,7 +453,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             };
 
             let encoding = match req.content_type() {
-                Some(m) => match Encoding::try_from(m.to_string()) {
+                Some(m) => match DefaultEncoder::parse(m.to_string().as_str()) {
                     Ok(e) => e,
                     Err(e) => {
                         return Ok(response(

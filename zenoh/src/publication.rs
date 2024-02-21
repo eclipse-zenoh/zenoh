@@ -824,7 +824,7 @@ fn resolve_put(
                     }
                     PushBody::Put(Put {
                         timestamp,
-                        encoding: value.encoding.clone().into(),
+                        encoding: value.encoding.clone(),
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
