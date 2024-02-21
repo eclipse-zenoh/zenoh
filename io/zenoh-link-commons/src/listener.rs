@@ -11,21 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::net::{SocketAddr, TcpListener, TcpStream};
-use async_std::prelude::*;
+use async_std::net::SocketAddr;
 use async_std::task;
 use async_std::task::JoinHandle;
-use async_trait::async_trait;
 use std::collections::HashMap;
-use std::convert::TryInto;
-use std::fmt;
-use std::net::{IpAddr, Shutdown};
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
 use zenoh_core::{zread, zwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{bail, zerror, Error as ZError, ZResult};
+use zenoh_result::{zerror, ZResult};
 use zenoh_sync::Signal;
 
 pub struct UnicastListener {
@@ -56,13 +51,13 @@ pub struct UnicastListeners {
 }
 
 impl UnicastListeners {
-    fn new() -> UnicastListeners {
+    pub fn new() -> UnicastListeners {
         UnicastListeners {
             listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    async fn add_listener(
+    pub async fn add_listener(
         &self,
         endpoint: EndPoint,
         addr: SocketAddr,
@@ -86,7 +81,7 @@ impl UnicastListeners {
         Ok(())
     }
 
-    async fn del_listener(&self, addr: SocketAddr) -> ZResult<()> {
+    pub async fn del_listener(&self, addr: SocketAddr) -> ZResult<()> {
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
             zerror!(
@@ -101,14 +96,14 @@ impl UnicastListeners {
         listener.handle.await
     }
 
-    fn get_endpoints(&self) -> Vec<EndPoint> {
+    pub fn get_endpoints(&self) -> Vec<EndPoint> {
         zread!(self.listeners)
             .values()
             .map(|l| l.endpoint.clone())
             .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
+    pub fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
 
         let guard = zread!(self.listeners);
