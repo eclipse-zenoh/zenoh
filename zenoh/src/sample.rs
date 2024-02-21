@@ -528,7 +528,7 @@ pub struct QoS {
 impl QoS {
     /// Gets priority of the message.
     pub fn priority(&self) -> Priority {
-        let priority = match Priority::try_from(self.inner.get_priority()) {
+        match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
             Err(e) => {
                 log::trace!(
@@ -537,8 +537,7 @@ impl QoS {
                 );
                 Priority::default()
             }
-        };
-        priority
+        }
     }
 
     /// Gets congestion control of the message.
