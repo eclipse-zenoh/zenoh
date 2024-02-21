@@ -22,7 +22,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, UnicastListeners,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -199,14 +200,14 @@ impl fmt::Debug for LinkUnicastTcp {
 
 pub struct LinkManagerUnicastTcp {
     manager: NewLinkChannelSender,
-    listeners: UnicastListeners,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastTcp {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: UnicastListeners::new(),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }

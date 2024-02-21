@@ -23,21 +23,21 @@ use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::Signal;
 
-pub struct UnicastListener {
+pub struct ListenerUnicastIP {
     endpoint: EndPoint,
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
 }
 
-impl UnicastListener {
+impl ListenerUnicastIP {
     fn new(
         endpoint: EndPoint,
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
-    ) -> UnicastListener {
-        UnicastListener {
+    ) -> ListenerUnicastIP {
+        ListenerUnicastIP {
             endpoint,
             active,
             signal,
@@ -46,13 +46,13 @@ impl UnicastListener {
     }
 }
 
-pub struct UnicastListeners {
-    listeners: Arc<RwLock<HashMap<SocketAddr, UnicastListener>>>,
+pub struct ListenersUnicastIP {
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastIP>>>,
 }
 
-impl UnicastListeners {
-    pub fn new() -> UnicastListeners {
-        UnicastListeners {
+impl ListenersUnicastIP {
+    pub fn new() -> ListenersUnicastIP {
+        ListenersUnicastIP {
             listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -75,7 +75,7 @@ impl UnicastListeners {
             res
         });
 
-        let listener = UnicastListener::new(endpoint, active, signal, wraphandle);
+        let listener = ListenerUnicastIP::new(endpoint, active, signal, wraphandle);
         // Update the list of active listeners on the manager
         listeners.insert(addr, listener);
         Ok(())
@@ -134,7 +134,7 @@ impl UnicastListeners {
     }
 }
 
-impl Default for UnicastListeners {
+impl Default for ListenersUnicastIP {
     fn default() -> Self {
         Self::new()
     }

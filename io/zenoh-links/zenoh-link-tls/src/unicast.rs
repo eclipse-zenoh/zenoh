@@ -46,7 +46,8 @@ use webpki::{
 };
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, UnicastListeners,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
@@ -237,14 +238,14 @@ impl fmt::Debug for LinkUnicastTls {
 
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
-    listeners: UnicastListeners,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: UnicastListeners::new(),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }

@@ -32,7 +32,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, UnicastListeners,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZError, ZResult};
@@ -188,14 +189,14 @@ impl fmt::Debug for LinkUnicastQuic {
 
 pub struct LinkManagerUnicastQuic {
     manager: NewLinkChannelSender,
-    listeners: UnicastListeners,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastQuic {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: UnicastListeners::new(),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }
