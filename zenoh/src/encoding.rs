@@ -26,15 +26,9 @@ use zenoh_shm::SharedMemoryBuf;
 pub trait EncodingMapping {
     fn prefix_to_str(&self, e: EncodingPrefix) -> &str;
     fn str_to_prefix(&self, s: &str) -> EncodingPrefix;
-    fn parse(s: &str) -> ZResult<Encoding>;
-}
-
-pub trait Encoder<T> {
-    fn encode(t: T) -> Value;
-}
-
-pub trait Decoder<T> {
-    fn decode(t: &Value) -> ZResult<T>;
+    fn parse<S>(s: S) -> ZResult<Encoding>
+    where
+        S: Into<String>;
 }
 
 /// Default encoder provided with Zenoh to facilitate the encoding and decoding
@@ -43,9 +37,35 @@ pub trait Decoder<T> {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DefaultEncoder;
 
+pub struct DefaultMapping;
+
+impl DefaultMapping {
+    pub const EMPTY: EncodingPrefix = 0;
+    pub const APP_OCTET_STREAM: EncodingPrefix = 1;
+    pub const APP_CUSTOM: EncodingPrefix = 2;
+    pub const TEXT_PLAIN: EncodingPrefix = 3;
+    pub const APP_PROPERTIES: EncodingPrefix = 4;
+    pub const APP_JSON: EncodingPrefix = 5;
+    pub const APP_SQL: EncodingPrefix = 6;
+    pub const APP_INTEGER: EncodingPrefix = 7;
+    pub const APP_FLOAT: EncodingPrefix = 8;
+    pub const APP_XML: EncodingPrefix = 9;
+    pub const APP_XHTML_XML: EncodingPrefix = 10;
+    pub const APP_XWWW_FORM_URLENCODED: EncodingPrefix = 11;
+    pub const TEXT_JSON: EncodingPrefix = 12;
+    pub const TEXT_HTML: EncodingPrefix = 13;
+    pub const TEXT_XML: EncodingPrefix = 14;
+    pub const TEXT_CSS: EncodingPrefix = 15;
+    pub const TEXT_CSV: EncodingPrefix = 16;
+    pub const TEXT_JAVASCRIPT: EncodingPrefix = 17;
+    pub const IMAGE_JPEG: EncodingPrefix = 18;
+    pub const IMAGE_PNG: EncodingPrefix = 19;
+    pub const IMAGE_GIF: EncodingPrefix = 20;
+}
+
 impl DefaultEncoder {
-    pub const EMPTY: Encoding = Encoding::new(0);
-    pub const APP_OCTET_STREAM: Encoding = Encoding::new(1);
+    pub const EMPTY: Encoding = Encoding::new(DefaultMapping::EMPTY);
+    pub const APP_OCTET_STREAM: Encoding = Encoding::new(DefaultMapping::APP_OCTET_STREAM);
     pub const APP_CUSTOM: Encoding = Encoding::new(2);
     pub const TEXT_PLAIN: Encoding = Encoding::new(3);
     pub const APP_PROPERTIES: Encoding = Encoding::new(4);
@@ -137,17 +157,35 @@ impl EncodingMapping for DefaultEncoder {
 
     // Parse a string into a valid Encoding. This functions performs the necessary
     // prefix mapping and suffix substring when parsing the input.
-    fn parse(t: &str) -> ZResult<Encoding> {
-        for (s, p) in Self::KNOWN_STRING.entries() {
-            if let Some((_, b)) = t.split_once(s) {
-                return Encoding::new(*p).with_suffix(b.to_string());
+    fn parse<S>(t: S) -> ZResult<Encoding>
+    where
+        S: Into<String>,
+    {
+        fn _parse(mut t: String) -> ZResult<Encoding> {
+            if t.is_empty() {
+                return Ok(DefaultEncoder::EMPTY);
             }
+
+            // Skip empty string mapping
+            for (s, p) in DefaultEncoder::KNOWN_STRING.entries().skip(1) {
+                if let Some(i) = t.find(s) {
+                    return Encoding::new(*p).with_suffix(t.split_off(i + s.len()));
+                }
+            }
+            DefaultEncoder::EMPTY.with_suffix(t.to_string())
         }
-        Encoding::empty().with_suffix(t.to_string())
+        _parse(t.into())
     }
 }
 
-// -- impls
+// Encoder
+pub trait Encoder<T> {
+    fn encode(t: T) -> Value;
+}
+
+pub trait Decoder<T> {
+    fn decode(t: &Value) -> ZResult<T>;
+}
 
 // Bytes conversion
 impl Encoder<ZBuf> for DefaultEncoder {
@@ -382,5 +420,65 @@ impl Encoder<SharedMemoryBuf> for DefaultEncoder {
             payload: t.into(),
             encoding: DefaultEncoder::APP_OCTET_STREAM,
         }
+    }
+}
+
+mod tests {
+    #[test]
+    fn encoder() {
+        use crate::Value;
+        use zenoh_buffers::ZBuf;
+        use zenoh_collections::Properties;
+
+        macro_rules! encode_decode {
+            ($t:ty, $in:expr) => {
+                let t = $in.clone();
+                let v = Value::encode(t);
+                let out: $t = v.decode().unwrap();
+                assert_eq!($in, out)
+            };
+        }
+
+        encode_decode!(u8, u8::MIN);
+        encode_decode!(u16, u16::MIN);
+        encode_decode!(u32, u32::MIN);
+        encode_decode!(u64, u64::MIN);
+        encode_decode!(usize, usize::MIN);
+
+        encode_decode!(u8, u8::MAX);
+        encode_decode!(u16, u16::MAX);
+        encode_decode!(u32, u32::MAX);
+        encode_decode!(u64, u64::MAX);
+        encode_decode!(usize, usize::MAX);
+
+        encode_decode!(i8, i8::MIN);
+        encode_decode!(i16, i16::MIN);
+        encode_decode!(i32, i32::MIN);
+        encode_decode!(i64, i64::MIN);
+        encode_decode!(isize, isize::MIN);
+
+        encode_decode!(i8, i8::MAX);
+        encode_decode!(i16, i16::MAX);
+        encode_decode!(i32, i32::MAX);
+        encode_decode!(i64, i64::MAX);
+        encode_decode!(isize, isize::MAX);
+
+        encode_decode!(f32, f32::MIN);
+        encode_decode!(f64, f64::MIN);
+
+        encode_decode!(f32, f32::MAX);
+        encode_decode!(f64, f64::MAX);
+
+        encode_decode!(String, "");
+        encode_decode!(String, String::from("abcdefghijklmnopqrstuvwxyz"));
+
+        encode_decode!(Vec<u8>, vec![0u8; 0]);
+        encode_decode!(Vec<u8>, vec![0u8; 64]);
+
+        encode_decode!(ZBuf, ZBuf::from(vec![0u8; 0]));
+        encode_decode!(ZBuf, ZBuf::from(vec![0u8; 64]));
+
+        encode_decode!(Properties, Properties::from(""));
+        encode_decode!(Properties, Properties::from("a=1;b=2"));
     }
 }

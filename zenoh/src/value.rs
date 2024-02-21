@@ -31,7 +31,7 @@ pub struct Value {
 }
 
 impl Value {
-    /// Creates a new zenoh Value.
+    /// Creates a new [`Value`].
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
@@ -39,7 +39,7 @@ impl Value {
         }
     }
 
-    /// Creates an empty Value.
+    /// Creates an empty [`Value`].
     pub fn empty() -> Self {
         Value {
             payload: ZBuf::empty(),
@@ -47,11 +47,147 @@ impl Value {
         }
     }
 
-    /// Sets the encoding of this zenoh Value.
+    /// Sets the payload of this [`Value`]`.
+    #[inline(always)]
+    pub fn payload(mut self, payload: ZBuf) -> Self {
+        self.payload = payload;
+        self
+    }
+
+    /// Sets the encoding of this [`Value`]`.
     #[inline(always)]
     pub fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self
+    }
+}
+
+// Provide some facilities in the Rust API to encode/decode [`Value`] with an `Encoder`.
+impl Value {
+    /// Encode an object of type `T` as a [`Value`] using the [`DefaultEncoder`].
+    ///
+    /// ```rust
+    /// use zenoh::value::Value;
+    ///
+    /// let start = String::from("abc");
+    /// let value = Value::encode(start.clone());
+    /// let end: String = value.decode().unwrap();
+    /// assert_eq!(start, end);
+    /// ```
+    pub fn encode<T>(t: T) -> Self
+    where
+        DefaultEncoder: Encoder<T>,
+    {
+        DefaultEncoder::encode(t)
+    }
+
+    /// Encode an object of type `T` as a [`Value`] using a provided [`Encoder`].
+    ///
+    /// ```rust
+    /// use zenoh::prelude::sync::*;
+    /// use zenoh_result::{zerror, ZResult};
+    /// use zenoh::encoding::{Encoder, Decoder};
+    ///
+    /// struct MyEncoder;
+    ///
+    /// impl MyEncoder {
+    ///     pub const STRING: Encoding = Encoding::new(2);   
+    /// }
+    ///
+    /// impl Encoder<String> for MyEncoder {
+    ///     fn encode(s: String) -> Value {
+    ///         Value::new(s.into_bytes().into()).encoding(MyEncoder::STRING)
+    ///     }
+    /// }
+    ///
+    /// impl Decoder<String> for MyEncoder {
+    ///     fn decode(v: &Value) -> ZResult<String> {
+    ///         if v.encoding == MyEncoder::STRING {
+    ///             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
+    ///         } else {
+    ///             Err(zerror!("Invalid encoding").into())
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let start = String::from("abc");
+    /// let value = Value::encode_with::<MyEncoder, _>(start.clone());
+    /// let end: String = value.decode_with::<MyEncoder, _>().unwrap();
+    /// assert_eq!(start, end);
+    /// ```
+    pub fn encode_with<M, T>(t: T) -> Self
+    where
+        M: Encoder<T>,
+    {
+        M::encode(t)
+    }
+
+    /// Decode an object of type `T` from a [`Value`] using the [`DefaultEncoder`].
+    ///
+    /// ```rust
+    /// use zenoh::value::Value;
+    ///
+    /// let start = String::from("abc");
+    /// let value = Value::encode(start.clone());
+    /// let end: String = value.decode().unwrap();
+    /// assert_eq!(start, end);
+    /// ```
+    pub fn decode<T>(&self) -> ZResult<T>
+    where
+        DefaultEncoder: Decoder<T>,
+    {
+        DefaultEncoder::decode(self)
+    }
+
+    /// Decode an object of type `T` from a [`Value`] using a provided [`Encoder`].
+    ///
+    /// ```rust
+    /// use zenoh::prelude::sync::*;
+    /// use zenoh_result::{zerror, ZResult};
+    /// use zenoh::encoding::{Encoder, Decoder};
+    ///
+    /// struct MyEncoder;
+    ///
+    /// impl MyEncoder {
+    ///     pub const STRING: Encoding = Encoding::new(2);   
+    /// }
+    ///
+    /// impl Encoder<String> for MyEncoder {
+    ///     fn encode(s: String) -> Value {
+    ///         Value::new(s.into_bytes().into()).encoding(MyEncoder::STRING)
+    ///     }
+    /// }
+    ///
+    /// impl Decoder<String> for MyEncoder {
+    ///     fn decode(v: &Value) -> ZResult<String> {
+    ///         if v.encoding == MyEncoder::STRING {
+    ///             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
+    ///         } else {
+    ///             Err(zerror!("Invalid encoding").into())
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let start = String::from("abc");
+    /// let value = Value::encode_with::<MyEncoder, _>(start.clone());
+    /// let end: String = value.decode_with::<MyEncoder, _>().unwrap();
+    /// assert_eq!(start, end);
+    /// ```
+    pub fn decode_with<M, T>(&self) -> ZResult<T>
+    where
+        M: Decoder<T>,
+    {
+        M::decode(self)
+    }
+}
+
+/// Build a [`Value`] from any type `T` supported by the [`DefaultEncoder`].
+impl<T> From<T> for Value
+where
+    DefaultEncoder: Encoder<T>,
+{
+    fn from(t: T) -> Self {
+        Value::encode(t)
     }
 }
 
@@ -78,42 +214,3 @@ impl std::fmt::Display for Value {
 }
 
 impl std::error::Error for Value {}
-
-impl Value {
-    pub fn decode<T>(&self) -> ZResult<T>
-    where
-        DefaultEncoder: Decoder<T>,
-    {
-        DefaultEncoder::decode(self)
-    }
-
-    pub fn decode_with<T, M>(&self) -> ZResult<T>
-    where
-        M: Decoder<T>,
-    {
-        M::decode(self)
-    }
-
-    pub fn encode<T>(t: T) -> Self
-    where
-        DefaultEncoder: Encoder<T>,
-    {
-        DefaultEncoder::encode(t)
-    }
-
-    pub fn encode_with<T, M>(t: T) -> Self
-    where
-        M: Encoder<T>,
-    {
-        M::encode(t)
-    }
-}
-
-impl<T> From<T> for Value
-where
-    DefaultEncoder: Encoder<T>,
-{
-    fn from(t: T) -> Self {
-        Value::encode(t)
-    }
-}

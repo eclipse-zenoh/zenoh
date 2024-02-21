@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::CowStr;
-use alloc::{borrow::Cow, string::String};
+use alloc::borrow::Cow;
 use core::fmt::{self, Debug};
 use zenoh_result::{bail, ZResult};
 
