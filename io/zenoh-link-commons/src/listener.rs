@@ -133,3 +133,9 @@ impl UnicastListeners {
         locators
     }
 }
+
+impl Default for UnicastListeners {
+    fn default() -> Self {
+        Self::new()
+    }
+}
