@@ -28,9 +28,11 @@ pub trait EncodingMapping {
     fn str_to_prefix(&self, s: &str) -> EncodingPrefix;
     fn parse<S>(s: S) -> ZResult<Encoding>
     where
-        S: Into<String>;
+        S: Into<Cow<'static, str>>;
+    fn to_string(e: &Encoding) -> Cow<'_, str>;
 }
 
+/// The default encoding mapping used by Zenoh.
 pub struct DefaultEncodingMapping;
 
 impl DefaultEncodingMapping {
@@ -129,22 +131,35 @@ impl EncodingMapping for DefaultEncodingMapping {
     /// prefix mapping and suffix substring when parsing the input.
     fn parse<S>(t: S) -> ZResult<Encoding>
     where
-        S: Into<String>,
+        S: Into<Cow<'static, str>>,
     {
-        fn _parse(mut t: String) -> ZResult<Encoding> {
+        fn _parse(t: Cow<'static, str>) -> ZResult<Encoding> {
             if t.is_empty() {
                 return Ok(DefaultEncoding::EMPTY);
             }
 
-            // Skip empty string mapping
+            // Skip empty string mapping. The order is guaranteed by the phf::OrderedMap.
             for (s, p) in DefaultEncodingMapping::KNOWN_STRING.entries().skip(1) {
                 if let Some(i) = t.find(s) {
-                    return Encoding::new(*p).with_suffix(t.split_off(i + s.len()));
+                    let e = Encoding::new(*p);
+                    match t {
+                        Cow::Borrowed(s) => return e.with_suffix(s.split_at(i + s.len()).1),
+                        Cow::Owned(mut s) => return e.with_suffix(s.split_off(i + s.len())),
+                    }
                 }
             }
             DefaultEncoding::EMPTY.with_suffix(t)
         }
         _parse(t.into())
+    }
+
+    fn to_string(e: &Encoding) -> Cow<'_, str> {
+        if e.prefix() == DefaultEncodingMapping::EMPTY {
+            Cow::Borrowed(e.suffix())
+        } else {
+            let p = Self::KNOWN_PREFIX.get(&e.prefix()).unwrap_or(&"unkwown");
+            Cow::Owned(format!("{}{}", p, e.suffix()))
+        }
     }
 }
 

@@ -695,7 +695,7 @@ fn construct_update(data: String) -> Update {
         payload.push_zslice(slice.to_vec().into());
     }
     let value =
-        Value::new(payload).encoding(DefaultEncodingMapping::parse(result.2.as_str()).unwrap()); // @TODO: remove the unwrap()
+        Value::new(payload).encoding(DefaultEncodingMapping::parse(result.2.to_string()).unwrap()); // @TODO: remove the unwrap()
     let data = StoredData {
         value,
         timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()
