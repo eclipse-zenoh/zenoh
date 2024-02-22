@@ -72,7 +72,6 @@ impl AllocAlignment {
     }
 }
 
-// Allocation layout
 #[derive(Debug)]
 pub struct MemoryLayout {
     size: usize,
@@ -105,7 +104,6 @@ impl MemoryLayout {
     }
 }
 
-// Allocation layout
 #[derive(Debug)]
 pub struct AllocLayout {
     pub layout: MemoryLayout,

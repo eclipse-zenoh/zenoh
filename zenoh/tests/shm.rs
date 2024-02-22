@@ -20,10 +20,11 @@ mod tests {
     use std::time::Duration;
     use zenoh::prelude::r#async::*;
     use zenoh_core::zasync_executor_init;
-    use zenoh_shm::api::factory::SharedMemoryFactory;
     use zenoh_shm::api::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
     use zenoh_shm::api::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
-    use zenoh_shm::api::provider::shared_memory_provider::{BlockOn, GarbageCollect};
+    use zenoh_shm::api::provider::shared_memory_provider::{
+        BlockOn, GarbageCollect, SharedMemoryProvider,
+    };
     use zenoh_shm::api::provider::types::{AllocAlignment, AllocLayout, MemoryLayout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -116,19 +117,13 @@ mod tests {
             // Wait for the declaration to propagate
             task::sleep(SLEEP).await;
 
-            // Make factory with POSIX SHM provider
-            let c_size = size;
-            let mut factory = SharedMemoryFactory::builder()
-                .provider(POSIX_PROTOCOL_ID, move || {
-                    Ok(Box::new(
-                        PosixSharedMemoryProviderBackend::builder()
-                            .with_size(c_size * MSG_COUNT / 10)?
-                            .res()?,
-                    ))
-                })
+            // create SHM provider
+            let backend = PosixSharedMemoryProviderBackend::builder()
+                .with_size(size * MSG_COUNT / 10)
                 .unwrap()
-                .build();
-            let shm01 = factory.provider(POSIX_PROTOCOL_ID).unwrap();
+                .res()
+                .unwrap();
+            let mut shm01 = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
 
             // remember segment size that was allocated
             let shm_segment_size = shm01.available();
@@ -136,7 +131,7 @@ mod tests {
             // Put data
             println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
 
-            let layout = AllocLayout::new(size, AllocAlignment::default(), shm01).unwrap();
+            let layout = AllocLayout::new(size, AllocAlignment::default(), &shm01).unwrap();
 
             for c in 0..msg_count {
                 // Create the message to send
@@ -221,43 +216,36 @@ mod tests {
             zasync_executor_init!();
             let _ = env_logger::try_init();
 
-            // Initialize the SHM factory
-            // In this example the provider is lazily-initialized and does not consume any resources until used
-            // It is up to the user to use lazy-initialization or move an already-initialized backend instance
-            // into factory's initialization lambda
-            let mut factory = SharedMemoryFactory::builder()
-                .provider(POSIX_PROTOCOL_ID, || {
-                    // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
-                    // The initialisation of SHM backend is completely backend-specific and user is free to do
-                    // anything reasonable here. This code is execuated at the provider's first use
+            let backend = {
+                // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
+                // The initialisation of SHM backend is completely backend-specific and user is free to do
+                // anything reasonable here. This code is execuated at the provider's first use
 
-                    // Alignment for POSIX SHM provider
-                    // All allocations will be aligned corresponding to this alignment -
-                    // that means that the provider will be able to satisfy allocation layouts
-                    // with alignment <= provider_alignment
-                    let provider_alignment = AllocAlignment::default();
+                // Alignment for POSIX SHM provider
+                // All allocations will be aligned corresponding to this alignment -
+                // that means that the provider will be able to satisfy allocation layouts
+                // with alignment <= provider_alignment
+                let provider_alignment = AllocAlignment::default();
 
-                    // Create layout for POSIX Provider's memory
-                    let provider_layout = MemoryLayout::new(1024, provider_alignment).unwrap();
+                // Create layout for POSIX Provider's memory
+                let provider_layout = MemoryLayout::new(1024, provider_alignment).unwrap();
 
-                    // Construct and return the backend with specified memory layout
-                    Ok(Box::new(
-                        PosixSharedMemoryProviderBackend::builder()
-                            .with_layout(provider_layout)
-                            .res()?,
-                    ))
-                })?
-                .build();
+                PosixSharedMemoryProviderBackend::builder()
+                    .with_layout(provider_layout)
+                    .res()
+                    .unwrap()
+            };
 
             // Get the SHM provider for POSIX_PROTOCOL_ID
             // The actual resource initialization happens here
-            let provider = factory.provider(POSIX_PROTOCOL_ID)?;
+            let mut provider = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
 
             // Create a layout for particular buffer and particular SHM provider
             // The layout is validated for argument correctness and also is checked
             // against particular SHM provider's layouting capabilities. This approach
             // allows making a reusable layout for series of similar allocations
-            let buffer_layout = AllocLayout::new(512, AllocAlignment::default(), provider).unwrap();
+            let buffer_layout =
+                AllocLayout::new(512, AllocAlignment::default(), &provider).unwrap();
 
             // Allocate SharedMemoryBuf using asynchronous BlockOn<GarbageCollect<JustAlloc>> policy.
             // Policy generics collection is a mechanism to describe necessary allocation behaviour

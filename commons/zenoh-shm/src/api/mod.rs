@@ -14,6 +14,5 @@
 
 pub mod client;
 pub mod common;
-pub mod factory;
 pub mod protocol_implementations;
 pub mod provider;

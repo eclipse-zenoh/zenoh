@@ -37,13 +37,12 @@ mod tests {
     use zenoh_result::ZResult;
     use zenoh_shm::{
         api::{
-            factory::SharedMemoryFactory,
             protocol_implementations::posix::{
                 posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
                 protocol_id::POSIX_PROTOCOL_ID,
             },
             provider::{
-                shared_memory_provider::{BlockOn, GarbageCollect},
+                shared_memory_provider::{BlockOn, GarbageCollect, SharedMemoryProvider},
                 types::{AllocAlignment, AllocLayout},
             },
         },
@@ -169,17 +168,13 @@ mod tests {
         let peer_shm02 = ZenohId::try_from([2]).unwrap();
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
-        let mut factory = SharedMemoryFactory::builder()
-            .provider(POSIX_PROTOCOL_ID, || {
-                Ok(Box::new(
-                    PosixSharedMemoryProviderBackend::builder()
-                        .with_size(2 * MSG_SIZE)?
-                        .res()?,
-                ))
-            })
+        // create SHM provider
+        let backend = PosixSharedMemoryProviderBackend::builder()
+            .with_size(2 * MSG_SIZE)
             .unwrap()
-            .build();
-        let shm01 = factory.provider(POSIX_PROTOCOL_ID).unwrap();
+            .res()
+            .unwrap();
+        let mut shm01 = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
@@ -257,7 +252,7 @@ mod tests {
             .unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
-        let layout = AllocLayout::new(MSG_SIZE, AllocAlignment::default(), shm01).unwrap();
+        let layout = AllocLayout::new(MSG_SIZE, AllocAlignment::default(), &shm01).unwrap();
 
         // Send the message
         println!("Transport SHM [3a]");
