@@ -637,9 +637,9 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        shm: match osyn_out.ext_shm {
-            Some(val) => Some(TransportShmConfig::new(val)),
-            None => None,
+        shm: match state.transport.ext_shm.negotiated_to_use_shm() {
+            true => osyn_out.ext_shm.map(TransportShmConfig::new),
+            false => None,
         },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };

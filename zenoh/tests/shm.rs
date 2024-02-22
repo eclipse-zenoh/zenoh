@@ -279,9 +279,6 @@ mod tests {
                 .res_async())
             .unwrap();
 
-            // alloc_with_gc(..) // <GarbageCollect>
-            // alloc_with_defragment_gc(..) // <Defragment<GarbageCollect>>
-
             // Declare Session and Publisher (common code)
             // Session and Publisher do not depend from SHM subsystem...
             let session = zenoh::open(Config::default()).res_async().await?;

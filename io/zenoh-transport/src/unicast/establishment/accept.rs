@@ -212,13 +212,11 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension Shm
         #[cfg(feature = "shared-memory")]
-        let ext_shm = match (init_syn.ext_shm, &self.ext_shm) {
-            (Some(init_syn_shm), Some(my_shm)) => Some(
-                my_shm
-                    .recv_init_syn(init_syn_shm)
-                    .await
-                    .map_err(|e| (e, Some(close::reason::GENERIC)))?,
-            ),
+        let ext_shm = match &self.ext_shm {
+            Some(my_shm) => my_shm
+                .recv_init_syn(init_syn.ext_shm)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             _ => None,
         };
 
@@ -276,9 +274,9 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension Shm
         #[cfg(feature = "shared-memory")]
-        let ext_shm = match (input.ext_shm.as_ref(), self.ext_shm.as_ref()) {
-            (Some(input_shm), Some(my_shm)) => my_shm
-                .send_init_ack(input_shm)
+        let ext_shm = match self.ext_shm.as_ref() {
+            Some(my_shm) => my_shm
+                .send_init_ack(&input.ext_shm)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             _ => None,
@@ -546,7 +544,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(my_shm) => my_shm
-                .send_open_ack(())
+                .send_open_ack(&state.transport.ext_shm)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None => None,
@@ -729,9 +727,9 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        shm: match iack_out.ext_shm {
-            Some(val) => Some(TransportShmConfig::new(val)),
-            None => None,
+        shm: match state.transport.ext_shm.negotiated_to_use_shm() {
+            true => iack_out.ext_shm.map(TransportShmConfig::new),
+            false => None,
         },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };

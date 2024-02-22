@@ -137,7 +137,7 @@ impl<'a> ShmFsm<'a> {
 /*************************************/
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StateOpen {
-    // false by default, will be switched to true in the end of open_ack
+    // false by default, will be switched to true at the end of open_ack
     negotiated_to_use_shm: bool,
 }
 
@@ -310,17 +310,21 @@ where
 impl<'a> AcceptFsm for &'a ShmFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = init::ext::Shm;
-    type RecvInitSynOut = AuthSegment;
+    type RecvInitSynIn = Option<init::ext::Shm>;
+    type RecvInitSynOut = Option<AuthSegment>;
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "Shm extension - Recv InitSyn.";
 
+        let Some(ext) = input.as_ref() else {
+            return Ok(None);
+        };
+
         // Decode the extension
         let codec = Zenoh080::new();
-        let mut reader = input.value.reader();
+        let mut reader = ext.value.reader();
         let Ok(init_syn): Result<InitSyn, _> = codec.read(&mut reader) else {
             log::trace!("{} Decoding error.", S);
             bail!("");
@@ -329,16 +333,20 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         // Read Alice's SHM Segment
         let alice_segment = AuthSegment::open(init_syn.alice_segment)?;
 
-        Ok(alice_segment)
+        Ok(Some(alice_segment))
     }
 
     type SendInitAckIn = &'a Self::RecvInitSynOut;
     type SendInitAckOut = Option<init::ext::Shm>;
     async fn send_init_ack(
         self,
-        alice_segment: Self::SendInitAckIn,
+        input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         const S: &str = "Shm extension - Send InitAck.";
+
+        let Some(alice_segment) = input.as_ref() else {
+            return Ok(None);
+        };
 
         let init_syn = InitAck {
             alice_challenge: alice_segment.challenge(),
@@ -389,14 +397,17 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         Ok(())
     }
 
-    type SendOpenAckIn = ();
+    type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<open::ext::Shm>;
     async fn send_open_ack(
         self,
-        _input: Self::SendOpenAckIn,
+        input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         // const S: &str = "Shm extension - Send OpenAck.";
 
-        Ok(Some(open::ext::Shm::new(1)))
+        Ok(match input.negotiated_to_use_shm {
+            true => Some(open::ext::Shm::new(1)),
+            false => None,
+        })
     }
 }
