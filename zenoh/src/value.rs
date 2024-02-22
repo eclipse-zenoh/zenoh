@@ -195,7 +195,7 @@ impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "Value{{ payload: {:?}, encoding: {} }}",
+            "Value{{ payload: {:?}, encoding: {:?} }}",
             self.payload, self.encoding
         )
     }

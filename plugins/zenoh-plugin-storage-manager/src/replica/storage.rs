@@ -682,7 +682,7 @@ fn serialize_update(update: &Update) -> String {
     let result = (
         update.kind.to_string(),
         update.data.timestamp.to_string(),
-        update.data.value.encoding.to_string(),
+        DefaultEncodingMapping.to_str(&update.data.value.encoding),
         update.data.value.payload.slices().collect::<Vec<&[u8]>>(),
     );
     serde_json::to_string_pretty(&result).unwrap()

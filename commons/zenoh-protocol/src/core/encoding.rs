@@ -13,7 +13,7 @@
 //
 use crate::core::CowStr;
 use alloc::borrow::Cow;
-use core::fmt::{self, Debug};
+use core::fmt::Debug;
 use zenoh_result::{bail, ZResult};
 
 pub type EncodingPrefix = u16;
@@ -73,12 +73,6 @@ impl Encoding {
     /// the string representation of the other given encoding.
     pub fn starts_with(&self, with: &Encoding) -> bool {
         self.prefix() == with.prefix() && self.suffix().starts_with(with.suffix())
-    }
-}
-
-impl fmt::Display for Encoding {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("{}:{}", self.prefix, self.suffix.as_str()))
     }
 }
 
