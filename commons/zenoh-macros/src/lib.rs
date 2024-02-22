@@ -19,6 +19,7 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::LitStr;
 use zenoh_keyexpr::format::{
     macro_support::{self, SegmentBuilder},
     KeFormat,
@@ -313,4 +314,15 @@ pub fn keformat(tokens: TokenStream) -> TokenStream {
         Err(e) => Err(e.into()),
     })
     .into()
+}
+
+/// Equivalent to [`keyexpr::new`](zenoh_keyexpr::keyexpr::new), but the check is run at compile-time and will throw a compile error in case of failure.
+#[proc_macro]
+pub fn ke(tokens: TokenStream) -> TokenStream {
+    let value: LitStr = syn::parse(tokens).unwrap();
+    let ke = value.value();
+    match zenoh_keyexpr::keyexpr::new(&ke) {
+        Ok(_) => quote!(unsafe {::zenoh::key_expr::keyexpr::from_str_unchecked(#ke)}).into(),
+        Err(e) => panic!("{}", e),
+    }
 }

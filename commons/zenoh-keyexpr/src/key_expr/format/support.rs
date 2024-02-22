@@ -86,8 +86,32 @@ impl core::fmt::Display for Spec<'_> {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Segment<'a> {
+    /// What precedes a spec in a [`KeFormat`].
+    /// It may be:
+    /// - empty if the spec is the first thing in the format.
+    /// - `/` if the spec comes right after another spec.
+    /// - a valid keyexpr followed by `/` if the spec comes after a keyexpr.
     pub(crate) prefix: &'a str,
     pub(crate) spec: Spec<'a>,
+}
+impl Segment<'_> {
+    pub fn prefix(&self) -> Option<&keyexpr> {
+        match self.prefix {
+            "" | "/" => None,
+            _ => Some(unsafe {
+                keyexpr::from_str_unchecked(trim_suffix_slash(trim_prefix_slash(self.prefix)))
+            }),
+        }
+    }
+    pub fn id(&self) -> &str {
+        self.spec.id()
+    }
+    pub fn pattern(&self) -> &keyexpr {
+        self.spec.pattern()
+    }
+    pub fn default(&self) -> Option<&keyexpr> {
+        self.spec.default()
+    }
 }
 
 pub enum IterativeConstructor<Complete, Partial, Error> {
@@ -246,6 +270,9 @@ impl<'s> IKeFormatStorage<'s> for Vec<Segment<'s>> {
     }
 }
 
+/// Trim the prefix slash from a target string if it has one.
+/// # Safety
+/// `target` is assumed to be a valid `keyexpr` except for the leading slash.
 pub(crate) fn trim_prefix_slash(target: &str) -> &str {
     &target[matches!(target.as_bytes().first(), Some(b'/')) as usize..]
 }

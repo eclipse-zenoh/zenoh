@@ -12,10 +12,45 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! # Building and parsing Key Expressions
+//! A common issue in REST API is the association of meaning to sections of the URL, and respecting that API in a convenient manner.
+//! The same issue arises naturally when designing a KE space, and [`KeFormat`] was designed to help you with this,
+//! both in constructing and in parsing KEs that fit the formats you've defined.
+//!
+//! [`kedefine`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kedefine.html) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+//! as the [`keformat`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.keformat.html) and [`kewrite`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
+//!
+//! ## The format syntax
+//! KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formmats support "specification" chunks.
+//! These chunks must follow the one of the following syntaxes: `${id:pattern}`, `${id:pattern#default}`, `$#{id:pattern}#`, or `$#{id:pattern#default}#`, where:
+//! - `id` is the chunk identifer: it cannot contain the `:` character, and is used to name the chunk in accessors.
+//! - `pattern` must be a valid KE (and therefore cannot contain `#`) and defines the range of values that the chunk may adopt.
+//! - `default` (optional) is used as the chunk value when formatting if the builder wasn't supplied with a value for `id`.
+//!
+//! ## Formatting
+//! To use a format to build a Key Expression, its [formatter](KeFormat::formatter) must be constructed.
+//!
+//! A formatter functions like as an `id`-value map which can be [`KeFormatter::build`] into a [`OwnedKeyExpr`] once all specs have a value.
+//!
+//! The formatter will notably prevent you from setting values for a spec that isn't included by its pattern.
+//!
+//! ## Parsing
+//! [`KeFormat`] can also be used to parse any [`keyexpr`] that intersects with it, using [`KeFormat::parse`].
+//!
+//! The parser will then assign subsections of the [`keyexpr`] to each spec, and the resulting [`Parsed`] result can then be queried
+//! for each spec's assigned value.
+//!
+//! Specs are considered greedy and evaluated left-to-right: if your format would allow ambiguous parsings, chunks will be consumed
+//! by the leftmost specs first. For example `${a:**}/-/${b:**}` parsing `hey/-/-/there` would assign `hey/-` to `a` and `there` to `b`,
+//! (even though you might have expected `a` to only consume `hey` and `b` to consume the remaining `-/there`).
+//!
+//! A good way to avoid ambiguities when working with formats that contain multiple `**` specs is to separate such specs using verbatim chunks
+//! (chunks that start with an `@`), as `**` is incapable of consuming these chunks.
+
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
-    fmt::Display,
+    fmt::{Debug, Display},
     num::NonZeroU32,
 };
 
@@ -27,25 +62,66 @@ mod support;
 pub use support::{IKeFormatStorage, Segment};
 use support::{IterativeConstructor, Spec};
 
-/// A utility to define Key Expression (KE) formats.
+/// # Building and parsing Key Expressions
+/// A common issue in REST API is the association of meaning to sections of the URL, and respecting that API in a convenient manner.
+/// The same issue arises naturally when designing a KE space, and [`KeFormat`] was designed to help you with this,
+/// both in constructing and in parsing KEs that fit the formats you've defined.
 ///
-/// Formats are written like KEs, except sections can be substituted for specs using the `${id:pattern#default}` format to define fields.  
-/// `id` is the name of the field that gets encoded in that section, it must be non-empty and will stop at the first encountered `:`.  
-/// `pattern` is a KE pattern that any value set for that field must match. It stops at the first encountered `#` or end of spec.  
-/// `default` is optional, and lets you specify a value at construction for the field.
+/// [`zenoh::kedefine`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kedefine.html) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+/// as the [`zenoh::keformat`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.keformat.html) and [`zenoh::kewrite`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 ///
-/// Note that the spec is considered to end at the first encountered `}`; if you need your id, pattern or default to contain `}`, you may use `$#{spec}#.
+/// ## The format syntax
+/// KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formmats support "specification" chunks.
+/// These chunks must follow the one of the following syntaxes: `${id:pattern}`, `${id:pattern#default}`, `$#{id:pattern}#`, or `$#{id:pattern#default}#`, where:
+/// - `id` is the chunk identifer: it cannot contain the `:` character, and is used to name the chunk in accessors.
+/// - `pattern` must be a valid KE (and therefore cannot contain `#`) and defines the range of values that the chunk may adopt.
+/// - `default` (optional) is used as the chunk value when formatting if the builder wasn't supplied with a value for `id`.
 ///
-/// Specs may only be preceded and followed by `/`.
-#[derive(Debug, Clone, Copy, Hash)]
+/// ## Formatting
+/// To use a format to build a Key Expression, its [formatter](KeFormat::formatter) must be constructed.
+///
+/// A formatter functions like as an `id`-value map which can be [`KeFormatter::build`] into a [`OwnedKeyExpr`] once all specs have a value.
+///
+/// The formatter will notably prevent you from setting values for a spec that isn't included by its pattern.
+///
+/// ## Parsing
+/// [`KeFormat`] can also be used to parse any [`keyexpr`] that intersects with it, using [`KeFormat::parse`].
+///
+/// The parser will then assign subsections of the [`keyexpr`] to each spec, and the resulting [`Parsed`] result can then be queried
+/// for each spec's assigned value.
+///
+/// Specs are considered greedy and evaluated left-to-right: if your format would allow ambiguous parsings, chunks will be consumed
+/// by the leftmost specs first. For example `${a:**}/-/${b:**}` parsing `hey/-/-/there` would assign `hey/-` to `a` and `there` to `b`,
+/// (even though you might have expected `a` to only consume `hey` and `b` to consume the remaining `-/there`).
+///
+/// A good way to avoid ambiguities when working with formats that contain multiple `**` specs is to separate such specs using verbatim chunks
+/// (chunks that start with an `@`), as `**` is incapable of consuming these chunks.
+#[derive(Clone, Copy, Hash)]
 pub struct KeFormat<'s, Storage: IKeFormatStorage<'s> + 's = Vec<Segment<'s>>> {
+    /// The [`[Segment]`](Segment)s of the format.
     storage: Storage,
+    /// The end of the format. It may be one of 3 cases:
+    /// - An empty string, in which case the format ends with the last segment.
+    /// - A keyexpr preceded by `/`.
+    /// - A keyexpr, in the case the format contains no specs.
     suffix: &'s str,
 }
+impl<'s, Storage: IKeFormatStorage<'s>> Debug for KeFormat<'s, Storage> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self}")
+    }
+}
 impl<'s> KeFormat<'s, Vec<Segment<'s>>> {
+    /// Construct a new [`KeFormat`], using a vector to store its state-machine and parser results.
     pub fn new<S: AsRef<str> + ?Sized>(value: &'s S) -> ZResult<Self> {
         value.as_ref().try_into()
     }
+    /// Construct a new [`KeFormat], using a stack-allocated array to store its state-machine and parser results.
+    ///
+    /// `N` is simply the number of specifications in `value`. If this number of specs isn't known at compile-time, use [`KeFormat::new`] instead.
+    ///
+    /// If you know `value` at compile time, using [`zenoh::kedefine`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kedefine.html) instead is advised,
+    /// as it will provide more features and construct higher performance formats than this constructor.
     pub fn noalloc_new<const N: usize>(value: &'s str) -> ZResult<KeFormat<'s, [Segment<'s>; N]>> {
         value.try_into()
     }
@@ -138,6 +214,7 @@ pub mod macro_support {
     }
 }
 impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
+    /// Constructs a new formatter for the format.
     pub fn formatter(&'s self) -> KeFormatter<'s, Storage> {
         KeFormatter {
             format: self,
@@ -216,10 +293,11 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> TryFrom<&'s str> for KeFormat<'s, S
                 bail!("Invalid KeFormat: {value} contains duplicated ids")
             }
         }
-        Ok(KeFormat {
-            storage,
-            suffix: &value[segment_start..],
-        })
+        let suffix = &value[segment_start..];
+        if suffix.contains('*') {
+            bail!("Invalid KeFormat: wildcards are only allowed in specs when writing formats")
+        }
+        Ok(KeFormat { storage, suffix })
     }
 }
 
@@ -258,6 +336,8 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> core::fmt::Display for KeFormat<'s,
         write!(f, "{}", self.suffix)
     }
 }
+
+/// An active formatter for a [`KeFormat`]
 #[derive(Clone)]
 pub struct KeFormatter<'s, Storage: IKeFormatStorage<'s>> {
     format: &'s KeFormat<'s, Storage>,
