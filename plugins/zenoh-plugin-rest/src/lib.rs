@@ -50,19 +50,19 @@ const RAW_KEY: &str = "_raw";
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
-        p if p.starts_with(DefaultEncoding::TEXT_PLAIN)
-            || p.starts_with(DefaultEncoding::APP_XWWW_FORM_URLENCODED) =>
+        p if p.starts_with(&DefaultEncoding::TEXT_PLAIN)
+            || p.starts_with(&DefaultEncoding::APP_XWWW_FORM_URLENCODED) =>
         {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
-        p if p.starts_with(DefaultEncoding::APP_PROPERTIES) => {
+        p if p.starts_with(&DefaultEncoding::APP_PROPERTIES) => {
             // convert to Json string for special characters escaping
             serde_json::json!(*Properties::from(value.to_string())).to_string()
         }
-        p if p.starts_with(DefaultEncoding::APP_JSON)
-            || p.starts_with(DefaultEncoding::APP_INTEGER)
-            || p.starts_with(DefaultEncoding::APP_FLOAT) =>
+        p if p.starts_with(&DefaultEncoding::APP_JSON)
+            || p.starts_with(&DefaultEncoding::APP_INTEGER)
+            || p.starts_with(&DefaultEncoding::APP_FLOAT) =>
         {
             value.to_string()
         }

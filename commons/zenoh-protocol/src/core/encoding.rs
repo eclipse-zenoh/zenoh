@@ -71,11 +71,7 @@ impl Encoding {
 
     /// Returns `true` if the string representation of this encoding starts with
     /// the string representation of the other given encoding.
-    pub fn starts_with<T>(&self, with: T) -> bool
-    where
-        T: Into<Encoding>,
-    {
-        let with: Encoding = with.into();
+    pub fn starts_with(&self, with: &Encoding) -> bool {
         self.prefix() == with.prefix() && self.suffix().starts_with(with.suffix())
     }
 }
