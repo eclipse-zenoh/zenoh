@@ -337,12 +337,23 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> core::fmt::Display for KeFormat<'s,
     }
 }
 
-/// An active formatter for a [`KeFormat`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NonMaxU32(NonZeroU32);
+impl NonMaxU32 {
+    fn new(value: u32) -> Option<Self> {
+        NonZeroU32::new(!value).map(NonMaxU32)
+    }
+    fn get(&self) -> u32 {
+        !self.0.get()
+    }
+}
+
+/// An active formatter for a [`KeFormat`].
 #[derive(Clone)]
 pub struct KeFormatter<'s, Storage: IKeFormatStorage<'s>> {
     format: &'s KeFormat<'s, Storage>,
     buffer: String,
-    values: Storage::ValuesStorage<Option<(u32, NonZeroU32)>>,
+    values: Storage::ValuesStorage<Option<(u32, NonMaxU32)>>,
 }
 
 impl<'s, Storage: IKeFormatStorage<'s>> core::fmt::Debug for KeFormatter<'s, Storage> {
@@ -438,9 +449,12 @@ impl core::fmt::Display for FormatSetError {
 }
 impl IError for FormatSetError {}
 impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
+    /// Access the formatter's format
     pub fn format(&self) -> &KeFormat<'s, Storage> {
         self.format
     }
+
+    /// Clear the formatter of previously set values, without deallocating its internal formatting buffer.
     pub fn clear(&mut self) -> &mut Self {
         self.buffer.clear();
         for value in self.values.as_mut() {
@@ -448,9 +462,15 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
         }
         self
     }
+
+    /// Build a key-expression according to the format and the currently set values.
+    ///
+    /// This doesn't clear the formatter of already set values, allowing to reuse the builder and only
+    /// change a subset of its properties before building a new key-expression again.
     pub fn build(&self) -> ZResult<OwnedKeyExpr> {
         self.try_into()
     }
+    /// Access the current value for `id`.
     pub fn get(&self, id: &str) -> Option<&str> {
         let segments = self.format.storage.segments();
         segments
@@ -461,6 +481,12 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
                     .map(|(start, end)| &self.buffer[start as usize..end.get() as usize])
             })
     }
+    /// Set a new value for `id` using `S`'s [`Display`] formatting.
+    ///
+    /// # Errors
+    /// If the result of `format!("{value}")` is neither:
+    /// - A valid key expression that is included by the pattern for `id`
+    /// - An empty string, on the condition that `id`'s pattern is `**`
     pub fn set<S: Display>(&mut self, id: &str, value: S) -> Result<&mut Self, FormatSetError> {
         use core::fmt::Write;
         let segments = self.format.storage.segments();
@@ -477,7 +503,7 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
                     continue;
                 }
                 *s -= shift;
-                *e = NonZeroU32::new(e.get() - shift).unwrap()
+                *e = NonMaxU32::new(e.get() - shift).unwrap()
             }
         }
         let pattern = segments[i].spec.pattern();
@@ -485,7 +511,11 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
         write!(&mut self.buffer, "{value}").unwrap(); // Writing on `&mut String` should be infallible.
         match (|| {
             let end = self.buffer.len();
-            if pattern.as_str() != "**" {
+            if start == end {
+                if !pattern.is_double_wild() {
+                    return Err(());
+                }
+            } else {
                 let Ok(ke) = keyexpr::new(&self.buffer[start..end]) else {
                     return Err(());
                 };
@@ -493,9 +523,10 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
                     return Err(());
                 }
             }
+
             values[i] = Some((
                 start as u32,
-                NonZeroU32::new(end.try_into().map_err(|_| ())?).ok_or(())?,
+                NonMaxU32::new(end.try_into().map_err(|_| ())?).ok_or(())?,
             ));
             Ok(())
         })() {
@@ -508,6 +539,7 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
     }
 }
 
+/// A [`KeFormat`] that owns its format-string.
 pub struct OwnedKeFormat<Storage: IKeFormatStorage<'static> + 'static = Vec<Segment<'static>>> {
     _owner: Box<str>,
     format: KeFormat<'static, Storage>,

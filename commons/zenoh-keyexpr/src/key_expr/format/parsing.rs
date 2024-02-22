@@ -23,7 +23,13 @@ pub struct Parsed<'s, Storage: IKeFormatStorage<'s>> {
 }
 
 impl<'s, Storage: IKeFormatStorage<'s>> Parsed<'s, Storage> {
-    pub fn get(&self, id: &str) -> ZResult<Option<&'s keyexpr>> {
+    /// Access the `id` element.
+    ///
+    /// The returned string is guaranteed to either be an empty string or a valid key expression.
+    ///
+    /// # Errors
+    /// If `id` is not part of `self`'s specs.
+    pub fn get(&self, id: &str) -> ZResult<&'s str> {
         let Some(i) = self
             .format
             .storage
@@ -33,11 +39,13 @@ impl<'s, Storage: IKeFormatStorage<'s>> Parsed<'s, Storage> {
         else {
             bail!("{} has no {id} field", self.format)
         };
-        Ok(self.results.as_ref()[i])
+        Ok(self.results.as_ref()[i].map_or("", keyexpr::as_str))
     }
+    /// The raw values for each spec, in left-to-right order.
     pub fn values(&self) -> &[Option<&'s keyexpr>] {
         self.results.as_ref()
     }
+    /// Iterates over id-value pairs.
     pub fn iter(&'s self) -> Iter<'s, Storage> {
         self.into_iter()
     }
@@ -99,16 +107,13 @@ impl<'s, Storage: IKeFormatStorage<'s>> DoubleEndedIterator for Iter<'s, Storage
 }
 
 impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
-    /// Parses `target` according to `self`. The returned `Parsed` object can be used to extract the values of the fields in `self` from `target`.
+    /// Parses `target` according to `self`. The returned [`Parsed`] object can be used to extract the values of the fields in `self` from `target`.
     ///
-    /// The parser is spec-greedy, fixed-section lazy: it will consume as much of `target` as possible for each spec in the format.
-    ///
-    /// For example, `**/${spec:**}/**` will always assign all of `target` to `spec`.
+    /// Parsing is greedy and done left-to-right. Please refer to [`KeFormat`]'s documentation for more details.
     ///
     /// # Errors
     /// If `target` does not intersect with `self`, an error is returned.
     pub fn parse(&'s self, target: &'s keyexpr) -> ZResult<Parsed<'s, Storage>> {
-        dbg!(target, self);
         let segments = self.storage.segments();
         if segments.is_empty()
             && !target.intersects(unsafe { keyexpr::from_str_unchecked(self.suffix) })
@@ -153,22 +158,21 @@ fn do_parse<'a>(
     segments: &[Segment],
     results: &mut [Option<&'a keyexpr>],
 ) -> bool {
-    dbg!(target, segments);
     match (segments, results) {
         ([], []) => target.map_or(true, keyexpr::is_double_wild),
         ([segment, segments @ ..], [result, results @ ..]) => {
-            let prefix = dbg!(segment.prefix());
-            let pattern = dbg!(segment.pattern());
+            let prefix = segment.prefix();
+            let pattern = segment.pattern();
             // if target is empty
             let Some(target) = target else {
                 // this segment only matches if the pattern is `**` and the prefix is empty (since it cannot be `**`)
-                if dbg!(prefix.is_none() && pattern.is_double_wild()) {
+                if prefix.is_none() && pattern.is_double_wild() {
                     *result = None;
                     // the next segments still have to be checked to respect the same condition
-                    return dbg!(!segments.iter().zip(results).any(|(segment, result)| {
+                    return !segments.iter().zip(results).any(|(segment, result)| {
                         *result = None;
                         segment.prefix().is_some() || !segment.pattern().is_double_wild()
-                    }));
+                    });
                 } else {
                     return false;
                 }
@@ -177,7 +181,6 @@ fn do_parse<'a>(
                 ($pattern: expr, $result: expr, $target: expr, $segments: expr, $results: expr) => {{
                     let target = $target;
                     let segments = $segments;
-                    dbg!($pattern, target);
                     if $pattern.intersects(target)
                         && do_parse(
                             target.is_double_wild().then_some(target),
@@ -185,11 +188,11 @@ fn do_parse<'a>(
                             $results,
                         )
                     {
-                        *$result = Some(dbg!(target));
+                        *$result = Some(target);
                         return true;
                     }
                     for (candidate, target) in target.iter_splits_rtl() {
-                        if $pattern.intersects(dbg!(candidate))
+                        if $pattern.intersects(candidate)
                             && do_parse(Some(target), segments, $results)
                         {
                             *result = Some(candidate);
@@ -212,13 +215,13 @@ fn do_parse<'a>(
                 Some(prefix) => (prefix.bytes().filter(|&c| c == b'/').count() + 1) * 3,
             }) {
                 if prefix.map_or(candidate.is_double_wild(), |prefix| {
-                    dbg!(prefix).intersects(dbg!(candidate))
+                    prefix.intersects(candidate)
                 }) {
                     try_intersect!(pattern, result, target, segments, results);
                 }
             }
-            dbg!(pattern.is_double_wild())
-                && prefix.map_or(false, |prefix| dbg!(prefix.intersects(target)))
+            pattern.is_double_wild()
+                && prefix.map_or(false, |prefix| prefix.intersects(target))
                 && do_parse(None, segments, results)
         }
         _ => unreachable!(),
@@ -242,8 +245,8 @@ fn parsing() {
                         formatter.set("b", b_val).unwrap();
                         let ke = OwnedKeyExpr::try_from(&formatter).unwrap();
                         let parsed = format.parse(&ke).unwrap();
-                        assert_eq!(parsed.get("a").unwrap().unwrap().as_str(), a_val);
-                        assert_eq!(parsed.get("b").unwrap().map_or("", |s| s.as_str()), b_val);
+                        assert_eq!(parsed.get("a").unwrap(), a_val);
+                        assert_eq!(parsed.get("b").unwrap(), b_val);
                     }
                 }
             }
@@ -256,9 +259,7 @@ fn parsing() {
             .parse(keyexpr::new("a/b/c").unwrap())
             .unwrap()
             .get("a")
-            .unwrap()
-            .unwrap()
-            .as_str(),
+            .unwrap(),
         "a/b/c"
     );
     assert_eq!(
@@ -266,9 +267,7 @@ fn parsing() {
             .parse(keyexpr::new("**").unwrap())
             .unwrap()
             .get("a")
-            .unwrap()
-            .unwrap()
-            .as_str(),
+            .unwrap(),
         "**"
     );
     assert_eq!(
@@ -276,9 +275,7 @@ fn parsing() {
             .parse(keyexpr::new("**").unwrap())
             .unwrap()
             .get("b")
-            .unwrap()
-            .unwrap()
-            .as_str(),
+            .unwrap(),
         "**"
     );
     let format = KeFormat::new("hi/${a:there}/${b:**}").unwrap();
@@ -287,9 +284,7 @@ fn parsing() {
             .parse(keyexpr::new("hi/**").unwrap())
             .unwrap()
             .get("a")
-            .unwrap()
-            .unwrap()
-            .as_str(),
+            .unwrap(),
         "**"
     );
     assert_eq!(
@@ -297,9 +292,7 @@ fn parsing() {
             .parse(keyexpr::new("hi/**").unwrap())
             .unwrap()
             .get("b")
-            .unwrap()
-            .unwrap()
-            .as_str(),
+            .unwrap(),
         "**"
     );
     let format = KeFormat::new("hi/${a:there}/@/${b:**}").unwrap();
@@ -308,9 +301,7 @@ fn parsing() {
             .parse(keyexpr::new("hi/**/@").unwrap())
             .unwrap()
             .get("a")
-            .unwrap()
-            .unwrap()
-            .as_str(),
+            .unwrap(),
         "**"
     );
     assert_eq!(
@@ -319,6 +310,6 @@ fn parsing() {
             .unwrap()
             .get("b")
             .unwrap(),
-        None
+        ""
     );
 }
