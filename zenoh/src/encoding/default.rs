@@ -11,7 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{value::Value, Sample};
+use crate::{
+    encoding::{Decoder, Encoder, EncodingMapping},
+    value::Value,
+    Sample,
+};
 use phf::phf_ordered_map;
 use std::borrow::Cow;
 #[cfg(feature = "shared-memory")]
@@ -23,94 +27,111 @@ use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
 
-pub trait EncodingMapping {
-    fn prefix_to_str(&self, e: EncodingPrefix) -> &str;
-    fn str_to_prefix(&self, s: &str) -> EncodingPrefix;
-    fn parse<S>(s: S) -> ZResult<Encoding>
-    where
-        S: Into<Cow<'static, str>>;
-    fn to_string(e: &Encoding) -> Cow<'_, str>;
-}
-
-/// The default encoding mapping used by Zenoh.
+/// Default encoding mapping used by the [`DefaultEncoding`]. Please note that Zenoh does not
+/// impose any encoding mapping and users are free to use any mapping they like. The mapping
+/// here below is provided for user convenience and does its best to cover the most common
+/// cases.
+#[derive(Clone, Copy, Debug)]
 pub struct DefaultEncodingMapping;
 
 impl DefaultEncodingMapping {
+    /// Unspecified [`EncodingPrefix`].
+    /// Note that an [`Encoding`] could have an empty [prefix](`Encoding::prefix`) and a non-empty [suffix](`Encoding::suffix`).
     pub const EMPTY: EncodingPrefix = 0;
+    /// A stream of bytes.
     pub const APP_OCTET_STREAM: EncodingPrefix = 1;
+    /// An application-specific encoding. Usually a [suffix](`Encoding::suffix`) is provided in the [`Encoding`].
     pub const APP_CUSTOM: EncodingPrefix = 2;
+    /// An UTF-8 encoded string.
     pub const TEXT_PLAIN: EncodingPrefix = 3;
+    /// A list of [`Properties`].
     pub const APP_PROPERTIES: EncodingPrefix = 4;
+    /// A JSON intended to be consumed by an application.
     pub const APP_JSON: EncodingPrefix = 5;
+    /// An SQL query.
     pub const APP_SQL: EncodingPrefix = 6;
+    /// An signed or unsigned integer. Either 8bit, 16bit, 32bit, or 64bit.
     pub const APP_INTEGER: EncodingPrefix = 7;
+    /// A 32bit or 64bit float.
     pub const APP_FLOAT: EncodingPrefix = 8;
+    /// An XML document not readable from casual users ([RFC 3023, sec 3](https://www.rfc-editor.org/rfc/rfc3023#section-3)).
     pub const APP_XML: EncodingPrefix = 9;
+    /// An XML document that likely has a root element from the HTML namespace
     pub const APP_XHTML_XML: EncodingPrefix = 10;
+    /// A x-www-form-urlencoded list of tuples, each consisting of a name and a value.
     pub const APP_XWWW_FORM_URLENCODED: EncodingPrefix = 11;
+    /// A JSON intended to be human readable.
     pub const TEXT_JSON: EncodingPrefix = 12;
+    /// An HTML document.
     pub const TEXT_HTML: EncodingPrefix = 13;
+    /// An XML document readable from casual users ([RFC 3023, sec 3](https://www.rfc-editor.org/rfc/rfc3023#section-3)).
     pub const TEXT_XML: EncodingPrefix = 14;
+    /// A CSS document.
     pub const TEXT_CSS: EncodingPrefix = 15;
+    /// A CSV document.
     pub const TEXT_CSV: EncodingPrefix = 16;
+    /// A Javascript program.
     pub const TEXT_JAVASCRIPT: EncodingPrefix = 17;
+    /// A Jpeg image.
     pub const IMAGE_JPEG: EncodingPrefix = 18;
+    /// A PNG image.
     pub const IMAGE_PNG: EncodingPrefix = 19;
+    /// A GIF image.
     pub const IMAGE_GIF: EncodingPrefix = 20;
 
-    // A perfect hashmap for fast lookup of prefixes
+    /// A perfect hashmap for fast lookup of [`EncodingPrefix`] to string represenation.
     pub(super) const KNOWN_PREFIX: phf::OrderedMap<EncodingPrefix, &'static str> = phf_ordered_map! {
-        0u8 =>  "",
-        1u8 =>  "application/octet-stream",
-        2u8 =>  "application/custom", // non iana standard
-        3u8 =>  "text/plain",
-        4u8 =>  "application/properties", // non iana standard
-        5u8 =>  "application/json", // if not readable from casual users
-        6u8 =>  "application/sql",
-        7u8 =>  "application/integer", // non iana standard
-        8u8 =>  "application/float", // non iana standard
-        9u8 =>  "application/xml", // if not readable from casual users (RFC 3023, sec 3)
-        10u8 => "application/xhtml+xml",
-        11u8 => "application/x-www-form-urlencoded",
-        12u8 => "text/json", // non iana standard - if readable from casual users
-        13u8 => "text/html",
-        14u8 => "text/xml", // if readable from casual users (RFC 3023, section 3)
-        15u8 => "text/css",
-        16u8 => "text/csv",
-        17u8 => "text/javascript",
-        18u8 => "image/jpeg",
-        19u8 => "image/png",
-        20u8 => "image/gif",
+        0u16 =>  "",
+        1u16 =>  "application/octet-stream",
+        2u16 =>  "application/custom",
+        3u16 =>  "text/plain",
+        4u16 =>  "application/properties",
+        5u16 =>  "application/json",
+        6u16 =>  "application/sql",
+        7u16 =>  "application/integer",
+        8u16 =>  "application/float",
+        9u16 =>  "application/xml",
+        10u16 => "application/xhtml+xml",
+        11u16 => "application/x-www-form-urlencoded",
+        12u16 => "text/json",
+        13u16 => "text/html",
+        14u16 => "text/xml",
+        15u16 => "text/css",
+        16u16 => "text/csv",
+        17u16 => "text/javascript",
+        18u16 => "image/jpeg",
+        19u16 => "image/png",
+        20u16 => "image/gif",
     };
 
     // A perfect hashmap for fast lookup of prefixes
     pub(super) const KNOWN_STRING: phf::OrderedMap<&'static str, EncodingPrefix> = phf_ordered_map! {
-        "" => 0u8,
-        "application/octet-stream" => 1u8,
-        "application/custom" => 2u8, // non iana standard
-        "text/plain" => 3u8,
-        "application/properties" => 4u8, // non iana standard
-        "application/json" => 5u8, // if not readable from casual users
-        "application/sql" => 6u8,
-        "application/integer" => 7u8, // non iana standard
-        "application/float" => 8u8, // non iana standard
-        "application/xml" => 9u8, // if not readable from casual users (RFC 3023, sec 3)
-        "application/xhtml+xml" => 10u8,
-        "application/x-www-form-urlencoded" => 11u8,
-        "text/json" => 12u8, // non iana standard - if readable from casual users
-        "text/html" => 13u8,
-        "text/xml" => 14u8, // if readable from casual users (RFC 3023, section 3)
-        "text/css" => 15u8,
-        "text/csv" => 16u8,
-        "text/javascript" => 17u8,
-        "image/jpeg" => 18u8,
-        "image/png" => 19u8,
-        "image/gif" => 20u8,
+        "" => 0u16,
+        "application/octet-stream" => 1u16,
+        "application/custom" => 2u16,
+        "text/plain" => 3u16,
+        "application/properties" => 4u16,
+        "application/json" => 5u16,
+        "application/sql" => 6u16,
+        "application/integer" => 7u16,
+        "application/float" => 8u16,
+        "application/xml" => 9u16,
+        "application/xhtml+xml" => 10u16,
+        "application/x-www-form-urlencoded" => 11u16,
+        "text/json" => 12u16,
+        "text/html" => 13u16,
+        "text/xml" => 14u16,
+        "text/css" => 15u16,
+        "text/csv" => 16u16,
+        "text/javascript" => 17u16,
+        "image/jpeg" => 18u16,
+        "image/png" => 19u16,
+        "image/gif" => 20u16,
     };
 }
 
 impl EncodingMapping for DefaultEncodingMapping {
-    /// Given a numeric prefix ID returns its string representation
+    /// Given a numerical [`EncodingPrefix`] returns its string representation.
     fn prefix_to_str(&self, p: EncodingPrefix) -> &'static str {
         match Self::KNOWN_PREFIX.get(&p) {
             Some(p) => p,
@@ -118,8 +139,8 @@ impl EncodingMapping for DefaultEncodingMapping {
         }
     }
 
-    /// Given the string representation of a prefix returns its prefix ID.
-    /// Empty is returned in case the prefix is unknown.
+    /// Given the string representation of a prefix returns its numerical representation as [`EncodingPrefix`].
+    /// [EMPTY](`DefaultEncodingMapping::EMPTY`) is returned in case of unknown mapping.
     fn str_to_prefix(&self, s: &str) -> EncodingPrefix {
         match Self::KNOWN_STRING.get(s) {
             Some(p) => *p,
@@ -127,9 +148,11 @@ impl EncodingMapping for DefaultEncodingMapping {
         }
     }
 
-    /// Parse a string into a valid Encoding. This functions performs the necessary
-    /// prefix mapping and suffix substring when parsing the input.
-    fn parse<S>(t: S) -> ZResult<Encoding>
+    /// Parse a string into a valid [`Encoding`]. This functions performs the necessary
+    /// prefix mapping and suffix substring when parsing the input. In case of unknown prefix mapping,
+    /// the [prefix](`Encoding::prefix`) will be set to [EMPTY](`DefaultEncodingMapping::EMPTY`) and the
+    /// full string will be part of the [suffix](`Encoding::suffix`).
+    fn parse<S>(&self, t: S) -> ZResult<Encoding>
     where
         S: Into<Cow<'static, str>>,
     {
@@ -153,23 +176,26 @@ impl EncodingMapping for DefaultEncodingMapping {
         _parse(t.into())
     }
 
-    fn to_string(e: &Encoding) -> Cow<'_, str> {
+    /// Given an [`Encoding`] returns a full string representation.
+    /// It concatenates the string represenation of the encoding prefix with the encoding suffix.
+    fn to_str<'a>(&self, e: &'a Encoding) -> Cow<'a, str> {
         if e.prefix() == DefaultEncodingMapping::EMPTY {
             Cow::Borrowed(e.suffix())
         } else {
-            let p = Self::KNOWN_PREFIX.get(&e.prefix()).unwrap_or(&"unkwown");
-            Cow::Owned(format!("{}{}", p, e.suffix()))
+            Cow::Owned(format!("{}{}", self.prefix_to_str(e.prefix()), e.suffix()))
         }
     }
 }
 
-/// Default encoder provided with Zenoh to facilitate the encoding and decoding
-/// of Values in the Rust API. Please note that Zenoh does not impose any
-/// encoding and users are free to use any encoder they like.
+/// Default [`Encoding`] provided with Zenoh to facilitate the encoding and decoding
+/// of [`Value`]s in the Rust API. Please note that Zenoh does not impose any
+/// encoding and users are free to use any encoder they like. [`DefaultEncoding`]
+/// is simply provided as convenience to the users.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DefaultEncoding;
 
 impl DefaultEncoding {
+    /// Encoding is unspecified. Applications are expected to decode messages
     pub const EMPTY: Encoding = Encoding::new(DefaultEncodingMapping::EMPTY);
     pub const APP_OCTET_STREAM: Encoding = Encoding::new(DefaultEncodingMapping::APP_OCTET_STREAM);
     pub const APP_CUSTOM: Encoding = Encoding::new(DefaultEncodingMapping::APP_CUSTOM);
@@ -192,15 +218,6 @@ impl DefaultEncoding {
     pub const IMAGE_JPEG: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_JPEG);
     pub const IMAGE_PNG: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_PNG);
     pub const IMAGE_GIF: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_GIF);
-}
-
-// Encoder
-pub trait Encoder<T> {
-    fn encode(t: T) -> Value;
-}
-
-pub trait Decoder<T> {
-    fn decode(t: &Value) -> ZResult<T>;
 }
 
 // Bytes conversion

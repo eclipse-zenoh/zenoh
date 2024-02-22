@@ -16,7 +16,7 @@ use alloc::borrow::Cow;
 use core::fmt::{self, Debug};
 use zenoh_result::{bail, ZResult};
 
-pub type EncodingPrefix = u8;
+pub type EncodingPrefix = u16;
 
 /// The encoding of a zenoh `zenoh::Value`.
 ///

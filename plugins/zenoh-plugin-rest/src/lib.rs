@@ -404,7 +404,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         let mut query = req.state().0.get(&selector).consolidation(consolidation);
         if !body.is_empty() {
             let encoding = match req.content_type() {
-                Some(m) => match DefaultEncodingMapping::parse(m.to_string()) {
+                Some(m) => match DefaultEncodingMapping.parse(m.to_string()) {
                     Ok(e) => e,
                     Err(e) => {
                         return Ok(response(
@@ -453,7 +453,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             };
 
             let encoding = match req.content_type() {
-                Some(m) => match DefaultEncodingMapping::parse(m.to_string()) {
+                Some(m) => match DefaultEncodingMapping.parse(m.to_string()) {
                     Ok(e) => e,
                     Err(e) => {
                         return Ok(response(
