@@ -204,12 +204,13 @@ impl std::fmt::Debug for Value {
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let payload = self.payload.contiguous();
-        write!(
-            f,
-            "{}",
-            String::from_utf8(payload.clone().into_owned())
-                .unwrap_or_else(|_| b64_std_engine.encode(payload))
-        )
+        match std::str::from_utf8(&payload) {
+            Ok(s) => write!(f, "{}", s),
+            Err(_) => {
+                let s = b64_std_engine.encode(&payload);
+                write!(f, "{}", s)
+            }
+        }
     }
 }
 
