@@ -126,6 +126,7 @@ pub mod writer {
     // tags{}
     pub struct DidntWrite;
 
+    /// tags{}
     pub trait Writer {
         fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite>;
         fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite>;
@@ -173,6 +174,7 @@ pub mod reader {
     // tags{}
     pub struct DidntRead;
 
+    // tags{}
     pub trait Reader {
         fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead>;
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead>;

@@ -577,20 +577,24 @@ fn config_deser() {
 }
 
 impl Config {
+    // tags{}
     pub fn set_plugin_validator<T: ConfigValidator + 'static>(&mut self, validator: Weak<T>) {
         self.plugins.validator = validator;
     }
 
+    // tags{}
     pub fn plugin(&self, name: &str) -> Option<&Value> {
         self.plugins.values.get(name)
     }
 
+    // tags{}
     pub fn sift_privates(&self) -> Self {
         let mut copy = self.clone();
         copy.plugins.sift_privates();
         copy
     }
 
+    // tags{}
     pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
         let key = key.as_ref();
         self._remove(key)
@@ -608,6 +612,7 @@ impl Config {
 }
 
 #[derive(Debug)]
+// tags{}
 pub enum ConfigOpenErr {
     IoError(std::io::Error),
     JsonParseErr(json5::Error),
@@ -672,7 +677,7 @@ impl Config {
             Err(e) => bail!(e),
         }
     }
-
+    // tags{}
     pub fn libloader(&self) -> LibLoader {
         if self.plugins_search_dirs.is_empty() {
             LibLoader::default()
@@ -726,6 +731,7 @@ impl<T> Clone for Notifier<T> {
     }
 }
 impl Notifier<Config> {
+    // tags{}
     pub fn remove<K: AsRef<str>>(&self, key: K) -> ZResult<()> {
         let key = key.as_ref();
         self._remove(key)
@@ -741,6 +747,7 @@ impl Notifier<Config> {
     }
 }
 impl<T: ValidatedMap> Notifier<T> {
+    // tags{}
     pub fn new(inner: T) -> Self {
         Notifier {
             inner: Arc::new(NotifierInner {
@@ -749,6 +756,7 @@ impl<T: ValidatedMap> Notifier<T> {
             }),
         }
     }
+    // tags{}
     pub fn subscribe(&self) -> flume::Receiver<Notification> {
         let (tx, rx) = flume::unbounded();
         {
@@ -756,6 +764,7 @@ impl<T: ValidatedMap> Notifier<T> {
         }
         rx
     }
+    // tags{}
     pub fn notify<K: AsRef<str>>(&self, key: K) {
         let key = key.as_ref();
         self._notify(key);
@@ -773,7 +782,7 @@ impl<T: ValidatedMap> Notifier<T> {
             guard.swap_remove(i);
         }
     }
-
+    // tags{}
     pub fn lock(&self) -> MutexGuard<T> {
         zlock!(self.inner.inner)
     }
@@ -866,6 +875,7 @@ where
     }
 }
 
+// tags{}
 pub struct GetGuard<'a, T> {
     _guard: MutexGuard<'a, T>,
     subref: *const dyn Any,
@@ -940,6 +950,7 @@ fn user_conf_validator(u: &UsrPwdConf) -> bool {
 /// }
 /// ```
 #[derive(Clone)]
+// tags{}
 pub struct PluginsConfig {
     values: Value,
     validator: std::sync::Weak<dyn ConfigValidator>,
@@ -963,15 +974,18 @@ fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
 }
 
 #[derive(Debug, Clone)]
+// tags{}
 pub struct PluginLoad {
     pub name: String,
     pub paths: Option<Vec<String>>,
     pub required: bool,
 }
 impl PluginsConfig {
+    // tags{}
     pub fn sift_privates(&mut self) {
         sift_privates(&mut self.values);
     }
+    // tags{}
     fn load_external_configs(&mut self) -> ZResult<()> {
         let Some(values) = self.values.as_object_mut() else {
             bail!("plugins configuration must be an object")
@@ -981,6 +995,7 @@ impl PluginsConfig {
         }
         Ok(())
     }
+    // tags{}
     pub fn load_requests(&'_ self) -> impl Iterator<Item = PluginLoad> + '_ {
         self.values.as_object().unwrap().iter().map(|(name, value)| {
             let value = value.as_object().expect("Plugin configurations must be objects");
@@ -1001,6 +1016,7 @@ impl PluginsConfig {
             }
         })
     }
+    // tags{}
     pub fn remove(&mut self, key: &str) -> ZResult<()> {
         let mut split = key.split('/');
         let plugin = split.next().unwrap();
@@ -1268,6 +1284,7 @@ impl validated_struct::ValidatedMap for PluginsConfig {
     }
 }
 
+// tags{}
 pub trait ModeDependent<T> {
     fn router(&self) -> Option<&T>;
     fn peer(&self) -> Option<&T>;
@@ -1283,6 +1300,7 @@ pub trait ModeDependent<T> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+// tags{}
 pub struct ModeValues<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     router: Option<T>,
@@ -1310,6 +1328,7 @@ impl<T> ModeDependent<T> for ModeValues<T> {
 }
 
 #[derive(Clone, Debug)]
+// tags{}
 pub enum ModeDependentValue<T> {
     Unique(T),
     Dependent(ModeValues<T>),
