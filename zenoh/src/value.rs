@@ -123,15 +123,7 @@ impl Value {
     }
 
     /// Decode an object of type `T` from a [`Value`] using the [`DefaultEncoding`].
-    ///
-    /// ```rust
-    /// use zenoh::value::Value;
-    ///
-    /// let start = String::from("abc");
-    /// let value = Value::encode(start.clone());
-    /// let end: String = value.decode().unwrap();
-    /// assert_eq!(start, end);
-    /// ```
+    /// See [encode](Value::encode) for an example.
     pub fn decode<T>(&self) -> ZResult<T>
     where
         DefaultEncoding: Decoder<T>,
@@ -140,39 +132,7 @@ impl Value {
     }
 
     /// Decode an object of type `T` from a [`Value`] using a provided [`Encoder`].
-    ///
-    /// ```rust
-    /// use zenoh::prelude::sync::*;
-    /// use zenoh_result::{zerror, ZResult};
-    /// use zenoh::encoding::{Encoder, Decoder};
-    ///
-    /// struct MyEncoder;
-    ///
-    /// impl MyEncoder {
-    ///     pub const STRING: Encoding = Encoding::new(2);   
-    /// }
-    ///
-    /// impl Encoder<String> for MyEncoder {
-    ///     fn encode(s: String) -> Value {
-    ///         Value::new(s.into_bytes().into()).encoding(MyEncoder::STRING)
-    ///     }
-    /// }
-    ///
-    /// impl Decoder<String> for MyEncoder {
-    ///     fn decode(v: &Value) -> ZResult<String> {
-    ///         if v.encoding == MyEncoder::STRING {
-    ///             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
-    ///         } else {
-    ///             Err(zerror!("Invalid encoding").into())
-    ///         }
-    ///     }
-    /// }
-    ///
-    /// let start = String::from("abc");
-    /// let value = Value::encode_with::<MyEncoder, _>(start.clone());
-    /// let end: String = value.decode_with::<MyEncoder, _>().unwrap();
-    /// assert_eq!(start, end);
-    /// ```
+    /// See [encode_with](Value::encode_with) for an example.
     pub fn decode_with<M, T>(&self) -> ZResult<T>
     where
         M: Decoder<T>,
@@ -182,6 +142,7 @@ impl Value {
 }
 
 /// Build a [`Value`] from any type `T` supported by the [`DefaultEncoding`].
+/// This trait implementation is provided as convenience for users using the [`DefaultEncoding`].
 impl<T> From<T> for Value
 where
     DefaultEncoding: Encoder<T>,
