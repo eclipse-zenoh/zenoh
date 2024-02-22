@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use async_std::net::SocketAddr;
 use async_trait::async_trait;
 use core::{
     fmt,
@@ -98,5 +99,18 @@ impl fmt::Debug for LinkUnicast {
 impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
     fn from(link: Arc<dyn LinkUnicastTrait>) -> LinkUnicast {
         LinkUnicast(link)
+    }
+}
+
+pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
+    match zenoh_util::net::get_interface_names_by_addr(addr.ip()) {
+        Ok(interfaces) => {
+            log::trace!("get_interface_names for {:?}: {:?}", addr.ip(), interfaces);
+            interfaces
+        }
+        Err(e) => {
+            log::debug!("get_interface_names for {:?} failed: {:?}", addr.ip(), e);
+            vec![]
+        }
     }
 }

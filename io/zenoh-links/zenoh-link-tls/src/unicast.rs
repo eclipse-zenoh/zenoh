@@ -46,8 +46,8 @@ use webpki::{
 };
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender,
+    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
@@ -196,9 +196,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
-        // @TODO: Not supported for now
-        log::debug!("The get_interface_names for LinkUnicastTls is not supported");
-        vec![]
+        get_ip_interface_names(&self.src_addr)
     }
 
     #[inline(always)]

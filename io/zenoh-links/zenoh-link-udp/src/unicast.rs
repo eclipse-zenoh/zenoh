@@ -27,8 +27,8 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -208,24 +208,7 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
-        match zenoh_util::net::get_interface_names_by_addr(self.src_addr.ip()) {
-            Ok(interfaces) => {
-                log::trace!(
-                    "get_interface_names for {:?}: {:?}",
-                    self.src_addr.ip(),
-                    interfaces
-                );
-                interfaces
-            }
-            Err(e) => {
-                log::debug!(
-                    "get_interface_names for {:?} failed: {:?}",
-                    self.src_addr.ip(),
-                    e
-                );
-                vec![]
-            }
-        }
+        get_ip_interface_names(&self.src_addr)
     }
 
     #[inline(always)]

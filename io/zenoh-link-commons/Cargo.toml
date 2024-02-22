@@ -33,6 +33,7 @@ zenoh-sync = { workspace = true }
 async-trait = { workspace = true }
 flume = { workspace = true }
 lz4_flex = { workspace = true }
+log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 typenum = { workspace = true }
 zenoh-buffers = { workspace = true }
