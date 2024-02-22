@@ -18,10 +18,13 @@ use zenoh_result::{bail, ZResult};
 
 pub type EncodingPrefix = u16;
 
-/// The encoding of a zenoh `zenoh::Value`.
-///
-/// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
-/// as an integer prefix (that maps to a string) and a string suffix.
+/// [`Encoding`] is a metadata that indicates how the data payload should be interpreted.
+/// For wire-efficiency and extensibility purposes, Zenoh defines an [`Encoding`] as
+/// composed of an unsigned integer prefix and a string suffix. The actual meaning of the
+/// prefix and suffix are out-of-scope of the protocol definition. Therefore, Zenoh does not
+/// impose any encoding mapping and users are free to use any mapping they like.
+/// Nevertheless, it is worth highlighting that Zenoh still provides a default mapping as part
+/// of the API as per user convenience. That mapping has no impact on the Zenoh protocol definition.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Encoding {
     prefix: EncodingPrefix,
@@ -29,7 +32,7 @@ pub struct Encoding {
 }
 
 impl Encoding {
-    /// Returns a new [`WireEncoding`] object provided the prefix ID.
+    /// Returns a new [`Encoding`] object provided the prefix ID.
     pub const fn new(prefix: EncodingPrefix) -> Self {
         Self {
             prefix,
@@ -37,8 +40,8 @@ impl Encoding {
         }
     }
 
-    /// Sets the suffix of this encoding.
-    /// This method will return an error when the suffix is longer than 255 characters.
+    /// Sets the suffix of the encoding.
+    /// It will return an error when the suffix is longer than 255 characters.
     pub fn with_suffix<IntoCowStr>(mut self, suffix: IntoCowStr) -> ZResult<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
@@ -51,12 +54,12 @@ impl Encoding {
         Ok(self)
     }
 
-    /// Returns a new [`WireEncoding`] object with default empty prefix ID.
+    /// Returns a new [`Encoding`] object with default empty prefix ID.
     pub const fn empty() -> Self {
         Self::new(0)
     }
 
-    // Returns the numerical prefix ID
+    // Returns the numerical prefix
     pub const fn prefix(&self) -> EncodingPrefix {
         self.prefix
     }
@@ -67,7 +70,7 @@ impl Encoding {
     }
 
     /// Returns `true` if the string representation of this encoding starts with
-    /// the string representation of ther given encoding.
+    /// the string representation of the other given encoding.
     pub fn starts_with<T>(&self, with: T) -> bool
     where
         T: Into<Encoding>,

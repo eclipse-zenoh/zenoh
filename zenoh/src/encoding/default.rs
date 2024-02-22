@@ -30,7 +30,7 @@ use zenoh_shm::SharedMemoryBuf;
 /// Default encoding mapping used by the [`DefaultEncoding`]. Please note that Zenoh does not
 /// impose any encoding mapping and users are free to use any mapping they like. The mapping
 /// here below is provided for user convenience and does its best to cover the most common
-/// cases.
+/// cases. To implement a custom mapping refer to [`EncodingMapping`] trait.
 #[derive(Clone, Copy, Debug)]
 pub struct DefaultEncodingMapping;
 

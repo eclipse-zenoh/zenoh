@@ -21,12 +21,12 @@ use std::borrow::Cow;
 use zenoh_protocol::core::{Encoding, EncodingPrefix};
 use zenoh_result::ZResult;
 
+/// Trait to implement to create, resolve, parse an [`Encoding`] mapping.
 pub trait EncodingMapping {
     /// Map a numerical prefix to its string representation
     fn prefix_to_str(&self, e: EncodingPrefix) -> &str;
     /// Map a string to a known numerical prefix ID
     fn str_to_prefix(&self, s: &str) -> EncodingPrefix;
-
     /// Parse a string into a valid
     fn parse<S>(&self, s: S) -> ZResult<Encoding>
     where

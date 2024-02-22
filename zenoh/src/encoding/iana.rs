@@ -17,6 +17,9 @@ use std::borrow::Cow;
 use zenoh_protocol::core::{Encoding, EncodingPrefix};
 use zenoh_result::ZResult;
 
+/// Encoding mapping used by the [`IanaEncoding`]. It has been generated starting from the
+/// MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml).
+/// [`IanaEncodingMapping`] covers the types defined in the `2024-02-16` IANA update.
 #[derive(Clone, Copy, Debug)]
 pub struct IanaEncodingMapping;
 
@@ -6387,7 +6390,7 @@ impl IanaEncodingMapping {
         "video/vnd.vivo" => 2096u16,
         "video/vnd.youtube.yt" => 2097u16,
     };
-} // End of impl
+}
 
 impl EncodingMapping for IanaEncodingMapping {
     /// Given a numerical [`EncodingPrefix`] returns its string representation.
@@ -10134,4 +10137,4 @@ impl IanaEncoding {
     pub const VIDEO_VND_VIVO: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_VIVO);
     pub const VIDEO_VND_YOUTUBE_YT: Encoding =
         Encoding::new(IanaEncodingMapping::VIDEO_VND_YOUTUBE_YT);
-} // End of impl
+}
