@@ -58,52 +58,52 @@ impl DefaultEncodingMapping {
 
     // A perfect hashmap for fast lookup of prefixes
     pub(super) const KNOWN_PREFIX: phf::OrderedMap<EncodingPrefix, &'static str> = phf_ordered_map! {
-        0u64 =>  "",
-        1u64 =>  "application/octet-stream",
-        2u64 =>  "application/custom", // non iana standard
-        3u64 =>  "text/plain",
-        4u64 =>  "application/properties", // non iana standard
-        5u64 =>  "application/json", // if not readable from casual users
-        6u64 =>  "application/sql",
-        7u64 =>  "application/integer", // non iana standard
-        8u64 =>  "application/float", // non iana standard
-        9u64 =>  "application/xml", // if not readable from casual users (RFC 3023, sec 3)
-        10u64 => "application/xhtml+xml",
-        11u64 => "application/x-www-form-urlencoded",
-        12u64 => "text/json", // non iana standard - if readable from casual users
-        13u64 => "text/html",
-        14u64 => "text/xml", // if readable from casual users (RFC 3023, section 3)
-        15u64 => "text/css",
-        16u64 => "text/csv",
-        17u64 => "text/javascript",
-        18u64 => "image/jpeg",
-        19u64 => "image/png",
-        20u64 => "image/gif",
+        0u8 =>  "",
+        1u8 =>  "application/octet-stream",
+        2u8 =>  "application/custom", // non iana standard
+        3u8 =>  "text/plain",
+        4u8 =>  "application/properties", // non iana standard
+        5u8 =>  "application/json", // if not readable from casual users
+        6u8 =>  "application/sql",
+        7u8 =>  "application/integer", // non iana standard
+        8u8 =>  "application/float", // non iana standard
+        9u8 =>  "application/xml", // if not readable from casual users (RFC 3023, sec 3)
+        10u8 => "application/xhtml+xml",
+        11u8 => "application/x-www-form-urlencoded",
+        12u8 => "text/json", // non iana standard - if readable from casual users
+        13u8 => "text/html",
+        14u8 => "text/xml", // if readable from casual users (RFC 3023, section 3)
+        15u8 => "text/css",
+        16u8 => "text/csv",
+        17u8 => "text/javascript",
+        18u8 => "image/jpeg",
+        19u8 => "image/png",
+        20u8 => "image/gif",
     };
 
     // A perfect hashmap for fast lookup of prefixes
     pub(super) const KNOWN_STRING: phf::OrderedMap<&'static str, EncodingPrefix> = phf_ordered_map! {
-        "" => 0u64,
-        "application/octet-stream" => 1u64,
-        "application/custom" => 2u64, // non iana standard
-        "text/plain" => 3u64,
-        "application/properties" => 4u64, // non iana standard
-        "application/json" => 5u64, // if not readable from casual users
-        "application/sql" => 6u64,
-        "application/integer" => 7u64, // non iana standard
-        "application/float" => 8u64, // non iana standard
-        "application/xml" => 9u64, // if not readable from casual users (RFC 3023, sec 3)
-        "application/xhtml+xml" => 10u64,
-        "application/x-www-form-urlencoded" => 11u64,
-        "text/json" => 12u64, // non iana standard - if readable from casual users
-        "text/html" => 13u64,
-        "text/xml" => 14u64, // if readable from casual users (RFC 3023, section 3)
-        "text/css" => 15u64,
-        "text/csv" => 16u64,
-        "text/javascript" => 17u64,
-        "image/jpeg" => 18u64,
-        "image/png" => 19u64,
-        "image/gif" => 20u64,
+        "" => 0u8,
+        "application/octet-stream" => 1u8,
+        "application/custom" => 2u8, // non iana standard
+        "text/plain" => 3u8,
+        "application/properties" => 4u8, // non iana standard
+        "application/json" => 5u8, // if not readable from casual users
+        "application/sql" => 6u8,
+        "application/integer" => 7u8, // non iana standard
+        "application/float" => 8u8, // non iana standard
+        "application/xml" => 9u8, // if not readable from casual users (RFC 3023, sec 3)
+        "application/xhtml+xml" => 10u8,
+        "application/x-www-form-urlencoded" => 11u8,
+        "text/json" => 12u8, // non iana standard - if readable from casual users
+        "text/html" => 13u8,
+        "text/xml" => 14u8, // if readable from casual users (RFC 3023, section 3)
+        "text/css" => 15u8,
+        "text/csv" => 16u8,
+        "text/javascript" => 17u8,
+        "image/jpeg" => 18u8,
+        "image/png" => 19u8,
+        "image/gif" => 20u8,
     };
 }
 
