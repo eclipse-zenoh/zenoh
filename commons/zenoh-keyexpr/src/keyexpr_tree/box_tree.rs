@@ -30,6 +30,7 @@ use super::support::IterOrOption;
 ///
 /// Note that most of `KeBoxTree`'s methods are declared in the [`IKeyExprTree`] and [`IKeyExprTreeMut`] traits.
 #[repr(C)]
+// tags{rust.ke_box_tree, api.ke_tree}
 pub struct KeBoxTree<
     Weight,
     Wildness: IWildness = bool,
@@ -44,6 +45,7 @@ where
     DefaultChildrenProvider:
         IChildrenProvider<Box<KeyExprTreeNode<Weight, bool, DefaultChildrenProvider>>>,
 {
+    // tags{rust.ke_box_tree.new}
     pub fn new() -> Self {
         Default::default()
     }
@@ -263,6 +265,7 @@ where
 }
 
 #[repr(C)]
+// tags{}
 pub struct KeyExprTreeNode<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> {
     parent: Option<NonNull<Self>>,
     chunk: OwnedKeyExpr,

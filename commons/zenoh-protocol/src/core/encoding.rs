@@ -144,6 +144,7 @@ impl Encoding {
         }
     }
 
+    // tags{}
     pub fn as_ref<'a, T>(&'a self) -> T
     where
         &'a Self: Into<T>,
@@ -179,27 +180,49 @@ impl Encoding {
 }
 
 impl Encoding {
+    // tags{}
     pub const EMPTY: Encoding = Encoding::Exact(KnownEncoding::Empty);
+    // tags{}
     pub const APP_OCTET_STREAM: Encoding = Encoding::Exact(KnownEncoding::AppOctetStream);
+    // tags{}
     pub const APP_CUSTOM: Encoding = Encoding::Exact(KnownEncoding::AppCustom);
+    // tags{}
     pub const TEXT_PLAIN: Encoding = Encoding::Exact(KnownEncoding::TextPlain);
+    // tags{}
     pub const APP_PROPERTIES: Encoding = Encoding::Exact(KnownEncoding::AppProperties);
+    // tags{}
     pub const APP_JSON: Encoding = Encoding::Exact(KnownEncoding::AppJson);
+    // tags{}
     pub const APP_SQL: Encoding = Encoding::Exact(KnownEncoding::AppSql);
+    // tags{}
     pub const APP_INTEGER: Encoding = Encoding::Exact(KnownEncoding::AppInteger);
+    // tags{}
     pub const APP_FLOAT: Encoding = Encoding::Exact(KnownEncoding::AppFloat);
+    // tags{}
     pub const APP_XML: Encoding = Encoding::Exact(KnownEncoding::AppXml);
+    // tags{}
     pub const APP_XHTML_XML: Encoding = Encoding::Exact(KnownEncoding::AppXhtmlXml);
+    // tags{}
     pub const APP_XWWW_FORM_URLENCODED: Encoding =
+    // tags{}
         Encoding::Exact(KnownEncoding::AppXWwwFormUrlencoded);
+    // tags{}
     pub const TEXT_JSON: Encoding = Encoding::Exact(KnownEncoding::TextJson);
+    // tags{}
     pub const TEXT_HTML: Encoding = Encoding::Exact(KnownEncoding::TextHtml);
+    // tags{}
     pub const TEXT_XML: Encoding = Encoding::Exact(KnownEncoding::TextXml);
+    // tags{}
     pub const TEXT_CSS: Encoding = Encoding::Exact(KnownEncoding::TextCss);
+    // tags{}
     pub const TEXT_CSV: Encoding = Encoding::Exact(KnownEncoding::TextCsv);
+    // tags{}
     pub const TEXT_JAVASCRIPT: Encoding = Encoding::Exact(KnownEncoding::TextJavascript);
+    // tags{}
     pub const IMAGE_JPEG: Encoding = Encoding::Exact(KnownEncoding::ImageJpeg);
+    // tags{}
     pub const IMAGE_PNG: Encoding = Encoding::Exact(KnownEncoding::ImagePng);
+    // tags{}
     pub const IMAGE_GIF: Encoding = Encoding::Exact(KnownEncoding::ImageGif);
 }
 
@@ -274,6 +297,7 @@ impl Default for Encoding {
 
 impl Encoding {
     #[cfg(feature = "test")]
+    // tags{}
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},

@@ -322,7 +322,7 @@ impl Div for &keyexpr {
 /// Note that [`Equals`](SetIntersectionLevel::Equals) implies [`Includes`](SetIntersectionLevel::Includes), which itself implies [`Intersects`](SetIntersectionLevel::Intersects).
 ///
 /// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
-// rust.keyexpr.set_intersection_level, api.options.keyexpr.set_intersection_level}
+// tags{rust.keyexpr.set_intersection_level, api.options.keyexpr.set_intersection_level}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SetIntersectionLevel {
     Disjoint,

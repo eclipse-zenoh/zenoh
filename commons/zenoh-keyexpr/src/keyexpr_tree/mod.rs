@@ -61,6 +61,7 @@
 
 use crate::{keyexpr, OwnedKeyExpr};
 /// Allows importing all of the KeTree traits at once.
+// ignore_tagging
 pub mod traits;
 pub use traits::*;
 
@@ -75,12 +76,15 @@ pub use box_tree::KeBoxTree;
 /// KeTrees can store their children in different manners.
 ///
 /// This module contains a few implementations.
+// ignore_tagging
 pub mod impls;
 pub use impls::DefaultChildrenProvider;
+// ignore_tagging
 mod iters;
 pub use iters::*;
 
 #[cfg(test)]
 mod test;
 
+// ignore_tagging
 pub mod support;

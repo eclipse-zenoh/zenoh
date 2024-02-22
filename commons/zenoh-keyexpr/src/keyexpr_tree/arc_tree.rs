@@ -25,6 +25,7 @@ use super::support::IterOrOption;
 use crate::keyexpr;
 use crate::keyexpr_tree::{support::IWildness, *};
 
+// tags{}
 pub struct KeArcTreeInner<
     Weight,
     Wildness: IWildness,
@@ -58,6 +59,7 @@ fn ketree_borrow_mut<'a, T, Token: TokenTrait>(
 /// The tree and its nodes have shared ownership, while their mutability is managed through the `Token`.
 ///
 /// Most of its methods are declared in the [`ITokenKeyExprTree`] trait.
+// tags{rust.ke_arc_tree, api.ke_tree}
 pub struct KeArcTree<
     Weight,
     Token: TokenTrait = DefaultToken,
@@ -91,6 +93,7 @@ impl<
     ///
     /// The simplest way to resolve this is to eventually assign to tree part of the return value
     /// to a variable or field whose type is named `KeArcTree<_>` (the `Weight` parameter can generally be infered).
+    // tags{rust.ke_arc_tree.new, api.ke_tree.create}
     pub fn new() -> Result<(Self, DefaultToken), <DefaultToken as TokenTrait>::ConstructionError> {
         let token = DefaultToken::new()?;
         Ok((Self::with_token(&token), token))
@@ -107,6 +110,7 @@ impl<
     > KeArcTree<Weight, Token, Wildness, Children>
 {
     /// Constructs the KeArcTree with a specific token.
+    // tags{rust.ke_arc_tree.with_token, api.ke_tree.create.with_token}
     pub fn with_token(token: &Token) -> Self {
         Self {
             inner: TokenCell::new(
@@ -417,6 +421,7 @@ pub(crate) mod sealed {
     use core::ops::{Deref, DerefMut};
     use token_cell::prelude::{TokenCell, TokenTrait};
 
+    // tags{}
     pub struct Tokenized<A, B>(pub A, pub(crate) B);
     impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &Token> {
         type Target = T;
@@ -424,6 +429,7 @@ pub(crate) mod sealed {
             unsafe { &*self.0.get() }
         }
     }
+    // tags{}
     impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &mut Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
@@ -447,6 +453,7 @@ pub(crate) mod sealed {
             unsafe { &*self.0.get() }
         }
     }
+    // tags{}
     impl<T, Token: TokenTrait> DerefMut for Tokenized<&Arc<TokenCell<T, Token>>, &mut Token> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             unsafe { &mut *self.0.get() }
@@ -485,20 +492,24 @@ pub(crate) mod sealed {
 }
 pub use sealed::{TokenPacker, Tokenized};
 
+// tags{}
 pub trait IArcProvider {
     type Ptr<T>: IArc<T>;
 }
+// tags{}
 pub trait IArc<T> {
     fn weak(&self) -> Weak<T>;
     type UpgradeErr: Debug;
     fn upgrade(&self) -> Result<Arc<T>, Self::UpgradeErr>;
 }
+// tags{}
 impl IArcProvider for Arc<()> {
     type Ptr<T> = Arc<T>;
 }
 impl IArcProvider for Weak<()> {
     type Ptr<T> = Weak<T>;
 }
+// tags{}
 impl<T> IArc<T> for Arc<T> {
     fn weak(&self) -> Weak<T> {
         Arc::downgrade(self)
@@ -509,6 +520,7 @@ impl<T> IArc<T> for Arc<T> {
     }
 }
 #[derive(Debug, Clone, Copy)]
+// tags{}
 pub struct WeakConvertError;
 impl<T> IArc<T> for Weak<T> {
     fn weak(&self) -> Weak<T> {
@@ -521,6 +533,7 @@ impl<T> IArc<T> for Weak<T> {
 }
 
 #[allow(clippy::type_complexity)]
+// tags{}
 pub struct KeArcTreeNode<
     Weight,
     Parent: IArcProvider,
@@ -733,6 +746,7 @@ where
     /// which may be necessary for operations such as [`IKeyExprTreeNode::keyexpr`].
     ///
     /// To become zombified, a node and its parents must both have been pruned from the tree that constructed them, while at least one of the parents has also been dropped everywhere it was aliased through [`Arc`].
+    // tags{rust.ke_arc_tree_node.is_zombie}
     pub fn is_zombie(&self) -> bool {
         match &self.parent {
             Some(parent) => match parent.upgrade() {

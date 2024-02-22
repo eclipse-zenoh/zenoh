@@ -74,12 +74,14 @@ pub type SecretValue = Secret<SecretString>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "lowercase")]
+// tags{rust.downsampling_flow, api.options.downsampling_flow}
 pub enum DownsamplingFlow {
     Egress,
     Ingress,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+// tags{rust.downsampling_rule_conf, api.downsampling_rule_conf}
 pub struct DownsamplingRuleConf {
     /// A list of key-expressions to which the downsampling will be applied.
     /// Downsampling will be applied for all key extensions if the parameter is None
@@ -89,33 +91,7 @@ pub struct DownsamplingRuleConf {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct DownsamplingItemConf {
-    /// A list of interfaces to which the downsampling will be applied
-    /// Downsampling will be applied for all interfaces if the parameter is None
-    pub interfaces: Option<Vec<String>>,
-    /// A list of interfaces to which the downsampling will be applied.
-    pub rules: Vec<DownsamplingRuleConf>,
-    /// Downsampling flow direction: egress, ingress
-    pub flow: DownsamplingFlow,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum DownsamplingFlow {
-    Egress,
-    Ingress,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct DownsamplingRuleConf {
-    /// A list of key-expressions to which the downsampling will be applied.
-    /// Downsampling will be applied for all key extensions if the parameter is None
-    pub key_expr: OwnedKeyExpr,
-    /// The maximum frequency in Hertz;
-    pub rate: f64,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
+// tags{rust.downsampling_item_conf, api.downsampling_item_conf}
 pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
