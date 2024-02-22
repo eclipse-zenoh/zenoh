@@ -226,7 +226,7 @@ impl keyexpr {
     /// );
     /// ```
     pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
-        let mut result = vec![];
+        let mut result = alloc::vec![];
         'chunks: for i in (0..=self.len()).rev() {
             if if i == self.len() {
                 self.ends_with("**")
