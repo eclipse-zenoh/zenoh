@@ -36,6 +36,9 @@ use zenoh_result::ZResult;
 /*************************************/
 /*            GENERAL                */
 /*************************************/
+
+pub const BIND_INTERFACE: &str = "iface";
+
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
     pub src: Locator,

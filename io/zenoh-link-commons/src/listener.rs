@@ -23,6 +23,8 @@ use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::Signal;
 
+use crate::BIND_INTERFACE;
+
 pub struct ListenerUnicastIP {
     endpoint: EndPoint,
     active: Arc<AtomicBool>,
@@ -109,12 +111,17 @@ impl ListenersUnicastIP {
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
             let (kip, kpt) = (key.ip(), key.port());
+            let iface = value
+                .endpoint
+                .config()
+                .get(BIND_INTERFACE)
+                .map(|s| s.to_string());
 
             // Either ipv4/0.0.0.0 or ipv6/[::]
             if kip.is_unspecified() {
                 let mut addrs = match kip {
-                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
-                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
+                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(iface),
+                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(iface),
                 };
                 let iter = addrs.drain(..).map(|x| {
                     Locator::new(

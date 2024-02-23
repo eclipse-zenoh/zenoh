@@ -416,7 +416,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         for (key, value) in guard.iter() {
             let listener_locator = value.endpoint.to_locator();
             if key.ip() == default_ipv4 {
-                match zenoh_util::net::get_local_addresses() {
+                match zenoh_util::net::get_local_addresses(None) {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
@@ -433,7 +433,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                     Err(err) => log::error!("Unable to get local addresses: {}", err),
                 }
             } else if key.ip() == default_ipv6 {
-                match zenoh_util::net::get_local_addresses() {
+                match zenoh_util::net::get_local_addresses(None) {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {

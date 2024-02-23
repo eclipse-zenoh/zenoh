@@ -210,12 +210,19 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
     }
 }
 
-pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
+pub fn get_local_addresses(interface: Option<String>) -> ZResult<Vec<IpAddr>> {
     #[cfg(unix)]
     {
         Ok(pnet_datalink::interfaces()
             .into_iter()
-            .filter(|iface| iface.is_up() && iface.is_running())
+            .filter(|iface| {
+                if let Some(interface) = interface.clone() {
+                    if iface.name != interface {
+                        return false;
+                    }
+                }
+                iface.is_up() && iface.is_running()
+            })
             .flat_map(|iface| iface.ips)
             .map(|ipnet| ipnet.ip())
             .collect())
@@ -412,25 +419,26 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
     }
 }
 
-pub fn get_ipv4_ipaddrs() -> Vec<IpAddr> {
-    get_local_addresses()
+pub fn get_ipv4_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
+    get_local_addresses(interface)
         .unwrap_or_else(|_| vec![])
         .drain(..)
         .filter_map(|x| match x {
             IpAddr::V4(a) => Some(a),
             IpAddr::V6(_) => None,
         })
-        .filter(|x| !x.is_loopback() && !x.is_multicast())
+        .filter(|x| !x.is_multicast())
+        // .filter(|x| !x.is_loopback() && !x.is_multicast()) // TODO(sashacmc): Why we exclude loopback?
         .map(IpAddr::V4)
         .collect()
 }
 
-pub fn get_ipv6_ipaddrs() -> Vec<IpAddr> {
+pub fn get_ipv6_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
     const fn is_unicast_link_local(addr: &Ipv6Addr) -> bool {
         (addr.segments()[0] & 0xffc0) == 0xfe80
     }
 
-    let ipaddrs = get_local_addresses().unwrap_or_else(|_| vec![]);
+    let ipaddrs = get_local_addresses(interface).unwrap_or_else(|_| vec![]);
 
     // Get first all IPv4 addresses
     let ipv4_iter = ipaddrs
@@ -440,7 +448,8 @@ pub fn get_ipv6_ipaddrs() -> Vec<IpAddr> {
             IpAddr::V6(_) => None,
         })
         .filter(|x| {
-            !x.is_loopback() && !x.is_link_local() && !x.is_multicast() && !x.is_broadcast()
+            // !x.is_loopback() && !x.is_link_local() && !x.is_multicast() && !x.is_broadcast() // TODO(sashacmc): Why we exclude loopback?
+            !x.is_multicast() && !x.is_broadcast()
         });
 
     // Get next all IPv6 addresses
