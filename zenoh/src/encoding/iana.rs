@@ -6428,7 +6428,6 @@ impl EncodingMapping for IanaEncodingMapping {
             if p != IanaEncodingMapping::EMPTY {
                 return Ok(Encoding::new(p));
             }
-
             // Check if the passed string matches one of the known prefixes. It will map the known string
             // prefix to the numerical prefix and carry the remaining part of the string in the suffix.
             // Skip empty string mapping. The order is guaranteed by the phf::OrderedMap.
@@ -6441,6 +6440,7 @@ impl EncodingMapping for IanaEncodingMapping {
                     }
                 }
             }
+            // No matching known prefix has been found, carry everything in the suffix.
             IanaEncoding::EMPTY.with_suffix(t)
         }
         _parse(self, t.into())

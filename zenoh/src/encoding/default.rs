@@ -166,7 +166,6 @@ impl EncodingMapping for DefaultEncodingMapping {
             if p != DefaultEncodingMapping::EMPTY {
                 return Ok(Encoding::new(p));
             }
-
             // Check if the passed string matches one of the known prefixes. It will map the known string
             // prefix to the numerical prefix and carry the remaining part of the string in the suffix.
             // Skip empty string mapping. The order is guaranteed by the phf::OrderedMap.
