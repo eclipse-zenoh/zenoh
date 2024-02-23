@@ -14,31 +14,32 @@
 pub mod default;
 pub mod iana;
 
-pub use default::*;
-
 use crate::value::Value;
+pub use default::*;
 use std::borrow::Cow;
 use zenoh_protocol::core::{Encoding, EncodingPrefix};
 use zenoh_result::ZResult;
 
-/// Trait to implement to create, resolve, parse an [`Encoding`] mapping.
+/// Trait to create, resolve, parse an [`Encoding`] mapping.
 pub trait EncodingMapping {
-    /// Map a numerical prefix to its string representation
+    /// Map a numerical prefix to its string representation.
     fn prefix_to_str(&self, e: EncodingPrefix) -> &str;
-    /// Map a string to a known numerical prefix ID
+    /// Map a string to a known numerical prefix ID.
     fn str_to_prefix(&self, s: &str) -> EncodingPrefix;
-    /// Parse a string into a valid
+    /// Parse a string into a valid [`Encoding`].
     fn parse<S>(&self, s: S) -> ZResult<Encoding>
     where
         S: Into<Cow<'static, str>>;
     fn to_str<'a>(&self, e: &'a Encoding) -> Cow<'a, str>;
 }
 
-// Encoder
+/// Trait to encode a type `T` into a [`Value`].
 pub trait Encoder<T> {
+    /// The implementer should take care of serializing the type `T` and set the proper [`Encoding`].
     fn encode(t: T) -> Value;
 }
 
 pub trait Decoder<T> {
+    /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
     fn decode(t: &Value) -> ZResult<T>;
 }
