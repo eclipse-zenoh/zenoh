@@ -267,6 +267,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addrs = get_tcp_addrs(endpoint.address()).await?;
         let iface = endpoint.config().get(BIND_INTERFACE).map(|s| s.to_string());
+
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
             match self.new_listener_inner(&da, &iface).await {

@@ -4779,7 +4779,6 @@ dependencies = [
  "async-std",
  "async-trait",
  "flume",
- "libc",
  "log",
  "lz4_flex",
  "serde",
