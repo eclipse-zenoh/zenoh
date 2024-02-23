@@ -20,7 +20,7 @@ use zenoh_shm::api::{
     },
     provider::{
         shared_memory_provider_backend::SharedMemoryProviderBackend,
-        types::{AllocAlignment, AllocLayout},
+        types::{AllocAlignment, MemoryLayout},
     },
 };
 
@@ -44,7 +44,7 @@ fn posix_shm_provider_alloc() {
         .res()
         .expect("Error creating PosixSharedMemoryProviderBackend!");
 
-    let layout = AllocLayout::new(100, AllocAlignment::default(), &backend).unwrap();
+    let layout = MemoryLayout::new(100, AllocAlignment::default()).unwrap();
 
     let _buf = backend
         .alloc(&layout)
@@ -59,7 +59,7 @@ fn posix_shm_provider_open() {
         .res()
         .expect("Error creating PosixSharedMemoryProviderBackend!");
 
-    let layout = AllocLayout::new(100, AllocAlignment::default(), &backend).unwrap();
+    let layout = MemoryLayout::new(100, AllocAlignment::default()).unwrap();
 
     let buf = backend
         .alloc(&layout)
@@ -80,7 +80,7 @@ fn posix_shm_provider_allocator() {
         .res()
         .expect("Error creating PosixSharedMemoryProviderBackend!");
 
-    let layout = AllocLayout::new(BUFFER_SIZE, AllocAlignment::default(), &backend).unwrap();
+    let layout = MemoryLayout::new(BUFFER_SIZE, AllocAlignment::default()).unwrap();
 
     // exaust memory by allocating it all
     let mut buffers = vec![];

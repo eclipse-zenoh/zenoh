@@ -41,10 +41,7 @@ mod tests {
                 posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
                 protocol_id::POSIX_PROTOCOL_ID,
             },
-            provider::{
-                shared_memory_provider::{BlockOn, GarbageCollect, SharedMemoryProvider},
-                types::{AllocAlignment, AllocLayout},
-            },
+            provider::shared_memory_provider::{BlockOn, GarbageCollect, SharedMemoryProvider},
         },
         SharedMemoryBuf,
     };
@@ -174,7 +171,7 @@ mod tests {
             .unwrap()
             .res()
             .unwrap();
-        let mut shm01 = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
+        let shm01 = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
@@ -252,17 +249,16 @@ mod tests {
             .unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
-        let layout = AllocLayout::new(MSG_SIZE, AllocAlignment::default(), &shm01).unwrap();
+        let layout = shm01.layout().size(MSG_SIZE).build().unwrap();
 
         // Send the message
         println!("Transport SHM [3a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = ztimeout!(shm01
+            let mut sbuf = ztimeout!(layout
                 .alloc()
                 .with_policy::<BlockOn<GarbageCollect>>()
-                .with_layout(&layout)
                 .res_async())
             .unwrap();
 
@@ -306,10 +302,9 @@ mod tests {
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = ztimeout!(shm01
+            let mut sbuf = ztimeout!(layout
                 .alloc()
                 .with_policy::<BlockOn<GarbageCollect>>()
-                .with_layout(&layout)
                 .res_async())
             .unwrap();
 

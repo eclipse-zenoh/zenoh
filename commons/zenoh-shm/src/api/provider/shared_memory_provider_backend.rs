@@ -14,7 +14,7 @@
 
 use super::{
     chunk::ChunkDescriptor,
-    types::{AllocAlignment, AllocLayout, ChunkAllocResult},
+    types::{AllocAlignment, ChunkAllocResult, MemoryLayout},
 };
 
 // The provider backend trait
@@ -22,7 +22,7 @@ use super::{
 pub trait SharedMemoryProviderBackend: Send {
     // Allocate the chunk of desired size
     // If successful, the result's chunk size will be >= len
-    fn alloc(&mut self, layout: &AllocLayout) -> ChunkAllocResult;
+    fn alloc(&mut self, layout: &MemoryLayout) -> ChunkAllocResult;
 
     // Deallocate the chunk
     // It is guaranteed that chunk's len will correspond to the len returned from alloc(...)

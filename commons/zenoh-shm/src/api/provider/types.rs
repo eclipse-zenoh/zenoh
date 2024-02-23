@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Display, ops::Deref};
+use std::fmt::Display;
 
 use zenoh_result::{bail, ZResult};
 
 use crate::SharedMemoryBuf;
 
-use super::{chunk::AllocatedChunk, shared_memory_provider::LimitedAlignment};
+use super::chunk::AllocatedChunk;
 
 // Allocation errors
 #[derive(Debug)]
@@ -101,34 +101,6 @@ impl MemoryLayout {
     }
     pub fn alignment(&self) -> AllocAlignment {
         self.alignment
-    }
-}
-
-#[derive(Debug)]
-pub struct AllocLayout {
-    pub layout: MemoryLayout,
-}
-
-impl Deref for AllocLayout {
-    type Target = MemoryLayout;
-
-    fn deref(&self) -> &Self::Target {
-        &self.layout
-    }
-}
-
-impl AllocLayout {
-    pub fn new(
-        size: usize,
-        alignment: AllocAlignment,
-        aligning: &impl LimitedAlignment,
-    ) -> ZResult<Self> {
-        // Create layout for the size corresponding to aligning entitie's capabilities
-        if aligning.max_align() >= alignment {
-            let layout = MemoryLayout::new(size, alignment)?;
-            return Ok(Self { layout });
-        }
-        bail!("Unsupported alignemnt: {:?}", alignment)
     }
 }
 

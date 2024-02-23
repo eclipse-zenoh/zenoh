@@ -25,7 +25,7 @@ mod tests {
     use zenoh_shm::api::provider::shared_memory_provider::{
         BlockOn, GarbageCollect, SharedMemoryProvider,
     };
-    use zenoh_shm::api::provider::types::{AllocAlignment, AllocLayout, MemoryLayout};
+    use zenoh_shm::api::provider::types::{AllocAlignment, MemoryLayout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -123,7 +123,7 @@ mod tests {
                 .unwrap()
                 .res()
                 .unwrap();
-            let mut shm01 = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
+            let shm01 = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
 
             // remember segment size that was allocated
             let shm_segment_size = shm01.available();
@@ -131,14 +131,13 @@ mod tests {
             // Put data
             println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
 
-            let layout = AllocLayout::new(size, AllocAlignment::default(), &shm01).unwrap();
+            let layout = shm01.layout().size(size).build().unwrap();
 
             for c in 0..msg_count {
                 // Create the message to send
-                let sbuf = ztimeout!(shm01
+                let sbuf = ztimeout!(layout
                     .alloc()
                     .with_policy::<BlockOn<GarbageCollect>>()
-                    .with_layout(&layout)
                     .res_async())
                 .unwrap();
                 println!("{c} created");
@@ -238,14 +237,13 @@ mod tests {
 
             // Get the SHM provider for POSIX_PROTOCOL_ID
             // The actual resource initialization happens here
-            let mut provider = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
+            let provider = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
 
             // Create a layout for particular buffer and particular SHM provider
             // The layout is validated for argument correctness and also is checked
             // against particular SHM provider's layouting capabilities. This approach
             // allows making a reusable layout for series of similar allocations
-            let buffer_layout =
-                AllocLayout::new(512, AllocAlignment::default(), &provider).unwrap();
+            let buffer_layout = provider.layout().size(512).build().unwrap();
 
             // Allocate SharedMemoryBuf using asynchronous BlockOn<GarbageCollect<JustAlloc>> policy.
             // Policy generics collection is a mechanism to describe necessary allocation behaviour
@@ -259,11 +257,9 @@ mod tests {
             // ---DeallocateEldest
             // ---DeallocateOptimal
             // -BlockOn (sync and async)
-            // SharedMemoryProvider's alloc supports sync and async APIs to do the allocations
-            let sbuf = ztimeout!(provider
+            let sbuf = ztimeout!(buffer_layout
                 .alloc()
                 .with_policy::<BlockOn<GarbageCollect>>()
-                .with_layout(&buffer_layout)
                 .res_async())
             .unwrap();
 

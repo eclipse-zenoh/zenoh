@@ -13,7 +13,6 @@
 //
 
 use std::{
-    borrow::Borrow,
     collections::VecDeque,
     marker::PhantomData,
     ptr::NonNull,
@@ -22,7 +21,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use zenoh_core::zlock;
+use zenoh_core::bail;
 use zenoh_result::ZResult;
 
 use crate::{
@@ -44,7 +43,7 @@ use crate::{
 use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
     shared_memory_provider_backend::SharedMemoryProviderBackend,
-    types::{AllocAlignment, AllocLayout, BufAllocResult, ChunkAllocResult, ZAllocError},
+    types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
 };
 
 #[derive(Debug)]
@@ -68,26 +67,111 @@ impl BusyChunk {
     }
 }
 
+pub struct AllocLayoutBuilder<'a, Backend: SharedMemoryProviderBackend> {
+    provider: &'a SharedMemoryProvider<Backend>,
+}
+impl<'a, Backend: SharedMemoryProviderBackend> AllocLayoutBuilder<'a, Backend> {
+    pub fn size(self, size: usize) -> AllocLayoutSizedBuilder<'a, Backend> {
+        AllocLayoutSizedBuilder {
+            provider: self.provider,
+            size,
+        }
+    }
+
+    /*
+    pub fn for_type<T: IStable<ContainsIndirections = stabby::abi::B0>>(
+        self,
+    ) -> AllocLayout<'a, Backend> {
+        todo: return AllocLayout for type
+    }
+    */
+}
+
+pub struct AllocLayoutSizedBuilder<'a, Backend: SharedMemoryProviderBackend> {
+    provider: &'a SharedMemoryProvider<Backend>,
+    size: usize,
+}
+impl<'a, Backend: SharedMemoryProviderBackend> AllocLayoutSizedBuilder<'a, Backend> {
+    pub fn alignment(self, alignment: AllocAlignment) -> AllocLayoutAlignedBuilder<'a, Backend> {
+        AllocLayoutAlignedBuilder {
+            provider: self.provider,
+            size: self.size,
+            alignment,
+        }
+    }
+
+    pub fn build(self) -> ZResult<AllocLayout<'a, Backend>> {
+        AllocLayout::new(self.size, AllocAlignment::default(), self.provider)
+    }
+}
+
+pub struct AllocLayoutAlignedBuilder<'a, Backend: SharedMemoryProviderBackend> {
+    provider: &'a SharedMemoryProvider<Backend>,
+    size: usize,
+    alignment: AllocAlignment,
+}
+impl<'a, Backend: SharedMemoryProviderBackend> AllocLayoutAlignedBuilder<'a, Backend> {
+    pub fn build(self) -> ZResult<AllocLayout<'a, Backend>> {
+        AllocLayout::new(self.size, self.alignment, self.provider)
+    }
+}
+
+#[derive(Debug)]
+pub struct AllocLayout<'a, Backend: SharedMemoryProviderBackend> {
+    layout: MemoryLayout,
+    provider: &'a SharedMemoryProvider<Backend>,
+}
+
+impl<'a, Backend: SharedMemoryProviderBackend> AllocLayout<'a, Backend> {
+    // Allocate buffer of desired size
+    pub fn alloc(&'a self) -> AllocBuilder<'a, Backend> {
+        AllocBuilder {
+            layout: &self.layout,
+            provider: self.provider,
+            _phantom: PhantomData,
+        }
+    }
+
+    fn new(
+        size: usize,
+        alignment: AllocAlignment,
+        provider: &'a SharedMemoryProvider<Backend>,
+    ) -> ZResult<Self> {
+        // Create layout for the size corresponding to aligning entitie's capabilities
+        if provider.max_align >= alignment {
+            let layout = MemoryLayout::new(size, alignment)?;
+            return Ok(Self { layout, provider });
+        }
+        bail!("Unsupported alignemnt: {:?}", alignment)
+    }
+}
+
 pub trait ForceDeallocPolicy {
     fn dealloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> bool;
 }
 
 pub struct DeallocOptimal;
 impl ForceDeallocPolicy for DeallocOptimal {
     fn dealloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> bool {
-        let chunk_to_dealloc = match provider.busy_list.remove(1) {
+        let mut guard = provider.busy_list.lock().unwrap();
+        let chunk_to_dealloc = match guard.remove(1) {
             Some(val) => val,
-            None => match provider.busy_list.pop_front() {
+            None => match guard.pop_front() {
                 Some(val) => val,
                 None => return false,
             },
         };
+        drop(guard);
 
-        provider.backend.free(&chunk_to_dealloc.descriptor);
+        provider
+            .backend
+            .lock()
+            .unwrap()
+            .free(&chunk_to_dealloc.descriptor);
         true
     }
 }
@@ -95,11 +179,11 @@ impl ForceDeallocPolicy for DeallocOptimal {
 pub struct DeallocYoungest;
 impl ForceDeallocPolicy for DeallocYoungest {
     fn dealloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> bool {
-        match provider.busy_list.pop_back() {
+        match provider.busy_list.lock().unwrap().pop_back() {
             Some(val) => {
-                provider.backend.free(&val.descriptor);
+                provider.backend.lock().unwrap().free(&val.descriptor);
                 true
             }
             None => false,
@@ -109,11 +193,11 @@ impl ForceDeallocPolicy for DeallocYoungest {
 pub struct DeallocEldest;
 impl ForceDeallocPolicy for DeallocEldest {
     fn dealloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> bool {
-        match provider.busy_list.pop_front() {
+        match provider.busy_list.lock().unwrap().pop_front() {
             Some(val) => {
-                provider.backend.free(&val.descriptor);
+                provider.backend.lock().unwrap().free(&val.descriptor);
                 true
             }
             None => false,
@@ -123,26 +207,26 @@ impl ForceDeallocPolicy for DeallocEldest {
 
 pub trait AllocPolicy {
     fn alloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
-        layout: &AllocLayout,
+        layout: &MemoryLayout,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> ChunkAllocResult;
 }
 
 #[async_trait]
 pub trait AsyncAllocPolicy {
     async fn alloc_async<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
-        layout: &AllocLayout,
+        layout: &MemoryLayout,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> ChunkAllocResult;
 }
 
 pub struct JustAlloc;
 impl AllocPolicy for JustAlloc {
     fn alloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
-        layout: &AllocLayout,
+        layout: &MemoryLayout,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> ChunkAllocResult {
-        provider.backend.alloc(layout)
+        provider.backend.lock().unwrap().alloc(layout)
     }
 }
 
@@ -155,14 +239,14 @@ impl<InnerPolicy: AllocPolicy, AltPolicy: AllocPolicy> AllocPolicy
     for GarbageCollect<InnerPolicy, AltPolicy>
 {
     fn alloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
-        layout: &AllocLayout,
+        layout: &MemoryLayout,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> ChunkAllocResult {
-        let result = InnerPolicy::alloc(provider, layout);
+        let result = InnerPolicy::alloc(layout, provider);
         if let Err(ZAllocError::OutOfMemory) = result {
             // try to alloc again only if GC managed to reclaim big enough chunk
             if provider.garbage_collect() >= layout.size() {
-                return AltPolicy::alloc(provider, layout);
+                return AltPolicy::alloc(layout, provider);
             }
         }
         result
@@ -177,14 +261,14 @@ impl<InnerPolicy: AllocPolicy, AltPolicy: AllocPolicy> AllocPolicy
     for Defragment<InnerPolicy, AltPolicy>
 {
     fn alloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
-        layout: &AllocLayout,
+        layout: &MemoryLayout,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> ChunkAllocResult {
-        let result = InnerPolicy::alloc(provider, layout);
+        let result = InnerPolicy::alloc(layout, provider);
         if let Err(ZAllocError::NeedDefragment) = result {
             // try to alloc again only if big enough chunk was defragmented
             if provider.defragment() >= layout.size() {
-                return AltPolicy::alloc(provider, layout);
+                return AltPolicy::alloc(layout, provider);
             }
         }
         result
@@ -209,10 +293,10 @@ impl<
     > AllocPolicy for Deallocate<N, InnerPolicy, AltPolicy, DeallocatePolicy>
 {
     fn alloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
-        layout: &AllocLayout,
+        layout: &MemoryLayout,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> ChunkAllocResult {
-        let mut result = InnerPolicy::alloc(provider, layout);
+        let mut result = InnerPolicy::alloc(layout, provider);
         for _ in 0..N {
             match result {
                 Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
@@ -224,7 +308,7 @@ impl<
                     return result;
                 }
             }
-            result = AltPolicy::alloc(provider, layout);
+            result = AltPolicy::alloc(layout, provider);
         }
         result
     }
@@ -236,11 +320,11 @@ pub struct BlockOn<InnerPolicy: AllocPolicy = JustAlloc> {
 #[async_trait]
 impl<InnerPolicy: AllocPolicy> AsyncAllocPolicy for BlockOn<InnerPolicy> {
     async fn alloc_async<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
-        layout: &AllocLayout,
+        layout: &MemoryLayout,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> ChunkAllocResult {
         loop {
-            match InnerPolicy::alloc(provider, layout) {
+            match InnerPolicy::alloc(layout, provider) {
                 Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
                     // todo: implement provider's async signalling instead of this!
                     async_std::task::sleep(Duration::from_millis(1)).await;
@@ -254,11 +338,11 @@ impl<InnerPolicy: AllocPolicy> AsyncAllocPolicy for BlockOn<InnerPolicy> {
 }
 impl<InnerPolicy: AllocPolicy> AllocPolicy for BlockOn<InnerPolicy> {
     fn alloc<Backend: SharedMemoryProviderBackend>(
-        provider: &mut SharedMemoryProvider<Backend>,
-        layout: &AllocLayout,
+        layout: &MemoryLayout,
+        provider: &SharedMemoryProvider<Backend>,
     ) -> ChunkAllocResult {
         loop {
-            match InnerPolicy::alloc(provider, layout) {
+            match InnerPolicy::alloc(layout, provider) {
                 Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
                     // todo: implement provider's async signalling instead of this!
                     std::thread::sleep(Duration::from_millis(1));
@@ -273,7 +357,7 @@ impl<InnerPolicy: AllocPolicy> AllocPolicy for BlockOn<InnerPolicy> {
 
 // todo: allocator API
 pub struct ShmAllocator<'a, Policy: AllocPolicy, Backend: SharedMemoryProviderBackend> {
-    provider: Mutex<&'a mut SharedMemoryProvider<Backend>>,
+    provider: &'a SharedMemoryProvider<Backend>,
     allocations: lockfree::map::Map<std::ptr::NonNull<u8>, SharedMemoryBuf>,
     _phantom: PhantomData<Policy>,
 }
@@ -282,10 +366,12 @@ impl<'a, Policy: AllocPolicy, Backend: SharedMemoryProviderBackend>
     ShmAllocator<'a, Policy, Backend>
 {
     fn allocate(&self, layout: std::alloc::Layout) -> BufAllocResult {
-        let mut guard = zlock!(self.provider);
-        guard
+        self.provider
+            .layout()
+            .size(layout.size())
+            .alignment(AllocAlignment::new(layout.align() as u32))
+            .build()?
             .alloc()
-            .with_layout_args(layout.size(), AllocAlignment::new(layout.align() as u32))?
             .res()
     }
 }
@@ -315,140 +401,74 @@ unsafe impl<'a, Policy: AllocPolicy, Backend: SharedMemoryProviderBackend>
     }
 }
 
-pub trait LimitedAlignment {
-    fn max_align(&self) -> AllocAlignment;
-}
-
-impl<T: SharedMemoryProviderBackend> LimitedAlignment for T {
-    fn max_align(&self) -> AllocAlignment {
-        self.max_align()
-    }
-}
-
-impl<Backend: SharedMemoryProviderBackend> LimitedAlignment for SharedMemoryProvider<Backend> {
-    fn max_align(&self) -> AllocAlignment {
-        self.backend.max_align()
-    }
-}
-
 pub struct AllocBuilder<'a, Backend: SharedMemoryProviderBackend, Policy = JustAlloc> {
-    provider: &'a mut SharedMemoryProvider<Backend>,
+    layout: &'a MemoryLayout,
+    provider: &'a SharedMemoryProvider<Backend>,
     _phantom: PhantomData<Policy>,
 }
 
-impl<'a, Backend: SharedMemoryProviderBackend, T> AllocBuilder<'a, Backend, T> {
+impl<'a, Backend: SharedMemoryProviderBackend, Policy> AllocBuilder<'a, Backend, Policy> {
     pub fn with_policy<OtherPolicy>(self) -> AllocBuilder<'a, Backend, OtherPolicy> {
         AllocBuilder {
+            layout: self.layout,
             provider: self.provider,
             _phantom: PhantomData,
         }
     }
 
-    pub fn with_layout<Layout>(self, layout: Layout) -> LayoutedAllocBuilder<'a, T, Layout, Backend>
-    where
-        Layout: Borrow<AllocLayout>,
-    {
-        LayoutedAllocBuilder {
-            builder: self,
-            layout,
-        }
-    }
-
-    pub fn with_layout_args(
-        self,
-        size: usize,
-        alignment: AllocAlignment,
-    ) -> ZResult<LayoutedAllocBuilder<'a, T, AllocLayout, Backend>> {
-        let layout = AllocLayout::new(size, alignment, self.provider)?;
-
-        Ok(LayoutedAllocBuilder {
-            builder: self,
-            layout,
-        })
-    }
-
-    pub fn with_size(
-        self,
-        size: usize,
-    ) -> ZResult<LayoutedAllocBuilder<'a, T, AllocLayout, Backend>> {
-        let layout = AllocLayout::new(size, AllocAlignment::default(), self.provider)?;
-
-        Ok(LayoutedAllocBuilder {
-            builder: self,
-            layout,
-        })
-    }
-}
-
-pub struct LayoutedAllocBuilder<'a, Policy, Layout, Backend>
-where
-    Layout: Borrow<AllocLayout>,
-    Backend: SharedMemoryProviderBackend,
-{
-    builder: AllocBuilder<'a, Backend, Policy>,
-    layout: Layout,
-}
-
-impl<'a, Policy, Layout, Backend> LayoutedAllocBuilder<'a, Policy, Layout, Backend>
-where
-    Layout: Borrow<AllocLayout>,
-    Backend: SharedMemoryProviderBackend,
-{
     pub fn res(self) -> BufAllocResult
     where
         Policy: AllocPolicy,
     {
-        self.builder
-            .provider
-            .alloc_inner::<Policy>(self.layout.borrow())
+        self.provider.alloc_inner::<Policy>(self.layout)
     }
 
     pub async fn res_async(self) -> BufAllocResult
     where
         Policy: AsyncAllocPolicy,
     {
-        self.builder
-            .provider
-            .alloc_inner_async::<Policy>(self.layout.borrow())
-            .await
+        self.provider.alloc_inner_async::<Policy>(self.layout).await
     }
 }
 
 // SharedMemoryProvider aggregates backend, watchdog and refcount storages and
 // provides a generalized interface for shared memory data sources
+#[derive(Debug)]
 pub struct SharedMemoryProvider<Backend: SharedMemoryProviderBackend> {
-    backend: Backend,
-    busy_list: VecDeque<BusyChunk>,
+    backend: Mutex<Backend>,
+    busy_list: Mutex<VecDeque<BusyChunk>>,
     id: ProtocolID,
+    max_align: AllocAlignment,
 }
+
+unsafe impl<Backend: SharedMemoryProviderBackend> Send for SharedMemoryProvider<Backend> {}
+unsafe impl<Backend: SharedMemoryProviderBackend> Sync for SharedMemoryProvider<Backend> {}
 
 impl<Backend: SharedMemoryProviderBackend> SharedMemoryProvider<Backend> {
     // Crete the new SharedMemoryProvider
     pub fn new(backend: Backend, id: ProtocolID) -> Self {
+        let max_align = backend.max_align();
         Self {
-            backend,
-            busy_list: VecDeque::default(),
+            backend: Mutex::new(backend),
+            busy_list: Mutex::new(VecDeque::default()),
             id,
+            max_align,
         }
     }
 
-    // Allocate buffer of desired size
-    pub fn alloc<'a, 'b: 'a>(&'b mut self) -> AllocBuilder<'a, Backend> {
-        AllocBuilder {
-            provider: self,
-            _phantom: PhantomData,
-        }
+    pub fn layout(&self) -> AllocLayoutBuilder<Backend> {
+        AllocLayoutBuilder { provider: self }
     }
 
     // Defragment memory
-    pub fn defragment(&mut self) -> usize {
-        self.backend.defragment()
+    pub fn defragment(&self) -> usize {
+        self.backend.lock().unwrap().defragment()
     }
 
     // Map externally-allocated chunk into SharedMemoryBuf
     // This method is designed to be used with push data sources
     // Remember that chunk's len may be >= len!
-    pub fn map(&mut self, chunk: AllocatedChunk, len: usize) -> ZResult<SharedMemoryBuf> {
+    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<SharedMemoryBuf> {
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
 
@@ -465,7 +485,7 @@ impl<Backend: SharedMemoryProviderBackend> SharedMemoryProvider<Backend> {
 
     // Try to collect free chunks
     // Returns the size of largest freed chunk
-    pub fn garbage_collect(&mut self) -> usize {
+    pub fn garbage_collect(&self) -> usize {
         fn is_free_chunk(chunk: &BusyChunk) -> bool {
             let header = chunk.header.descriptor.header();
             if header.refcount.load(Ordering::SeqCst) != 0 {
@@ -477,24 +497,36 @@ impl<Backend: SharedMemoryProviderBackend> SharedMemoryProvider<Backend> {
         log::trace!("Running Garbage Collector");
 
         let mut largest = 0usize;
-        self.busy_list.retain(|maybe_free| {
-            if is_free_chunk(maybe_free) {
-                log::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
-                self.backend.free(&maybe_free.descriptor);
-                largest = largest.max(maybe_free.descriptor.len);
-                return false;
+        let mut to_free = Vec::default();
+        {
+            let mut guard = self.busy_list.lock().unwrap();
+            guard.retain(|maybe_free| {
+                if is_free_chunk(maybe_free) {
+                    log::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
+                    to_free.push(maybe_free.descriptor.clone());
+                    largest = largest.max(maybe_free.descriptor.len);
+                    return false;
+                }
+                true
+            });
+            drop(guard);
+        }
+        if largest > 0 {
+            let mut guard = self.backend.lock().unwrap();
+            for elem in to_free {
+                guard.free(&elem);
             }
-            true
-        });
+            drop(guard);
+        }
         largest
     }
 
     // Bytes available for use
     pub fn available(&self) -> usize {
-        self.backend.available()
+        self.backend.lock().unwrap().available()
     }
 
-    fn alloc_inner<Policy>(&mut self, layout: &AllocLayout) -> BufAllocResult
+    fn alloc_inner<Policy>(&self, layout: &MemoryLayout) -> BufAllocResult
     where
         Policy: AllocPolicy,
     {
@@ -507,9 +539,9 @@ impl<Backend: SharedMemoryProviderBackend> SharedMemoryProvider<Backend> {
         // Don't loose this chunk as it leads to memory leak at the backend side!
         // NOTE: self.backend.alloc(len) returns chunk with len >= required len,
         // and it is necessary to handle that properly and pass this len to corresponding free(...)
-        let chunk = Policy::alloc(self, layout)?;
+        let chunk = Policy::alloc(layout, self)?;
 
-        // wrap everything to SharedMemoryBuf
+        // wrap allocated chunk to SharedMemoryBuf
         let wrapped = self.wrap(
             chunk,
             layout.size(),
@@ -521,7 +553,7 @@ impl<Backend: SharedMemoryProviderBackend> SharedMemoryProvider<Backend> {
     }
 
     // Allocate buffer of desired size using async policy!
-    async fn alloc_inner_async<Policy>(&mut self, layout: &AllocLayout) -> BufAllocResult
+    async fn alloc_inner_async<Policy>(&self, layout: &MemoryLayout) -> BufAllocResult
     where
         Policy: AsyncAllocPolicy,
     {
@@ -534,9 +566,9 @@ impl<Backend: SharedMemoryProviderBackend> SharedMemoryProvider<Backend> {
         // Don't loose this chunk as it leads to memory leak at the backend side!
         // NOTE: self.backend.alloc(len) returns chunk with len >= required len,
         // and it is necessary to handle that properly and pass this len to corresponding free(...)
-        let chunk = Policy::alloc_async(self, layout).await?;
+        let chunk = Policy::alloc_async(layout, self).await?;
 
-        // wrap everything to SharedMemoryBuf
+        // wrap allocated chunk to SharedMemoryBuf
         let wrapped = self.wrap(
             chunk,
             layout.size(),
@@ -565,7 +597,7 @@ impl<Backend: SharedMemoryProviderBackend> SharedMemoryProvider<Backend> {
     }
 
     fn wrap(
-        &mut self,
+        &self,
         chunk: AllocatedChunk,
         len: usize,
         allocated_header: AllocatedHeaderDescriptor,
@@ -606,7 +638,7 @@ impl<Backend: SharedMemoryProviderBackend> SharedMemoryProvider<Backend> {
         };
 
         // Create and store busy chunk
-        self.busy_list.push_back(BusyChunk::new(
+        self.busy_list.lock().unwrap().push_back(BusyChunk::new(
             chunk.descriptor,
             allocated_header,
             allocated_watchdog,

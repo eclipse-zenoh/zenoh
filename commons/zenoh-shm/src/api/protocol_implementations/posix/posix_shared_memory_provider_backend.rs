@@ -21,7 +21,7 @@ use crate::api::{
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
         shared_memory_provider_backend::SharedMemoryProviderBackend,
-        types::{AllocAlignment, AllocLayout, ChunkAllocResult, MemoryLayout, ZAllocError},
+        types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError},
     },
 };
 
@@ -136,7 +136,7 @@ impl PosixSharedMemoryProviderBackend {
 }
 
 impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
-    fn alloc(&mut self, layout: &AllocLayout) -> ChunkAllocResult {
+    fn alloc(&mut self, layout: &MemoryLayout) -> ChunkAllocResult {
         log::trace!("PosixSharedMemoryProviderBackend::alloc({:?})", layout);
 
         // Change required size to fit internal alignment
