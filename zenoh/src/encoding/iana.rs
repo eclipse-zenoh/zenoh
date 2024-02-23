@@ -6418,11 +6418,19 @@ impl EncodingMapping for IanaEncodingMapping {
     where
         S: Into<Cow<'static, str>>,
     {
-        fn _parse(t: Cow<'static, str>) -> ZResult<Encoding> {
+        fn _parse(_self: &IanaEncodingMapping, t: Cow<'static, str>) -> ZResult<Encoding> {
+            // Check if empty
             if t.is_empty() {
                 return Ok(IanaEncoding::EMPTY);
             }
+            // Try first an exact lookup of the string to prefix
+            let p = _self.str_to_prefix(t.as_ref());
+            if p != IanaEncodingMapping::EMPTY {
+                return Ok(Encoding::new(p));
+            }
 
+            // Check if the passed string matches one of the known prefixes. It will map the known string
+            // prefix to the numerical prefix and carry the remaining part of the string in the suffix.
             // Skip empty string mapping. The order is guaranteed by the phf::OrderedMap.
             for (s, p) in IanaEncodingMapping::KNOWN_STRING.entries().skip(1) {
                 if let Some(i) = t.find(s) {
@@ -6435,7 +6443,7 @@ impl EncodingMapping for IanaEncodingMapping {
             }
             IanaEncoding::EMPTY.with_suffix(t)
         }
-        _parse(t.into())
+        _parse(self, t.into())
     }
 
     /// Given an [`Encoding`] returns a full string representation.
