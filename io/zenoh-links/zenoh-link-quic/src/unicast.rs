@@ -21,20 +21,19 @@ use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use async_std::prelude::FutureExt;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use rustls::{Certificate, PrivateKey};
 use rustls_pemfile::Item;
-use std::collections::HashMap;
 use std::fmt;
 use std::io::BufReader;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
-use zenoh_core::{zasynclock, zread, zwrite};
+use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZError, ZResult};
@@ -145,9 +144,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
-        // @TODO: Not supported for now
-        log::debug!("The get_interface_names for LinkUnicastQuic is not supported");
-        vec![]
+        get_ip_interface_names(&self.src_addr)
     }
 
     #[inline(always)]
@@ -188,42 +185,16 @@ impl fmt::Debug for LinkUnicastQuic {
     }
 }
 
-/*************************************/
-/*          LISTENER                 */
-/*************************************/
-struct ListenerUnicastQuic {
-    endpoint: EndPoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
-    handle: JoinHandle<ZResult<()>>,
-}
-
-impl ListenerUnicastQuic {
-    fn new(
-        endpoint: EndPoint,
-        active: Arc<AtomicBool>,
-        signal: Signal,
-        handle: JoinHandle<ZResult<()>>,
-    ) -> ListenerUnicastQuic {
-        ListenerUnicastQuic {
-            endpoint,
-            active,
-            signal,
-            handle,
-        }
-    }
-}
-
 pub struct LinkManagerUnicastQuic {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastQuic>>>,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastQuic {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }
@@ -429,88 +400,40 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             endpoint.config(),
         )?;
 
-        // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
-        let mut listeners = zwrite!(self.listeners);
 
         let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
-        let c_listeners = self.listeners.clone();
-        let c_addr = local_addr;
-        let handle = task::spawn(async move {
-            // Wait for the accept loop to terminate
-            let res = accept_task(quic_endpoint, c_active, c_signal, c_manager).await;
-            zwrite!(c_listeners).remove(&c_addr);
-            res
-        });
+
+        let handle =
+            task::spawn(
+                async move { accept_task(quic_endpoint, c_active, c_signal, c_manager).await },
+            );
 
         // Initialize the QuicAcceptor
         let locator = endpoint.to_locator();
-        let listener = ListenerUnicastQuic::new(endpoint, active, signal, handle);
-        // Update the list of active listeners on the manager
-        listeners.insert(local_addr, listener);
+
+        self.listeners
+            .add_listener(endpoint, local_addr, active, signal, handle)
+            .await?;
 
         Ok(locator)
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         let epaddr = endpoint.address();
-
         let addr = get_quic_addr(&epaddr).await?;
-
-        // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
-            let e = zerror!(
-                "Can not delete the QUIC listener because it has not been found: {}",
-                addr
-            );
-            log::trace!("{}", e);
-            e
-        })?;
-
-        // Send the stop signal
-        listener.active.store(false, Ordering::Release);
-        listener.signal.trigger();
-        listener.handle.await
+        self.listeners.del_listener(addr).await
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
-            .values()
-            .map(|x| x.endpoint.clone())
-            .collect()
+        self.listeners.get_endpoints()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
-
-        let guard = zread!(self.listeners);
-        for (key, value) in guard.iter() {
-            let (kip, kpt) = (key.ip(), key.port());
-
-            // Either ipv4/0.0.0.0 or ipv6/[::]
-            if kip.is_unspecified() {
-                let mut addrs = match kip {
-                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
-                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
-                };
-                let iter = addrs.drain(..).map(|x| {
-                    Locator::new(
-                        value.endpoint.protocol(),
-                        SocketAddr::new(x, kpt).to_string(),
-                        value.endpoint.metadata(),
-                    )
-                    .unwrap()
-                });
-                locators.extend(iter);
-            } else {
-                locators.push(value.endpoint.to_locator());
-            }
-        }
-
-        locators
+        self.listeners.get_locators()
     }
 }
 
