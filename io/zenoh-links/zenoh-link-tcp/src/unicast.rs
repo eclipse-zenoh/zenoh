@@ -23,8 +23,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+    get_ip_interface_names, set_bind_to_device, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -226,19 +226,7 @@ impl LinkManagerUnicastTcp {
             .await
             .map_err(|e| zerror!("{}: {}", addr, e))?;
 
-        if let Some(iface) = iface {
-            // @TODO: switch to bind_device after tokio porting
-            log::debug!("Listen at the interface: {}", iface);
-            unsafe {
-                libc::setsockopt(
-                    socket.as_raw_fd(),
-                    libc::SOL_SOCKET,
-                    libc::SO_BINDTODEVICE,
-                    iface.as_ptr() as *const std::os::raw::c_void,
-                    iface.len() as libc::socklen_t,
-                );
-            }
-        }
+        set_bind_to_device(socket.as_raw_fd(), iface);
 
         let local_addr = socket
             .local_addr()

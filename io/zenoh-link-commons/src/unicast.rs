@@ -114,3 +114,27 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
         }
     }
 }
+
+pub fn set_bind_to_device(socket: std::os::raw::c_int, iface: &Option<String>) {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(iface) = iface {
+            // @TODO: switch to bind_device after tokio porting
+            log::debug!("Listen at the interface: {}", iface);
+            unsafe {
+                libc::setsockopt(
+                    socket,
+                    libc::SOL_SOCKET,
+                    libc::SO_BINDTODEVICE,
+                    iface.as_ptr() as *const std::os::raw::c_void,
+                    iface.len() as libc::socklen_t,
+                );
+            }
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        log::warn!("Listen at the interface is not supported for this platform");
+    }
+}

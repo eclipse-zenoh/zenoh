@@ -22,13 +22,15 @@ use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
+use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names, set_bind_to_device, ConstructibleLinkManagerUnicast,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -301,13 +303,19 @@ impl LinkManagerUnicastUdp {
         Ok((socket, src_addr, dst_addr))
     }
 
-    async fn new_listener_inner(&self, addr: &SocketAddr) -> ZResult<(UdpSocket, SocketAddr)> {
+    async fn new_listener_inner(
+        &self,
+        addr: &SocketAddr,
+        iface: &Option<String>,
+    ) -> ZResult<(UdpSocket, SocketAddr)> {
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
             log::warn!("{}", e);
             e
         })?;
+
+        set_bind_to_device(socket.as_raw_fd(), iface);
 
         let local_addr = socket.local_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
@@ -362,10 +370,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let addrs = get_udp_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
+        let iface = endpoint.config().get(BIND_INTERFACE).map(|s| s.to_string());
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match self.new_listener_inner(&da).await {
+            match self.new_listener_inner(&da, &iface).await {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(

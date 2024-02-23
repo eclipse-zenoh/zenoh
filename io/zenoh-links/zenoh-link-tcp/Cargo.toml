@@ -28,7 +28,6 @@ description = "Internal crate for zenoh."
 async-std = { workspace = true }
 async-trait = { workspace = true }
 log = { workspace = true }
-libc = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
