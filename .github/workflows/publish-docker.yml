@@ -1,0 +1,88 @@
+#
+# Copyright (c) 2023 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+name: Publish (Docker)
+
+on:
+  workflow_dispatch:
+    inputs:
+      live-run:
+        type: boolean
+        required: true
+      version:
+        type: string
+        required: false
+  workflow_call:
+    inputs:
+      live-run:
+        type: boolean
+        required: true
+      version:
+        type: string
+        required: true
+
+jobs:
+  main:
+    name: Docker build and push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
+
+      - name: Download packages from previous job
+        uses: actions/download-artifact@v3
+        with:
+          path: build
+
+      - name: Unzip artifacts
+        run: |
+          ls build
+
+          mkdir -p docker/linux/amd
+          unzip build/zenoh-${{ inputs.version }}-x86_64-unknown-linux-musl-artifacts.zip -d docker/linux/amd64/
+          rm docker/linux/amd64/libzenoh_plugin_example.so
+
+          mkdir -p docker/linux/arm64
+          unzip build/zenoh-${{ inputs.version }}-aarch64-unknown-linux-musl-artifacts.zip -d docker/linux/arm64/
+          rm docker/linux/arm64/libzenoh_plugin_example.so
+
+          tree docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta - set tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: eclipse/zenoh
+          labels: |
+            org.opencontainers.image.licenses=EPL-2.0 OR Apache-2.0
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_COM_USERNAME }}
+          password: ${{ secrets.DOCKER_COM_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ inputs.live-run }}
+          platforms: linux/amd64, linux/arm64
+          file: .github/workflows/Dockerfile
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
