@@ -789,7 +789,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 }
 
 #[cfg(feature = "transport_tcp")]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 fn openclose_tcp_only_with_interface_restriction() {
@@ -808,7 +808,7 @@ fn openclose_tcp_only_with_interface_restriction() {
 }
 
 #[cfg(feature = "transport_udp")]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 fn openclose_udp_only_with_interface_restriction() {

@@ -28,14 +28,16 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    get_ip_interface_names, set_bind_to_device, ConstructibleLinkManagerUnicast,
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender, BIND_INTERFACE,
+    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Mvar;
 use zenoh_sync::Signal;
+
+#[cfg(unix)]
+use zenoh_link_commons::set_bind_to_device;
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (Vec<u8>, usize);
@@ -306,7 +308,7 @@ impl LinkManagerUnicastUdp {
     async fn new_listener_inner(
         &self,
         addr: &SocketAddr,
-        iface: &Option<String>,
+        #[warn(unused_variables)] iface: &Option<String>,
     ) -> ZResult<(UdpSocket, SocketAddr)> {
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {

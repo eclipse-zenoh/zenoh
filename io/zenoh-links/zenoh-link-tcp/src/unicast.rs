@@ -23,12 +23,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_link_commons::{
-    get_ip_interface_names, set_bind_to_device, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Signal;
+
+#[cfg(unix)]
+use zenoh_link_commons::set_bind_to_device;
 
 use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
@@ -219,7 +222,7 @@ impl LinkManagerUnicastTcp {
     async fn new_listener_inner(
         &self,
         addr: &SocketAddr,
-        iface: &Option<String>,
+        #[warn(unused_variables)] iface: &Option<String>,
     ) -> ZResult<(TcpListener, SocketAddr)> {
         // Bind the TCP socket
         let socket = TcpListener::bind(addr)
