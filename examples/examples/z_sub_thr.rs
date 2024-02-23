@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use std::io::{stdin, Read};
-use std::time::Instant;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh_examples::CommonArgs;
@@ -95,11 +95,9 @@ fn main() {
         .res()
         .unwrap();
 
-    for byte in stdin().bytes() {
-        match byte {
-            Ok(b'q') => break,
-            _ => std::thread::yield_now(),
-        }
+    println!("Press CTRL-C to quit...");
+    loop {
+        sleep(Duration::from_secs(1));
     }
 }
 

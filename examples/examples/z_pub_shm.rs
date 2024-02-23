@@ -44,6 +44,7 @@ async fn main() -> Result<(), zenoh::Error> {
     println!("Allocating Shared Memory Buffer...");
     let publisher = session.declare_publisher(&path).res().await.unwrap();
 
+    println!("Press CTRL-C to quit...");
     for idx in 0..(K * N as u32) {
         sleep(Duration::from_secs(1)).await;
         let mut sbuf = match shm.alloc(1024) {

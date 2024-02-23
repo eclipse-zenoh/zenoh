@@ -13,7 +13,6 @@
 //
 use async_std::task::sleep;
 use clap::Parser;
-use futures::prelude::*;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
@@ -30,7 +29,7 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring LivelinessToken on '{}'...", &key_expr);
-    let mut token = Some(
+    let _token = Some(
         session
             .liveliness()
             .declare_token(&key_expr)
@@ -39,23 +38,17 @@ async fn main() {
             .unwrap(),
     );
 
-    println!("Enter 'd' to undeclare LivelinessToken, 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
+    println!("Press CTRL-C to undeclare LivelinessToken and quit...");
     loop {
-        let _ = stdin.read_exact(&mut input).await;
-        match input[0] {
-            b'q' => break,
-            b'd' => {
-                if let Some(token) = token.take() {
-                    println!("Undeclaring LivelinessToken...");
-                    token.undeclare().res().await.unwrap();
-                }
-            }
-            0 => sleep(Duration::from_secs(1)).await,
-            _ => (),
-        }
+        sleep(Duration::from_secs(1)).await;
     }
+    // LivelinessTokens are automatically closed when dropped
+    // Use the code below to manually undeclare it if needed
+    //
+    // if let Some(token) = token.take() {
+    //     println!("Undeclaring LivelinessToken...");
+    //     token.undeclare().res().await.unwrap();
+    // }
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

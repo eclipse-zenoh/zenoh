@@ -11,12 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::arg;
 use clap::Command;
-use futures::prelude::*;
 use futures::select;
-use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::query::ReplyKeyExpr;
@@ -55,9 +52,7 @@ async fn main() {
             .unwrap()
     };
 
-    println!("Enter 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
+    println!("Press CTRL-C to quit...");
     loop {
         select!(
             sample = subscriber.recv_async() => {
@@ -65,14 +60,6 @@ async fn main() {
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
                     sample.kind, sample.key_expr.as_str(), sample.value);
             },
-
-            _ = stdin.read_exact(&mut input).fuse() => {
-                match input[0] {
-                    b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
-                    _ => (),
-                }
-            }
         );
     }
 }
