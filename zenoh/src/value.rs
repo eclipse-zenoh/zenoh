@@ -20,18 +20,20 @@ use crate::buffers::ZBuf;
 use crate::encoding::{Decoder, DefaultEncoding, Encoder};
 use crate::prelude::{Encoding, SplitBuffer};
 
-/// A zenoh Value.
+/// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the `payload`
+/// should be interpreted.
 #[non_exhaustive]
 #[derive(Clone)]
 pub struct Value {
-    /// The payload of this Value.
+    /// The payload of this [`Value`].
     pub payload: ZBuf,
-    /// An encoding description indicating how the associated payload is encoded.
+    /// An [`Encoding`] description indicating how the payload should be interpreted.
     pub encoding: Encoding,
 }
 
 impl Value {
-    /// Creates a new [`Value`].
+    /// Creates a new [`Value`]. The enclosed [`Encoding`] is [empty](`Encoding::empty`) by default if
+    /// not specified via the [`encoding`](`Value::encoding`).
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
