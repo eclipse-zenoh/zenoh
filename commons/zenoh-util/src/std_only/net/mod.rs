@@ -510,23 +510,34 @@ fn set_bind_to_device(socket: std::os::raw::c_int, iface: &Option<String>) {
 }
 
 #[cfg(target_os = "linux")]
-pub fn set_bind_to_device_tcp(socket: &TcpListener, iface: &Option<String>) {
+pub fn set_bind_to_device_tcp_listener(socket: &TcpListener, iface: &Option<String>) {
     use std::os::fd::AsRawFd;
     set_bind_to_device(socket.as_raw_fd(), iface);
 }
 
 #[cfg(target_os = "linux")]
-pub fn set_bind_to_device_udp(socket: &UdpSocket, iface: &Option<String>) {
+pub fn set_bind_to_device_tcp_stream(socket: &TcpStream, iface: &Option<String>) {
+    use std::os::fd::AsRawFd;
+    set_bind_to_device(socket.as_raw_fd(), iface);
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &Option<String>) {
     use std::os::fd::AsRawFd;
     set_bind_to_device(socket.as_raw_fd(), iface);
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_tcp(_socket: &TcpListener, _iface: &Option<String>) {
+pub fn set_bind_to_device_tcp_listener(_socket: &TcpListener, _iface: &Option<String>) {
     log::warn!("Listen at the interface is not supported for this platform");
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_udp(_socket: &UdpSocket, _iface: &Option<String>) {
+pub fn set_bind_to_device_tcp_stream(_socket: &TcpStream, _iface: &Option<String>) {
+    log::warn!("Listen at the interface is not supported for this platform");
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn set_bind_to_device_udp_socket(_socket: &UdpSocket, _iface: &Option<String>) {
     log::warn!("Listen at the interface is not supported for this platform");
 }

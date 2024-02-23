@@ -261,6 +261,7 @@ impl LinkManagerUnicastUdp {
     async fn new_link_inner(
         &self,
         dst_addr: &SocketAddr,
+        iface: &Option<String>,
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
         // Establish a UDP socket
         let socket = UdpSocket::bind(SocketAddr::new(
@@ -277,6 +278,8 @@ impl LinkManagerUnicastUdp {
             log::warn!("{}", e);
             e
         })?;
+
+        zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface);
 
         // Connect the socket to the remote address
         socket.connect(dst_addr).await.map_err(|e| {
@@ -313,7 +316,7 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
-        zenoh_util::net::set_bind_to_device_udp(&socket, iface);
+        zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface);
 
         let local_addr = socket.local_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
@@ -331,10 +334,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let dst_addrs = get_udp_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
+        let iface = endpoint.config().get(BIND_INTERFACE).map(|s| s.to_string());
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
-            match self.new_link_inner(&da).await {
+            match self.new_link_inner(&da, &iface).await {
                 Ok((socket, src_addr, dst_addr)) => {
                     // Create UDP link
                     let link = Arc::new(LinkUnicastUdp::new(
