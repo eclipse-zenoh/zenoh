@@ -23,6 +23,8 @@ use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
+
+#[cfg(target_os = "linux")]
 use zenoh_util::net::get_ipv4_ipaddrs;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

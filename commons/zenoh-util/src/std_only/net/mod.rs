@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::net::TcpStream;
+use async_std::net::{TcpListener, TcpStream, UdpSocket};
 use std::net::{IpAddr, Ipv6Addr};
 use std::time::Duration;
 use zenoh_core::zconfigurable;
@@ -490,4 +490,43 @@ pub fn get_ipv6_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
         .chain(yll_ipv6_addrs)
         .chain(priv_ipv4_addrs)
         .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn set_bind_to_device(socket: std::os::raw::c_int, iface: &Option<String>) {
+    if let Some(iface) = iface {
+        // @TODO: switch to bind_device after tokio porting
+        log::debug!("Listen at the interface: {}", iface);
+        unsafe {
+            libc::setsockopt(
+                socket,
+                libc::SOL_SOCKET,
+                libc::SO_BINDTODEVICE,
+                iface.as_ptr() as *const std::os::raw::c_void,
+                iface.len() as libc::socklen_t,
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_bind_to_device_tcp(socket: &TcpListener, iface: &Option<String>) {
+    use std::os::fd::AsRawFd;
+    set_bind_to_device(socket.as_raw_fd(), iface);
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_bind_to_device_udp(socket: &UdpSocket, iface: &Option<String>) {
+    use std::os::fd::AsRawFd;
+    set_bind_to_device(socket.as_raw_fd(), iface);
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn set_bind_to_device_tcp(_socket: &TcpListener, _iface: &Option<String>) {
+    log::warn!("Listen at the interface is not supported for this platform");
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn set_bind_to_device_udp(_socket: &UdpSocket, _iface: &Option<String>) {
+    log::warn!("Listen at the interface is not supported for this platform");
 }

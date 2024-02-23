@@ -18,7 +18,6 @@ use async_trait::async_trait;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
-use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -29,9 +28,6 @@ use zenoh_link_commons::{
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Signal;
-
-#[cfg(unix)]
-use zenoh_link_commons::set_bind_to_device;
 
 use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
@@ -222,15 +218,14 @@ impl LinkManagerUnicastTcp {
     async fn new_listener_inner(
         &self,
         addr: &SocketAddr,
-        #[warn(unused_variables)] iface: &Option<String>,
+        iface: &Option<String>,
     ) -> ZResult<(TcpListener, SocketAddr)> {
         // Bind the TCP socket
         let socket = TcpListener::bind(addr)
             .await
             .map_err(|e| zerror!("{}: {}", addr, e))?;
 
-        #[cfg(unix)]
-        set_bind_to_device(socket.as_raw_fd(), iface);
+        zenoh_util::net::set_bind_to_device_tcp(&socket, iface);
 
         let local_addr = socket
             .local_addr()

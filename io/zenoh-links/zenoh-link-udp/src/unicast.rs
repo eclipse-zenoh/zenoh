@@ -22,7 +22,6 @@ use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
-use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
@@ -35,9 +34,6 @@ use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Mvar;
 use zenoh_sync::Signal;
-
-#[cfg(unix)]
-use zenoh_link_commons::set_bind_to_device;
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (Vec<u8>, usize);
@@ -308,7 +304,7 @@ impl LinkManagerUnicastUdp {
     async fn new_listener_inner(
         &self,
         addr: &SocketAddr,
-        #[warn(unused_variables)] iface: &Option<String>,
+        iface: &Option<String>,
     ) -> ZResult<(UdpSocket, SocketAddr)> {
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
@@ -317,8 +313,7 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
-        #[cfg(unix)]
-        set_bind_to_device(socket.as_raw_fd(), iface);
+        zenoh_util::net::set_bind_to_device_udp(&socket, iface);
 
         let local_addr = socket.local_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
