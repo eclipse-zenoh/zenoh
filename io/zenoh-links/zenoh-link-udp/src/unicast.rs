@@ -315,6 +315,7 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
+        #[cfg(unix)]
         set_bind_to_device(socket.as_raw_fd(), iface);
 
         let local_addr = socket.local_addr().map_err(|e| {

@@ -135,6 +135,10 @@ pub fn set_bind_to_device(socket: std::os::raw::c_int, iface: &Option<String>) {
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
-        log::warn!("Listen at the interface is not supported for this platform");
+        log::warn!(
+            "Listen at the interface ({:?}, {:?}) is not supported for this platform",
+            socket,
+            iface
+        );
     }
 }

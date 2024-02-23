@@ -23,6 +23,7 @@ use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
+use zenoh_util::net::get_ipv4_ipaddrs;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
@@ -153,10 +154,10 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     let mut links_num = 1;
 
     println!("Transport Open Close [1c1]");
-    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+    let open_res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
     println!("Transport Open Close [1c2]: {res:?}");
-    assert!(res.is_ok());
-    let c_ses1 = res.unwrap();
+    assert!(open_res.is_ok());
+    let c_ses1 = open_res.unwrap();
     println!("Transport Open Close [1d1]");
     let transports = ztimeout!(client01_manager.get_transports_unicast());
     println!("Transport Open Close [1d2]: {transports:?}");
@@ -784,5 +785,43 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
+    task::block_on(openclose_universal_transport(&endpoint));
+}
+
+#[cfg(feature = "transport_tcp")]
+#[cfg(unix)]
+#[test]
+#[should_panic(expected = "assertion failed: open_res.is_ok()")]
+fn openclose_tcp_only_with_interface_restriction() {
+    let addrs = get_ipv4_ipaddrs(None);
+
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // should not connect to local interface and external address
+    let endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], 13001)
+        .parse()
+        .unwrap();
+    task::block_on(openclose_universal_transport(&endpoint));
+}
+
+#[cfg(feature = "transport_udp")]
+#[cfg(unix)]
+#[test]
+#[should_panic(expected = "assertion failed: open_res.is_ok()")]
+fn openclose_udp_only_with_interface_restriction() {
+    let addrs = get_ipv4_ipaddrs(None);
+
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // should not connect to local interface and external address
+    let endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13011)
+        .parse()
+        .unwrap();
     task::block_on(openclose_universal_transport(&endpoint));
 }

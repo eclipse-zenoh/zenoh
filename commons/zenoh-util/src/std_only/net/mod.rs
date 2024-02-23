@@ -239,6 +239,11 @@ pub fn get_local_addresses(interface: Option<String>) -> ZResult<Vec<IpAddr>> {
             let mut result = vec![];
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
+                if let Some(interface) = interface.clone() {
+                    if ffi::pstr_to_string(iface.AdapterName) != interface {
+                        continue;
+                    }
+                }
                 let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
                 while let Some(ucast_addr) = next_ucast_addr {
                     if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
@@ -427,8 +432,7 @@ pub fn get_ipv4_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
             IpAddr::V4(a) => Some(a),
             IpAddr::V6(_) => None,
         })
-        .filter(|x| !x.is_multicast())
-        // .filter(|x| !x.is_loopback() && !x.is_multicast()) // TODO(sashacmc): Why we exclude loopback?
+        .filter(|x| !x.is_loopback() && !x.is_multicast())
         .map(IpAddr::V4)
         .collect()
 }
@@ -448,8 +452,7 @@ pub fn get_ipv6_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
             IpAddr::V6(_) => None,
         })
         .filter(|x| {
-            // !x.is_loopback() && !x.is_link_local() && !x.is_multicast() && !x.is_broadcast() // TODO(sashacmc): Why we exclude loopback?
-            !x.is_multicast() && !x.is_broadcast()
+            !x.is_loopback() && !x.is_link_local() && !x.is_multicast() && !x.is_broadcast()
         });
 
     // Get next all IPv6 addresses

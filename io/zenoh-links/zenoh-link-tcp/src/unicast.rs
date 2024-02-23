@@ -226,6 +226,7 @@ impl LinkManagerUnicastTcp {
             .await
             .map_err(|e| zerror!("{}: {}", addr, e))?;
 
+        #[cfg(unix)]
         set_bind_to_device(socket.as_raw_fd(), iface);
 
         let local_addr = socket
