@@ -34,6 +34,7 @@ impl WhatAmI {
     const U8_P: u8 = Self::Peer as u8;
     const U8_C: u8 = Self::Client as u8;
 
+    // tags{rust.what_am_i.to_str, api.options.what_am_i.to_str}
     pub const fn to_str(self) -> &'static str {
         match self {
             Self::Router => Self::STR_R,
@@ -42,6 +43,7 @@ impl WhatAmI {
         }
     }
 
+    // tags{}
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::prelude::SliceRandom;
@@ -99,6 +101,7 @@ impl From<WhatAmI> for u8 {
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+// tags{rust.what_am_i_matcher, api.what_am_i_matcher}
 pub struct WhatAmIMatcher(NonZeroU8);
 
 impl WhatAmIMatcher {
@@ -112,30 +115,37 @@ impl WhatAmIMatcher {
     const U8_R_C: u8 = Self::U8_0 | WhatAmI::U8_R | WhatAmI::U8_C;
     const U8_R_P_C: u8 = Self::U8_0 | WhatAmI::U8_R | WhatAmI::U8_P | WhatAmI::U8_C;
 
+    // tags{rust.what_am_i_matcher.empty, api.what_am_i_matcher.create.empty}
     pub const fn empty() -> Self {
         Self(unsafe { NonZeroU8::new_unchecked(Self::U8_0) })
     }
 
+    // tags{rust.what_am_i_matcher.router, api.what_am_i_matcher.create.router}
     pub const fn router(self) -> Self {
         Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_R) })
     }
 
+    // tags{rust.what_am_i_matcher.peer, api.what_am_i_matcher.create.peer}
     pub const fn peer(self) -> Self {
         Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_P) })
     }
 
+    // tags{rust.what_am_i_matcher.client, api.what_am_i_matcher.create.client}
     pub const fn client(self) -> Self {
         Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_C) })
     }
 
+    // tags{rust.what_am_i_matcher.is_empty, api.what_am_i_matcher.is_empty}
     pub const fn is_empty(&self) -> bool {
         self.0.get() == Self::U8_0
     }
 
+    // tags{rust.what_am_i_matcher.matches, api.what_am_i_matcher.matches}
     pub const fn matches(&self, w: WhatAmI) -> bool {
         (self.0.get() & w as u8) != 0
     }
 
+    // tags{rust.what_am_i_matcher.to_str, api.what_am_i_matcher.to_str}
     pub const fn to_str(self) -> &'static str {
         match self.0.get() {
             Self::U8_0 => "",
@@ -151,6 +161,7 @@ impl WhatAmIMatcher {
     }
 
     #[cfg(feature = "test")]
+    // tags{}
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -269,6 +280,7 @@ impl serde::Serialize for WhatAmI {
     }
 }
 
+// tags{}
 pub struct WhatAmIVisitor;
 
 impl<'de> serde::de::Visitor<'de> for WhatAmIVisitor {
@@ -323,6 +335,7 @@ impl serde::Serialize for WhatAmIMatcher {
     }
 }
 
+// tags{}
 pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;
