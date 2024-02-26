@@ -34,8 +34,10 @@ pub struct ZBuf {
 
 impl ZBuf {
     #[must_use]
-    pub fn empty() -> Self {
-        Self::default()
+    pub const fn empty() -> Self {
+        Self {
+            slices: SingleOrVec::empty(),
+        }
     }
 
     pub fn clear(&mut self) {

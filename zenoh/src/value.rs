@@ -42,7 +42,7 @@ impl Value {
     }
 
     /// Creates an empty [`Value`].
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Value {
             payload: ZBuf::empty(),
             encoding: Encoding::empty(),
