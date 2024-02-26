@@ -351,6 +351,7 @@ impl<'a> Iterator for SplitsLeftToRight<'a> {
                 if left.is_empty() {
                     self.next()
                 } else {
+                    // SAFETY: because any keyexpr split at `/` becomes 2 valid keyexprs by design, it's safe to assume the constraint is valid once both sides have been validated to not be empty.
                     (!right.is_empty()).then(|| unsafe {
                         (
                             keyexpr::from_str_unchecked(left),
@@ -401,6 +402,7 @@ impl<'a> Iterator for SplitsRightToLeft<'a> {
                 if right.is_empty() {
                     self.next()
                 } else {
+                    // SAFETY: because any keyexpr split at `/` becomes 2 valid keyexprs by design, it's safe to assume the constraint is valid once both sides have been validated to not be empty.
                     (!left.is_empty()).then(|| unsafe {
                         (
                             keyexpr::from_str_unchecked(left),
