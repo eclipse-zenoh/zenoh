@@ -509,14 +509,11 @@ impl Network {
         let idxs = self
             .graph
             .node_indices()
-            .filter_map(|idx| {
-                (self.gossip_multihop
+            .filter(|&idx| (self.gossip_multihop
                     || self.links.values().any(|link| link.zid == zid)
                     || (self.router_peers_failover_brokering
                         && idx == self.idx
-                        && whatami == WhatAmI::Router))
-                    .then(|| {
-                        (
+                        && whatami == WhatAmI::Router))).map(|idx| (
                             idx,
                             Details {
                                 zid: true,
@@ -525,9 +522,7 @@ impl Network {
                                     && idx == self.idx
                                     && whatami == WhatAmI::Router),
                             },
-                        )
-                    })
-            })
+                        ))
             .collect();
         self.send_on_link(idxs, &transport);
         free_index
