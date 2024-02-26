@@ -27,6 +27,7 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
+use zenoh::encoding::{DefaultEncodingMapping, EncodingMapping};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::properties::Properties;
@@ -49,19 +50,19 @@ const RAW_KEY: &str = "_raw";
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
-        p if p.starts_with(Encoding::TEXT_PLAIN)
-            || p.starts_with(Encoding::APP_XWWW_FORM_URLENCODED) =>
+        p if p.starts_with(&DefaultEncoding::TEXT_PLAIN)
+            || p.starts_with(&DefaultEncoding::APP_XWWW_FORM_URLENCODED) =>
         {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
-        p if p.starts_with(Encoding::APP_PROPERTIES) => {
+        p if p.starts_with(&DefaultEncoding::APP_PROPERTIES) => {
             // convert to Json string for special characters escaping
             serde_json::json!(*Properties::from(value.to_string())).to_string()
         }
-        p if p.starts_with(Encoding::APP_JSON)
-            || p.starts_with(Encoding::APP_INTEGER)
-            || p.starts_with(Encoding::APP_FLOAT) =>
+        p if p.starts_with(&DefaultEncoding::APP_JSON)
+            || p.starts_with(&DefaultEncoding::APP_INTEGER)
+            || p.starts_with(&DefaultEncoding::APP_FLOAT) =>
         {
             value.to_string()
         }
@@ -72,7 +73,9 @@ fn value_to_json(value: Value) -> String {
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let encoding = sample.value.encoding.to_string();
+    let encoding = DefaultEncodingMapping
+        .to_str(&sample.value.encoding)
+        .into_owned();
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
         sample.key_expr.as_str(),
@@ -90,7 +93,7 @@ fn result_to_json(sample: Result<Sample, Value>) -> String {
     match sample {
         Ok(sample) => sample_to_json(sample),
         Err(err) => {
-            let encoding = err.encoding.to_string();
+            let encoding = DefaultEncodingMapping.to_str(&err.encoding).into_owned();
             format!(
                 r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
                 value_to_json(err),
@@ -157,12 +160,14 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
         Ok(reply) => match reply.sample {
             Ok(sample) => response(
                 StatusCode::Ok,
-                sample.value.encoding.to_string().as_ref(),
+                DefaultEncodingMapping
+                    .to_str(&sample.value.encoding)
+                    .as_ref(),
                 String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
-                value.encoding.to_string().as_ref(),
+                DefaultEncodingMapping.to_str(&value.encoding).as_ref(),
                 String::from_utf8_lossy(&value.payload.contiguous()).as_ref(),
             ),
         },
@@ -403,7 +408,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         let mut query = req.state().0.get(&selector).consolidation(consolidation);
         if !body.is_empty() {
             let encoding = match req.content_type() {
-                Some(m) => match Encoding::try_from(m.to_string()) {
+                Some(m) => match DefaultEncodingMapping.parse(m.to_string()) {
                     Ok(e) => e,
                     Err(e) => {
                         return Ok(response(
@@ -415,7 +420,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 },
                 None => Encoding::default(),
             };
-            query = query.with_value(Value::from(body).encoding(encoding));
+            query = query.with_value(Value::from(body).with_encoding(encoding));
         }
         match query.res().await {
             Ok(receiver) => {
@@ -452,7 +457,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             };
 
             let encoding = match req.content_type() {
-                Some(m) => match Encoding::try_from(m.to_string()) {
+                Some(m) => match DefaultEncodingMapping.parse(m.to_string()) {
                     Ok(e) => e,
                     Err(e) => {
                         return Ok(response(

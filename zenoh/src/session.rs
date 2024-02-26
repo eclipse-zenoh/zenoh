@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use crate::admin;
 use crate::config::Config;
 use crate::config::Notifier;
+use crate::encoding::DefaultEncoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
@@ -679,7 +679,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session
     ///     .put("key/expression", "value")
-    ///     .encoding(KnownEncoding::TextPlain)
+    ///     .encoding(DefaultEncoding::TEXT_PLAIN)
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -2270,7 +2270,7 @@ impl Primitives for Session {
                             },
                             None => Value {
                                 payload: ZBuf::empty(),
-                                encoding: zenoh_protocol::core::Encoding::EMPTY,
+                                encoding: DefaultEncoding::EMPTY,
                             },
                         };
                         let replier_id = match e.ext_sinfo {

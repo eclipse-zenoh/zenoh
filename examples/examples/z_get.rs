@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
@@ -45,7 +44,7 @@ async fn main() {
                 sample.key_expr.as_str(),
                 sample.value,
             ),
-            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+            Err(err) => println!(">> Received (ERROR: '{}')", err.decode::<String>().unwrap()),
         }
     }
 }

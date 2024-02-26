@@ -22,6 +22,7 @@ use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::ZBuf;
+use zenoh::encoding::{DefaultEncodingMapping, EncodingMapping};
 use zenoh::prelude::r#async::*;
 use zenoh::query::ConsolidationMode;
 use zenoh::time::{Timestamp, NTP64};
@@ -681,7 +682,7 @@ fn serialize_update(update: &Update) -> String {
     let result = (
         update.kind.to_string(),
         update.data.timestamp.to_string(),
-        update.data.value.encoding.to_string(),
+        DefaultEncodingMapping.to_str(&update.data.value.encoding),
         update.data.value.payload.slices().collect::<Vec<&[u8]>>(),
     );
     serde_json::to_string_pretty(&result).unwrap()
@@ -693,7 +694,8 @@ fn construct_update(data: String) -> Update {
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).encoding(Encoding::try_from(result.2).unwrap()); // @TODO: remove the unwrap()
+    let value = Value::new(payload)
+        .with_encoding(DefaultEncodingMapping.parse(result.2.to_string()).unwrap()); // @TODO: remove the unwrap()
     let data = StoredData {
         value,
         timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()

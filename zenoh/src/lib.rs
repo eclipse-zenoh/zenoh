@@ -124,6 +124,7 @@ pub const FEATURES: &str = concat_enabled_features!(
 mod admin;
 #[macro_use]
 mod session;
+pub mod encoding;
 pub use session::*;
 
 pub mod key_expr;

@@ -2221,9 +2221,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.16"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f30b0abd723be7e2ffca1272140fac1a2f084c77ec3e123c192b66af1ee9e6c2"
+checksum = "da0df0e5185db44f69b44f26786fe401b6c293d1907744beaa7fa62b2e5a517a"
 dependencies = [
  "autocfg",
  "libm",
@@ -4629,6 +4629,7 @@ dependencies = [
  "ordered-float",
  "paste",
  "petgraph",
+ "phf",
  "rand 0.8.5",
  "regex",
  "rustc_version 0.4.0",
@@ -5110,7 +5111,6 @@ dependencies = [
  "const_format",
  "hex",
  "lazy_static",
- "phf",
  "rand 0.8.5",
  "serde",
  "uhlc",

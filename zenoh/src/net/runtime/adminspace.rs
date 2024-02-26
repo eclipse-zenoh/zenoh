@@ -15,10 +15,14 @@ use super::Runtime;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::{Sample, SyncResolve};
+use crate::prelude::{
+    sync::{Sample, SyncResolve},
+    Encoding,
+};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
+use crate::DefaultEncoding;
 use async_std::task;
 use log::{error, trace};
 use serde_json::json;
@@ -33,7 +37,7 @@ use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        Encoding, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
+        ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
     network::{
         declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
@@ -422,7 +426,7 @@ impl Primitives for AdminSpace {
                     parameters,
                     value: query
                         .ext_body
-                        .map(|b| Value::from(b.payload).encoding(b.encoding)),
+                        .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
                     qid: msg.id,
                     zid,
                     primitives,
@@ -562,7 +566,7 @@ fn router_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::from(json.to_string().as_bytes().to_vec()).encoding(Encoding::APP_JSON),
+            Value::from(json.to_string().as_bytes().to_vec()).with_encoding(Encoding::new(42)),
         )))
         .res()
     {
@@ -596,7 +600,7 @@ zenoh_build{{version="{}"}} 1
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::from(metrics.as_bytes().to_vec()).encoding(Encoding::TEXT_PLAIN),
+            Value::encode(metrics.as_bytes().to_vec()),
         )))
         .res()
     {
@@ -614,14 +618,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::from(
-                tables
-                    .hat_code
-                    .info(&tables, WhatAmI::Router)
-                    .as_bytes()
-                    .to_vec(),
-            )
-            .encoding(Encoding::TEXT_PLAIN),
+            Value::encode(tables.hat_code.info(&tables, WhatAmI::Router)),
         )))
         .res()
     {
@@ -639,14 +636,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::from(
-                tables
-                    .hat_code
-                    .info(&tables, WhatAmI::Peer)
-                    .as_bytes()
-                    .to_vec(),
-            )
-            .encoding(Encoding::TEXT_PLAIN),
+            Value::encode(tables.hat_code.info(&tables, WhatAmI::Peer)),
         )))
         .res()
     {
@@ -718,10 +708,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
-                            .reply(Ok(Sample::new(
-                                key_expr,
-                                Value::from(plugin.path()).encoding(Encoding::TEXT_PLAIN),
-                            )))
+                            .reply(Ok(Sample::new(key_expr, Value::encode(plugin.path()))))
                             .res()
                         {
                             log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -747,7 +734,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             if let Err(e) = query.reply(Ok(Sample::new(
                                 key_expr,
-                                Value::from(response.value).encoding(Encoding::TEXT_PLAIN),
+                                Value::from(response.value).with_encoding(DefaultEncoding::TEXT_PLAIN),
                             )))
                             .res()
                             {

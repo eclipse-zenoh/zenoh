@@ -594,8 +594,8 @@ where
 ///     .unwrap();
 /// while let Ok(token) = tokens.recv_async().await {
 ///     match token.sample {
-///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr.as_str(),),
-///         Err(err) => println!("Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr.as_str()),
+///         Err(err) => println!("Received (ERROR: '{}')", err),
 ///     }
 /// }
 /// # })

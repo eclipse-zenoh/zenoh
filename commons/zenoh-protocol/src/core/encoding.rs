@@ -12,122 +12,50 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::CowStr;
-use alloc::{borrow::Cow, string::String};
-use core::{
-    fmt::{self, Debug},
-    write,
-};
+use alloc::borrow::Cow;
+use core::fmt::Debug;
 use zenoh_result::{bail, ZResult};
 
-pub type EncodingPrefix = u8;
+pub type EncodingPrefix = u16;
 
-/// The encoding of a zenoh `zenoh::Value`.
-///
-/// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
-/// as an integer prefix (that maps to a string) and a string suffix.
+/// [`Encoding`] is a metadata that indicates how the data payload should be interpreted.
+/// For wire-efficiency and extensibility purposes, Zenoh defines an [`Encoding`] as
+/// composed of an unsigned integer prefix and a string suffix. The actual meaning of the
+/// prefix and suffix are out-of-scope of the protocol definition. Therefore, Zenoh does not
+/// impose any encoding mapping and users are free to use any mapping they like.
+/// Nevertheless, it is worth highlighting that Zenoh still provides a default mapping as part
+/// of the API as per user convenience. That mapping has no impact on the Zenoh protocol definition.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Encoding {
     prefix: EncodingPrefix,
     suffix: CowStr<'static>,
 }
 
-pub mod prefix {
-    use crate::core::encoding::EncodingPrefix;
-    use phf::phf_ordered_map;
-
-    /// Prefixes from 0 to 63 are reserved by Zenoh
-    /// Users are free to use any prefix from 64 to 255
-    pub const EMPTY: EncodingPrefix = 0;
-    pub const APP_OCTET_STREAM: EncodingPrefix = 1;
-    pub const APP_CUSTOM: EncodingPrefix = 2;
-    pub const TEXT_PLAIN: EncodingPrefix = 3;
-    pub const APP_PROPERTIES: EncodingPrefix = 4;
-    pub const APP_JSON: EncodingPrefix = 5;
-    pub const APP_SQL: EncodingPrefix = 6;
-    pub const APP_INTEGER: EncodingPrefix = 7;
-    pub const APP_FLOAT: EncodingPrefix = 8;
-    pub const APP_XML: EncodingPrefix = 9;
-    pub const APP_XHTML_XML: EncodingPrefix = 10;
-    pub const APP_XWWW_FORM_URLENCODED: EncodingPrefix = 11;
-    pub const TEXT_JSON: EncodingPrefix = 12;
-    pub const TEXT_HTML: EncodingPrefix = 13;
-    pub const TEXT_XML: EncodingPrefix = 14;
-    pub const TEXT_CSS: EncodingPrefix = 15;
-    pub const TEXT_CSV: EncodingPrefix = 16;
-    pub const TEXT_JAVASCRIPT: EncodingPrefix = 17;
-    pub const IMAGE_JPEG: EncodingPrefix = 18;
-    pub const IMAGE_PNG: EncodingPrefix = 19;
-    pub const IMAGE_GIF: EncodingPrefix = 20;
-
-    // A perfect hashmap for fast lookup of prefixes
-    pub(super) const KNOWN: phf::OrderedMap<EncodingPrefix, &'static str> = phf_ordered_map! {
-        0u8  =>  "",
-        1u8  =>  "application/octet-stream",
-        2u8  =>  "application/custom", // non iana standard
-        3u8  =>  "text/plain",
-        4u8  =>  "application/properties", // non iana standard
-        5u8  =>  "application/json", // if not readable from casual users
-        6u8  =>  "application/sql",
-        7u8  =>  "application/integer", // non iana standard
-        8u8  =>  "application/float", // non iana standard
-        9u8  =>  "application/xml", // if not readable from casual users (RFC 3023, sec 3)
-        10u8  => "application/xhtml+xml",
-        11u8  => "application/x-www-form-urlencoded",
-        12u8  => "text/json", // non iana standard - if readable from casual users
-        13u8  => "text/html",
-        14u8  => "text/xml", // if readable from casual users (RFC 3023, section 3)
-        15u8  => "text/css",
-        16u8  => "text/csv",
-        17u8  => "text/javascript",
-        18u8  => "image/jpeg",
-        19u8  => "image/png",
-        20u8  => "image/gif",
-    };
+/// # Encoding field
+///
+/// ```text
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// ~ prefix: z16 |S~
+/// +---------------+
+/// ~suffix: <u8;z8>~  -- if S==1
+/// +---------------+
+/// ```
+pub mod flag {
+    pub const S: u32 = 1; // 0x01 Suffix    if S==1 then suffix is present
 }
 
 impl Encoding {
-    /// The encoding is empty. It is equivalent to not being defined.
-    pub const EMPTY: Encoding = Encoding::exact(prefix::EMPTY);
-    pub const APP_OCTET_STREAM: Encoding = Encoding::exact(prefix::APP_OCTET_STREAM);
-    pub const APP_CUSTOM: Encoding = Encoding::exact(prefix::APP_CUSTOM);
-    pub const TEXT_PLAIN: Encoding = Encoding::exact(prefix::TEXT_PLAIN);
-    pub const APP_PROPERTIES: Encoding = Encoding::exact(prefix::APP_PROPERTIES);
-    pub const APP_JSON: Encoding = Encoding::exact(prefix::APP_JSON);
-    pub const APP_SQL: Encoding = Encoding::exact(prefix::APP_SQL);
-    pub const APP_INTEGER: Encoding = Encoding::exact(prefix::APP_INTEGER);
-    pub const APP_FLOAT: Encoding = Encoding::exact(prefix::APP_FLOAT);
-    pub const APP_XML: Encoding = Encoding::exact(prefix::APP_XML);
-    pub const APP_XHTML_XML: Encoding = Encoding::exact(prefix::APP_XHTML_XML);
-    pub const APP_XWWW_FORM_URLENCODED: Encoding =
-        Encoding::exact(prefix::APP_XWWW_FORM_URLENCODED);
-    pub const TEXT_JSON: Encoding = Encoding::exact(prefix::TEXT_JSON);
-    pub const TEXT_HTML: Encoding = Encoding::exact(prefix::TEXT_HTML);
-    pub const TEXT_XML: Encoding = Encoding::exact(prefix::TEXT_XML);
-    pub const TEXT_CSS: Encoding = Encoding::exact(prefix::TEXT_CSS);
-    pub const TEXT_CSV: Encoding = Encoding::exact(prefix::TEXT_CSV);
-    pub const TEXT_JAVASCRIPT: Encoding = Encoding::exact(prefix::TEXT_JAVASCRIPT);
-    pub const IMAGE_JPEG: Encoding = Encoding::exact(prefix::IMAGE_JPEG);
-    pub const IMAGE_PNG: Encoding = Encoding::exact(prefix::IMAGE_PNG);
-    pub const IMAGE_GIF: Encoding = Encoding::exact(prefix::IMAGE_GIF);
-
-    pub const fn exact(prefix: EncodingPrefix) -> Self {
+    /// Returns a new [`Encoding`] object provided the prefix ID.
+    pub const fn new(prefix: EncodingPrefix) -> Self {
         Self {
             prefix,
             suffix: CowStr::borrowed(""),
         }
     }
 
-    /// Returns a new [`Encoding`] object.
-    /// This method will return an error when the suffix is longer than 255 characters.
-    pub fn new<IntoCowStr>(prefix: EncodingPrefix, suffix: IntoCowStr) -> ZResult<Self>
-    where
-        IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
-    {
-        Self::exact(prefix).with_suffix(suffix)
-    }
-
-    /// Sets the suffix of this encoding.
-    /// This method will return an error when the suffix is longer than 255 characters.
+    /// Sets the suffix of the encoding.
+    /// It will return an error when the suffix is longer than 255 characters.
     pub fn with_suffix<IntoCowStr>(mut self, suffix: IntoCowStr) -> ZResult<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
@@ -140,106 +68,31 @@ impl Encoding {
         Ok(self)
     }
 
-    pub fn as_ref<'a, T>(&'a self) -> T
-    where
-        &'a Self: Into<T>,
-    {
-        self.into()
+    /// Returns a new [`Encoding`] object with default empty prefix ID.
+    pub const fn empty() -> Self {
+        Self::new(0)
     }
 
-    /// Returns `true` if the string representation of this encoding starts with
-    /// the string representation of ther given encoding.
-    pub fn starts_with<T>(&self, with: T) -> bool
-    where
-        T: Into<Encoding>,
-    {
-        let with: Encoding = with.into();
-        self.prefix() == with.prefix() && self.suffix().starts_with(with.suffix())
-    }
-
+    // Returns the numerical prefix
     pub const fn prefix(&self) -> EncodingPrefix {
         self.prefix
     }
 
+    // Returns the suffix string
     pub fn suffix(&self) -> &str {
         self.suffix.as_str()
     }
-}
 
-impl From<&EncodingPrefix> for Encoding {
-    fn from(e: &EncodingPrefix) -> Encoding {
-        Encoding::exact(*e)
-    }
-}
-
-impl From<EncodingPrefix> for Encoding {
-    fn from(e: EncodingPrefix) -> Encoding {
-        Encoding::exact(e)
-    }
-}
-
-impl fmt::Display for Encoding {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match prefix::KNOWN.get(&self.prefix) {
-            Some(s) => write!(f, "{}", s)?,
-            None => write!(f, "Unknown({})", self.prefix)?,
-        }
-        write!(f, "{}", self.suffix.as_str())
-    }
-}
-
-impl TryFrom<&'static str> for Encoding {
-    type Error = zenoh_result::Error;
-
-    fn try_from(s: &'static str) -> Result<Self, Self::Error> {
-        for (k, v) in prefix::KNOWN.entries().skip(1) {
-            if let Some(suffix) = s.strip_prefix(v) {
-                let e = Encoding::exact(*k);
-                if suffix.is_empty() {
-                    return Ok(e);
-                } else {
-                    return e.with_suffix(suffix);
-                }
-            }
-        }
-
-        let e = Encoding::EMPTY;
-        if s.is_empty() {
-            Ok(e)
-        } else {
-            e.with_suffix(s)
-        }
-    }
-}
-
-impl TryFrom<String> for Encoding {
-    type Error = zenoh_result::Error;
-
-    fn try_from(mut s: String) -> Result<Self, Self::Error> {
-        for (k, v) in prefix::KNOWN.entries().skip(1) {
-            if s.starts_with(v) {
-                s.replace_range(..v.len(), "");
-                let e = Encoding::exact(*k);
-                if s.is_empty() {
-                    return Ok(e);
-                } else {
-                    return e.with_suffix(s);
-                }
-            }
-        }
-
-        let e = Encoding::EMPTY;
-        if s.is_empty() {
-            Ok(e)
-        } else {
-            e.with_suffix(s)
-        }
+    /// Returns `true` if the string representation of this encoding starts with
+    /// the string representation of the other given encoding.
+    pub fn starts_with(&self, with: &Encoding) -> bool {
+        self.prefix() == with.prefix() && self.suffix().starts_with(with.suffix())
     }
 }
 
 impl Default for Encoding {
     fn default() -> Self {
-        Encoding::EMPTY
+        Self::empty()
     }
 }
 
@@ -263,6 +116,6 @@ impl Encoding {
         } else {
             String::new()
         };
-        Encoding::new(prefix, suffix).unwrap()
+        Encoding::new(prefix).with_suffix(suffix).unwrap()
     }
 }

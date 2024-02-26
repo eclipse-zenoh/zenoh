@@ -67,7 +67,7 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
 ///     .put("key/expression", "value")
-///     .encoding(KnownEncoding::TextPlain)
+///     .encoding(DefaultEncoding::TEXT_PLAIN)
 ///     .congestion_control(CongestionControl::Block)
 ///     .res()
 ///     .await
@@ -855,7 +855,7 @@ fn resolve_put(
     if publisher.destination != Locality::Remote {
         let data_info = DataInfo {
             kind,
-            encoding: Some(value.encoding),
+            encoding: Some(value.encoding.clone()),
             timestamp,
             ..Default::default()
         };

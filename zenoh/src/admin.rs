@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    encoding::DefaultEncoding,
     keyexpr,
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
@@ -25,10 +26,7 @@ use std::{
     sync::Arc,
 };
 use zenoh_core::SyncResolve;
-use zenoh_protocol::{
-    core::{Encoding, WireExpr},
-    network::NetworkMessage,
-};
+use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
@@ -145,7 +143,7 @@ impl TransportMulticastEventHandler for Handler {
                 let expr = WireExpr::from(&(*KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid))
                     .to_owned();
                 let info = DataInfo {
-                    encoding: Some(Encoding::APP_JSON),
+                    encoding: Some(DefaultEncoding::APP_JSON),
                     ..Default::default()
                 };
                 self.session.handle_data(
@@ -191,7 +189,7 @@ impl TransportPeerEventHandler for PeerHandler {
         let mut s = DefaultHasher::new();
         link.hash(&mut s);
         let info = DataInfo {
-            encoding: Some(Encoding::APP_JSON),
+            encoding: Some(DefaultEncoding::APP_JSON),
             ..Default::default()
         };
         self.session.handle_data(

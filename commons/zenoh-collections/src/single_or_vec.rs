@@ -27,6 +27,10 @@ enum SingleOrVecInner<T> {
 }
 
 impl<T> SingleOrVecInner<T> {
+    const fn empty() -> Self {
+        SingleOrVecInner::Vec(Vec::new())
+    }
+
     fn push(&mut self, value: T) {
         match self {
             SingleOrVecInner::Vec(vec) if vec.capacity() == 0 => *self = Self::Single(value),
@@ -50,7 +54,7 @@ where
 
 impl<T> Default for SingleOrVecInner<T> {
     fn default() -> Self {
-        SingleOrVecInner::Vec(Vec::new())
+        Self::empty()
     }
 }
 
@@ -85,6 +89,10 @@ where
 pub struct SingleOrVec<T>(SingleOrVecInner<T>);
 
 impl<T> SingleOrVec<T> {
+    pub const fn empty() -> Self {
+        Self(SingleOrVecInner::empty())
+    }
+
     pub fn push(&mut self, value: T) {
         self.0.push(value);
     }
