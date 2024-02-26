@@ -111,11 +111,8 @@ impl ListenersUnicastIP {
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
             let (kip, kpt) = (key.ip(), key.port());
-            let iface = value
-                .endpoint
-                .config()
-                .get(BIND_INTERFACE)
-                .map(|s| s.to_string());
+            let config = value.endpoint.config();
+            let iface = config.get(BIND_INTERFACE);
 
             // Either ipv4/0.0.0.0 or ipv6/[::]
             if kip.is_unspecified() {

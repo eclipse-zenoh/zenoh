@@ -210,14 +210,14 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
     }
 }
 
-pub fn get_local_addresses(interface: Option<String>) -> ZResult<Vec<IpAddr>> {
+pub fn get_local_addresses(interface: Option<&str>) -> ZResult<Vec<IpAddr>> {
     #[cfg(unix)]
     {
         Ok(pnet_datalink::interfaces()
             .into_iter()
             .filter(|iface| {
-                if let Some(interface) = interface.clone() {
-                    if iface.name != interface {
+                if let Some(interface) = interface.as_ref() {
+                    if iface.name != *interface {
                         return false;
                     }
                 }
@@ -239,8 +239,8 @@ pub fn get_local_addresses(interface: Option<String>) -> ZResult<Vec<IpAddr>> {
             let mut result = vec![];
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
-                if let Some(interface) = interface.clone() {
-                    if ffi::pstr_to_string(iface.AdapterName) != interface {
+                if let Some(interface) = interface.as_ref() {
+                    if ffi::pstr_to_string(iface.AdapterName) != *interface {
                         continue;
                     }
                 }
@@ -424,7 +424,7 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
     }
 }
 
-pub fn get_ipv4_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
+pub fn get_ipv4_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
     get_local_addresses(interface)
         .unwrap_or_else(|_| vec![])
         .drain(..)
@@ -437,7 +437,7 @@ pub fn get_ipv4_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
         .collect()
 }
 
-pub fn get_ipv6_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
+pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
     const fn is_unicast_link_local(addr: &Ipv6Addr) -> bool {
         (addr.segments()[0] & 0xffc0) == 0xfe80
     }
@@ -493,7 +493,7 @@ pub fn get_ipv6_ipaddrs(interface: Option<String>) -> Vec<IpAddr> {
 }
 
 #[cfg(target_os = "linux")]
-fn set_bind_to_device(socket: std::os::raw::c_int, iface: &Option<String>) {
+fn set_bind_to_device(socket: std::os::raw::c_int, iface: Option<&str>) {
     if let Some(iface) = iface {
         // @TODO: switch to bind_device after tokio porting
         log::debug!("Listen at the interface: {}", iface);
@@ -510,34 +510,34 @@ fn set_bind_to_device(socket: std::os::raw::c_int, iface: &Option<String>) {
 }
 
 #[cfg(target_os = "linux")]
-pub fn set_bind_to_device_tcp_listener(socket: &TcpListener, iface: &Option<String>) {
+pub fn set_bind_to_device_tcp_listener(socket: &TcpListener, iface: Option<&str>) {
     use std::os::fd::AsRawFd;
     set_bind_to_device(socket.as_raw_fd(), iface);
 }
 
 #[cfg(target_os = "linux")]
-pub fn set_bind_to_device_tcp_stream(socket: &TcpStream, iface: &Option<String>) {
+pub fn set_bind_to_device_tcp_stream(socket: &TcpStream, iface: Option<&str>) {
     use std::os::fd::AsRawFd;
     set_bind_to_device(socket.as_raw_fd(), iface);
 }
 
 #[cfg(target_os = "linux")]
-pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &Option<String>) {
+pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) {
     use std::os::fd::AsRawFd;
     set_bind_to_device(socket.as_raw_fd(), iface);
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_tcp_listener(_socket: &TcpListener, _iface: &Option<String>) {
+pub fn set_bind_to_device_tcp_listener(_socket: &TcpListener, _iface: Option<&str>) {
     log::warn!("Listen at the interface is not supported for this platform");
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_tcp_stream(_socket: &TcpStream, _iface: &Option<String>) {
+pub fn set_bind_to_device_tcp_stream(_socket: &TcpStream, _iface: Option<&str>) {
     log::warn!("Listen at the interface is not supported for this platform");
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_udp_socket(_socket: &UdpSocket, _iface: &Option<String>) {
+pub fn set_bind_to_device_udp_socket(_socket: &UdpSocket, _iface: Option<&str>) {
     log::warn!("Listen at the interface is not supported for this platform");
 }

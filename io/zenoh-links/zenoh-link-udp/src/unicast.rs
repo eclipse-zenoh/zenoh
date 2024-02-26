@@ -261,7 +261,7 @@ impl LinkManagerUnicastUdp {
     async fn new_link_inner(
         &self,
         dst_addr: &SocketAddr,
-        iface: &Option<String>,
+        iface: Option<&str>,
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
         // Establish a UDP socket
         let socket = UdpSocket::bind(SocketAddr::new(
@@ -307,7 +307,7 @@ impl LinkManagerUnicastUdp {
     async fn new_listener_inner(
         &self,
         addr: &SocketAddr,
-        iface: &Option<String>,
+        iface: Option<&str>,
     ) -> ZResult<(UdpSocket, SocketAddr)> {
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
@@ -334,11 +334,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let dst_addrs = get_udp_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
-        let iface = endpoint.config().get(BIND_INTERFACE).map(|s| s.to_string());
+        let config = endpoint.config();
+        let iface = config.get(BIND_INTERFACE);
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
-            match self.new_link_inner(&da, &iface).await {
+            match self.new_link_inner(&da, iface).await {
                 Ok((socket, src_addr, dst_addr)) => {
                     // Create UDP link
                     let link = Arc::new(LinkUnicastUdp::new(
@@ -372,11 +373,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let addrs = get_udp_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
-        let iface = endpoint.config().get(BIND_INTERFACE).map(|s| s.to_string());
+        let config = endpoint.config();
+        let iface = config.get(BIND_INTERFACE);
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match self.new_listener_inner(&da, &iface).await {
+            match self.new_listener_inner(&da, iface).await {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(
