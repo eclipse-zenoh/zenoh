@@ -58,7 +58,7 @@ impl Value {
 
     /// Sets the encoding of this [`Value`]`.
     #[inline(always)]
-    pub fn encoding(mut self, encoding: Encoding) -> Self {
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self
     }
@@ -117,7 +117,7 @@ impl Value {
     /// let end: String = value.decode_with::<MyEncoder, _>().unwrap();
     /// assert_eq!(start, end);
     /// ```
-    pub fn encode_with<M, T>(t: T, m: M) -> Self
+    pub fn encode_with<T, M>(t: T, m: M) -> Self
     where
         M: Encoder<T>,
     {
@@ -135,7 +135,7 @@ impl Value {
 
     /// Decode an object of type `T` from a [`Value`] using a provided [`Encoder`].
     /// See [encode_with](Value::encode_with) for an example.
-    pub fn decode_with<M, T>(&self, m: M) -> ZResult<T>
+    pub fn decode_with<T, M>(&self, m: M) -> ZResult<T>
     where
         M: Decoder<T>,
     {

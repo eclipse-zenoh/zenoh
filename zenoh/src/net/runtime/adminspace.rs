@@ -426,7 +426,7 @@ impl Primitives for AdminSpace {
                     parameters,
                     value: query
                         .ext_body
-                        .map(|b| Value::from(b.payload).encoding(b.encoding)),
+                        .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
                     qid: msg.id,
                     zid,
                     primitives,
@@ -566,7 +566,7 @@ fn router_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::from(json.to_string().as_bytes().to_vec()).encoding(Encoding::new(42)),
+            Value::from(json.to_string().as_bytes().to_vec()).with_encoding(Encoding::new(42)),
         )))
         .res()
     {
@@ -734,7 +734,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             if let Err(e) = query.reply(Ok(Sample::new(
                                 key_expr,
-                                Value::from(response.value).encoding(DefaultEncoding::TEXT_PLAIN),
+                                Value::from(response.value).with_encoding(DefaultEncoding::TEXT_PLAIN),
                             )))
                             .res()
                             {
