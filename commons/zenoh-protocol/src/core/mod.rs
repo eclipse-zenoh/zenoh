@@ -42,7 +42,7 @@ pub use wire_expr::*;
 
 mod cowstr;
 pub use cowstr::CowStr;
-mod encoding;
+pub mod encoding;
 pub use encoding::{Encoding, EncodingPrefix};
 
 pub mod locator;

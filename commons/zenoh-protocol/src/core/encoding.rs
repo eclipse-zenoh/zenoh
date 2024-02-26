@@ -31,6 +31,20 @@ pub struct Encoding {
     suffix: CowStr<'static>,
 }
 
+/// # Encoding field
+///
+/// ```text
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// ~ prefix: z16 |S~
+/// +---------------+
+/// ~suffix: <u8;z8>~  -- if S==1
+/// +---------------+
+/// ```
+pub mod flag {
+    pub const S: u32 = 1; // 0x01 Suffix    if S==1 then suffix is present
+}
+
 impl Encoding {
     /// Returns a new [`Encoding`] object provided the prefix ID.
     pub const fn new(prefix: EncodingPrefix) -> Self {

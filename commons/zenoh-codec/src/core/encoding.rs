@@ -17,11 +17,19 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::{Encoding, EncodingPrefix};
+use zenoh_protocol::{
+    common::imsg,
+    core::encoding::{flag, Encoding, EncodingPrefix},
+};
 
 impl LCodec<&Encoding> for Zenoh080 {
     fn w_len(self, x: &Encoding) -> usize {
-        self.w_len(x.prefix()) + self.w_len(x.suffix())
+        let (prefix, suffix) = (x.prefix(), x.suffix());
+        let mut len = self.w_len((prefix as u32) << 1);
+        if !suffix.is_empty() {
+            len += self.w_len(x.suffix());
+        }
+        len
     }
 }
 
@@ -32,10 +40,18 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Encoding) -> Self::Output {
-        let zodec = Zenoh080Bounded::<EncodingPrefix>::new();
-        zodec.write(&mut *writer, x.prefix())?;
-        let zodec = Zenoh080Bounded::<u8>::new();
-        zodec.write(&mut *writer, x.suffix())?;
+        let mut prefix = (x.prefix() as u32) << 1;
+        let suffix = x.suffix();
+
+        if !suffix.is_empty() {
+            prefix |= flag::S;
+        }
+        let zodec = Zenoh080Bounded::<u32>::new();
+        zodec.write(&mut *writer, prefix)?;
+        if !suffix.is_empty() {
+            let zodec = Zenoh080Bounded::<u8>::new();
+            zodec.write(&mut *writer, suffix)?;
+        }
         Ok(())
     }
 }
@@ -47,10 +63,18 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Encoding, Self::Error> {
-        let zodec = Zenoh080Bounded::<EncodingPrefix>::new();
-        let prefix: EncodingPrefix = zodec.read(&mut *reader)?;
-        let zodec = Zenoh080Bounded::<u8>::new();
-        let suffix: String = zodec.read(&mut *reader)?;
+        let zodec = Zenoh080Bounded::<u32>::new();
+        let prefix: u32 = zodec.read(&mut *reader)?;
+        let (prefix, has_suffix) = (
+            (prefix >> 1) as EncodingPrefix,
+            imsg::has_flag(prefix as u8, flag::S as u8),
+        );
+
+        let mut suffix = String::new();
+        if has_suffix {
+            let zodec = Zenoh080Bounded::<u8>::new();
+            suffix = zodec.read(&mut *reader)?;
+        }
 
         let mut encoding: Encoding = Encoding::new(prefix);
         if !suffix.is_empty() {
