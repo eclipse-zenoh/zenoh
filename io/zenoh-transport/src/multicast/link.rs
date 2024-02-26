@@ -216,7 +216,7 @@ impl TransportLinkMulticastRx {
 
         let mut into = (buff)();
         let (n, locator) = self.inner.link.read(into.as_mut_slice()).await?;
-        let buffer = ZSlice::make(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
+        let buffer = ZSlice::new(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
         let mut batch = RBatch::new(self.inner.config.batch, buffer);
         batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
         Ok((batch, locator.into_owned()))

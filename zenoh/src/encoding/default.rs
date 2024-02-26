@@ -17,10 +17,8 @@ use crate::{
     Sample,
 };
 use phf::phf_ordered_map;
-use std::borrow::Cow;
-#[cfg(feature = "shared-memory")]
-use std::sync::Arc;
-use zenoh_buffers::{buffer::SplitBuffer, ZBuf};
+use std::{borrow::Cow, sync::Arc};
+use zenoh_buffers::{buffer::SplitBuffer, ZBuf, ZSlice};
 use zenoh_collections::Properties;
 use zenoh_protocol::core::{Encoding, EncodingPrefix};
 use zenoh_result::ZResult;
@@ -331,8 +329,13 @@ macro_rules! impl_int {
     ($t:ty, $encoding:expr) => {
         impl Encoder<$t> for DefaultEncoding {
             fn encode(self, t: $t) -> Value {
+                let bs = t.to_le_bytes();
+                let end = bs.iter().rposition(|b| *b != 0).unwrap_or(bs.len() - 1);
                 Value {
-                    payload: ZBuf::from(t.to_string().into_bytes()),
+                    // Safety:
+                    // - 0 is a valid start index because bs is guaranteed to always have a length greater or equal than 1
+                    // - end is a valid end index because is bounded between 0 and bs.len()-1 both inclusive
+                    payload: ZBuf::from(unsafe { ZSlice::new_unchecked(Arc::new(bs), 0, end) }),
                     encoding: $encoding,
                 }
             }
@@ -353,13 +356,31 @@ macro_rules! impl_int {
         impl Decoder<$t> for DefaultEncoding {
             fn decode(self, v: &Value) -> ZResult<$t> {
                 if v.encoding == $encoding {
-                    let v: $t = std::str::from_utf8(&v.payload.contiguous())
-                        .map_err(|e| zerror!("{}", e))?
-                        .parse()
-                        .map_err(|e| zerror!("{}", e))?;
+                    let p = v.payload.contiguous();
+                    let mut bs = <$t>::MIN.to_le_bytes();
+                    if p.len() > bs.len() {
+                        return Err(zerror!(
+                            "{:?} can not be decoded into {}: invalid length ({} > {})",
+                            v,
+                            std::any::type_name::<$t>(),
+                            p.len(),
+                            bs.len()
+                        )
+                        .into());
+                    }
+                    bs[..p.len()].copy_from_slice(&p);
+                    let v = <$t>::from_le_bytes(bs);
+
                     Ok(v)
                 } else {
-                    Err(zerror!("{:?} can not be converted into String", v).into())
+                    Err(zerror!(
+                        "{:?} can not be decoded into {}: invalid encoding ({:?} != {:?})",
+                        v,
+                        std::any::type_name::<$t>(),
+                        v.encoding,
+                        $encoding,
+                    )
+                    .into())
                 }
             }
         }
@@ -474,17 +495,21 @@ mod tests {
     #[test]
     fn encoder() {
         use crate::Value;
+        use rand::Rng;
         use zenoh_buffers::ZBuf;
         use zenoh_collections::Properties;
 
         macro_rules! encode_decode {
             ($t:ty, $in:expr) => {
-                let t = $in.clone();
+                let i = $in;
+                let t = i.clone();
                 let v = Value::encode(t);
-                let out: $t = v.decode().unwrap();
-                assert_eq!($in, out)
+                let o: $t = v.decode().unwrap();
+                assert_eq!(i, o)
             };
         }
+
+        let mut rng = rand::thread_rng();
 
         encode_decode!(u8, u8::MIN);
         encode_decode!(u16, u16::MIN);
@@ -498,6 +523,12 @@ mod tests {
         encode_decode!(u64, u64::MAX);
         encode_decode!(usize, usize::MAX);
 
+        encode_decode!(u8, rng.gen::<u8>());
+        encode_decode!(u16, rng.gen::<u16>());
+        encode_decode!(u32, rng.gen::<u32>());
+        encode_decode!(u64, rng.gen::<u64>());
+        encode_decode!(usize, rng.gen::<usize>());
+
         encode_decode!(i8, i8::MIN);
         encode_decode!(i16, i16::MIN);
         encode_decode!(i32, i32::MIN);
@@ -510,11 +541,20 @@ mod tests {
         encode_decode!(i64, i64::MAX);
         encode_decode!(isize, isize::MAX);
 
+        encode_decode!(i8, rng.gen::<i8>());
+        encode_decode!(i16, rng.gen::<i16>());
+        encode_decode!(i32, rng.gen::<i32>());
+        encode_decode!(i64, rng.gen::<i64>());
+        encode_decode!(isize, rng.gen::<isize>());
+
         encode_decode!(f32, f32::MIN);
         encode_decode!(f64, f64::MIN);
 
         encode_decode!(f32, f32::MAX);
         encode_decode!(f64, f64::MAX);
+
+        encode_decode!(f32, rng.gen::<f32>());
+        encode_decode!(f64, rng.gen::<f64>());
 
         encode_decode!(String, "");
         encode_decode!(String, String::from("abcdefghijklmnopqrstuvwxyz"));
