@@ -230,7 +230,7 @@ impl DefaultEncoding {
 
 // Bytes conversion
 impl Encoder<ZBuf> for DefaultEncoding {
-    fn encode(t: ZBuf) -> Value {
+    fn encode(self, t: ZBuf) -> Value {
         Value {
             payload: t,
             encoding: DefaultEncoding::APP_OCTET_STREAM,
@@ -239,7 +239,7 @@ impl Encoder<ZBuf> for DefaultEncoding {
 }
 
 impl Decoder<ZBuf> for DefaultEncoding {
-    fn decode(v: &Value) -> ZResult<ZBuf> {
+    fn decode(self, v: &Value) -> ZResult<ZBuf> {
         if v.encoding == DefaultEncoding::APP_OCTET_STREAM {
             Ok(v.payload.clone())
         } else {
@@ -249,40 +249,40 @@ impl Decoder<ZBuf> for DefaultEncoding {
 }
 
 impl Encoder<Vec<u8>> for DefaultEncoding {
-    fn encode(t: Vec<u8>) -> Value {
-        Self::encode(ZBuf::from(t))
+    fn encode(self, t: Vec<u8>) -> Value {
+        Self.encode(ZBuf::from(t))
     }
 }
 
 impl Encoder<&[u8]> for DefaultEncoding {
-    fn encode(t: &[u8]) -> Value {
-        Self::encode(t.to_vec())
+    fn encode(self, t: &[u8]) -> Value {
+        Self.encode(t.to_vec())
     }
 }
 
 impl Decoder<Vec<u8>> for DefaultEncoding {
-    fn decode(v: &Value) -> ZResult<Vec<u8>> {
-        let v: ZBuf = Self::decode(v)?;
+    fn decode(self, v: &Value) -> ZResult<Vec<u8>> {
+        let v: ZBuf = Self.decode(v)?;
         Ok(v.contiguous().to_vec())
     }
 }
 
 impl<'a> Encoder<Cow<'a, [u8]>> for DefaultEncoding {
-    fn encode(t: Cow<'a, [u8]>) -> Value {
-        Self::encode(ZBuf::from(t.to_vec()))
+    fn encode(self, t: Cow<'a, [u8]>) -> Value {
+        Self.encode(ZBuf::from(t.to_vec()))
     }
 }
 
 impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoding {
-    fn decode(v: &Value) -> ZResult<Cow<'a, [u8]>> {
-        let v: Vec<u8> = Self::decode(v)?;
+    fn decode(self, v: &Value) -> ZResult<Cow<'a, [u8]>> {
+        let v: Vec<u8> = Self.decode(v)?;
         Ok(Cow::Owned(v))
     }
 }
 
 // String
 impl Encoder<String> for DefaultEncoding {
-    fn encode(s: String) -> Value {
+    fn encode(self, s: String) -> Value {
         Value {
             payload: ZBuf::from(s.into_bytes()),
             encoding: DefaultEncoding::TEXT_PLAIN,
@@ -291,13 +291,13 @@ impl Encoder<String> for DefaultEncoding {
 }
 
 impl Encoder<&str> for DefaultEncoding {
-    fn encode(s: &str) -> Value {
-        Self::encode(s.to_string())
+    fn encode(self, s: &str) -> Value {
+        Self.encode(s.to_string())
     }
 }
 
 impl Decoder<String> for DefaultEncoding {
-    fn decode(v: &Value) -> ZResult<String> {
+    fn decode(self, v: &Value) -> ZResult<String> {
         if v.encoding == DefaultEncoding::TEXT_PLAIN {
             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
         } else {
@@ -307,21 +307,21 @@ impl Decoder<String> for DefaultEncoding {
 }
 
 impl<'a> Encoder<Cow<'a, str>> for DefaultEncoding {
-    fn encode(s: Cow<'a, str>) -> Value {
-        Self::encode(s.to_string())
+    fn encode(self, s: Cow<'a, str>) -> Value {
+        Self.encode(s.to_string())
     }
 }
 
 impl<'a> Decoder<Cow<'a, str>> for DefaultEncoding {
-    fn decode(v: &Value) -> ZResult<Cow<'a, str>> {
-        let v: String = Self::decode(v)?;
+    fn decode(self, v: &Value) -> ZResult<Cow<'a, str>> {
+        let v: String = Self.decode(v)?;
         Ok(Cow::Owned(v))
     }
 }
 
 // Sample
 impl Encoder<Sample> for DefaultEncoding {
-    fn encode(t: Sample) -> Value {
+    fn encode(self, t: Sample) -> Value {
         t.value
     }
 }
@@ -330,7 +330,7 @@ impl Encoder<Sample> for DefaultEncoding {
 macro_rules! impl_int {
     ($t:ty, $encoding:expr) => {
         impl Encoder<$t> for DefaultEncoding {
-            fn encode(t: $t) -> Value {
+            fn encode(self, t: $t) -> Value {
                 Value {
                     payload: ZBuf::from(t.to_string().into_bytes()),
                     encoding: $encoding,
@@ -339,13 +339,13 @@ macro_rules! impl_int {
         }
 
         impl Encoder<&$t> for DefaultEncoding {
-            fn encode(t: &$t) -> Value {
-                Self::encode(*t)
+            fn encode(self, t: &$t) -> Value {
+                Self.encode(*t)
             }
         }
 
         impl Decoder<$t> for DefaultEncoding {
-            fn decode(v: &Value) -> ZResult<$t> {
+            fn decode(self, v: &Value) -> ZResult<$t> {
                 if v.encoding == $encoding {
                     let v: $t = std::str::from_utf8(&v.payload.contiguous())
                         .map_err(|e| zerror!("{}", e))?
@@ -378,7 +378,7 @@ impl_int!(f64, DefaultEncoding::APP_FLOAT);
 
 // JSON
 impl Encoder<&serde_json::Value> for DefaultEncoding {
-    fn encode(t: &serde_json::Value) -> Value {
+    fn encode(self, t: &serde_json::Value) -> Value {
         Value {
             payload: ZBuf::from(t.to_string().into_bytes()),
             encoding: DefaultEncoding::APP_JSON,
@@ -387,13 +387,13 @@ impl Encoder<&serde_json::Value> for DefaultEncoding {
 }
 
 impl Encoder<serde_json::Value> for DefaultEncoding {
-    fn encode(t: serde_json::Value) -> Value {
-        Self::encode(&t)
+    fn encode(self, t: serde_json::Value) -> Value {
+        Self.encode(&t)
     }
 }
 
 impl Decoder<serde_json::Value> for DefaultEncoding {
-    fn decode(v: &Value) -> ZResult<serde_json::Value> {
+    fn decode(self, v: &Value) -> ZResult<serde_json::Value> {
         if v.encoding == DefaultEncoding::APP_JSON || v.encoding == DefaultEncoding::TEXT_JSON {
             let r: serde_json::Value = serde::Deserialize::deserialize(
                 &mut serde_json::Deserializer::from_slice(&v.payload.contiguous()),
@@ -408,7 +408,7 @@ impl Decoder<serde_json::Value> for DefaultEncoding {
 
 // Properties
 impl Encoder<&Properties> for DefaultEncoding {
-    fn encode(t: &Properties) -> Value {
+    fn encode(self, t: &Properties) -> Value {
         Value {
             payload: ZBuf::from(t.to_string().into_bytes()),
             encoding: DefaultEncoding::APP_PROPERTIES,
@@ -417,13 +417,13 @@ impl Encoder<&Properties> for DefaultEncoding {
 }
 
 impl Encoder<Properties> for DefaultEncoding {
-    fn encode(t: Properties) -> Value {
-        Self::encode(&t)
+    fn encode(self, t: Properties) -> Value {
+        Self.encode(&t)
     }
 }
 
 impl Decoder<Properties> for DefaultEncoding {
-    fn decode(v: &Value) -> ZResult<Properties> {
+    fn decode(self, v: &Value) -> ZResult<Properties> {
         if v.encoding == DefaultEncoding::APP_PROPERTIES {
             let ps = Properties::from(
                 std::str::from_utf8(&v.payload.contiguous()).map_err(|e| zerror!("{}", e))?,
@@ -438,7 +438,7 @@ impl Decoder<Properties> for DefaultEncoding {
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl Encoder<Arc<SharedMemoryBuf>> for DefaultEncoding {
-    fn encode(t: Arc<SharedMemoryBuf>) -> Value {
+    fn encode(self, t: Arc<SharedMemoryBuf>) -> Value {
         Value {
             payload: t.into(),
             encoding: DefaultEncoding::APP_OCTET_STREAM,
@@ -448,15 +448,15 @@ impl Encoder<Arc<SharedMemoryBuf>> for DefaultEncoding {
 
 #[cfg(feature = "shared-memory")]
 impl Encoder<Box<SharedMemoryBuf>> for DefaultEncoding {
-    fn encode(t: Box<SharedMemoryBuf>) -> Value {
+    fn encode(self, t: Box<SharedMemoryBuf>) -> Value {
         let smb: Arc<SharedMemoryBuf> = t.into();
-        Self::encode(smb)
+        Self.encode(smb)
     }
 }
 
 #[cfg(feature = "shared-memory")]
 impl Encoder<SharedMemoryBuf> for DefaultEncoding {
-    fn encode(t: SharedMemoryBuf) -> Value {
+    fn encode(self, t: SharedMemoryBuf) -> Value {
         Value {
             payload: t.into(),
             encoding: DefaultEncoding::APP_OCTET_STREAM,

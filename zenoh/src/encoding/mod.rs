@@ -36,10 +36,10 @@ pub trait EncodingMapping {
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Encoder<T> {
     /// The implementer should take care of serializing the type `T` and set the proper [`Encoding`].
-    fn encode(t: T) -> Value;
+    fn encode(self, t: T) -> Value;
 }
 
 pub trait Decoder<T> {
     /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
-    fn decode(t: &Value) -> ZResult<T>;
+    fn decode(self, t: &Value) -> ZResult<T>;
 }

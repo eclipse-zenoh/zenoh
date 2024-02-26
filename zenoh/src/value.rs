@@ -80,7 +80,7 @@ impl Value {
     where
         DefaultEncoding: Encoder<T>,
     {
-        DefaultEncoding::encode(t)
+        DefaultEncoding.encode(t)
     }
 
     /// Encode an object of type `T` as a [`Value`] using a provided [`Encoder`].
@@ -117,11 +117,11 @@ impl Value {
     /// let end: String = value.decode_with::<MyEncoder, _>().unwrap();
     /// assert_eq!(start, end);
     /// ```
-    pub fn encode_with<M, T>(t: T) -> Self
+    pub fn encode_with<M, T>(t: T, m: M) -> Self
     where
         M: Encoder<T>,
     {
-        M::encode(t)
+        m.encode(t)
     }
 
     /// Decode an object of type `T` from a [`Value`] using the [`DefaultEncoding`].
@@ -130,16 +130,16 @@ impl Value {
     where
         DefaultEncoding: Decoder<T>,
     {
-        DefaultEncoding::decode(self)
+        DefaultEncoding.decode(self)
     }
 
     /// Decode an object of type `T` from a [`Value`] using a provided [`Encoder`].
     /// See [encode_with](Value::encode_with) for an example.
-    pub fn decode_with<M, T>(&self) -> ZResult<T>
+    pub fn decode_with<M, T>(&self, m: M) -> ZResult<T>
     where
         M: Decoder<T>,
     {
-        M::decode(self)
+        m.decode(self)
     }
 }
 
