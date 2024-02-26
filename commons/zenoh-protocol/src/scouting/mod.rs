@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod hello;
+// ignore_tagging
 pub mod scout;
 
 pub use hello::Hello;
@@ -19,18 +20,22 @@ pub use scout::Scout;
 
 pub mod id {
     // Scouting Messages
+    // tags{}
     pub const SCOUT: u8 = 0x01;
+    // tags{}
     pub const HELLO: u8 = 0x02;
 }
 
 // Zenoh messages at scouting level
 #[derive(Debug, Clone, PartialEq, Eq)]
+// tags{}
 pub enum ScoutingBody {
     Scout(Scout),
     Hello(Hello),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+// tags{}
 pub struct ScoutingMessage {
     pub body: ScoutingBody,
     #[cfg(feature = "stats")]
@@ -39,6 +44,7 @@ pub struct ScoutingMessage {
 
 impl ScoutingMessage {
     #[cfg(feature = "test")]
+    // tags{}
     pub fn rand() -> Self {
         use rand::Rng;
 

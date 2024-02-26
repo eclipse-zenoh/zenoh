@@ -93,12 +93,16 @@ use core::fmt;
 /// ```
 ///
 pub mod flag {
+    // tags{}
     pub const L: u8 = 1 << 5; // 0x20 Locators      if L==1 then the list of locators is present, else the src address is the locator
+                              // tags{}
                               // pub const X: u8 = 1 << 6; // 0x40       Reserved
+    // tags{}
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// tags{rust.hello, api.hello}
 pub struct Hello {
     pub version: u8,
     pub whatami: WhatAmI,
@@ -118,6 +122,7 @@ impl fmt::Display for Hello {
 
 impl Hello {
     #[cfg(feature = "test")]
+    // tags{}
     pub fn rand() -> Self {
         use rand::Rng;
 

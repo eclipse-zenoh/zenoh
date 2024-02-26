@@ -497,7 +497,7 @@ impl<'a> Publisher<'a> {
 /// # })
 /// ```
 #[zenoh_macros::unstable]
-// tag{}
+// tags{}
 pub trait PublisherDeclarations {
     /// # Examples
     /// ```no_run

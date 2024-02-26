@@ -297,6 +297,7 @@ fn selector_accessors() {
         assert_eq!(selector.to_string(), without_any + "&other");
     }
 }
+// tags{}
 pub trait Parameter: Sized {
     type Name: AsRef<str> + Sized;
     type Value: AsRef<str> + Sized;
@@ -337,6 +338,7 @@ type ExtractedValue<'a, VS: Parameters<'a>> = <<VS::Decoder as Iterator>::Item a
 /// A trait to help decode zenoh selector parameters.
 ///
 /// Most methods will return an Error if duplicates of a same parameter are found, to avoid HTTP Parameter Pollution like vulnerabilities.
+// tags{}
 pub trait Parameters<'a> {
     type Decoder: Iterator + 'a;
     /// Returns this selector's parameters as an iterator.

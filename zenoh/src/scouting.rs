@@ -223,7 +223,7 @@ impl ScoutInner {
     /// scout.stop();
     /// # })
     /// ```
-    // tag{}
+    // tags{}
     pub fn stop(self) {
         // This drops the inner `stop_sender` and hence stops the scouting receiver
         std::mem::drop(self);
