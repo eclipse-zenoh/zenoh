@@ -483,7 +483,7 @@ async fn tx_task(
                     .collect::<Vec<PrioritySn>>();
                 let (next_sn, ext_qos) = if next_sns.len() == Priority::NUM {
                     let tmp: [PrioritySn; Priority::NUM] = next_sns.try_into().unwrap();
-                    (PrioritySn::default(), Some(Box::new(tmp)))
+                    (PrioritySn::DEFAULT, Some(Box::new(tmp)))
                 } else {
                     (next_sns[0], None)
                 };

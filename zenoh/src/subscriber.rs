@@ -25,9 +25,6 @@ use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::declare::{subscriber::ext::SubscriberInfo, Mode};
 
-/// The subscription mode.
-pub use zenoh_protocol::core::SubMode;
-
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;
 
@@ -117,7 +114,6 @@ impl<'a> PullSubscriberInner<'a> {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::r#async::*;
-    /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
@@ -252,12 +248,6 @@ impl Drop for SubscriberInner<'_> {
 #[derive(Debug, Clone, Copy)]
 pub struct PullMode;
 
-impl From<PullMode> for SubMode {
-    fn from(_: PullMode) -> Self {
-        SubMode::Pull
-    }
-}
-
 impl From<PullMode> for Mode {
     fn from(_: PullMode) -> Self {
         Mode::Pull
@@ -268,12 +258,6 @@ impl From<PullMode> for Mode {
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct PushMode;
-
-impl From<PushMode> for SubMode {
-    fn from(_: PushMode) -> Self {
-        SubMode::Push
-    }
-}
 
 impl From<PushMode> for Mode {
     fn from(_: PushMode) -> Self {
@@ -712,7 +696,6 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::r#async::*;
-    /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session

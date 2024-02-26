@@ -46,6 +46,8 @@ pub mod flag {
 }
 
 impl Encoding {
+    pub const DEFAULT: Self = Self::empty();
+
     /// Returns a new [`Encoding`] object provided the prefix ID.
     pub const fn new(prefix: EncodingPrefix) -> Self {
         Self {

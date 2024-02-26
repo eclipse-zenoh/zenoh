@@ -37,7 +37,7 @@ impl Value {
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
-            encoding: Encoding::empty(),
+            encoding: Encoding::DEFAULT,
         }
     }
 
@@ -45,7 +45,7 @@ impl Value {
     pub const fn empty() -> Self {
         Value {
             payload: ZBuf::empty(),
-            encoding: Encoding::empty(),
+            encoding: Encoding::DEFAULT,
         }
     }
 

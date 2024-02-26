@@ -208,7 +208,7 @@ fn send_sourced_queryable_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                ext_qos: ext::QoSType::declare_default(),
+                                ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
                                     node_id: routing_context,
@@ -258,9 +258,9 @@ fn propagate_simple_queryable(
             let key_expr = Resource::decl_key(res, &mut dst_face);
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         wire_expr: key_expr,
@@ -488,7 +488,7 @@ fn send_forget_sourced_queryable_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                ext_qos: ext::QoSType::declare_default(),
+                                ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
                                     node_id: routing_context,
@@ -514,9 +514,9 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
@@ -554,9 +554,9 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
                 let wire_expr = Resource::get_best_key(res, "", face.id);
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
-                        ext_qos: ext::QoSType::declare_default(),
+                        ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                             id: 0, // @TODO use proper QueryableId (#703)
                             ext_wire_expr: WireExprType { wire_expr },
@@ -723,9 +723,9 @@ pub(super) fn undeclare_client_queryable(
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
@@ -756,9 +756,9 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 let key_expr = Resource::decl_key(qabl, face);
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
-                        ext_qos: ext::QoSType::declare_default(),
+                        ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
                             id: 0, // @TODO use proper QueryableId (#703)
                             wire_expr: key_expr,
@@ -785,9 +785,9 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 let key_expr = Resource::decl_key(qabl, face);
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
-                        ext_qos: ext::QoSType::declare_default(),
+                        ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
                             id: 0, // @TODO use proper QueryableId (#703)
                             wire_expr: key_expr,
@@ -884,9 +884,9 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                     let wire_expr = Resource::get_best_key(res, "", dst_face.id);
                                     dst_face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
-                                            ext_qos: ext::QoSType::declare_default(),
+                                            ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::default(),
+                                            ext_nodeid: ext::NodeIdType::DEFAULT,
                                             body: DeclareBody::UndeclareQueryable(
                                                 UndeclareQueryable {
                                                     id: 0, // @TODO use proper QueryableId (#703)
@@ -908,9 +908,9 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                 let key_expr = Resource::decl_key(res, dst_face);
                                 dst_face.primitives.send_declare(RoutingContext::with_expr(
                                     Declare {
-                                        ext_qos: ext::QoSType::declare_default(),
+                                        ext_qos: ext::QoSType::DECLARE,
                                         ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
+                                        ext_nodeid: ext::NodeIdType::DEFAULT,
                                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                             id: 0, // @TODO use proper QueryableId (#703)
                                             wire_expr: key_expr,

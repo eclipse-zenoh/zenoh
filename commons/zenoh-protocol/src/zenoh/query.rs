@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::ZExtUnknown, core::ConsolidationMode};
+use crate::common::ZExtUnknown;
 use alloc::{string::String, vec::Vec};
 
 /// The kind of consolidation.
@@ -38,6 +38,8 @@ pub enum Consolidation {
 }
 
 impl Consolidation {
+    pub const DEFAULT: Self = Self::Auto;
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::prelude::SliceRandom;
@@ -55,63 +57,48 @@ impl Consolidation {
     }
 }
 
-impl From<ConsolidationMode> for Consolidation {
-    fn from(val: ConsolidationMode) -> Self {
-        match val {
-            ConsolidationMode::None => Consolidation::None,
-            ConsolidationMode::Monotonic => Consolidation::Monotonic,
-            ConsolidationMode::Latest => Consolidation::Latest,
-        }
-    }
-}
-
 /// # Query message
 ///
 /// ```text
 /// Flags:
+/// - C: Consolidation  if C==1 then consolidation is present
 /// - P: Parameters     If P==1 then the parameters are present
-/// - X: Reserved
 /// - Z: Extension      If Z==1 then at least one extension is present
 ///
 ///   7 6 5 4 3 2 1 0
 ///  +-+-+-+-+-+-+-+-+
-///  |Z|X|P|  QUERY  |
+///  |Z|P|C|  QUERY  |
 ///  +-+-+-+---------+
+///  % consolidation %  if C==1
+///  +---------------+
 ///  ~ ps: <u8;z16>  ~  if P==1
 ///  +---------------+
 ///  ~  [qry_exts]   ~  if Z==1
 ///  +---------------+
 /// ```
 pub mod flag {
-    pub const P: u8 = 1 << 5; // 0x20 Parameters    if P==1 then the parameters are present
-                              // pub const X: u8 = 1 << 6; // 0x40 Reserved
+    pub const C: u8 = 1 << 5; // 0x20 Consolidation if C==1 then consolidation is present
+    pub const P: u8 = 1 << 6; // 0x40 Parameters    if P==1 then the parameters are present
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
+    pub consolidation: Consolidation,
     pub parameters: String,
     pub ext_sinfo: Option<ext::SourceInfoType>,
-    pub ext_consolidation: Consolidation,
     pub ext_body: Option<ext::QueryBodyType>,
     pub ext_attachment: Option<ext::AttachmentType>,
     pub ext_unknown: Vec<ZExtUnknown>,
 }
 
 pub mod ext {
-    use crate::{
-        common::{ZExtZ64, ZExtZBuf},
-        zextz64, zextzbuf,
-    };
+    use crate::{common::ZExtZBuf, zextzbuf};
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
     pub type SourceInfo = zextzbuf!(0x1, false);
     pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
-
-    /// # Consolidation extension
-    pub type Consolidation = zextz64!(0x2, true);
-    pub type ConsolidationType = crate::zenoh::query::Consolidation;
 
     /// # QueryBody extension
     /// Used to carry a body attached to the query
@@ -137,6 +124,7 @@ impl Query {
         const MIN: usize = 2;
         const MAX: usize = 16;
 
+        let consolidation = Consolidation::rand();
         let parameters: String = if rng.gen_bool(0.5) {
             let len = rng.gen_range(MIN..MAX);
             Alphanumeric.sample_string(&mut rng, len)
@@ -144,7 +132,6 @@ impl Query {
             String::new()
         };
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
-        let ext_consolidation = Consolidation::rand();
         let ext_body = rng.gen_bool(0.5).then_some(ext::QueryBodyType::rand());
         let ext_attachment = rng.gen_bool(0.5).then_some(ext::AttachmentType::rand());
         let mut ext_unknown = Vec::new();
@@ -156,9 +143,9 @@ impl Query {
         }
 
         Self {
+            consolidation,
             parameters,
             ext_sinfo,
-            ext_consolidation,
             ext_body,
             ext_attachment,
             ext_unknown,

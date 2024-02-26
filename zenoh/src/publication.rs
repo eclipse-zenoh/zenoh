@@ -811,7 +811,7 @@ fn resolve_put(
                 false,
             ),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: match kind {
                 SampleKind::Put => {
                     #[allow(unused_mut)]
@@ -887,6 +887,8 @@ pub enum Priority {
 }
 
 impl Priority {
+    /// Default
+    pub const DEFAULT: Self = Self::Data;
     /// The lowest Priority
     pub const MIN: Self = Self::Background;
     /// The highest Priority
@@ -1328,7 +1330,6 @@ mod tests {
     #[test]
     fn sample_kind_integrity_in_publication() {
         use crate::{open, prelude::sync::*};
-        use zenoh_protocol::core::SampleKind;
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/publication";
         const VALUE: &str = "zenoh";
@@ -1351,7 +1352,6 @@ mod tests {
     #[test]
     fn sample_kind_integrity_in_put_builder() {
         use crate::{open, prelude::sync::*};
-        use zenoh_protocol::core::SampleKind;
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/put_builder";
         const VALUE: &str = "zenoh";

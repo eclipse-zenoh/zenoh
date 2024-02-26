@@ -23,7 +23,7 @@ fn main() {
     env_logger::init();
     let args = Args::parse();
 
-    let mut prio = Priority::default();
+    let mut prio = Priority::DEFAULT;
     if let Some(p) = args.priority {
         prio = p.try_into().unwrap();
     }
