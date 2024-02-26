@@ -344,6 +344,12 @@ macro_rules! impl_int {
             }
         }
 
+        impl Encoder<&mut $t> for DefaultEncoding {
+            fn encode(self, t: &mut $t) -> Value {
+                Self.encode(*t)
+            }
+        }
+
         impl Decoder<$t> for DefaultEncoding {
             fn decode(self, v: &Value) -> ZResult<$t> {
                 if v.encoding == $encoding {
