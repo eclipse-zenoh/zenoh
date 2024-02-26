@@ -38,11 +38,7 @@ default = ["std"]
 [dependencies]
 async-std = { workspace = true, features = ["default", "unstable"] }
 async-trait = { workspace = true }
-clap = { workspace = true }
-const_format = { workspace = true }
 flume = { workspace = true }
-futures = { workspace = true }
-hex = { workspace = true, features = ["default"] }
 home = { workspace = true }
 humantime = { workspace = true }
 lazy_static = { workspace = true }
@@ -50,7 +46,6 @@ libloading = { workspace = true }
 log = { workspace = true }
 shellexpand = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-protocol = { workspace = true, features = ["default"] }
 zenoh-result = { workspace = true, features = ["default"] }
 
 [target.'cfg(windows)'.dependencies]
@@ -58,7 +53,6 @@ winapi = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
-pnet = { workspace = true }
 pnet_datalink = { workspace = true }
 
 [dev-dependencies]

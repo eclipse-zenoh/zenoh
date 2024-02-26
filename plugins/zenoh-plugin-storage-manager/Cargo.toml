@@ -34,7 +34,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 async-std = { workspace = true, features = ["default"] }
 async-trait = { workspace = true }
-clap = { workspace = true }
 crc = { workspace = true }
 const_format = { workspace = true }
 derive-new = { workspace = true }
