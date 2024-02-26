@@ -97,13 +97,13 @@ impl Value {
     /// }
     ///
     /// impl Encoder<String> for MyEncoder {
-    ///     fn encode(s: String) -> Value {
-    ///         Value::new(s.into_bytes().into()).encoding(MyEncoder::STRING)
+    ///     fn encode(self, s: String) -> Value {
+    ///         Value::new(s.into_bytes().into()).with_encoding(MyEncoder::STRING)
     ///     }
     /// }
     ///
     /// impl Decoder<String> for MyEncoder {
-    ///     fn decode(v: &Value) -> ZResult<String> {
+    ///     fn decode(self, v: &Value) -> ZResult<String> {
     ///         if v.encoding == MyEncoder::STRING {
     ///             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
     ///         } else {
@@ -113,8 +113,8 @@ impl Value {
     /// }
     ///
     /// let start = String::from("abc");
-    /// let value = Value::encode_with::<MyEncoder, _>(start.clone());
-    /// let end: String = value.decode_with::<MyEncoder, _>().unwrap();
+    /// let value = Value::encode_with(start.clone(), MyEncoder);
+    /// let end: String = value.decode_with(MyEncoder).unwrap();
     /// assert_eq!(start, end);
     /// ```
     pub fn encode_with<T, M>(t: T, m: M) -> Self
