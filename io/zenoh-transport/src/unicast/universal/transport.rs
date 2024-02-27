@@ -44,13 +44,6 @@ macro_rules! zlinkget {
     };
 }
 
-// macro_rules! zlinkgetmut {
-//     ($guard:expr, $link:expr) => {
-//         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-//         $guard.iter_mut().find(|tl| tl.link == $link)
-//     };
-// }
-
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction

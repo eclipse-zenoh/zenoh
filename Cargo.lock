@@ -4721,7 +4721,6 @@ name = "zenoh-core"
 version = "0.11.0-dev"
 dependencies = [
  "async-global-executor",
- "async-std",
  "lazy_static",
  "tokio",
  "zenoh-result",
@@ -4798,7 +4797,6 @@ dependencies = [
 name = "zenoh-link"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "rcgen",
  "zenoh-config",

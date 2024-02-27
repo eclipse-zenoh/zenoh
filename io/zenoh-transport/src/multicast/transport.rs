@@ -54,7 +54,6 @@ pub(super) struct TransportMulticastPeer {
     pub(super) lease: Duration,
     pub(super) is_active: Arc<AtomicBool>,
     token: CancellationToken,
-    // pub(super) handle: TimedHandle,
     pub(super) priority_rx: Box<[TransportPriorityRx]>,
     pub(super) handler: Arc<dyn TransportPeerEventHandler>,
 }

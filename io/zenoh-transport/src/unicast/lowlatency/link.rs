@@ -244,9 +244,7 @@ async fn keepalive_task(
                 drop(guard);
             }
 
-            _ = token.cancelled() => {
-                break
-            }
+            _ = token.cancelled() => break,
         }
     }
     Ok(())

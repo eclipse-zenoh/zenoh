@@ -46,7 +46,7 @@
    ```
    or
    ```bash
-      _put -k demo/example/test -v 'Hello World'
+      z_put -k demo/example/test -v 'Hello World'
    ```
 
 ### z_pub
