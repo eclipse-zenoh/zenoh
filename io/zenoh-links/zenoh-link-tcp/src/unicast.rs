@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -199,6 +199,7 @@ impl LinkManagerUnicastTcp {
     async fn new_link_inner(
         &self,
         dst_addr: &SocketAddr,
+        iface: Option<&str>,
     ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
         let stream = TcpStream::connect(dst_addr)
             .await
@@ -212,14 +213,22 @@ impl LinkManagerUnicastTcp {
             .peer_addr()
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
 
+        zenoh_util::net::set_bind_to_device_tcp_stream(&stream, iface);
+
         Ok((stream, src_addr, dst_addr))
     }
 
-    async fn new_listener_inner(&self, addr: &SocketAddr) -> ZResult<(TcpListener, SocketAddr)> {
+    async fn new_listener_inner(
+        &self,
+        addr: &SocketAddr,
+        iface: Option<&str>,
+    ) -> ZResult<(TcpListener, SocketAddr)> {
         // Bind the TCP socket
         let socket = TcpListener::bind(addr)
             .await
             .map_err(|e| zerror!("{}: {}", addr, e))?;
+
+        zenoh_util::net::set_bind_to_device_tcp_listener(&socket, iface);
 
         let local_addr = socket
             .local_addr()
@@ -233,10 +242,12 @@ impl LinkManagerUnicastTcp {
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_addrs = get_tcp_addrs(endpoint.address()).await?;
+        let config = endpoint.config();
+        let iface = config.get(BIND_INTERFACE);
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
-            match self.new_link_inner(&da).await {
+            match self.new_link_inner(&da, iface).await {
                 Ok((stream, src_addr, dst_addr)) => {
                     let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
                     return Ok(LinkUnicast(link));
@@ -260,10 +271,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addrs = get_tcp_addrs(endpoint.address()).await?;
+        let config = endpoint.config();
+        let iface = config.get(BIND_INTERFACE);
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match self.new_listener_inner(&da).await {
+            match self.new_listener_inner(&da, iface).await {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(
