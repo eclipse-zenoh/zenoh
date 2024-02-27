@@ -201,8 +201,8 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
             rest: value
                 .into_iter()
                 .filter(|&(k, _v)| {
-                    (!["__required__", "backend_search_dirs", "volumes", "storages"]
-                        .contains(&k.as_str()))
+                    !["__required__", "backend_search_dirs", "volumes", "storages"]
+                        .contains(&k.as_str())
                 })
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),

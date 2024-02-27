@@ -115,7 +115,7 @@ impl TransportMulticastInner {
     ) -> ZResult<TransportMulticastInner> {
         let mut priority_tx = vec![];
         if (config.initial_sns.len() != 1) != (config.initial_sns.len() != Priority::NUM) {
-            for (_, sn) in config.initial_sns.iter().enumerate() {
+            for sn in config.initial_sns.iter() {
                 let tct = TransportPriorityTx::make(config.sn_resolution)?;
                 tct.sync(*sn)?;
                 priority_tx.push(tct);
@@ -359,7 +359,7 @@ impl TransportMulticastInner {
         .into_boxed_slice();
 
         let mut priority_rx = Vec::with_capacity(next_sns.len());
-        for (_, sn) in next_sns.iter().enumerate() {
+        for sn in next_sns.iter() {
             let tprx = TransportPriorityRx::make(
                 join.resolution.get(Field::FrameSN),
                 self.manager.config.defrag_buff_size,

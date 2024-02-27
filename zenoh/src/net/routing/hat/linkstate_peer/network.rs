@@ -774,12 +774,12 @@ impl Network {
             .graph
             .node_indices()
             .filter(|&idx| {
-                (self.full_linkstate
+                self.full_linkstate
                     || self.gossip_multihop
                     || self.links.values().any(|link| link.zid == zid)
                     || (self.router_peers_failover_brokering
                         && idx == self.idx
-                        && whatami == WhatAmI::Router))
+                        && whatami == WhatAmI::Router)
             })
             .map(|idx| {
                 (
