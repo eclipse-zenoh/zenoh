@@ -303,7 +303,7 @@ impl UnicastPipeListener {
         // create listening task
         // TODO: Check the necessity of this spawn_blocking
         tokio::task::spawn_blocking(move || {
-            ZRuntime::Reception.block_on(async move {
+            ZRuntime::Acceptor.block_on(async move {
                 loop {
                     tokio::select! {
                         _ = handle_incoming_connections(

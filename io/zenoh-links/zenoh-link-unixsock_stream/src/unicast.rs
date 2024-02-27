@@ -393,7 +393,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             zasyncwrite!(c_listeners).remove(&c_path);
             res
         };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Reception);
+        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Acceptor);
 
         let locator = endpoint.to_locator();
         let listener = ListenerUnixSocketStream::new(endpoint, token, tracker, lock_fd);

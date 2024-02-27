@@ -391,7 +391,7 @@ impl TransportMulticastInner {
         };
 
         // TODO: Put it into TaskTracker properly
-        zenoh_runtime::ZRuntime::Reception.spawn(task);
+        zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
         // TODO: Integrate the above async task into TransportMulticastPeer
         // Store the new peer

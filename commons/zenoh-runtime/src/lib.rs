@@ -31,7 +31,7 @@ const ZENOH_RUNTIME_THREADS_ENV: &str = "ZENOH_RUNTIME_THREADS";
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum ZRuntime {
     Application,
-    Reception,
+    Acceptor,
     TX,
     RX,
     Net,
@@ -40,7 +40,7 @@ pub enum ZRuntime {
 impl ZRuntime {
     fn iter() -> impl Iterator<Item = ZRuntime> {
         use ZRuntime::*;
-        [Application, Reception, TX, RX, Net].into_iter()
+        [Application, Acceptor, TX, RX, Net].into_iter()
     }
 
     fn init(&self) -> Result<Runtime> {
@@ -61,8 +61,8 @@ impl ZRuntime {
                     format!("{thread_name}-{}", id)
                 })
                 .build()?,
-            Reception => tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(config.reception_threads)
+            Acceptor => tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(config.acceptor_threads)
                 .enable_io()
                 .enable_time()
                 .thread_name_fn(move || {
@@ -145,7 +145,7 @@ impl ZRuntimePool {
 #[derive(Debug, Copy, Clone)]
 pub struct ZRuntimeConfig {
     pub application_threads: usize,
-    pub reception_threads: usize,
+    pub acceptor_threads: usize,
     pub tx_threads: usize,
     pub rx_threads: usize,
     pub net_threads: usize,
@@ -172,9 +172,9 @@ impl ZRuntimeConfig {
                     c.net_threads = n;
                 }
             }
-            if let Some(n) = ps.get("reception") {
+            if let Some(n) = ps.get("acceptor") {
                 if let Ok(n) = n.parse::<usize>() {
-                    c.reception_threads = n;
+                    c.acceptor_threads = n;
                 }
             }
             if let Some(n) = ps.get("application") {
@@ -193,7 +193,7 @@ impl Default for ZRuntimeConfig {
     fn default() -> Self {
         Self {
             application_threads: 2,
-            reception_threads: 2,
+            acceptor_threads: 2,
             tx_threads: 2,
             rx_threads: 2,
             net_threads: 2,
