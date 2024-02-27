@@ -38,7 +38,7 @@ fn posix_shm_provider_create() {
 
 #[test]
 fn posix_shm_provider_alloc() {
-    let mut backend = PosixSharedMemoryProviderBackend::builder()
+    let backend = PosixSharedMemoryProviderBackend::builder()
         .with_size(1024)
         .expect("Error creating Layout!")
         .res()
@@ -53,7 +53,7 @@ fn posix_shm_provider_alloc() {
 
 #[test]
 fn posix_shm_provider_open() {
-    let mut backend = PosixSharedMemoryProviderBackend::builder()
+    let backend = PosixSharedMemoryProviderBackend::builder()
         .with_size(1024)
         .expect("Error creating Layout!")
         .res()
@@ -74,7 +74,7 @@ fn posix_shm_provider_open() {
 
 #[test]
 fn posix_shm_provider_allocator() {
-    let mut backend = PosixSharedMemoryProviderBackend::builder()
+    let backend = PosixSharedMemoryProviderBackend::builder()
         .with_size(BUFFER_SIZE * BUFFER_NUM)
         .expect("Error creating Layout!")
         .res()

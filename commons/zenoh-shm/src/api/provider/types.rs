@@ -102,6 +102,18 @@ impl MemoryLayout {
     pub fn alignment(&self) -> AllocAlignment {
         self.alignment
     }
+
+    pub fn extend(&self, new_alignment: AllocAlignment) -> ZResult<MemoryLayout> {
+        if self.alignment <= new_alignment {
+            let new_size = new_alignment.align_size(self.size);
+            return MemoryLayout::new(new_size, new_alignment);
+        }
+        bail!(
+            "Cannot extend alignment form {} to {}: new alignment must be >= old!",
+            self.alignment,
+            new_alignment
+        )
+    }
 }
 
 pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;

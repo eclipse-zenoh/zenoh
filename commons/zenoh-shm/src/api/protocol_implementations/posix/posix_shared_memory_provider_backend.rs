@@ -12,7 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{borrow::Borrow, cmp, collections::BinaryHeap, sync::atomic::AtomicPtr};
+use std::{
+    borrow::Borrow,
+    cmp,
+    collections::BinaryHeap,
+    sync::{
+        atomic::{AtomicPtr, AtomicUsize, Ordering},
+        Mutex,
+    },
+};
 
 use zenoh_result::ZResult;
 
@@ -98,9 +106,9 @@ impl<Layout: Borrow<MemoryLayout>> LayoutedPosixSharedMemoryProviderBackendBuild
 }
 
 pub struct PosixSharedMemoryProviderBackend {
-    available: usize,
+    available: AtomicUsize,
     segment: PosixSharedMemorySegment,
-    free_list: BinaryHeap<Chunk>,
+    free_list: Mutex<BinaryHeap<Chunk>>,
     alignment: AllocAlignment,
 }
 
@@ -127,26 +135,26 @@ impl PosixSharedMemoryProviderBackend {
         );
 
         Ok(Self {
-            available: layout.size(),
+            available: AtomicUsize::new(layout.size()),
             segment,
-            free_list,
+            free_list: Mutex::new(free_list),
             alignment: layout.alignment(),
         })
     }
 }
 
 impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
-    fn alloc(&mut self, layout: &MemoryLayout) -> ChunkAllocResult {
+    fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult {
         log::trace!("PosixSharedMemoryProviderBackend::alloc({:?})", layout);
 
-        // Change required size to fit internal alignment
-        let required_len = self.alignment.align_size(layout.size());
+        let required_len = layout.size();
 
-        if self.available >= required_len {
+        if self.available.load(Ordering::Relaxed) >= required_len {
+            let mut guard = self.free_list.lock().unwrap();
             // The strategy taken is the same for some Unix System V implementations -- as described in the
             // famous Bach's book --  in essence keep an ordered list of free slot and always look for the
             // biggest as that will give the biggest left-over.
-            match self.free_list.pop() {
+            match guard.pop() {
                 Some(mut chunk) if chunk.size >= required_len => {
                     // NOTE: don't loose any chunks here, as it will lead to memory leak
                     log::trace!("Allocator selected Chunk ({:?})", &chunk);
@@ -156,10 +164,10 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                             size: chunk.size - required_len,
                         };
                         log::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
-                        self.free_list.push(free_chunk);
+                        guard.push(free_chunk);
                         chunk.size = required_len;
                     }
-                    self.available -= chunk.size;
+                    self.available.fetch_sub(chunk.size, Ordering::Relaxed);
 
                     let descriptor =
                         ChunkDescriptor::new(self.segment.segment.id(), chunk.offset, chunk.size);
@@ -173,7 +181,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                 }
                 Some(c) => {
                     log::trace!("PosixSharedMemoryProviderBackend::alloc({:?}) cannot find any big enough chunk\nSharedMemoryManager::free_list = {:?}", layout, self.free_list);
-                    self.free_list.push(c);
+                    guard.push(c);
                     Err(ZAllocError::NeedDefragment)
                 }
                 None => {
@@ -194,16 +202,16 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
         }
     }
 
-    fn free(&mut self, chunk: &ChunkDescriptor) {
+    fn free(&self, chunk: &ChunkDescriptor) {
         let free_chunk = Chunk {
             offset: chunk.chunk,
             size: chunk.len,
         };
-        self.available += free_chunk.size;
-        self.free_list.push(free_chunk);
+        self.available.fetch_add(free_chunk.size, Ordering::Relaxed);
+        self.free_list.lock().unwrap().push(free_chunk);
     }
 
-    fn defragment(&mut self) -> usize {
+    fn defragment(&self) -> usize {
         fn try_merge_adjacent_chunks(a: &Chunk, b: &Chunk) -> Option<Chunk> {
             let end_offset = a.offset as usize + a.size;
             if end_offset == b.offset as usize {
@@ -218,8 +226,9 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
 
         let mut largest = 0usize;
 
-        if self.free_list.len() > 1 {
-            let mut fbs: Vec<Chunk> = self.free_list.drain().collect();
+        let mut guard = self.free_list.lock().unwrap();
+        if guard.len() > 1 {
+            let mut fbs: Vec<Chunk> = guard.drain().collect();
             fbs.sort_by(|x, y| x.offset.partial_cmp(&y.offset).unwrap());
             let mut current = fbs.remove(0);
             let mut i = 0;
@@ -232,13 +241,13 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                         current = c;
                         largest = largest.max(current.size);
                         if i == n {
-                            self.free_list.push(current)
+                            guard.push(current)
                         }
                     }
                     None => {
-                        self.free_list.push(current);
+                        guard.push(current);
                         if i == n {
-                            self.free_list.push(next);
+                            guard.push(next);
                         } else {
                             current = next;
                         }
@@ -250,10 +259,10 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
     }
 
     fn available(&self) -> usize {
-        self.available
+        self.available.load(Ordering::Relaxed)
     }
 
-    fn max_align(&self) -> crate::api::provider::types::AllocAlignment {
-        self.alignment
+    fn layout_for(&self, layout: MemoryLayout) -> ZResult<MemoryLayout> {
+        layout.extend(self.alignment)
     }
 }

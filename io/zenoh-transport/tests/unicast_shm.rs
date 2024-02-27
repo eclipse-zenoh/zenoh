@@ -41,7 +41,9 @@ mod tests {
                 posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
                 protocol_id::POSIX_PROTOCOL_ID,
             },
-            provider::shared_memory_provider::{BlockOn, GarbageCollect, SharedMemoryProvider},
+            provider::shared_memory_provider::{
+                BlockOn, GarbageCollect, SharedMemoryProviderBuilder,
+            },
         },
         SharedMemoryBuf,
     };
@@ -171,7 +173,10 @@ mod tests {
             .unwrap()
             .res()
             .unwrap();
-        let shm01 = SharedMemoryProvider::new(backend, POSIX_PROTOCOL_ID);
+        let shm01 = SharedMemoryProviderBuilder::builder()
+            .protocol_id::<POSIX_PROTOCOL_ID>()
+            .backend(backend)
+            .res();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
@@ -249,7 +254,7 @@ mod tests {
             .unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
-        let layout = shm01.layout().size(MSG_SIZE).build().unwrap();
+        let layout = shm01.alloc_layout().size(MSG_SIZE).res().unwrap();
 
         // Send the message
         println!("Transport SHM [3a]");
