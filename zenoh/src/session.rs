@@ -31,6 +31,7 @@ use crate::queryable::*;
 #[cfg(feature = "unstable")]
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::sample::QoS;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
 use crate::Id;
@@ -2203,6 +2204,7 @@ impl Primitives for Session {
                     kind: SampleKind::Put,
                     encoding: Some(m.encoding),
                     timestamp: m.timestamp,
+                    qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
@@ -2220,6 +2222,7 @@ impl Primitives for Session {
                     kind: SampleKind::Delete,
                     encoding: None,
                     timestamp: m.timestamp,
+                    qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
@@ -2356,6 +2359,7 @@ impl Primitives for Session {
                             kind: SampleKind::Put,
                             encoding: Some(m.encoding),
                             timestamp: m.timestamp,
+                            qos: QoS::from(msg.ext_qos),
                             source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                             source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                         };

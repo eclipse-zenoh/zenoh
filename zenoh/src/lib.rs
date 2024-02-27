@@ -91,7 +91,7 @@ use std::future::Ready;
 #[cfg(feature = "shared-memory")]
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-pub use zenoh_macros::{kedefine, keformat, kewrite};
+pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
 use zenoh_util::concat_enabled_features;
