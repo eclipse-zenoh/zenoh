@@ -827,10 +827,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_prefix<'a>(
-        &'a self,
-        prefix: &'a str,
-    ) -> impl Resolve<ExprId> + 'a {
+    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<ExprId> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);

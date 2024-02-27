@@ -200,8 +200,11 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
             storages,
             rest: value
                 .into_iter()
-                .filter(|&(k, _v)| (!["__required__", "backend_search_dirs", "volumes", "storages"]
-                        .contains(&k.as_str()))).map(|(k, v)| (k.clone(), v.clone()))
+                .filter(|&(k, _v)| {
+                    (!["__required__", "backend_search_dirs", "volumes", "storages"]
+                        .contains(&k.as_str()))
+                })
+                .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
         })
     }
@@ -310,7 +313,8 @@ impl VolumeConfig {
                 required,
                 rest: config
                     .iter()
-                    .filter(|&(k, _v)| (!["__path__", "__required__"].contains(&k.as_str()))).map(|(k, v)| (k.clone(), v.clone()))
+                    .filter(|&(k, _v)| (!["__path__", "__required__"].contains(&k.as_str())))
+                    .map(|(k, v)| (k.clone(), v.clone()))
                     .collect(),
             })
         }

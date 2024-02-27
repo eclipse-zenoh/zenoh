@@ -173,7 +173,8 @@ impl LinkManagerMulticastUdp {
                         IpAddr::V6(_) => x.is_ipv6(),
                     })
                     .take(1)
-                    .collect::<Vec<IpAddr>>().first()
+                    .collect::<Vec<IpAddr>>()
+                    .first()
                     .copied(),
             };
         }
@@ -192,7 +193,8 @@ impl LinkManagerMulticastUdp {
                             }
                     })
                     .take(1)
-                    .collect::<Vec<IpAddr>>().first()
+                    .collect::<Vec<IpAddr>>()
+                    .first()
                     .copied();
 
                 match iface {
