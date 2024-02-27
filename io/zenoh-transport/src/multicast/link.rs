@@ -11,11 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::{pipeline::TransmissionPipeline, priority::TransportPriorityTx};
-use super::transport::TransportMulticastInner;
-use crate::common::pipeline::{
-    TransmissionPipelineConf, TransmissionPipelineConsumer, TransmissionPipelineProducer,
-};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -262,6 +257,7 @@ pub(super) struct TransportLinkMulticastConfigUniversal {
     pub(super) batch_size: BatchSize,
 }
 
+// TODO: Introduce TaskTracker and retire handle_tx, handle_rx, and signal_rx.
 #[derive(Clone)]
 pub(super) struct TransportLinkMulticastUniversal {
     // The underlying link
@@ -340,7 +336,7 @@ impl TransportLinkMulticastUniversal {
                     config,
                     initial_sns,
                     #[cfg(feature = "stats")]
-                    ctransport.stats.clone(),
+                    c_transport.stats.clone(),
                 )
                 .await;
                 if let Err(e) = res {
@@ -365,7 +361,7 @@ impl TransportLinkMulticastUniversal {
         if self.handle_rx.is_none() {
             // Spawn the RX task
             let c_link = self.link.clone();
-            let ctransport = self.transport.clone();
+            let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
@@ -373,7 +369,7 @@ impl TransportLinkMulticastUniversal {
                 // Start the consume task
                 let res = rx_task(
                     c_link.rx(),
-                    ctransport.clone(),
+                    c_transport.clone(),
                     c_signal.clone(),
                     c_rx_buffer_size,
                     batch_size,

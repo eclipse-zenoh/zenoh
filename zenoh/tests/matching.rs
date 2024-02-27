@@ -21,7 +21,7 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(feature = "unstable")]
-async fn create_session_pair(locator: &str) -> Result<(Session, Session)> {
+async fn create_session_pair(locator: &str) -> (Session, Session) {
     let config1 = {
         let mut config = zenoh::config::peer();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -31,11 +31,11 @@ async fn create_session_pair(locator: &str) -> Result<(Session, Session)> {
             .unwrap();
         config
     };
-    let config2 = zenoh::config::client([Locator::from_str(locator)?]);
+    let config2 = zenoh::config::client([Locator::from_str(locator).unwrap()]);
 
-    let session1 = ztimeout!(zenoh::open(config1).res_async())?;
-    let session2 = ztimeout!(zenoh::open(config2).res_async())?;
-    Ok((session1, session2))
+    let session1 = ztimeout!(zenoh::open(config1).res_async()).unwrap();
+    let session2 = ztimeout!(zenoh::open(config2).res_async()).unwrap();
+    (session1, session2)
 }
 
 #[cfg(feature = "unstable")]

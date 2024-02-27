@@ -13,8 +13,10 @@ use crate::common::batch::BatchConfig;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::batch::{Encode, WBatch, WError};
-use super::priority::{TransportChannelTx, TransportPriorityTx};
+use super::{
+    batch::{Encode, WBatch},
+    priority::{TransportChannelTx, TransportPriorityTx},
+};
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};

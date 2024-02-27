@@ -21,11 +21,6 @@ use crate::{
     TransportPeerEventHandler,
 };
 use std::sync::MutexGuard;
-use zenoh_buffers::{
-    reader::{HasReader, Reader},
-    ZSlice,
-};
-use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
 use zenoh_protocol::{

@@ -42,3 +42,7 @@ zenoh-core = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "net", "fs", "sync", "time"] }
+tokio-util = { workspace = true, features = ["rt"] }
+futures = { workspace = true }

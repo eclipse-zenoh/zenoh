@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
-use async_std::net::SocketAddr;
 use async_trait::async_trait;
 use core::{
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
 };
+use std::net::SocketAddr;
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::ZResult;
 

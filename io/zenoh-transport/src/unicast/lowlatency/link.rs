@@ -99,8 +99,9 @@ impl TransportUnicastLowlatency {
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
         let guard = zasyncwrite!(self.link);
-        let res = send_with_link(
-            &guard,
+        let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
+        send_with_link(
+            link,
             msg,
             #[cfg(feature = "stats")]
             &self.stats,

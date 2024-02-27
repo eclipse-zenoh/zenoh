@@ -569,44 +569,11 @@ impl Session {
     }
 }
 
-    /// Get informations about the zenoh [`Session`](Session).
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let info = session.info();
-    /// # }
-    /// ```
-    pub fn info(&self) -> SessionInfo {
-        SessionInfo {
-            session: SessionRef::Borrow(self),
-        }
+impl<'a> SessionDeclarations<'a, 'a> for Session {
+    fn info(&self) -> SessionInfo {
+        SessionRef::Borrow(self).info()
     }
-
-    /// Create a [`Subscriber`](Subscriber) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression to subscribe to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
-    /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {:?}", sample);
-    /// }
-    /// # }
-    /// ```
-    pub fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
+    fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
     ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
@@ -616,31 +583,7 @@ impl Session {
     {
         SessionRef::Borrow(self).declare_subscriber(key_expr)
     }
-
-    /// Create a [`Queryable`](Queryable) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](Queryable) will reply to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
-    /// while let Ok(query) = queryable.recv_async().await {
-    ///     query.reply(Ok(Sample::try_from(
-    ///         "key/expression",
-    ///         "value",
-    ///     ).unwrap())).res().await.unwrap();
-    /// }
-    /// # }
-    /// ```
-    pub fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
+    fn declare_queryable<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b, DefaultHandler>
@@ -650,28 +593,7 @@ impl Session {
     {
         SessionRef::Borrow(self).declare_queryable(key_expr)
     }
-
-    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching resources to write
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression")
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// publisher.put("value").res().await.unwrap();
-    /// # }
-    /// ```
-    pub fn declare_publisher<'a, 'b, TryIntoKeyExpr>(
+    fn declare_publisher<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
     ) -> PublisherBuilder<'a, 'b>
@@ -870,30 +792,6 @@ impl Session {
             #[cfg(feature = "unstable")]
             attachment: None,
             handler: DefaultHandler,
-        }
-    }
-
-    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let liveliness = session
-    ///     .liveliness()
-    ///     .declare_token("key/expression")
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[zenoh_macros::unstable]
-    pub fn liveliness(&self) -> Liveliness {
-        Liveliness {
-            session: SessionRef::Borrow(self),
         }
     }
 }

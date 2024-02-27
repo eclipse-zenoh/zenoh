@@ -34,5 +34,5 @@ async fn main() {
     .await;
 
     // stop scouting
-    drop(receiver);
+    receiver.stop();
 }

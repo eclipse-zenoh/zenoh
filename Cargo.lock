@@ -165,9 +165,9 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anstream"
-version = "0.6.4"
+version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ab91ebe16eb252986481c5b62f6098f3b698a45e34b5b98200cf20dd2484a44"
+checksum = "96b09b5178381e0874812a9b157f7fe84982617e48f71f4e3235482775e5b540"
 dependencies = [
  "anstyle",
  "anstyle-parse",
@@ -179,9 +179,9 @@ dependencies = [
 
 [[package]]
 name = "anstyle"
-version = "1.0.3"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b84bf0a05bbb2a83e5eb6fa36bb6e87baa08193c35ff52bbf6b38d8af2890e46"
+checksum = "8901269c6307e8d93993578286ac0edf7f195079ffff5ebdeea6a59ffb7e36bc"
 
 [[package]]
 name = "anstyle-parse"
@@ -357,16 +357,6 @@ dependencies = [
  "rustix 0.37.25",
  "signal-hook",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "async-rustls"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29479d362e242e320fa8f5c831940a5b83c1679af014068196cd20d4bf497b6b"
-dependencies = [
- "futures-io",
- "rustls",
 ]
 
 [[package]]
@@ -1111,16 +1101,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "env_logger"
-version = "0.10.0"
+name = "env_filter"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85cdab6a89accf66733ad5a1693a4dcced6aeff64602b634530dd73c1f3ee9f0"
+checksum = "a009aa4810eb158359dda09d0c87378e4bbb89b5a801f016885a4707ba24f7ea"
 dependencies = [
- "humantime",
- "is-terminal",
  "log",
  "regex",
- "termcolor",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c012a26a7f605efc424dd53697843a72be7dc86ad2d01f7814337794a12231d"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "env_filter",
+ "humantime",
+ "log",
 ]
 
 [[package]]
@@ -1480,7 +1480,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
- "http",
+ "http 0.2.9",
  "indexmap 1.9.3",
  "slab",
  "tokio",
@@ -1597,13 +1597,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "http"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b32afd38673a8016f7c9ae69e5af41a58f81b1d31689040f2f1959594ce194ea"
+dependencies = [
+ "bytes",
+ "fnv",
+ "itoa",
+]
+
+[[package]]
 name = "http-body"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
 dependencies = [
  "bytes",
- "http",
+ "http 0.2.9",
  "pin-project-lite 0.2.13",
 ]
 
@@ -1670,7 +1681,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2",
- "http",
+ "http 0.2.9",
  "http-body",
  "httparse",
  "httpdate",
@@ -1909,9 +1920,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.148"
+version = "0.2.153"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cdc71e17332e86d2e1d38c1f99edcb6288ee11b815fb1a4b049eaa2114d369b"
+checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
 name = "libloading"
@@ -2044,9 +2055,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.8"
+version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "927a765cd3fc26206e66b296465fa9d3e5ab003e651c1b3c060e7956d96b19d2"
+checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
 dependencies = [
  "libc",
  "log",
@@ -2645,7 +2656,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls",
+ "rustls 0.21.7",
  "thiserror",
  "tokio",
  "tracing",
@@ -2661,7 +2672,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.16.20",
  "rustc-hash",
- "rustls",
+ "rustls 0.21.7",
  "rustls-native-certs 0.6.3",
  "slab",
  "thiserror",
@@ -2677,7 +2688,7 @@ checksum = "055b4e778e8feb9f93c4e439f71dc2156ef13360b432b799e179a8c4cdf0b1d7"
 dependencies = [
  "bytes",
  "libc",
- "socket2 0.5.4",
+ "socket2 0.5.6",
  "tracing",
  "windows-sys 0.48.0",
 ]
@@ -2866,7 +2877,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2",
- "http",
+ "http 0.2.9",
  "http-body",
  "hyper",
  "ipnet",
@@ -3025,6 +3036,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls"
+version = "0.22.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e87c9956bd9807afa1f77e0f7594af32566e830e088a5576d27c5b6f30f49d41"
+dependencies = [
+ "log",
+ "ring 0.17.6",
+ "rustls-pki-types",
+ "rustls-webpki 0.102.2",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "rustls-native-certs"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3070,9 +3095,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.0.0"
+version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb0a1f9b9efec70d32e6d6aa3e58ebd88c3754ec98dfe9145c63cf54cc829b83"
+checksum = "5ede67b28608b4c60685c7d54122d4400d90f62b40caee7700e700380a390fa8"
 
 [[package]]
 name = "rustls-webpki"
@@ -3086,9 +3111,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.0"
+version = "0.102.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de2635c8bc2b88d367767c5de8ea1d8db9af3f6219eba28442242d9ab81d1b89"
+checksum = "faaa0a62740bedb9b2ef5afa303da42764c012f743917351dc9a237ea1663610"
 dependencies = [
  "ring 0.17.6",
  "rustls-pki-types",
@@ -3464,12 +3489,12 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.5.4"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4031e820eb552adee9295814c0ced9e5cf38ddf1e8b7d566d6de8e2538ea989e"
+checksum = "05ffd9c0a93b7543e062e759284fcf5f5e3b098501104bfbdde4d404db792871"
 dependencies = [
  "libc",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3676,15 +3701,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "termcolor"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be55cf8942feac5c765c2c993422806843c9a9a45d4d5c407ad6dd2ea95eb9b6"
-dependencies = [
- "winapi-util",
-]
-
-[[package]]
 name = "thiserror"
 version = "1.0.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3828,9 +3844,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.32.0"
+version = "1.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17ed6077ed6cd6c74735e21f37eb16dc3935f96878b1fe961074089cc80893f9"
+checksum = "61285f6515fa018fb2d1e46eb21223fff441ee8db5d0f1435e8ab4f5cdb80931"
 dependencies = [
  "backtrace",
  "bytes",
@@ -3838,21 +3854,41 @@ dependencies = [
  "mio",
  "num_cpus",
  "pin-project-lite 0.2.13",
- "socket2 0.5.4",
+ "socket2 0.5.6",
  "tokio-macros",
- "tracing",
  "windows-sys 0.48.0",
 ]
 
 [[package]]
 name = "tokio-macros"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
+checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.33",
+]
+
+[[package]]
+name = "tokio-rustls"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
+dependencies = [
+ "rustls 0.21.7",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-rustls"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "775e0c0f0adb3a2f22a00c4745d728b479985fc15ee7ca6a2608388c5569860f"
+dependencies = [
+ "rustls 0.22.2",
+ "rustls-pki-types",
+ "tokio",
 ]
 
 [[package]]
@@ -3870,9 +3906,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b2dbec703c26b00d74844519606ef15d09a7d6857860f84ad223dec002ddea2"
+checksum = "c83b561d025642014097b66e6c1bb422783339e0909e4429cde4749d1990bc38"
 dependencies = [
  "futures-util",
  "log",
@@ -3943,14 +3979,14 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "tungstenite"
-version = "0.20.1"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e3dac10fd62eaf6617d3a904ae222845979aec67c615d1c842b4002c7666fb9"
+checksum = "9ef1a641ea34f399a848dea702823bbecfb4c486f911735368f1f137cb8257e1"
 dependencies = [
  "byteorder",
  "bytes",
  "data-encoding",
- "http",
+ "http 1.0.0",
  "httparse",
  "log",
  "rand 0.8.5",
@@ -4587,7 +4623,7 @@ dependencies = [
  "rustc_version 0.4.0",
  "serde",
  "serde_json",
- "socket2 0.5.4",
+ "socket2 0.5.6",
  "stop-token",
  "tokio",
  "tokio-util",
@@ -4726,7 +4762,6 @@ dependencies = [
 name = "zenoh-ext"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "bincode",
  "clap",
  "env_logger",
@@ -4784,19 +4819,23 @@ dependencies = [
 name = "zenoh-link-commons"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "flume",
+ "futures",
  "log",
  "lz4_flex",
+ "rustls 0.22.2",
+ "rustls-webpki 0.102.2",
  "serde",
+ "tokio",
+ "tokio-util",
  "typenum",
  "zenoh-buffers",
  "zenoh-codec",
  "zenoh-core",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-sync",
+ "zenoh-runtime",
  "zenoh-util",
 ]
 
@@ -4804,23 +4843,25 @@ dependencies = [
 name = "zenoh-link-quic"
 version = "0.11.0-dev"
 dependencies = [
- "async-rustls",
- "async-std",
  "async-trait",
  "base64 0.21.4",
  "futures",
  "log",
  "quinn",
- "rustls",
+ "rustls 0.21.7",
  "rustls-native-certs 0.7.0",
  "rustls-pemfile 2.0.0",
- "rustls-webpki 0.102.0",
+ "rustls-webpki 0.102.2",
  "secrecy",
+ "tokio",
+ "tokio-rustls 0.24.1",
+ "tokio-util",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4854,6 +4895,7 @@ dependencies = [
  "async-trait",
  "log",
  "tokio",
+ "tokio-util",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
@@ -4867,22 +4909,25 @@ dependencies = [
 name = "zenoh-link-tls"
 version = "0.11.0-dev"
 dependencies = [
- "async-rustls",
- "async-std",
  "async-trait",
  "base64 0.21.4",
  "futures",
  "log",
- "rustls",
+ "rustls 0.22.2",
  "rustls-pemfile 2.0.0",
- "rustls-webpki 0.102.0",
+ "rustls-pki-types",
+ "rustls-webpki 0.102.2",
  "secrecy",
+ "tokio",
+ "tokio-rustls 0.25.0",
+ "tokio-util",
  "webpki-roots",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4893,7 +4938,7 @@ version = "0.11.0-dev"
 dependencies = [
  "async-trait",
  "log",
- "socket2 0.5.4",
+ "socket2 0.5.6",
  "tokio",
  "tokio-util",
  "zenoh-buffers",
@@ -4933,16 +4978,18 @@ dependencies = [
 name = "zenoh-link-unixsock_stream"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "futures",
  "log",
  "nix 0.27.1",
+ "tokio",
+ "tokio-util",
  "uuid",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-sync",
 ]
 
@@ -5102,6 +5149,7 @@ version = "0.11.0-dev"
 dependencies = [
  "lazy_static",
  "tokio",
+ "zenoh-collections",
  "zenoh-result",
 ]
 
@@ -5121,7 +5169,6 @@ dependencies = [
 name = "zenoh-sync"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "event-listener 4.0.0",
  "flume",
  "futures",
@@ -5129,6 +5176,8 @@ dependencies = [
  "zenoh-buffers",
  "zenoh-collections",
  "zenoh-core",
+ "zenoh-result",
+ "zenoh-runtime",
 ]
 
 [[package]]
@@ -5186,6 +5235,7 @@ dependencies = [
  "pnet",
  "pnet_datalink",
  "shellexpand",
+ "tokio",
  "winapi",
  "zenoh-core",
  "zenoh-protocol",

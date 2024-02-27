@@ -22,23 +22,21 @@ use rustls::{
     version::TLS13,
     ClientConfig, RootCertStore, ServerConfig,
 };
-use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Cursor};
-use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{cell::UnsafeCell, io};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use tokio::sync::Mutex as AsyncMutex;
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
 use webpki::anchor_from_trusted_cert;
-use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
+use zenoh_core::zasynclock;
 use zenoh_link_commons::tls::WebPkiVerifierAnyServerName;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
@@ -227,45 +225,16 @@ impl fmt::Debug for LinkUnicastTls {
     }
 }
 
-/*************************************/
-/*          LISTENER                 */
-/*************************************/
-struct ListenerUnicastTls {
-    endpoint: EndPoint,
-    token: CancellationToken,
-    tracker: TaskTracker,
-}
-
-impl ListenerUnicastTls {
-    fn new(
-        endpoint: EndPoint,
-        token: CancellationToken,
-        tracker: TaskTracker,
-    ) -> ListenerUnicastTls {
-        ListenerUnicastTls {
-            endpoint,
-            token,
-            tracker,
-        }
-    }
-
-    async fn stop(&self) {
-        self.token.cancel();
-        self.tracker.close();
-        self.tracker.wait().await;
-    }
-}
-
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
-    listeners: Arc<AsyncRwLock<HashMap<SocketAddr, ListenerUnicastTls>>>,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }
@@ -353,22 +322,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         // Initialize the TlsAcceptor
         let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
-        let token = CancellationToken::new();
+        let token = self.listeners.token.child_token();
         let c_token = token.clone();
-
-        // Spawn the accept loop for the listener
         let c_manager = self.manager.clone();
-        let c_listeners = self.listeners.clone();
-        let c_addr = local_addr;
 
-        let tracker = TaskTracker::new();
-        let task = async move {
-            // Wait for the accept loop to terminate
-            let res = accept_task(socket, acceptor, c_token, c_manager).await;
-            zasyncwrite!(c_listeners).remove(&c_addr);
-            res
-        };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Reception);
+        let task = async move { accept_task(socket, acceptor, c_token, c_manager).await };
 
         // Update the endpoint locator address
         let locator = Locator::new(
@@ -377,9 +335,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             endpoint.metadata(),
         )?;
 
-        let listener = ListenerUnicastTls::new(endpoint, token, tracker);
-        // Update the list of active listeners on the manager
-        zasyncwrite!(self.listeners).insert(local_addr, listener);
+        self.listeners
+            .add_listener(endpoint, local_addr, task, token)
+            .await?;
 
         Ok(locator)
     }
@@ -387,57 +345,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         let epaddr = endpoint.address();
         let addr = get_tls_addr(&epaddr).await?;
-
-        // Stop the listener
-        let listener = zasyncwrite!(self.listeners).remove(&addr).ok_or_else(|| {
-            let e = zerror!(
-                "Can not delete the TLS listener because it has not been found: {}",
-                addr
-            );
-            log::trace!("{}", e);
-            e
-        })?;
-
-        // Send the stop signal
-        listener.stop().await;
-        Ok(())
+        self.listeners.del_listener(addr).await
     }
 
     async fn get_listeners(&self) -> Vec<EndPoint> {
-        zasyncread!(self.listeners)
-            .values()
-            .map(|x| x.endpoint.clone())
-            .collect()
+        self.listeners.get_endpoints()
     }
 
     async fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
-
-        let guard = zasyncread!(self.listeners);
-        for (key, value) in guard.iter() {
-            let (kip, kpt) = (key.ip(), key.port());
-
-            // Either ipv4/0.0.0.0 or ipv6/[::]
-            if kip.is_unspecified() {
-                let mut addrs = match kip {
-                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
-                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
-                };
-                let iter = addrs.drain(..).map(|x| {
-                    Locator::new(
-                        value.endpoint.protocol(),
-                        SocketAddr::new(x, kpt).to_string(),
-                        value.endpoint.metadata(),
-                    )
-                    .unwrap()
-                });
-                locators.extend(iter);
-            } else {
-                locators.push(value.endpoint.to_locator());
-            }
-        }
-
-        locators
+        self.listeners.get_locators()
     }
 }
 
@@ -725,9 +641,13 @@ async fn load_tls_key(
 ) -> ZResult<Vec<u8>> {
     if let Some(value) = config.get(tls_private_key_raw_config_key) {
         return Ok(value.as_bytes().to_vec());
-    } else if let Some(b64_key) = config.get(tls_private_key_base64_config_key) {
+    }
+
+    if let Some(b64_key) = config.get(tls_private_key_base64_config_key) {
         return base64_decode(b64_key);
-    } else if let Some(value) = config.get(tls_private_key_file_config_key) {
+    }
+
+    if let Some(value) = config.get(tls_private_key_file_config_key) {
         return Ok(tokio::fs::read(value)
             .await
             .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?)
@@ -750,9 +670,13 @@ async fn load_tls_certificate(
 ) -> ZResult<Vec<u8>> {
     if let Some(value) = config.get(tls_certificate_raw_config_key) {
         return Ok(value.as_bytes().to_vec());
-    } else if let Some(b64_certificate) = config.get(tls_certificate_base64_config_key) {
+    }
+
+    if let Some(b64_certificate) = config.get(tls_certificate_base64_config_key) {
         return base64_decode(b64_certificate);
-    } else if let Some(value) = config.get(tls_certificate_file_config_key) {
+    }
+
+    if let Some(value) = config.get(tls_certificate_file_config_key) {
         return Ok(tokio::fs::read(value)
             .await
             .map_err(|e| zerror!("Invalid TLS certificate file: {}", e))?);

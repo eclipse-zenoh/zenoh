@@ -422,41 +422,6 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         }
     }
 
-    fn start_tx(&self, link: &LinkUnicast, keep_alive: Duration, batch_size: u16) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, link) {
-            Some(l) => {
-                assert!(!self.priority_tx.is_empty());
-                l.start_tx(keep_alive, batch_size, &self.priority_tx);
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not start Link TX {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
-    }
-
-    fn start_rx(&self, link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, link) {
-            Some(l) => {
-                l.start_rx(lease, batch_size);
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not start Link RX {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
-    }
-
     fn add_debug_fields<'a, 'b: 'a, 'c>(
         &self,
         s: &'c mut DebugStruct<'a, 'b>,

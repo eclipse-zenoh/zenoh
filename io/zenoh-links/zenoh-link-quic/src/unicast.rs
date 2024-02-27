@@ -26,9 +26,9 @@ use std::net::IpAddr;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
+use tokio::sync::Mutex as AsyncMutex;
+use tokio_util::sync::CancellationToken;
+use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
@@ -182,45 +182,16 @@ impl fmt::Debug for LinkUnicastQuic {
     }
 }
 
-/*************************************/
-/*          LISTENER                 */
-/*************************************/
-struct ListenerUnicastQuic {
-    endpoint: EndPoint,
-    token: CancellationToken,
-    tracker: TaskTracker,
-}
-
-impl ListenerUnicastQuic {
-    fn new(
-        endpoint: EndPoint,
-        token: CancellationToken,
-        tracker: TaskTracker,
-    ) -> ListenerUnicastQuic {
-        ListenerUnicastQuic {
-            endpoint,
-            token,
-            tracker,
-        }
-    }
-
-    async fn stop(&self) {
-        self.token.cancel();
-        self.tracker.close();
-        self.tracker.wait().await;
-    }
-}
-
 pub struct LinkManagerUnicastQuic {
     manager: NewLinkChannelSender,
-    listeners: Arc<AsyncRwLock<HashMap<SocketAddr, ListenerUnicastQuic>>>,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastQuic {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }
@@ -425,28 +396,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         )?;
 
         // Spawn the accept loop for the listener
-        let token = CancellationToken::new();
+        let token = self.listeners.token.child_token();
         let c_token = token.clone();
-        let mut listeners = zasyncwrite!(self.listeners);
 
         let c_manager = self.manager.clone();
-        let c_listeners = self.listeners.clone();
-        let c_addr = local_addr;
 
-        let tracker = TaskTracker::new();
-        let task = async move {
-            // Wait for the accept loop to terminate
-            let res = accept_task(quic_endpoint, c_token, c_manager).await;
-            zasyncwrite!(c_listeners).remove(&c_addr);
-            res
-        };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Reception);
+        let task = async move { accept_task(quic_endpoint, c_token, c_manager).await };
 
         // Initialize the QuicAcceptor
         let locator = endpoint.to_locator();
-        let listener = ListenerUnicastQuic::new(endpoint, token, tracker);
-        // Update the list of active listeners on the manager
-        listeners.insert(local_addr, listener);
+
+        self.listeners
+            .add_listener(endpoint, local_addr, task, token)
+            .await?;
 
         Ok(locator)
     }
@@ -454,57 +416,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         let epaddr = endpoint.address();
         let addr = get_quic_addr(&epaddr).await?;
-
-        // Stop the listener
-        let listener = zasyncwrite!(self.listeners).remove(&addr).ok_or_else(|| {
-            let e = zerror!(
-                "Can not delete the QUIC listener because it has not been found: {}",
-                addr
-            );
-            log::trace!("{}", e);
-            e
-        })?;
-
-        // Send the stop signal
-        listener.stop().await;
-        Ok(())
+        self.listeners.del_listener(addr).await
     }
 
     async fn get_listeners(&self) -> Vec<EndPoint> {
-        zasyncread!(self.listeners)
-            .values()
-            .map(|x| x.endpoint.clone())
-            .collect()
+        self.listeners.get_endpoints()
     }
 
     async fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
-
-        let guard = zasyncread!(self.listeners);
-        for (key, value) in guard.iter() {
-            let (kip, kpt) = (key.ip(), key.port());
-
-            // Either ipv4/0.0.0.0 or ipv6/[::]
-            if kip.is_unspecified() {
-                let mut addrs = match kip {
-                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
-                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
-                };
-                let iter = addrs.drain(..).map(|x| {
-                    Locator::new(
-                        value.endpoint.protocol(),
-                        SocketAddr::new(x, kpt).to_string(),
-                        value.endpoint.metadata(),
-                    )
-                    .unwrap()
-                });
-                locators.extend(iter);
-            } else {
-                locators.push(value.endpoint.to_locator());
-            }
-        }
-
-        locators
+        self.listeners.get_locators()
     }
 }
 

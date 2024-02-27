@@ -13,17 +13,13 @@
 //
 use async_trait::async_trait;
 use std::cell::UnsafeCell;
-use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
-use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::RwLock as AsyncRwLock;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_core::{zasyncread, zasyncwrite};
+use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
@@ -197,45 +193,16 @@ impl fmt::Debug for LinkUnicastTcp {
     }
 }
 
-/*************************************/
-/*          LISTENER                 */
-/*************************************/
-struct ListenerUnicastTcp {
-    endpoint: EndPoint,
-    token: CancellationToken,
-    tracker: TaskTracker,
-}
-
-impl ListenerUnicastTcp {
-    fn new(
-        endpoint: EndPoint,
-        token: CancellationToken,
-        tracker: TaskTracker,
-    ) -> ListenerUnicastTcp {
-        ListenerUnicastTcp {
-            endpoint,
-            token,
-            tracker,
-        }
-    }
-
-    async fn stop(&self) {
-        self.token.cancel();
-        self.tracker.close();
-        self.tracker.wait().await;
-    }
-}
-
 pub struct LinkManagerUnicastTcp {
     manager: NewLinkChannelSender,
-    listeners: Arc<AsyncRwLock<HashMap<SocketAddr, ListenerUnicastTcp>>>,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastTcp {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }
@@ -331,28 +298,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                         endpoint.config(),
                     )?;
 
-                    // Spawn the accept loop for the listener
-                    let token = CancellationToken::new();
+                    let token = self.listeners.token.child_token();
                     let c_token = token.clone();
-                    let mut listeners = zasyncwrite!(self.listeners);
 
                     let c_manager = self.manager.clone();
-                    let c_listeners = self.listeners.clone();
-                    let c_addr = local_addr;
-
-                    let tracker = TaskTracker::new();
-                    let task = async move {
-                        // Wait for the accept loop to terminate
-                        let res = accept_task(socket, c_token, c_manager).await;
-                        zasyncwrite!(c_listeners).remove(&c_addr);
-                        res
-                    };
-                    tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Reception);
+                    let task = async move { accept_task(socket, c_token, c_manager).await };
 
                     let locator = endpoint.to_locator();
-                    let listener = ListenerUnicastTcp::new(endpoint, token, tracker);
-                    // Update the list of active listeners on the manager
-                    listeners.insert(local_addr, listener);
+                    self.listeners
+                        .add_listener(endpoint, local_addr, task, token)
+                        .await?;
 
                     return Ok(locator);
                 }
@@ -380,11 +335,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let mut errs: Vec<ZError> = vec![];
         let mut failed = true;
         for a in addrs {
-            match zasyncwrite!(self.listeners).remove(&a) {
-                Some(l) => {
-                    // We cannot keep a sync guard across a .await
-                    // Break the loop and assign the listener.
-                    listener = Some(l);
+            match self.listeners.del_listener(a).await {
+                Ok(_) => {
+                    failed = false;
                     break;
                 }
                 Err(err) => {
@@ -393,57 +346,22 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             }
         }
 
-        match listener {
-            Some(l) => {
-                // Send the stop signal
-                l.stop().await;
-            }
-            None => {
-                bail!(
-                    "Can not delete the TCP listener bound to {}: {:?}",
-                    endpoint,
-                    errs
-                )
-            }
+        if failed {
+            bail!(
+                "Can not delete the TCP listener bound to {}: {:?}",
+                endpoint,
+                errs
+            )
         }
         Ok(())
     }
 
     async fn get_listeners(&self) -> Vec<EndPoint> {
-        zasyncread!(self.listeners)
-            .values()
-            .map(|l| l.endpoint.clone())
-            .collect()
+        self.listeners.get_endpoints()
     }
 
     async fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
-
-        let guard = zasyncread!(self.listeners);
-        for (key, value) in guard.iter() {
-            let (kip, kpt) = (key.ip(), key.port());
-
-            // Either ipv4/0.0.0.0 or ipv6/[::]
-            if kip.is_unspecified() {
-                let mut addrs = match kip {
-                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
-                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
-                };
-                let iter = addrs.drain(..).map(|x| {
-                    Locator::new(
-                        value.endpoint.protocol(),
-                        SocketAddr::new(x, kpt).to_string(),
-                        value.endpoint.metadata(),
-                    )
-                    .unwrap()
-                });
-                locators.extend(iter);
-            } else {
-                locators.push(value.endpoint.to_locator());
-            }
-        }
-
-        locators
+        self.listeners.get_locators()
     }
 }
 

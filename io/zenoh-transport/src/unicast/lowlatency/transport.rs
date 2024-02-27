@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::link::send_with_link;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -221,64 +220,6 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         self.internal_schedule(msg)
     }
 
-    fn start_tx(&self, _link: &LinkUnicast, keep_alive: Duration, _batch_size: u16) -> ZResult<()> {
-        let token = self.cancellation_token.child_token();
-        let mut interval = tokio::time::interval(keep_alive);
-
-        // TODO: Check the necessity of clone
-        let link = self.link.clone();
-        let transport = self.clone();
-
-        // TODO: Dangerous?
-        let (tx, rx) = flume::unbounded();
-        *self.msg_queue_tx.try_write().map_err(|e| zerror!("{e}"))? = Some(tx);
-
-        let task = async move {
-            loop {
-                tokio::select! {
-                    // Send out the message
-                    res = rx.recv_async() => {
-                        let msg = res?;
-                        transport.send_async(msg).await?;
-                    }
-
-                    // Send KeepAlive periodically
-                    _ = interval.tick() => {
-                        // TODO: Don not create a new message every time
-                        let keepailve = TransportMessageLowLatency {
-                            body: TransportBodyLowLatency::KeepAlive(KeepAlive),
-                        };
-                        // TODO: Check the necessity of this guard
-                        let guard = zasyncwrite!(link);
-
-                        // TODO: Why this is bounded by the feature?
-                        let _ = send_with_link(
-                            &guard,
-                            keepailve,
-                            #[cfg(feature = "stats")]
-                            &stats,
-                        )
-                        .await;
-                        drop(guard);
-                    }
-
-                    // Stop if cancelled
-                    _ = token.cancelled() => {
-                        break
-                    }
-                }
-            }
-            ZResult::Ok(())
-        };
-        self.task_tracker.spawn_on(task, &ZRuntime::TX);
-        Ok(())
-    }
-
-    fn start_rx(&self, _link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()> {
-        self.internal_start_rx(lease, batch_size);
-        Ok(())
-    }
-
     /*************************************/
     /*               LINK                */
     /*************************************/
@@ -293,64 +234,13 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
         let _ = self.sync(other_initial_sn).await;
 
-        #[cfg(feature = "transport_unixpipe")]
-        {
-            // For performance reasons, it first performs a try_write() and,
-            // if it fails, it falls back on write().await
-            let guard = if let Ok(g) = self.link.try_read() {
-                g
-            } else {
-                self.link.read().await
-            };
-
-            let existing_unixpipe = guard.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
-            let new_unixpipe = link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
-            match (existing_unixpipe, new_unixpipe) {
-                (false, true) => {
-                    // LowLatency transport suports only a single link, but code here also handles upgrade from non-unixpipe link to unixpipe link!
-                    log::trace!(
-                        "Upgrading {} LowLatency transport's link from {} to {}",
-                        self.config.zid,
-                        guard,
-                        link
-                    );
-
-                    // Prepare and send close message on old link
-                    {
-                        let close = TransportMessageLowLatency {
-                            body: TransportBodyLowLatency::Close(Close {
-                                reason: 0,
-                                session: false,
-                            }),
-                        };
-                        let _ = send_with_link(
-                            &guard,
-                            close,
-                            #[cfg(feature = "stats")]
-                            &self.stats,
-                        )
-                        .await;
-                    };
-                    // Notify the callback
-                    if let Some(callback) = zread!(self.callback).as_ref() {
-                        callback.del_link(Link::from(guard.clone()));
-                    }
-
-                    // Set the new link
-                    let mut write_guard = self.link.write().await;
-                    *write_guard = link;
-
-                    Ok(())
-                }
-                _ => {
-                    let e = zerror!(
-                    "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
-                    link,
-                    self.config.zid,
-                );
-                    Err(e.into())
-                }
-            }
+        let mut guard = zasyncwrite!(self.link);
+        if guard.is_some() {
+            return Err((
+                zerror!("Lowlatency transport cannot support more than one link!").into(),
+                link.fail(),
+                close::reason::GENERIC,
+            ));
         }
         let (link, ack) = link.unpack();
         *guard = Some(link);

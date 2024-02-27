@@ -27,7 +27,18 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::{TransportConfigUnicast, TransportPeerEventHandler};
+use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
+
+pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
+pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
+pub(crate) enum InitTransportError {
+    Link(LinkError),
+    Transport(TransportError),
+}
+
+pub(crate) type AddLinkResult<'a> =
+    Result<(Box<dyn FnOnce() + Send + Sync + 'a>, MaybeOpenAck), LinkError>;
+pub(crate) type InitTransportResult = Result<Arc<dyn TransportUnicastTrait>, InitTransportError>;
 
 /*************************************/
 /*      UNICAST TRANSPORT TRAIT      */
@@ -65,17 +76,6 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*                TX                 */
     /*************************************/
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()>;
-    fn start_tx(&self, link: &LinkUnicast, keep_alive: Duration, batch_size: u16) -> ZResult<()>;
-
-    /*************************************/
-    /*                RX                 */
-    /*************************************/
-    fn start_rx(&self, link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()>;
-
-    /*************************************/
-    /*           INITIATION              */
-    /*************************************/
-    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()>;
 
     /*************************************/
     /*            TERMINATION            */

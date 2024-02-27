@@ -30,7 +30,6 @@ use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -85,8 +84,6 @@ impl Runtime {
 
     pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
         log::debug!("Zenoh Rust API {}", GIT_VERSION);
-        // Make sure to have have enough threads spawned in the async futures executor
-        // WARN: switch to tokio
 
         let zid = *config.id();
 

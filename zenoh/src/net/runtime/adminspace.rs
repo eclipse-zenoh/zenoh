@@ -190,7 +190,15 @@ impl AdminSpace {
             context,
         });
 
-        let cfg_rx = admin.context.runtime.config.subscribe();
+        admin
+            .context
+            .runtime
+            .state
+            .config
+            .lock()
+            .set_plugin_validator(Arc::downgrade(&admin));
+
+        let cfg_rx = admin.context.runtime.state.config.subscribe();
         tokio::task::spawn({
             let admin = admin.clone();
             async move {
