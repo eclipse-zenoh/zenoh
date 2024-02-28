@@ -99,7 +99,7 @@ pub struct DownsamplingItemConf {
 
 //adding for authz structs
 
-#[derive(Serialize, Deserialize,Clone,Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PolicyList {
     policy_definition: String,
     ruleset: Vec<AttributeRules>,
@@ -111,29 +111,31 @@ pub struct AttributeRules {
     rules: Vec<AttributeRule>,
 }
 
-#[derive(Clone, Serialize,Debug, Deserialize)]
+#[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct AttributeRule {
-    sub: Attribute,
+    subject: Subject,
     ke: String,
     action: Action,
-    permission: bool,
+    permission: Permission,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+pub enum Permission {
+    Allow,
+    Deny,
 }
 
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(untagged)]
-pub enum Attribute {
+pub enum Subject {
     UserId(ZenohId),
-    NetworkType(String),  //clarify
-    MetadataType(String), //clarify
+    NetworkInterface(String), //clarify
+    MetadataType(String),     //clarify
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum Action {
-    Read,
-    Write,
-    DeclareSub,
-    Delete,
-    DeclareQuery,
+    Pub,
+    Sub,
 }
 
 pub trait ConfigValidator: Send + Sync {

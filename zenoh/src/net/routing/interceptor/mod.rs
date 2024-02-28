@@ -65,7 +65,7 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
 
     //get acl config
-    let acl_config = config.transport().acl().clone(); //get this gracefully
+    let acl_config = config.transport().acl().clone();
     let mut acl_enabled = false;
     match acl_config.enabled {
         Some(val) => acl_enabled = val,
@@ -78,6 +78,7 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
         match policy_enforcer.init(acl_config) {
             Ok(_) => res.push(Box::new(AclEnforcer {
                 e: Arc::new(policy_enforcer),
+                interfaces: None,
             })),
             Err(e) => log::error!(
                 "access control enabled but not initialized with error {}!",

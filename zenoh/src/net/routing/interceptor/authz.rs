@@ -5,35 +5,44 @@ use zenoh_config::AclConfig;
 use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+
 pub enum Action {
-    Read,
-    Write,
-    DeclareSub,
-    Delete,
-    DeclareQuery,
+    Pub,
+    Sub,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Request {
-    pub(crate) sub: Attribute, //removed String
-    pub(crate) obj: String,
-    pub(crate) action: Action,
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+
+pub enum Permission {
+    Allow,
+    Deny,
 }
 
-pub struct RequestBuilder {
-    sub: Option<Attribute>, //removed Attribute
-    obj: Option<String>,
-    action: Option<Action>,
-}
+pub struct PolicyForSubject(Vec<Vec<KeTreeRule>>); //vec of actions over vec of permission for tree of ke for this
+pub struct PolicyMap(pub FxHashMap<i32, PolicyForSubject>); //index of subject_map instead of subject
 
-#[derive(Deserialize,Debug)]
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct Request {
+//     pub(crate) sub: Subject,
+//     pub(crate) obj: String,
+//     pub(crate) action: Action,
+// }
+
+// pub struct RequestBuilder {
+//     sub: Option<Subject>, //removed Attribute
+//     obj: Option<String>,
+//     action: Option<Action>,
+// }
+
+#[derive(Deserialize, Debug)]
 pub struct GetPolicy {
     policy_definition: String,
     ruleset: Vec<AttributeRules>,
 }
 type KeTreeRule = KeBoxTree<bool>;
-
+/*
 impl RequestBuilder {
     pub fn default() -> Self {
         RequestBuilder {
@@ -46,7 +55,7 @@ impl RequestBuilder {
         RequestBuilder::default()
     }
 
-    pub fn sub(&mut self, sub: impl Into<Attribute>) -> &mut Self {
+    pub fn sub(&mut self, sub: impl Into<Subject>) -> &mut Self {
         let _ = self.sub.insert(sub.into());
         self
     }
@@ -69,19 +78,20 @@ impl RequestBuilder {
         Ok(Request { sub, obj, action })
     }
 }
-
-type SubActPolicy = FxHashMap<SubAct, KeTreeRule>; //replaces SinglePolic
-
+*/
 pub struct PolicyEnforcer {
-    acl_enabled: bool,
-    default_deny: bool,
-    attribute_list: Option<Vec<String>>, //should have all attribute names
-    policy_list: Option<Vec<SubActPolicy>>, //stores policy-map for ID and each attribute
+    pub(crate) acl_enabled: bool,
+    pub(crate) default_deny: bool,
+    pub(crate) subject_map: Option<FxHashMap<Subject, i32>>, //should have all attribute names
+    pub(crate) policy_list: Option<PolicyMap>,
 }
+
+#[derive(Debug, Clone)]
 
 pub struct PolicyInformation {
     policy_definition: String,
     attribute_list: Vec<String>, //list of attribute names in string
+    subject_map: FxHashMap<Subject, i32>,
     policy_rules: Vec<AttributeRules>,
 }
 
@@ -93,46 +103,42 @@ pub struct AttributeRules {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct AttributeRule {
-    sub: Attribute,
+    subject: Subject,
     ke: String,
     action: Action,
-    permission: bool,
+    permission: Permission,
 }
 use zenoh_config::ZenohId;
 
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(untagged)]
-pub enum Attribute {
+pub enum Subject {
     UserId(ZenohId),
-    NetworkType(String),  //clarify
-    MetadataType(String), //clarify
+    NetworkInterface(String),
 }
-#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
-pub struct SubAct(Attribute, Action);
-
 #[derive(Debug)]
 pub struct RequestInfo {
-    pub sub: Vec<Attribute>,
+    pub sub: Vec<Subject>,
     pub ke: String,
     pub action: Action,
 }
+
+const ACTION_LENGTH: usize = 2;
+const PERMISSION_LENGTH: usize = 2;
 
 impl PolicyEnforcer {
     pub fn new() -> PolicyEnforcer {
         PolicyEnforcer {
             acl_enabled: true,
             default_deny: true,
-            attribute_list: None,
+            subject_map: None,
             policy_list: None,
         }
     }
+
     pub fn init(&mut self, acl_config: AclConfig) -> ZResult<()> {
-        /*
-           Initializes the policy for the control logic
-           loads policy into memory from file/network path
-           creates the policy hashmap with the ke-tries for ke matching
-           can have policy-type in the mix here...need to verify
-        */
+        //returns Ok() for all good else returns Error
+        //insert values into the enforcer from the config file
         match acl_config.enabled {
             Some(val) => self.acl_enabled = val,
             None => log::error!("acl config not setup"),
@@ -145,72 +151,51 @@ impl PolicyEnforcer {
             match acl_config.policy_list {
                 Some(policy_list) => {
                     let policy_information = self.policy_information_point(policy_list)?;
-                    self.attribute_list = Some(policy_information.attribute_list);
-                    let _policy_definition = policy_information.policy_definition;
-                    self.build_policy_map(
-                        self.attribute_list.clone().unwrap(),
-                        policy_information.policy_rules,
-                    )?;
-                    log::info!("policy enforcer was initialised successfully");
+
+                    self.subject_map = Some(policy_information.subject_map.clone());
+                    let mut main_policy: PolicyMap = PolicyMap(FxHashMap::default());
+
+                    //first initialize the vector of vectors (needed to maintain the indices)
+                    let subject_map = policy_information.subject_map.clone();
+                    for (_, index) in subject_map {
+                        let mut rule: PolicyForSubject = PolicyForSubject(Vec::new());
+                        for _i in 0..ACTION_LENGTH {
+                            let mut action_rule: Vec<KeTreeRule> = Vec::new();
+                            for _j in 0..PERMISSION_LENGTH {
+                                let permission_rule = KeTreeRule::new();
+                                //
+                                action_rule.push(permission_rule);
+                            }
+                            rule.0.push(action_rule);
+                        }
+                        main_policy.0.insert(index, rule);
+                    }
+
+                    for rules in policy_information.policy_rules {
+                        for rule in rules.rules {
+                            //add values to the ketree as per the rules
+                            //get the subject index
+                            let index = policy_information.subject_map.get(&rule.subject).unwrap();
+                            main_policy.0.get_mut(index).unwrap().0[rule.action as usize]
+                                [rule.permission as usize]
+                                .insert(keyexpr::new(&rule.ke)?, true);
+                        }
+                    }
+                    //add to the policy_enforcer
+                    self.policy_list = Some(main_policy);
                 }
                 None => log::error!("no policy list was specified"),
             }
         }
         Ok(())
     }
-    pub fn build_policy_map(
-        &mut self,
-        attribute_list: Vec<String>,
-        policy_rules_vector: Vec<AttributeRules>,
-    ) -> ZResult<()> {
-        /*
-            representaiton of policy list as a vector of hashmap of trees
-            each hashmap maps a subact (ID/Atttribute + Action) to a trie of allowed values
-        */
-        //for each attrribute in the list, get rules, create map and push into rules_vector
-        let mut pm: Vec<SubActPolicy> = Vec::new();
-        for (i, _) in attribute_list.iter().enumerate() {
-            let rm = self.get_rules_list(policy_rules_vector[i].rules.clone())?;
-            pm.push(rm);
-        }
-        self.policy_list = Some(pm);
-
-        Ok(())
-    }
-
-    pub fn get_rules_list(&self, rule_set: Vec<AttributeRule>) -> ZResult<SubActPolicy> {
-        let mut policy: SubActPolicy = FxHashMap::default();
-        for v in rule_set {
-            //  for now permission being false means this KE will not be inserted into the trie of allowed KEs
-            let perm = v.permission;
-            if !perm {
-                continue;
-            }
-            let sub = v.sub;
-            let ke = v.ke;
-            let subact = SubAct(sub, v.action);
-            let subact_value_exists = policy.contains_key(&subact);
-            if subact_value_exists {
-                let ketree = policy.get_mut(&subact).unwrap();
-                ketree.insert(keyexpr::new(&ke)?, true);
-            } else {
-                //create new entry for subject + ke-tree
-                let mut ketree = KeTreeRule::new();
-                ketree.insert(keyexpr::new(&ke)?, true);
-                policy.insert(subact, ketree);
-            }
-        }
-        Ok(policy)
-    }
-
-    //if policy_list exists, get that value directly and use it for get policy
-
-    pub fn policy_information_point(&self, policy_list : zenoh_config::PolicyList)->ZResult<PolicyInformation>{
-
-        //let policy_list_info: GetPolicy;// = GetPolicy{
-                let value = serde_json::to_value(&policy_list).unwrap();
-                let policy_list_info: GetPolicy = serde_json::from_value(value)?;
-                let enforced_attributes = policy_list_info
+    pub fn policy_information_point(
+        &self,
+        policy_list: zenoh_config::PolicyList,
+    ) -> ZResult<PolicyInformation> {
+        let value = serde_json::to_value(&policy_list).unwrap();
+        let policy_list_info: GetPolicy = serde_json::from_value(value)?;
+        let enforced_attributes = policy_list_info
             .policy_definition
             .split(' ')
             .collect::<Vec<&str>>();
@@ -218,10 +203,16 @@ impl PolicyEnforcer {
         let complete_ruleset = policy_list_info.ruleset;
         let mut attribute_list: Vec<String> = Vec::new();
         let mut policy_rules: Vec<AttributeRules> = Vec::new();
-        for rule in complete_ruleset.iter() {
-            if enforced_attributes.contains(&rule.attribute.as_str()) {
-                attribute_list.push(rule.attribute.clone());
-                policy_rules.push(rule.clone())
+        let mut subject_map = FxHashMap::default();
+        let mut counter = 1; //starting at 1 since 0 is default value in policy_check and should not match anything
+        for attr_rule in complete_ruleset.iter() {
+            if enforced_attributes.contains(&attr_rule.attribute.as_str()) {
+                attribute_list.push(attr_rule.attribute.clone());
+                policy_rules.push(attr_rule.clone());
+                for rule in attr_rule.rules.clone() {
+                    subject_map.insert(rule.subject, counter);
+                    counter += 1;
+                }
             }
         }
 
@@ -230,102 +221,39 @@ impl PolicyEnforcer {
         Ok(PolicyInformation {
             policy_definition,
             attribute_list,
+            subject_map,
             policy_rules,
-        })    
-
-    }
-    // pub fn policy_resource_point(&self, file_path: &str) -> ZResult<PolicyInformation> {
-    //     //read file
-
-    //     let policy_file_info: GetPolicy = {
-    //         let data = fs::read_to_string(file_path).expect("error reading file");
-    //         serde_json::from_str(&data).expect("error parsing from json to struct")
-    //     };
-
-    //     //get the rules mentioned in the policy definition
-    //     let enforced_attributes = policy_file_info
-    //         .policy_definition
-    //         .split(' ')
-    //         .collect::<Vec<&str>>();
-
-    //     let complete_ruleset = policy_file_info.rules;
-    //     let mut attribute_list: Vec<String> = Vec::new();
-    //     let mut policy_rules: Vec<AttributeRules> = Vec::new();
-    //     for rule in complete_ruleset.iter() {
-    //         if enforced_attributes.contains(&rule.attribute_name.as_str()) {
-    //             attribute_list.push(rule.attribute_name.clone());
-    //             policy_rules.push(rule.clone())
-    //         }
-    //     }
-
-    //     let policy_definition = policy_file_info.policy_definition;
-
-    //     Ok(PolicyInformation {
-    //         policy_definition,
-    //         attribute_list,
-    //         policy_rules,
-    //     })
-    // }
-
-    pub fn policy_enforcement_point(&self, request_info: RequestInfo) -> ZResult<bool> {
-        /*
-           input: request_info from interceptor
-           output: decision = allow/deny permission [true/false]
-           function: builds the request and passes it to policy_decision_point()
-                    collects results (for each attribute in subject list) from PDP
-                     and then uses that to drop or pass the msg to routing table
-        */
-
-        let obj = request_info.ke;
-        let mut decision = true;
-        let mut decisions: Vec<bool> = Vec::new(); //to store all decisions for each subject in list
-        for (attribute_index, val) in request_info.sub.into_iter().enumerate() {
-            //build request
-            let request = RequestBuilder::new()
-                .sub(val)
-                .obj(obj.clone())
-                .action(request_info.action.clone())
-                .build()?;
-                let d = self.policy_decision_point(attribute_index, request);
-            decisions.push(d);
-            decision = decision & d;
-        }
-         
-        //let decision: bool = decisions.iter().map(|d,x=true|x=d&x);// decisions[0]; //only checks for single attribute right now
-        Ok(decision)
+        })
     }
 
-    pub fn policy_decision_point(&self, index: usize, request: Request) -> bool {
+    pub fn policy_decision_point(&self, subject: i32, act: Action, kexpr: String) -> ZResult<bool> {
         /*
-            input: (request)
-            output: true(allow)/false(deny)
-            function: process the request received from PEP against the policy (self)
-                    the policy list is chosen based on the policy-type specified in the rules file
-                    policy list is be a hashmap of subject->ketries (test and discuss)
+           need to decide policy for proper handling of the edge cases
+           what about default_deny vlaue from the policy file??
+           if it is allow, the should be allowed if everything is NONE
         */
+        match &self.policy_list {
+            Some(policy_map) => {
+                let ps = policy_map.0.get(&subject).unwrap();
+                let perm_vec = &ps.0[act as usize];
 
-        //compare the request to the vec of values...matching depends on the value of the policy type
+                //check for deny
 
-        //return true;
-        let ke = request.obj;
-        let sub = request.sub;
-        let action = request.action;
-        let subact = SubAct(sub, action);
-        //find index of attribute name in attribute list
-        //then use attribute_rules from same index
-        if let Some(policy_list) = &self.policy_list {
-            match policy_list[index].get(&subact) {
-                Some(ktrie) => {
-                    let result = ktrie.nodes_including(keyexpr::new(&ke).unwrap()).count();
-                    return result != 0;
+                let deny_result = perm_vec[Permission::Deny as usize]
+                    .nodes_including(keyexpr::new(&kexpr).unwrap())
+                    .count();
+                if deny_result != 0 {
+                    return Ok(false);
                 }
-                None => return false,
-            }
-        }
-        false
-    }
 
-    pub fn get_attribute_list(&self) -> Option<Vec<String>> {
-        self.attribute_list.clone()
+                //check for allow
+
+                let allow_result = perm_vec[Permission::Allow as usize]
+                    .nodes_including(keyexpr::new(&kexpr).unwrap())
+                    .count();
+                Ok(allow_result != 0)
+            }
+            None => Ok(false),
+        }
     }
 }
