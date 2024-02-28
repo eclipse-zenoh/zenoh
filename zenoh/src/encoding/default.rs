@@ -42,13 +42,11 @@ impl DefaultEncodingMapping {
     // - Primitives types supported in all Zenoh bindings
     /// A stream of bytes.
     pub const APPLICATION_OCTET_STREAM: EncodingPrefix = 1;
-    /// A VLE-encoded signed integer. Either little-endian 8bit, 16bit, 32bit, or 64bit.
+    /// A signed integer.
     pub const ZENOH_INT: EncodingPrefix = 2;
-    /// A VLE-encoded unsigned integer. Either little-endian 8bit, 16bit, 32bit, or 64bit.
-    /// Binary reprensentation uses two's complement.
+    /// An unsigned integer.
     pub const ZENOH_UINT: EncodingPrefix = 3;
-    /// A VLE-encoded float. Either little-endian 32bit or 64bit.
-    /// Binary representation uses *IEEE 754-2008* *binary32* or *binary64*, respectively.
+    /// A float.
     pub const ZENOH_FLOAT: EncodingPrefix = 4;
     /// A boolean. `0` is `false`, `1` is `true`. Other values are invalid.
     pub const ZENOH_BOOL: EncodingPrefix = 5;
@@ -76,27 +74,27 @@ impl DefaultEncodingMapping {
 
     // - A list of most common registries from IANA.
     // - The highest prefix value to fit in 1 byte on the wire is 63.
-    /// Registry used for *application* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#application).
+    /// Common prefix for *application* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#application).
     pub const APPLICATION: EncodingPrefix = 59;
-    /// Registry used for *audio* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#audio).
+    /// Common prefix for *audio* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#audio).
     pub const AUDIO: EncodingPrefix = 60;
-    /// Registry used for *image* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#image).
+    /// Common prefix for *image* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#image).
     pub const IMAGE: EncodingPrefix = 61;
-    /// Registry used for *text* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#text).
+    /// Common prefix for *text* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#text).
     pub const TEXT: EncodingPrefix = 62;
-    /// Registry used for *video* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#video).
+    /// Common prefix for *video* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#video).
     pub const VIDEO: EncodingPrefix = 63;
 
     // - 64-1019 are reserved.
 
     // - A list of least common registries from IANA.
-    /// Registry used for *font* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#font).
+    /// Common prefix for *font* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#font).
     pub const FONT: EncodingPrefix = 1_020;
-    /// Registry used for *message* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#message).
+    /// Common prefix for *message* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#message).
     pub const MESSAGE: EncodingPrefix = 1_021;
-    /// Registry used for *model* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#model).
+    /// Common prefix for *model* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#model).
     pub const MODEL: EncodingPrefix = 1_022;
-    /// Registry used for *multipart* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#multipart).
+    /// Common prefix for *multipart* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#multipart).
     pub const MULTIPART: EncodingPrefix = 1_023;
 
     // - 1024-65535 are free to use.
@@ -104,12 +102,14 @@ impl DefaultEncodingMapping {
     /// A perfect hashmap for fast lookup of [`EncodingPrefix`] to string represenation.
     pub(super) const KNOWN_PREFIX: phf::OrderedMap<EncodingPrefix, &'static str> = phf_ordered_map! {
         0u16 =>  "",
+        // - Primitive types
         1u16 =>  "application/octet-stream",
         2u16 =>  "zenoh/int",
         3u16 =>  "zenoh/uint",
         4u16 =>  "zenoh/float",
         5u16 =>  "zenoh/bool",
         6u16 =>  "text/plain",
+        // - Advanced types
         7u16 =>  "application/json",
         8u16 =>  "text/json",
         // - 9-15 are reserved.
@@ -133,12 +133,14 @@ impl DefaultEncodingMapping {
     // A perfect hashmap for fast lookup of prefixes
     pub(super) const KNOWN_STRING: phf::OrderedMap<&'static str, EncodingPrefix> = phf_ordered_map! {
         "" =>  0u16,
+        // - Primitive types
         "application/octet-stream" =>  1u16,
         "zenoh/int" =>  2u16,
         "zenoh/uint" =>  3u16,
         "zenoh/float" =>  4u16,
         "zenoh/bool" =>  5u16,
         "text/plain" =>  6u16,
+        // - Advanced types
         "application/json" =>  7u16,
         "text/json" =>  8u16,
         // - 9-15 are reserved.
@@ -233,13 +235,19 @@ impl EncodingMapping for DefaultEncodingMapping {
 pub struct DefaultEncoding;
 
 impl DefaultEncoding {
-    /// Encoding is unspecified. Applications are expected to decode messages
+    /// See [`DefaultEncodingMapping::EMPTY`].
     pub const EMPTY: Encoding = Encoding::new(DefaultEncodingMapping::EMPTY);
+    /// An application-specific stream of bytes.
     pub const APPLICATION_OCTET_STREAM: Encoding =
         Encoding::new(DefaultEncodingMapping::APPLICATION_OCTET_STREAM);
+    /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, or 64bit.
+    /// Binary reprensentation uses two's complement.
     pub const ZENOH_INT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_INT);
+    /// A VLE-encoded little-endian unsigned integer. Either 8bit, 16bit, 32bit, or 64bit.
     pub const ZENOH_UINT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_UINT);
+    /// See [`DefaultEncodingMapping::ZENOH_FLOAT`].
     pub const ZENOH_FLOAT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_FLOAT);
+    /// See [`DefaultEncodingMapping::ZENOH_BOOL`].
     pub const ZENOH_BOOL: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_BOOL);
     pub const TEXT_PLAIN: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_PLAIN);
     pub const APPLICATION_JSON: Encoding = Encoding::new(DefaultEncodingMapping::APPLICATION_JSON);
