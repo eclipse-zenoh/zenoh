@@ -214,8 +214,6 @@ impl SyncResolve for ReplyBuilder<'_> {
                         let mut ext_attachment = None;
                         #[cfg(feature = "unstable")]
                         {
-                            data_info.source_id = source_info.source_id;
-                            data_info.source_sn = source_info.source_sn;
                             if let Some(attachment) = attachment {
                                 ext_attachment = Some(attachment.into());
                             }
@@ -224,6 +222,11 @@ impl SyncResolve for ReplyBuilder<'_> {
                     }};
                 }
 
+                #[cfg(feature = "unstable")]
+                {
+                    data_info.source_id = source_info.source_id;
+                    data_info.source_sn = source_info.source_sn;
+                }
                 let ext_sinfo = if data_info.source_id.is_some() || data_info.source_sn.is_some() {
                     Some(zenoh::put::ext::SourceInfoType {
                         zid: data_info.source_id.unwrap_or_default(),
