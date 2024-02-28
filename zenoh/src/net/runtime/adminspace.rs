@@ -273,9 +273,9 @@ impl AdminSpace {
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                 id: runtime.next_id(),
                 wire_expr: [&root_key, "/**"].concat().into(),
@@ -287,13 +287,13 @@ impl AdminSpace {
         });
 
         primitives.send_declare(Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: runtime.next_id(),
                 wire_expr: [&root_key, "/config/**"].concat().into(),
-                ext_info: SubscriberInfo::default(),
+                ext_info: SubscriberInfo::DEFAULT,
             }),
         });
     }
@@ -395,7 +395,7 @@ impl Primitives for AdminSpace {
                     );
                     primitives.send_response_final(ResponseFinal {
                         rid: msg.id,
-                        ext_qos: ext::QoSType::response_final_default(),
+                        ext_qos: ext::QoSType::RESPONSE_FINAL,
                         ext_tstamp: None,
                     });
                     return;
@@ -408,7 +408,7 @@ impl Primitives for AdminSpace {
                     log::error!("Unknown KeyExpr: {}", e);
                     primitives.send_response_final(ResponseFinal {
                         rid: msg.id,
-                        ext_qos: ext::QoSType::response_final_default(),
+                        ext_qos: ext::QoSType::RESPONSE_FINAL,
                         ext_tstamp: None,
                     });
                     return;

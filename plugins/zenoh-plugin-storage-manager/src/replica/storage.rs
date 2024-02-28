@@ -30,10 +30,8 @@ use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_keyexpr::keyexpr_tree::IKeyExprTreeMut;
-use zenoh_keyexpr::keyexpr_tree::{
-    support::NonWild, support::UnknownWildness, IKeyExprTreeExt, IKeyExprTreeExtMut, KeBoxTree,
-};
+use zenoh_keyexpr::keyexpr_tree::{support::NonWild, support::UnknownWildness, KeBoxTree};
+use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
 use zenoh_result::bail;
 use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer};
 
@@ -85,8 +83,8 @@ impl StorageService {
             strip_prefix: config.strip_prefix,
             storage: Mutex::new(store_intercept.storage),
             capability: store_intercept.capability,
-            tombstones: Arc::new(RwLock::new(KeBoxTree::new())),
-            wildcard_updates: Arc::new(RwLock::new(KeBoxTree::new())),
+            tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
+            wildcard_updates: Arc::new(RwLock::new(KeBoxTree::default())),
             in_interceptor: store_intercept.in_interceptor,
             out_interceptor: store_intercept.out_interceptor,
             replication,

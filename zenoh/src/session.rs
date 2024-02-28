@@ -59,6 +59,9 @@ use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, S
 use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::RequestId;
+use zenoh_protocol::zenoh::reply::ReplyBody;
+use zenoh_protocol::zenoh::Del;
+use zenoh_protocol::zenoh::Put;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -75,10 +78,7 @@ use zenoh_protocol::{
         Mapping, Push, Response, ResponseFinal,
     },
     zenoh::{
-        query::{
-            self,
-            ext::{ConsolidationType, QueryBodyType},
-        },
+        query::{self, ext::QueryBodyType, Consolidation},
         Pull, PushBody, RequestBody, ResponseBody,
     },
 };
@@ -300,7 +300,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
         SubscriberBuilder {
             session: self.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            reliability: Reliability::default(),
+            reliability: Reliability::DEFAULT,
             mode: PushMode,
             origin: Locality::default(),
             handler: DefaultHandler,
@@ -333,8 +333,8 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
         PublisherBuilder {
             session: self.clone(),
             key_expr: key_expr.try_into().map_err(Into::into),
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
+            congestion_control: CongestionControl::DEFAULT,
+            priority: Priority::DEFAULT,
             destination: Locality::default(),
         }
     }
@@ -779,8 +779,8 @@ impl Session {
             session: self,
             selector,
             scope: Ok(None),
-            target: QueryTarget::default(),
-            consolidation: QueryConsolidation::default(),
+            target: QueryTarget::DEFAULT,
+            consolidation: QueryConsolidation::DEFAULT,
             destination: Locality::default(),
             timeout,
             value: None,
@@ -862,9 +862,9 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        ext_qos: declare::ext::QoSType::declare_default(),
+                        ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::default(),
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                             id: expr_id,
                             wire_expr: WireExpr {
@@ -1074,9 +1074,9 @@ impl Session {
             // };
 
             primitives.send_declare(Declare {
-                ext_qos: declare::ext::QoSType::declare_default(),
+                ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
-                ext_nodeid: declare::ext::NodeIdType::default(),
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                     id,
                     wire_expr: key_expr.to_wire(self).to_owned(),
@@ -1130,9 +1130,9 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        ext_qos: declare::ext::QoSType::default(),
+                        ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::default(),
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                         body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                             id: sub_state.remote_id,
                             ext_wire_expr: WireExprType {
@@ -1181,9 +1181,9 @@ impl Session {
                 distance: 0,
             };
             primitives.send_declare(Declare {
-                ext_qos: declare::ext::QoSType::declare_default(),
+                ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
-                ext_nodeid: declare::ext::NodeIdType::default(),
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
                     id,
                     wire_expr: key_expr.to_owned(),
@@ -1202,9 +1202,9 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    ext_qos: declare::ext::QoSType::declare_default(),
+                    ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType::default(),
+                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: qable_state.id,
                         ext_wire_expr: WireExprType {
@@ -1237,13 +1237,13 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(Declare {
-            ext_qos: declare::ext::QoSType::declare_default(),
+            ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::default(),
+            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id,
                 wire_expr: key_expr.to_wire(self).to_owned(),
-                ext_info: SubscriberInfo::default(),
+                ext_info: SubscriberInfo::DEFAULT,
             }),
         });
         Ok(tok_state)
@@ -1261,9 +1261,9 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                         id: tok_state.id,
                         ext_wire_expr: WireExprType::null(),
@@ -1563,10 +1563,10 @@ impl Session {
             primitives.send_request(Request {
                 id: 0, // @TODO compute a proper request ID
                 wire_expr: key_expr.to_wire(self).to_owned(),
-                ext_qos: ext::QoSType::request_default(),
+                ext_qos: ext::QoSType::REQUEST,
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                ext_target: request::ext::TargetType::default(),
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                ext_target: request::ext::TargetType::DEFAULT,
                 ext_budget: None,
                 ext_timeout: None,
                 payload: RequestBody::Pull(Pull {
@@ -1593,14 +1593,14 @@ impl Session {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
-            Mode::Auto => {
+            ConsolidationMode::Auto => {
                 if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
                     ConsolidationMode::None
                 } else {
                     ConsolidationMode::Latest
                 }
             }
-            Mode::Manual(mode) => mode,
+            mode => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let nb_final = match destination {
@@ -1666,16 +1666,16 @@ impl Session {
             primitives.send_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
-                ext_qos: request::ext::QoSType::request_default(),
+                ext_qos: request::ext::QoSType::REQUEST,
                 ext_tstamp: None,
-                ext_nodeid: request::ext::NodeIdType::default(),
+                ext_nodeid: request::ext::NodeIdType::DEFAULT,
                 ext_target: target,
                 ext_budget: None,
                 ext_timeout: Some(timeout),
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
+                    consolidation,
                     parameters: selector.parameters().to_string(),
                     ext_sinfo: None,
-                    ext_consolidation: consolidation.into(),
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
@@ -1694,7 +1694,7 @@ impl Session {
                 selector.parameters(),
                 qid,
                 target,
-                consolidation.into(),
+                consolidation,
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -1716,7 +1716,7 @@ impl Session {
         parameters: &str,
         qid: RequestId,
         _target: TargetType,
-        _consolidation: ConsolidationType,
+        _consolidation: Consolidation,
         body: Option<QueryBodyType>,
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
@@ -1825,7 +1825,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            reliability: Reliability::default(),
+            reliability: Reliability::DEFAULT,
             mode: PushMode,
             origin: Locality::default(),
             handler: DefaultHandler,
@@ -1906,8 +1906,8 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         PublisherBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
+            congestion_control: CongestionControl::DEFAULT,
+            priority: Priority::DEFAULT,
             destination: Locality::default(),
         }
     }
@@ -2100,7 +2100,7 @@ impl Primitives for Session {
                 &m.parameters,
                 msg.id,
                 msg.ext_target,
-                m.ext_consolidation,
+                m.consolidation,
                 m.ext_body,
                 #[cfg(feature = "unstable")]
                 m.ext_attachment.map(Into::into),
@@ -2114,11 +2114,6 @@ impl Primitives for Session {
     fn send_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
         match msg.payload {
-            ResponseBody::Ack(_) => {
-                log::warn!(
-                    "Received a ResponseBody::Ack, but this isn't supported yet. Dropping message."
-                )
-            }
             ResponseBody::Put(_) => {
                 log::warn!(
                     "Received a ResponseBody::Put, but this isn't supported yet. Dropping message."
@@ -2208,19 +2203,63 @@ impl Primitives for Session {
                             }
                             None => key_expr,
                         };
-                        let info = DataInfo {
-                            kind: SampleKind::Put,
-                            encoding: Some(m.encoding),
-                            timestamp: m.timestamp,
-                            source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
-                            source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+
+                        struct Ret {
+                            payload: ZBuf,
+                            info: DataInfo,
+                            #[cfg(feature = "unstable")]
+                            attachment: Option<Attachment>,
+                        }
+                        let Ret {
+                            payload,
+                            info,
+                            #[cfg(feature = "unstable")]
+                            attachment,
+                        } = match m.payload {
+                            ReplyBody::Put(Put {
+                                timestamp,
+                                encoding,
+                                ext_sinfo,
+                                ext_attachment: _attachment,
+                                payload,
+                                ..
+                            }) => Ret {
+                                payload,
+                                info: DataInfo {
+                                    kind: SampleKind::Put,
+                                    encoding: Some(encoding),
+                                    timestamp,
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                },
+                                #[cfg(feature = "unstable")]
+                                attachment: _attachment.map(Into::into),
+                            },
+                            ReplyBody::Del(Del {
+                                timestamp,
+                                ext_sinfo,
+                                ext_attachment: _attachment,
+                                ..
+                            }) => Ret {
+                                payload: ZBuf::empty(),
+                                info: DataInfo {
+                                    kind: SampleKind::Delete,
+                                    encoding: None,
+                                    timestamp,
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                },
+                                #[cfg(feature = "unstable")]
+                                attachment: _attachment.map(Into::into),
+                            },
                         };
+
                         #[allow(unused_mut)]
                         let mut sample =
-                            Sample::with_info(key_expr.into_owned(), m.payload, Some(info));
+                            Sample::with_info(key_expr.into_owned(), payload, Some(info));
                         #[cfg(feature = "unstable")]
                         {
-                            sample.attachment = m.ext_attachment.map(Into::into);
+                            sample.attachment = attachment;
                         }
                         let new_reply = Reply {
                             sample: Ok(sample),
@@ -2269,7 +2308,7 @@ impl Primitives for Session {
                                         }
                                     }
                                 }
-                                ConsolidationMode::Latest => {
+                                Consolidation::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
                                         new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {

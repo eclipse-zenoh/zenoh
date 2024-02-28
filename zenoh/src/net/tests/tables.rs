@@ -575,9 +575,9 @@ fn client_test() {
     Primitives::send_declare(
         primitives0.as_ref(),
         Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                 id: 11,
                 wire_expr: "test/client".into(),
@@ -602,9 +602,9 @@ fn client_test() {
     Primitives::send_declare(
         primitives0.as_ref(),
         Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                 id: 12,
                 wire_expr: WireExpr::from(11).with_suffix("/z1_pub1"),
@@ -623,9 +623,9 @@ fn client_test() {
     Primitives::send_declare(
         primitives1.as_ref(),
         Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                 id: 21,
                 wire_expr: "test/client".into(),
@@ -650,9 +650,9 @@ fn client_test() {
     Primitives::send_declare(
         primitives1.as_ref(),
         Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                 id: 22,
                 wire_expr: WireExpr::from(21).with_suffix("/z2_pub1"),
@@ -671,9 +671,9 @@ fn client_test() {
     Primitives::send_declare(
         primitives2.as_ref(),
         Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                 id: 31,
                 wire_expr: "test/client".into(),
@@ -698,10 +698,10 @@ fn client_test() {
         &tables,
         &face0.upgrade().unwrap(),
         &"test/client/z1_wr1".into(),
-        ext::QoSType::default(),
+        ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::DEFAULT,
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -731,10 +731,10 @@ fn client_test() {
         &router.tables,
         &face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/z1_wr2"),
-        ext::QoSType::default(),
+        ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::DEFAULT,
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -764,10 +764,10 @@ fn client_test() {
         &router.tables,
         &face1.upgrade().unwrap(),
         &"test/client/**".into(),
-        ext::QoSType::default(),
+        ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::DEFAULT,
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -797,10 +797,10 @@ fn client_test() {
         &router.tables,
         &face0.upgrade().unwrap(),
         &12.into(),
-        ext::QoSType::default(),
+        ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::DEFAULT,
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -830,10 +830,10 @@ fn client_test() {
         &router.tables,
         &face1.upgrade().unwrap(),
         &22.into(),
-        ext::QoSType::default(),
+        ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::DEFAULT,
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,

@@ -31,9 +31,7 @@ use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::{EntityId, WireExpr};
 use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
-use zenoh_protocol::zenoh::ext::ValueType;
-use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
-use zenoh_protocol::zenoh::{self, ResponseBody};
+use zenoh_protocol::zenoh::{self, ext::ValueType, reply::ReplyBody, Del, Put, ResponseBody};
 use zenoh_result::ZResult;
 
 pub(crate) struct QueryInner {
@@ -55,7 +53,7 @@ impl Drop for QueryInner {
     fn drop(&mut self) {
         self.primitives.send_response_final(ResponseFinal {
             rid: self.qid,
-            ext_qos: response::ext::QoSType::response_final_default(),
+            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
             ext_tstamp: None,
         });
     }
@@ -191,27 +189,33 @@ impl SyncResolve for ReplyBuilder<'_> {
                 let Sample {
                     key_expr,
                     value: Value { payload, encoding },
-                    kind: _,
+                    kind,
                     timestamp,
                     #[cfg(feature = "unstable")]
                     source_info,
                     #[cfg(feature = "unstable")]
                     attachment,
                 } = sample;
-                #[allow(unused_mut)]
-                let mut ext_attachment = None;
-                #[cfg(feature = "unstable")]
-                {
-                    if let Some(attachment) = attachment {
-                        ext_attachment = Some(attachment.into());
-                    }
+                // Use a macro for inferring the proper const extension ID between Put and Del cases
+                macro_rules! ext_attachment {
+                    () => {{
+                        #[allow(unused_mut)]
+                        let mut ext_attachment = None;
+                        #[cfg(feature = "unstable")]
+                        {
+                            if let Some(attachment) = attachment {
+                                ext_attachment = Some(attachment.into());
+                            }
+                        }
+                        ext_attachment
+                    }};
                 }
                 #[allow(unused_mut)]
                 let mut ext_sinfo = None;
                 #[cfg(feature = "unstable")]
                 {
                     if source_info.source_id.is_some() || source_info.source_sn.is_some() {
-                        ext_sinfo = Some(zenoh::reply::ext::SourceInfoType {
+                        ext_sinfo = Some(zenoh::put::ext::SourceInfoType {
                             id: source_info.source_id.unwrap_or_default(),
                             sn: source_info.source_sn.unwrap_or_default() as u32,
                         })
@@ -225,17 +229,28 @@ impl SyncResolve for ReplyBuilder<'_> {
                         mapping: Mapping::Sender,
                     },
                     payload: ResponseBody::Reply(zenoh::Reply {
-                        timestamp,
-                        encoding,
-                        ext_sinfo,
-                        ext_consolidation: ConsolidationType::default(),
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_attachment,
+                        consolidation: zenoh::Consolidation::DEFAULT,
                         ext_unknown: vec![],
-                        payload,
+                        payload: match kind {
+                            SampleKind::Put => ReplyBody::Put(Put {
+                                timestamp,
+                                encoding,
+                                ext_sinfo,
+                                #[cfg(feature = "shared-memory")]
+                                ext_shm: None,
+                                ext_attachment: ext_attachment!(),
+                                ext_unknown: vec![],
+                                payload,
+                            }),
+                            SampleKind::Delete => ReplyBody::Del(Del {
+                                timestamp,
+                                ext_sinfo,
+                                ext_attachment: ext_attachment!(),
+                                ext_unknown: vec![],
+                            }),
+                        },
                     }),
-                    ext_qos: response::ext::QoSType::response_default(),
+                    ext_qos: response::ext::QoSType::RESPONSE,
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,
@@ -265,7 +280,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         }),
                         code: 0, // TODO
                     }),
-                    ext_qos: response::ext::QoSType::response_default(),
+                    ext_qos: response::ext::QoSType::RESPONSE,
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,

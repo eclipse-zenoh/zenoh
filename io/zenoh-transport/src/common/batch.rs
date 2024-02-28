@@ -574,12 +574,12 @@ mod tests {
         let tmsg: TransportMessage = KeepAlive.into();
         let nmsg: NetworkMessage = Push {
             wire_expr: WireExpr::empty(),
-            ext_qos: ext::QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: ext::QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: PushBody::Put(Put {
                 timestamp: None,
-                encoding: Encoding::default(),
+                encoding: Encoding::DEFAULT,
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
@@ -601,7 +601,7 @@ mod tests {
         let mut frame = FrameHeader {
             reliability: Reliability::Reliable,
             sn: 0,
-            ext_qos: frame::ext::QoSType::default(),
+            ext_qos: frame::ext::QoSType::DEFAULT,
         };
 
         // Serialize with a frame

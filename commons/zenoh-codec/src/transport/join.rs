@@ -121,7 +121,7 @@ where
         let (_, more): (ZExtZBufHeader<{ ext::QoS::ID }>, bool) = self.read(&mut *reader)?;
 
         // Body
-        let mut ext_qos = Box::new([PrioritySn::default(); Priority::NUM]);
+        let mut ext_qos = Box::new([PrioritySn::DEFAULT; Priority::NUM]);
         for p in ext_qos.iter_mut() {
             *p = self.codec.read(&mut *reader)?;
         }

@@ -50,11 +50,9 @@ pub(crate) mod common {
     pub use crate::sample::Locality;
     #[cfg(not(feature = "unstable"))]
     pub(crate) use crate::sample::Locality;
-    pub use crate::sample::Sample;
     #[zenoh_macros::unstable]
     pub use crate::sample::SourceInfo;
-
-    pub use zenoh_protocol::core::SampleKind;
+    pub use crate::sample::{Sample, SampleKind};
 
     pub use crate::publication::Priority;
     #[zenoh_macros::unstable]

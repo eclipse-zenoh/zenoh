@@ -21,17 +21,14 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
-use zenoh_protocol::network::declare::QueryableId;
 use zenoh_protocol::{
-    core::{Encoding, WireExpr},
+    core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
-        declare::ext,
+        declare::{ext, queryable::ext::QueryableInfo, QueryableId},
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
-    zenoh::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
+    zenoh::{query::Consolidation, reply::ReplyBody, Put, Reply, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
@@ -497,11 +494,29 @@ macro_rules! inc_res_stats {
                 match &$body {
                     ResponseBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](p.payload.len());
+                        let mut n =  p.payload.len();
+                        if let Some(a) = p.ext_attachment.as_ref() {
+                           n += a.buffer.len();
+                        }
+                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](n);
                     }
                     ResponseBody::Reply(r) => {
                         stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](r.payload.len());
+                        let mut n = 0;
+                        match &r.payload {
+                            ReplyBody::Put(p) => {
+                                if let Some(a) = p.ext_attachment.as_ref() {
+                                   n += a.buffer.len();
+                                }
+                                n += p.payload.len();
+                            }
+                            ReplyBody::Del(d) => {
+                                if let Some(a) = d.ext_attachment.as_ref() {
+                                   n += a.buffer.len();
+                                }
+                            }
+                        }
+                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](n);
                     }
                     ResponseBody::Err(e) => {
                         stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
@@ -509,7 +524,6 @@ macro_rules! inc_res_stats {
                             e.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
                         );
                     }
-                    ResponseBody::Ack(_) => (),
                 }
             }
         }
@@ -570,15 +584,19 @@ pub fn route_query(
 
                 for (wexpr, payload) in local_replies {
                     let payload = ResponseBody::Reply(Reply {
-                        timestamp: None,
-                        encoding: Encoding::default(),
-                        ext_sinfo: None,
-                        ext_consolidation: ConsolidationType::default(),
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_attachment: None, // @TODO: expose it in the API
-                        ext_unknown: vec![],
-                        payload,
+                        consolidation: Consolidation::DEFAULT, // @TODO: handle Del case
+                        ext_unknown: vec![],                   // @TODO: handle unknown extensions
+                        payload: ReplyBody::Put(Put {
+                            // @TODO: handle Del case
+                            timestamp: None,             // @TODO: handle timestamp
+                            encoding: Encoding::DEFAULT, // @TODO: handle encoding
+                            ext_sinfo: None,             // @TODO: handle source info
+                            ext_attachment: None,        // @TODO: expose it in the API
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_unknown: vec![], // @TODO: handle unknown extensions
+                            payload,
+                        }),
                     });
                     #[cfg(feature = "stats")]
                     if !admin {
@@ -594,7 +612,7 @@ pub fn route_query(
                                 rid: qid,
                                 wire_expr: wexpr,
                                 payload,
-                                ext_qos: response::ext::QoSType::declare_default(),
+                                ext_qos: response::ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_respid: Some(response::ext::ResponderIdType {
                                     zid,
@@ -616,7 +634,7 @@ pub fn route_query(
                         .send_response_final(RoutingContext::with_expr(
                             ResponseFinal {
                                 rid: qid,
-                                ext_qos: response::ext::QoSType::response_final_default(),
+                                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                                 ext_tstamp: None,
                             },
                             expr.full_expr().to_string(),
@@ -647,7 +665,7 @@ pub fn route_query(
                                 Request {
                                     id: *qid,
                                     wire_expr: key_expr.into(),
-                                    ext_qos: ext::QoSType::request_default(),
+                                    ext_qos: ext::QoSType::REQUEST,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     ext_target: *t,
@@ -683,7 +701,7 @@ pub fn route_query(
                                 Request {
                                     id: *qid,
                                     wire_expr: key_expr.into(),
-                                    ext_qos: ext::QoSType::request_default(),
+                                    ext_qos: ext::QoSType::REQUEST,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     ext_target: target,
@@ -704,7 +722,7 @@ pub fn route_query(
                     .send_response_final(RoutingContext::with_expr(
                         ResponseFinal {
                             rid: qid,
-                            ext_qos: response::ext::QoSType::response_final_default(),
+                            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                             ext_tstamp: None,
                         },
                         expr.full_expr().to_string(),
@@ -723,7 +741,7 @@ pub fn route_query(
                 .send_response_final(RoutingContext::with_expr(
                     ResponseFinal {
                         rid: qid,
-                        ext_qos: response::ext::QoSType::response_final_default(),
+                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                         ext_tstamp: None,
                     },
                     "".to_string(),
@@ -770,7 +788,7 @@ pub(crate) fn route_send_response(
                         rid: query.src_qid,
                         wire_expr: key_expr.to_owned(),
                         payload: body,
-                        ext_qos: response::ext::QoSType::response_default(),
+                        ext_qos: response::ext::QoSType::RESPONSE,
                         ext_tstamp: None,
                         ext_respid,
                     },
@@ -830,7 +848,7 @@ pub(crate) fn finalize_pending_query(query: Arc<Query>) {
             .send_response_final(RoutingContext::with_expr(
                 ResponseFinal {
                     rid: query.src_qid,
-                    ext_qos: response::ext::QoSType::response_final_default(),
+                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                     ext_tstamp: None,
                 },
                 "".to_string(),
