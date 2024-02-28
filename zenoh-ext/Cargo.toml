@@ -37,6 +37,7 @@ env_logger = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
+phf = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 zenoh = { workspace = true, features = ["unstable"], default-features = false }
 zenoh-core = { workspace = true }

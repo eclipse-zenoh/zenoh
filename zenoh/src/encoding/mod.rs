@@ -12,12 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod default;
-pub mod iana;
 
 use crate::value::Value;
 pub use default::*;
 use std::borrow::Cow;
-use zenoh_protocol::core::{Encoding, EncodingPrefix};
+pub use zenoh_protocol::core::{Encoding, EncodingPrefix};
 use zenoh_result::ZResult;
 
 /// Trait to create, resolve, parse an [`Encoding`] mapping.

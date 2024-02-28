@@ -4775,6 +4775,7 @@ dependencies = [
  "flume",
  "futures",
  "log",
+ "phf",
  "serde",
  "zenoh",
  "zenoh-core",
