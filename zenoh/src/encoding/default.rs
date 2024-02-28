@@ -55,7 +55,7 @@ impl DefaultEncodingMapping {
     /// A UTF-8 encoded string.
     pub const TEXT_PLAIN: EncodingPrefix = 6;
 
-    // - Additional types supported in some Zenoh bindings.
+    // - Advanced types supported in some Zenoh bindings.
     /// A JSON intended to be consumed by an application.
     pub const APPLICATION_JSON: EncodingPrefix = 7;
     /// A JSON intended to be human readable.
