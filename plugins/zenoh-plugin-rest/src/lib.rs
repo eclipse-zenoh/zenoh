@@ -30,7 +30,6 @@ use tide::{Request, Response, Server, StatusCode};
 use zenoh::encoding::{DefaultEncodingMapping, EncodingMapping};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
-use zenoh::properties::Properties;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
@@ -50,19 +49,16 @@ const RAW_KEY: &str = "_raw";
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
-        p if p.starts_with(&DefaultEncoding::TEXT_PLAIN)
-            || p.starts_with(&DefaultEncoding::APP_XWWW_FORM_URLENCODED) =>
-        {
+        p if p.starts_with(&DefaultEncoding::TEXT_PLAIN) => {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
-        p if p.starts_with(&DefaultEncoding::APP_PROPERTIES) => {
-            // convert to Json string for special characters escaping
-            serde_json::json!(*Properties::from(value.to_string())).to_string()
-        }
-        p if p.starts_with(&DefaultEncoding::APP_JSON)
-            || p.starts_with(&DefaultEncoding::APP_INTEGER)
-            || p.starts_with(&DefaultEncoding::APP_FLOAT) =>
+        p if p.starts_with(&DefaultEncoding::APPLICATION_JSON)
+            || p.starts_with(&DefaultEncoding::TEXT_JSON)
+            || p.starts_with(&DefaultEncoding::ZENOH_UINT)
+            || p.starts_with(&DefaultEncoding::ZENOH_INT)
+            || p.starts_with(&DefaultEncoding::ZENOH_FLOAT)
+            || p.starts_with(&DefaultEncoding::ZENOH_BOOL) =>
         {
             value.to_string()
         }

@@ -19,7 +19,6 @@ use crate::{
 use phf::phf_ordered_map;
 use std::{borrow::Cow, sync::Arc};
 use zenoh_buffers::{buffer::SplitBuffer, ZBuf, ZSlice};
-use zenoh_collections::Properties;
 use zenoh_protocol::core::{Encoding, EncodingPrefix};
 use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
@@ -29,6 +28,9 @@ use zenoh_shm::SharedMemoryBuf;
 /// impose any encoding mapping and users are free to use any mapping they like. The mapping
 /// here below is provided for user convenience and does its best to cover the most common
 /// cases. To implement a custom mapping refer to [`EncodingMapping`] trait.
+///
+/// For compatibility purposes Zenoh reserves any prefix value from `0` to `1023` included.
+/// Any application is free to use any value from `1024` to `65535`.
 #[derive(Clone, Copy, Debug)]
 pub struct DefaultEncodingMapping;
 
@@ -36,95 +38,125 @@ impl DefaultEncodingMapping {
     /// Unspecified [`EncodingPrefix`].
     /// Note that an [`Encoding`] could have an empty [prefix](`Encoding::prefix`) and a non-empty [suffix](`Encoding::suffix`).
     pub const EMPTY: EncodingPrefix = 0;
+
+    // - Primitives types supported in all Zenoh bindings
     /// A stream of bytes.
-    pub const APP_OCTET_STREAM: EncodingPrefix = 1;
-    /// An application-specific encoding. Usually a [suffix](`Encoding::suffix`) is provided in the [`Encoding`].
-    pub const APP_CUSTOM: EncodingPrefix = 2;
-    /// An UTF-8 encoded string.
-    pub const TEXT_PLAIN: EncodingPrefix = 3;
-    /// A list of [`Properties`].
-    pub const APP_PROPERTIES: EncodingPrefix = 4;
+    pub const APPLICATION_OCTET_STREAM: EncodingPrefix = 1;
+    /// A VLE-encoded signed integer. Either little-endian 8bit, 16bit, 32bit, or 64bit.
+    pub const ZENOH_INT: EncodingPrefix = 2;
+    /// A VLE-encoded unsigned integer. Either little-endian 8bit, 16bit, 32bit, or 64bit.
+    /// Binary reprensentation uses two's complement.
+    pub const ZENOH_UINT: EncodingPrefix = 3;
+    /// A VLE-encoded float. Either little-endian 32bit or 64bit.
+    /// Binary representation uses *IEEE 754-2008* *binary32* or *binary64*, respectively.
+    pub const ZENOH_FLOAT: EncodingPrefix = 4;
+    /// A boolean. `0` is `false`, `1` is `true`. Other values are invalid.
+    pub const ZENOH_BOOL: EncodingPrefix = 5;
+    /// A UTF-8 encoded string.
+    pub const TEXT_PLAIN: EncodingPrefix = 6;
+
+    // - Additional types supported in some Zenoh bindings.
     /// A JSON intended to be consumed by an application.
-    pub const APP_JSON: EncodingPrefix = 5;
-    /// An SQL query.
-    pub const APP_SQL: EncodingPrefix = 6;
-    /// An signed or unsigned integer. Either 8bit, 16bit, 32bit, or 64bit.
-    pub const APP_INTEGER: EncodingPrefix = 7;
-    /// A 32bit or 64bit float.
-    pub const APP_FLOAT: EncodingPrefix = 8;
-    /// An XML document not readable from casual users ([RFC 3023, sec 3](https://www.rfc-editor.org/rfc/rfc3023#section-3)).
-    pub const APP_XML: EncodingPrefix = 9;
-    /// An XML document that likely has a root element from the HTML namespace
-    pub const APP_XHTML_XML: EncodingPrefix = 10;
-    /// A x-www-form-urlencoded list of tuples, each consisting of a name and a value.
-    pub const APP_XWWW_FORM_URLENCODED: EncodingPrefix = 11;
+    pub const APPLICATION_JSON: EncodingPrefix = 7;
     /// A JSON intended to be human readable.
-    pub const TEXT_JSON: EncodingPrefix = 12;
-    /// An HTML document.
-    pub const TEXT_HTML: EncodingPrefix = 13;
-    /// An XML document readable from casual users ([RFC 3023, sec 3](https://www.rfc-editor.org/rfc/rfc3023#section-3)).
-    pub const TEXT_XML: EncodingPrefix = 14;
-    /// A CSS document.
-    pub const TEXT_CSS: EncodingPrefix = 15;
-    /// A CSV document.
-    pub const TEXT_CSV: EncodingPrefix = 16;
-    /// A Javascript program.
-    pub const TEXT_JAVASCRIPT: EncodingPrefix = 17;
-    /// A Jpeg image.
-    pub const IMAGE_JPEG: EncodingPrefix = 18;
-    /// A PNG image.
-    pub const IMAGE_PNG: EncodingPrefix = 19;
-    /// A GIF image.
-    pub const IMAGE_GIF: EncodingPrefix = 20;
+    pub const TEXT_JSON: EncodingPrefix = 8;
+
+    // - 9-15 are reserved
+
+    // - A list of common prefixes
+    /// An application-specific encoding. Usually a [suffix](`Encoding::suffix`) is provided in the [`Encoding`].
+    pub const APPLICATION_CUSTOM: EncodingPrefix = 16;
+    /// A Common Data Representation (CDR)-encoded data. A [suffix](`Encoding::suffix`) may be provided in the [`Encoding`] to specify the concrete type.
+    pub const APPLICATION_CDR: EncodingPrefix = 17;
+
+    // - 18-58 are reserved
+
+    /// Common prefix for Zenoh-defined types.
+    pub const ZENOH: EncodingPrefix = 58;
+
+    // - A list of most common registries from IANA.
+    // - The highest prefix value to fit in 1 byte on the wire is 63.
+    /// Registry used for *application* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#application).
+    pub const APPLICATION: EncodingPrefix = 59;
+    /// Registry used for *audio* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#audio).
+    pub const AUDIO: EncodingPrefix = 60;
+    /// Registry used for *image* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#image).
+    pub const IMAGE: EncodingPrefix = 61;
+    /// Registry used for *text* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#text).
+    pub const TEXT: EncodingPrefix = 62;
+    /// Registry used for *video* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#video).
+    pub const VIDEO: EncodingPrefix = 63;
+
+    // - 64-1019 are reserved.
+
+    // - A list of least common registries from IANA.
+    /// Registry used for *font* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#font).
+    pub const FONT: EncodingPrefix = 1_020;
+    /// Registry used for *message* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#message).
+    pub const MESSAGE: EncodingPrefix = 1_021;
+    /// Registry used for *model* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#model).
+    pub const MODEL: EncodingPrefix = 1_022;
+    /// Registry used for *multipart* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#multipart).
+    pub const MULTIPART: EncodingPrefix = 1_023;
+
+    // - 1024-65535 are free to use.
 
     /// A perfect hashmap for fast lookup of [`EncodingPrefix`] to string represenation.
     pub(super) const KNOWN_PREFIX: phf::OrderedMap<EncodingPrefix, &'static str> = phf_ordered_map! {
         0u16 =>  "",
         1u16 =>  "application/octet-stream",
-        2u16 =>  "application/custom",
-        3u16 =>  "text/plain",
-        4u16 =>  "application/properties",
-        5u16 =>  "application/json",
-        6u16 =>  "application/sql",
-        7u16 =>  "application/integer",
-        8u16 =>  "application/float",
-        9u16 =>  "application/xml",
-        10u16 => "application/xhtml+xml",
-        11u16 => "application/x-www-form-urlencoded",
-        12u16 => "text/json",
-        13u16 => "text/html",
-        14u16 => "text/xml",
-        15u16 => "text/css",
-        16u16 => "text/csv",
-        17u16 => "text/javascript",
-        18u16 => "image/jpeg",
-        19u16 => "image/png",
-        20u16 => "image/gif",
+        2u16 =>  "zenoh/int",
+        3u16 =>  "zenoh/uint",
+        4u16 =>  "zenoh/float",
+        5u16 =>  "zenoh/bool",
+        6u16 =>  "text/plain",
+        7u16 =>  "application/json",
+        8u16 =>  "text/json",
+        // - 9-15 are reserved.
+        16u16 =>  "application/custom",
+        17u16 =>  "application/cdr",
+        // - 18-58 are reserved.
+        58u16 => "zenoh/",
+        59u16 => "application/",
+        60u16 => "audio/",
+        61u16 => "image/",
+        62u16 => "text/",
+        63u16 => "video/",
+        // - 64-1019 are reserved.
+        1_020u16 => "font/",
+        1_021u16 => "message/",
+        1_022u16 => "model/",
+        1_023u16 => "multipart/",
+        // - 1024-65535 are free to use.
     };
 
     // A perfect hashmap for fast lookup of prefixes
     pub(super) const KNOWN_STRING: phf::OrderedMap<&'static str, EncodingPrefix> = phf_ordered_map! {
-        "" => 0u16,
-        "application/octet-stream" => 1u16,
-        "application/custom" => 2u16,
-        "text/plain" => 3u16,
-        "application/properties" => 4u16,
-        "application/json" => 5u16,
-        "application/sql" => 6u16,
-        "application/integer" => 7u16,
-        "application/float" => 8u16,
-        "application/xml" => 9u16,
-        "application/xhtml+xml" => 10u16,
-        "application/x-www-form-urlencoded" => 11u16,
-        "text/json" => 12u16,
-        "text/html" => 13u16,
-        "text/xml" => 14u16,
-        "text/css" => 15u16,
-        "text/csv" => 16u16,
-        "text/javascript" => 17u16,
-        "image/jpeg" => 18u16,
-        "image/png" => 19u16,
-        "image/gif" => 20u16,
+        "" =>  0u16,
+        "application/octet-stream" =>  1u16,
+        "zenoh/int" =>  2u16,
+        "zenoh/uint" =>  3u16,
+        "zenoh/float" =>  4u16,
+        "zenoh/bool" =>  5u16,
+        "text/plain" =>  6u16,
+        "application/json" =>  7u16,
+        "text/json" =>  8u16,
+        // - 9-15 are reserved.
+        "application/custom" =>  16u16,
+        "application/cdr" =>  17u16,
+        // - 18-58 are reserved.
+        "zenoh/" => 58u16,
+        "application/" => 59u16,
+        "audio/" => 60u16,
+        "image/" => 61u16,
+        "text/" => 62u16,
+        "video/" => 63u16,
+        // - 64-1019 are reserved.
+        "font/" => 1_020u16,
+        "message/" => 1_021u16,
+        "model/" => 1_022u16,
+        "multipart/" => 1_023u16,
+        // - 1024-65535 are free to use.
     };
 }
 
@@ -203,45 +235,43 @@ pub struct DefaultEncoding;
 impl DefaultEncoding {
     /// Encoding is unspecified. Applications are expected to decode messages
     pub const EMPTY: Encoding = Encoding::new(DefaultEncodingMapping::EMPTY);
-    pub const APP_OCTET_STREAM: Encoding = Encoding::new(DefaultEncodingMapping::APP_OCTET_STREAM);
-    pub const APP_CUSTOM: Encoding = Encoding::new(DefaultEncodingMapping::APP_CUSTOM);
+    pub const APPLICATION_OCTET_STREAM: Encoding =
+        Encoding::new(DefaultEncodingMapping::APPLICATION_OCTET_STREAM);
+    pub const ZENOH_INT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_INT);
+    pub const ZENOH_UINT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_UINT);
+    pub const ZENOH_FLOAT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_FLOAT);
+    pub const ZENOH_BOOL: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_BOOL);
     pub const TEXT_PLAIN: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_PLAIN);
-    pub const APP_PROPERTIES: Encoding = Encoding::new(DefaultEncodingMapping::APP_PROPERTIES);
-    pub const APP_JSON: Encoding = Encoding::new(DefaultEncodingMapping::APP_JSON);
-    pub const APP_SQL: Encoding = Encoding::new(DefaultEncodingMapping::APP_SQL);
-    pub const APP_INTEGER: Encoding = Encoding::new(DefaultEncodingMapping::APP_INTEGER);
-    pub const APP_FLOAT: Encoding = Encoding::new(DefaultEncodingMapping::APP_FLOAT);
-    pub const APP_XML: Encoding = Encoding::new(DefaultEncodingMapping::APP_XML);
-    pub const APP_XHTML_XML: Encoding = Encoding::new(DefaultEncodingMapping::APP_XHTML_XML);
-    pub const APP_XWWW_FORM_URLENCODED: Encoding =
-        Encoding::new(DefaultEncodingMapping::APP_XWWW_FORM_URLENCODED);
+    pub const APPLICATION_JSON: Encoding = Encoding::new(DefaultEncodingMapping::APPLICATION_JSON);
     pub const TEXT_JSON: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_JSON);
-    pub const TEXT_HTML: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_HTML);
-    pub const TEXT_XML: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_XML);
-    pub const TEXT_CSS: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_CSS);
-    pub const TEXT_CSV: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_CSV);
-    pub const TEXT_JAVASCRIPT: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_JAVASCRIPT);
-    pub const IMAGE_JPEG: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_JPEG);
-    pub const IMAGE_PNG: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_PNG);
-    pub const IMAGE_GIF: Encoding = Encoding::new(DefaultEncodingMapping::IMAGE_GIF);
+
+    pub const APPLICATION_CUSTOM: Encoding =
+        Encoding::new(DefaultEncodingMapping::APPLICATION_CUSTOM);
+    pub const APPLICATION_CDR: Encoding = Encoding::new(DefaultEncodingMapping::APPLICATION_CDR);
 }
 
-// Bytes conversion
+// - Zenoh primitive types encoders/decoders
+// Octect stream
 impl Encoder<ZBuf> for DefaultEncoding {
     fn encode(self, t: ZBuf) -> Value {
         Value {
             payload: t,
-            encoding: DefaultEncoding::APP_OCTET_STREAM,
+            encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,
         }
     }
 }
 
 impl Decoder<ZBuf> for DefaultEncoding {
     fn decode(self, v: &Value) -> ZResult<ZBuf> {
-        if v.encoding == DefaultEncoding::APP_OCTET_STREAM {
+        if v.encoding == DefaultEncoding::APPLICATION_OCTET_STREAM {
             Ok(v.payload.clone())
         } else {
-            Err(zerror!("{:?} can not be converted into String", v).into())
+            Err(zerror!(
+                "Decode error: invalid encoding. Received '{}', expected '{}'.",
+                DefaultEncodingMapping.to_str(&v.encoding),
+                DefaultEncodingMapping.to_str(&DefaultEncoding::APPLICATION_OCTET_STREAM)
+            )
+            .into())
         }
     }
 }
@@ -278,7 +308,7 @@ impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoding {
     }
 }
 
-// String
+// Text plain
 impl Encoder<String> for DefaultEncoding {
     fn encode(self, s: String) -> Value {
         Value {
@@ -299,7 +329,12 @@ impl Decoder<String> for DefaultEncoding {
         if v.encoding == DefaultEncoding::TEXT_PLAIN {
             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
         } else {
-            Err(zerror!("{:?} can not be converted into String", v).into())
+            Err(zerror!(
+                "Decode error: invalid encoding. Received '{}', expected '{}'.",
+                DefaultEncodingMapping.to_str(&v.encoding),
+                DefaultEncodingMapping.to_str(&DefaultEncoding::TEXT_PLAIN)
+            )
+            .into())
         }
     }
 }
@@ -317,14 +352,7 @@ impl<'a> Decoder<Cow<'a, str>> for DefaultEncoding {
     }
 }
 
-// Sample
-impl Encoder<Sample> for DefaultEncoding {
-    fn encode(self, t: Sample) -> Value {
-        t.value
-    }
-}
-
-// Integers
+// - Integers impl
 macro_rules! impl_int {
     ($t:ty, $encoding:expr) => {
         impl Encoder<$t> for DefaultEncoding {
@@ -361,8 +389,7 @@ macro_rules! impl_int {
                     let mut bs = (0 as $t).to_le_bytes();
                     if p.len() > bs.len() {
                         return Err(zerror!(
-                            "{:?} can not be decoded into {}: invalid length ({} > {})",
-                            v,
+                            "Decode error: {} invalid length ({} > {})",
                             std::any::type_name::<$t>(),
                             p.len(),
                             bs.len()
@@ -374,11 +401,9 @@ macro_rules! impl_int {
                     Ok(t)
                 } else {
                     Err(zerror!(
-                        "{:?} can not be decoded into {}: invalid encoding ({:?} != {:?})",
-                        v,
-                        std::any::type_name::<$t>(),
-                        v.encoding,
-                        $encoding,
+                        "Decode error: invalid encoding. Received '{}', expected '{}'.",
+                        DefaultEncodingMapping.to_str(&v.encoding),
+                        DefaultEncodingMapping.to_str(&$encoding)
                     )
                     .into())
                 }
@@ -387,28 +412,68 @@ macro_rules! impl_int {
     };
 }
 
-impl_int!(u8, DefaultEncoding::APP_INTEGER);
-impl_int!(u16, DefaultEncoding::APP_INTEGER);
-impl_int!(u32, DefaultEncoding::APP_INTEGER);
-impl_int!(u64, DefaultEncoding::APP_INTEGER);
-impl_int!(usize, DefaultEncoding::APP_INTEGER);
+// Zenoh unsigned integers
+impl_int!(u8, DefaultEncoding::ZENOH_UINT);
+impl_int!(u16, DefaultEncoding::ZENOH_UINT);
+impl_int!(u32, DefaultEncoding::ZENOH_UINT);
+impl_int!(u64, DefaultEncoding::ZENOH_UINT);
+impl_int!(usize, DefaultEncoding::ZENOH_UINT);
 
-impl_int!(i8, DefaultEncoding::APP_INTEGER);
-impl_int!(i16, DefaultEncoding::APP_INTEGER);
-impl_int!(i32, DefaultEncoding::APP_INTEGER);
-impl_int!(i64, DefaultEncoding::APP_INTEGER);
-impl_int!(isize, DefaultEncoding::APP_INTEGER);
+// Zenoh signed integers
+impl_int!(i8, DefaultEncoding::ZENOH_INT);
+impl_int!(i16, DefaultEncoding::ZENOH_INT);
+impl_int!(i32, DefaultEncoding::ZENOH_INT);
+impl_int!(i64, DefaultEncoding::ZENOH_INT);
+impl_int!(isize, DefaultEncoding::ZENOH_INT);
 
-// Floats
-impl_int!(f32, DefaultEncoding::APP_FLOAT);
-impl_int!(f64, DefaultEncoding::APP_FLOAT);
+// Zenoh floats
+impl_int!(f32, DefaultEncoding::ZENOH_FLOAT);
+impl_int!(f64, DefaultEncoding::ZENOH_FLOAT);
 
+// Zenoh bool
+impl Encoder<bool> for DefaultEncoding {
+    fn encode(self, t: bool) -> Value {
+        // SAFETY: casting a bool into an integer is well-defined behaviour.
+        //      0 is false, 1 is true: https://doc.rust-lang.org/std/primitive.bool.html
+        Value {
+            payload: ZBuf::from((t as u8).to_le_bytes()),
+            encoding: DefaultEncoding::APPLICATION_JSON,
+        }
+    }
+}
+
+impl Decoder<bool> for DefaultEncoding {
+    fn decode(self, v: &Value) -> ZResult<bool> {
+        if v.encoding == DefaultEncoding::ZENOH_BOOL {
+            let p = v.payload.contiguous();
+            if p.len() != 1 {
+                return Err(
+                    zerror!("Decode error:: bool invalid length ({} != {})", p.len(), 1).into(),
+                );
+            }
+            match p[0] {
+                0 => Ok(false),
+                1 => Ok(true),
+                invalid => Err(zerror!("Decode error: bool invalid value ({})", invalid).into()),
+            }
+        } else {
+            Err(zerror!(
+                "Decode error: invalid encoding. Received '{}', expected '{}'.",
+                DefaultEncodingMapping.to_str(&v.encoding),
+                DefaultEncodingMapping.to_str(&DefaultEncoding::ZENOH_BOOL)
+            )
+            .into())
+        }
+    }
+}
+
+// - Zenoh advanced types encoders/decoders
 // JSON
 impl Encoder<&serde_json::Value> for DefaultEncoding {
     fn encode(self, t: &serde_json::Value) -> Value {
         Value {
             payload: ZBuf::from(t.to_string().into_bytes()),
-            encoding: DefaultEncoding::APP_JSON,
+            encoding: DefaultEncoding::APPLICATION_JSON,
         }
     }
 }
@@ -421,44 +486,31 @@ impl Encoder<serde_json::Value> for DefaultEncoding {
 
 impl Decoder<serde_json::Value> for DefaultEncoding {
     fn decode(self, v: &Value) -> ZResult<serde_json::Value> {
-        if v.encoding == DefaultEncoding::APP_JSON || v.encoding == DefaultEncoding::TEXT_JSON {
+        if v.encoding == DefaultEncoding::APPLICATION_JSON
+            || v.encoding == DefaultEncoding::TEXT_JSON
+        {
             let r: serde_json::Value = serde::Deserialize::deserialize(
                 &mut serde_json::Deserializer::from_slice(&v.payload.contiguous()),
             )
-            .map_err(|e| zerror!("{}", e))?;
+            .map_err(|e| zerror!("Decode error: {}", e))?;
             Ok(r)
         } else {
-            Err(zerror!("{:?} can not be converted into JSON", v.encoding).into())
+            Err(zerror!(
+                "Decode error: invalid encoding. Received '{}', expected '{}' or '{}'.",
+                DefaultEncodingMapping.to_str(&v.encoding),
+                DefaultEncodingMapping.to_str(&DefaultEncoding::APPLICATION_JSON),
+                DefaultEncodingMapping.to_str(&DefaultEncoding::TEXT_JSON)
+            )
+            .into())
         }
     }
 }
 
-// Properties
-impl Encoder<&Properties> for DefaultEncoding {
-    fn encode(self, t: &Properties) -> Value {
-        Value {
-            payload: ZBuf::from(t.to_string().into_bytes()),
-            encoding: DefaultEncoding::APP_PROPERTIES,
-        }
-    }
-}
-
-impl Encoder<Properties> for DefaultEncoding {
-    fn encode(self, t: Properties) -> Value {
-        Self.encode(&t)
-    }
-}
-
-impl Decoder<Properties> for DefaultEncoding {
-    fn decode(self, v: &Value) -> ZResult<Properties> {
-        if v.encoding == DefaultEncoding::APP_PROPERTIES {
-            let ps = Properties::from(
-                std::str::from_utf8(&v.payload.contiguous()).map_err(|e| zerror!("{}", e))?,
-            );
-            Ok(ps)
-        } else {
-            Err(zerror!("{:?} can not be converted into Properties", v.encoding).into())
-        }
+// - Zenoh Rust-specific types encoders/decoders
+// Sample
+impl Encoder<Sample> for DefaultEncoding {
+    fn encode(self, t: Sample) -> Value {
+        t.value
     }
 }
 
@@ -468,7 +520,7 @@ impl Encoder<Arc<SharedMemoryBuf>> for DefaultEncoding {
     fn encode(self, t: Arc<SharedMemoryBuf>) -> Value {
         Value {
             payload: t.into(),
-            encoding: DefaultEncoding::APP_OCTET_STREAM,
+            encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,
         }
     }
 }
@@ -486,7 +538,7 @@ impl Encoder<SharedMemoryBuf> for DefaultEncoding {
     fn encode(self, t: SharedMemoryBuf) -> Value {
         Value {
             payload: t.into(),
-            encoding: DefaultEncoding::APP_OCTET_STREAM,
+            encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,
         }
     }
 }
@@ -497,7 +549,6 @@ mod tests {
         use crate::Value;
         use rand::Rng;
         use zenoh_buffers::ZBuf;
-        use zenoh_collections::Properties;
 
         const NUM: usize = 1_000;
 
@@ -572,8 +623,5 @@ mod tests {
 
         encode_decode!(ZBuf, ZBuf::from(vec![0u8; 0]));
         encode_decode!(ZBuf, ZBuf::from(vec![0u8; 64]));
-
-        encode_decode!(Properties, Properties::from(""));
-        encode_decode!(Properties, Properties::from("a=1;b=2"));
     }
 }
