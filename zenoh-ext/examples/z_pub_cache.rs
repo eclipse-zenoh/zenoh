@@ -39,7 +39,7 @@ async fn main() {
     let _publication_cache = publication_cache_builder.res().await.unwrap();
 
     println!("Press CTRL-C to quit...");
-    for idx in 1..u32::MAX {
+    for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {value}");
         println!("Put Data ('{}': '{}')", &key_expr, buf);
