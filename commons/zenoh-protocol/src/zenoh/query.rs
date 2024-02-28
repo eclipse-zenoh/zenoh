@@ -33,8 +33,8 @@ pub enum Consolidation {
     Monotonic,
     /// Holds back samples to only send the set of samples that had the highest timestamp for their key.    
     Latest,
-    /// Remove the duplicates of any samples based on the their timestamp.
-    Unique,
+    // Remove the duplicates of any samples based on the their timestamp.
+    // Unique,
 }
 
 impl Consolidation {
@@ -45,15 +45,9 @@ impl Consolidation {
         use rand::prelude::SliceRandom;
         let mut rng = rand::thread_rng();
 
-        *[
-            Self::None,
-            Self::Monotonic,
-            Self::Latest,
-            Self::Unique,
-            Self::Auto,
-        ]
-        .choose(&mut rng)
-        .unwrap()
+        *[Self::None, Self::Monotonic, Self::Latest, Self::Auto]
+            .choose(&mut rng)
+            .unwrap()
     }
 }
 
