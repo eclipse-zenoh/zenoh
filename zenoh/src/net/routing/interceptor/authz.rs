@@ -1,24 +1,12 @@
 use rustc_hash::FxHashMap;
-use serde::{Deserialize, Serialize};
-use std::hash::Hash;
-use zenoh_config::AclConfig;
+use serde::Deserialize;
+use zenoh_config::{AclConfig, Action, AttributeRules, Permission, Subject};
 use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
-
-pub enum Action {
-    Pub,
-    Sub,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
-
-pub enum Permission {
-    Allow,
-    Deny,
-}
+const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum (small but might change)
+const NUMBER_OF_PERMISSIONS: usize = 2; //size of permission enum (fixed)
 
 pub struct PolicyForSubject(Vec<Vec<KeTreeRule>>); //vec of actions over vec of permission for tree of ke for this
 pub struct PolicyMap(pub FxHashMap<i32, PolicyForSubject>); //index of subject_map instead of subject
@@ -40,42 +28,39 @@ pub struct PolicyEnforcer {
 #[derive(Debug, Clone)]
 
 pub struct PolicyInformation {
-    policy_definition: String,
-    attribute_list: Vec<String>, //list of attribute names in string
+    _policy_definition: String,
+    _attribute_list: Vec<String>, //list of attribute names in string
     subject_map: FxHashMap<Subject, i32>,
     policy_rules: Vec<AttributeRules>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct AttributeRules {
-    attribute: String,
-    rules: Vec<AttributeRule>,
-}
+// #[derive(Debug, Deserialize, Clone)]
+// pub struct AttributeRules {
+//     attribute: String,
+//     rules: Vec<AttributeRule>,
+// }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct AttributeRule {
-    subject: Subject,
-    ke: String,
-    action: Action,
-    permission: Permission,
-}
-use zenoh_config::ZenohId;
+// #[derive(Clone, Debug, Deserialize)]
+// pub struct AttributeRule {
+//     subject: Subject,
+//     ke: String,
+//     action: Action,
+//     permission: Permission,
+// }
+// use zenoh_config::ZenohId;
 
-#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
-#[serde(untagged)]
-pub enum Subject {
-    UserId(ZenohId),
-    NetworkInterface(String),
-}
+// #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+// #[serde(untagged)]
+// pub enum Subject {
+//     UserId(ZenohId),
+//     NetworkInterface(String),
+// }
 #[derive(Debug)]
 pub struct RequestInfo {
     pub sub: Vec<Subject>,
     pub ke: String,
     pub action: Action,
 }
-
-const ACTION_LENGTH: usize = 2;
-const PERMISSION_LENGTH: usize = 2;
 
 impl PolicyEnforcer {
     pub fn new() -> PolicyEnforcer {
@@ -92,7 +77,7 @@ impl PolicyEnforcer {
         //insert values into the enforcer from the config file
         match acl_config.enabled {
             Some(val) => self.acl_enabled = val,
-            None => log::error!("acl config not setup"),
+            None => log::error!("acl config was not setup properly"),
         }
         match acl_config.default_deny {
             Some(val) => self.default_deny = val,
@@ -110,9 +95,9 @@ impl PolicyEnforcer {
                     let subject_map = policy_information.subject_map.clone();
                     for (_, index) in subject_map {
                         let mut rule: PolicyForSubject = PolicyForSubject(Vec::new());
-                        for _i in 0..ACTION_LENGTH {
+                        for _i in 0..NUMBER_OF_ACTIONS {
                             let mut action_rule: Vec<KeTreeRule> = Vec::new();
-                            for _j in 0..PERMISSION_LENGTH {
+                            for _j in 0..NUMBER_OF_PERMISSIONS {
                                 let permission_rule = KeTreeRule::new();
                                 //
                                 action_rule.push(permission_rule);
@@ -152,13 +137,13 @@ impl PolicyEnforcer {
             .collect::<Vec<&str>>();
 
         let complete_ruleset = policy_list_info.ruleset;
-        let mut attribute_list: Vec<String> = Vec::new();
+        let mut _attribute_list: Vec<String> = Vec::new();
         let mut policy_rules: Vec<AttributeRules> = Vec::new();
         let mut subject_map = FxHashMap::default();
         let mut counter = 1; //starting at 1 since 0 is default value in policy_check and should not match anything
         for attr_rule in complete_ruleset.iter() {
             if enforced_attributes.contains(&attr_rule.attribute.as_str()) {
-                attribute_list.push(attr_rule.attribute.clone());
+                _attribute_list.push(attr_rule.attribute.clone());
                 policy_rules.push(attr_rule.clone());
                 for rule in attr_rule.rules.clone() {
                     subject_map.insert(rule.subject, counter);
@@ -167,31 +152,35 @@ impl PolicyEnforcer {
             }
         }
 
-        let policy_definition = policy_list_info.policy_definition;
+        let _policy_definition = policy_list_info.policy_definition;
 
         Ok(PolicyInformation {
-            policy_definition,
-            attribute_list,
+            _policy_definition,
+            _attribute_list,
             subject_map,
             policy_rules,
         })
     }
 
-    pub fn policy_decision_point(&self, subject: i32, act: Action, kexpr: String) -> ZResult<bool> {
-        /*
-           need to decide policy for proper handling of the edge cases
-           what about default_deny vlaue from the policy file??
-           if it is allow, the should be allowed if everything is NONE
-        */
+    /*
+       checks each msg against the ACL ruleset for allow/deny
+    */
+
+    pub fn policy_decision_point(
+        &self,
+        subject: i32,
+        action: Action,
+        key_expr: String,
+    ) -> ZResult<bool> {
         match &self.policy_list {
             Some(policy_map) => {
                 let ps = policy_map.0.get(&subject).unwrap();
-                let perm_vec = &ps.0[act as usize];
+                let perm_vec = &ps.0[action as usize];
 
                 //check for deny
 
                 let deny_result = perm_vec[Permission::Deny as usize]
-                    .nodes_including(keyexpr::new(&kexpr).unwrap())
+                    .nodes_including(keyexpr::new(&key_expr).unwrap())
                     .count();
                 if deny_result != 0 {
                     return Ok(false);
@@ -200,7 +189,7 @@ impl PolicyEnforcer {
                 //check for allow
 
                 let allow_result = perm_vec[Permission::Allow as usize]
-                    .nodes_including(keyexpr::new(&kexpr).unwrap())
+                    .nodes_including(keyexpr::new(&key_expr).unwrap())
                     .count();
                 Ok(allow_result != 0)
             }

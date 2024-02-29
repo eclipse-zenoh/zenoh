@@ -275,7 +275,7 @@
     },
      acl: {
       enabled: true,
-      default_deny: true,
+      default_deny: false,
       policy_list: {
         "policy_definition": "NetworkInterface",
         "ruleset": [
@@ -284,8 +284,14 @@
             "rules": [
               {
                 "subject": "lo0",
+                "ke": "test/thr/a",
+                "action": "Put",
+                "permission": "Allow"
+              },
+              {
+                "subject": "lo0",
                 "ke": "test/thr",
-                "action": "Pub",
+                "action": "Put",
                 "permission": "Allow"
               },
               {
@@ -297,8 +303,8 @@
             ]
           }
         ]
-      },
-    },
+      }
+    }
   },
   /// Configure the Admin Space
   /// Unstable: this configuration part works as advertised, but may change in a future release

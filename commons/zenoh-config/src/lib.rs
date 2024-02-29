@@ -101,22 +101,22 @@ pub struct DownsamplingItemConf {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PolicyList {
-    policy_definition: String,
-    ruleset: Vec<AttributeRules>,
+    pub policy_definition: String,
+    pub ruleset: Vec<AttributeRules>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AttributeRules {
-    attribute: String,
-    rules: Vec<AttributeRule>,
+    pub attribute: String,
+    pub rules: Vec<AttributeRule>,
 }
 
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct AttributeRule {
-    subject: Subject,
-    ke: String,
-    action: Action,
-    permission: Permission,
+    pub subject: Subject,
+    pub ke: String,
+    pub action: Action,
+    pub permission: Permission,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum Permission {
@@ -134,10 +134,11 @@ pub enum Subject {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum Action {
-    Pub,
+    Put,
     Sub,
+    Get,
+    Reply,
 }
-
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,

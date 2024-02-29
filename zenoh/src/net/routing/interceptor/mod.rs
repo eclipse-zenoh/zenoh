@@ -19,11 +19,11 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 //!
 mod accesscontrol;
-mod authz;
-use std::sync::Arc;
+use accesscontrol::acl_interceptor_factories;
 
+mod authz;
 use super::RoutingContext;
-use crate::net::routing::interceptor::{accesscontrol::AclEnforcer, authz::PolicyEnforcer};
+
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
@@ -59,32 +59,9 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
 
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
+    res.extend(downsampling_interceptor_factories(config.downsampling())?);
+    res.extend(acl_interceptor_factories(config.transport().acl().clone())?);
 
-    /* if config condition is selected this will be initialiased; putting true for now */
-    res.push(Box::new(LoggerInterceptor {}));
-    //res.extend(downsampling_interceptor_factories(config.downsampling())?);
-
-    //get acl config
-    let acl_config = config.transport().acl().clone();
-    let mut acl_enabled = false;
-    match acl_config.enabled {
-        Some(val) => acl_enabled = val,
-        None => {
-            log::warn!("acl config not setup");
-        }
-    }
-    if acl_enabled {
-        let mut policy_enforcer = PolicyEnforcer::new();
-        match policy_enforcer.init(acl_config) {
-            Ok(_) => res.push(Box::new(AclEnforcer {
-                e: Arc::new(policy_enforcer),
-            })),
-            Err(e) => log::error!(
-                "access control enabled but not initialized with error {}!",
-                e
-            ),
-        }
-    }
     Ok(res)
 }
 
