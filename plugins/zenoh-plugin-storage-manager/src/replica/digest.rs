@@ -293,7 +293,13 @@ impl Digest {
 
         // reconstruct updated parts of the digest
         for sub in subintervals_to_update {
-            let subinterval = subintervals.get_mut(&sub).unwrap();
+            let subinterval = match subintervals.get_mut(&sub) {
+                Some(subinterval) => subinterval,
+                None => {
+                    log::error!("failed to get subinterval {sub:?}");
+                    continue;
+                }
+            };
             let content = &subinterval.content;
             if !content.is_empty() {
                 // order the content, hash them
@@ -308,7 +314,13 @@ impl Digest {
         }
 
         for int in intervals_to_update {
-            let interval = intervals.get_mut(&int).unwrap();
+            let interval = match intervals.get_mut(&int) {
+                Some(interval) => interval,
+                None => {
+                    log::error!("failed to get interval: {int:?}");
+                    continue;
+                }
+            };
             let content = &interval.content;
             if !content.is_empty() {
                 // order the content, hash them
@@ -324,7 +336,13 @@ impl Digest {
         }
 
         for era_type in eras_to_update {
-            let era = eras.get_mut(&era_type).unwrap();
+            let era = match eras.get_mut(&era_type) {
+                Some(era) => era,
+                None => {
+                    log::error!("failed to get era: {era_type:?}");
+                    continue;
+                }
+            };
             let content = &era.content;
             if !content.is_empty() {
                 // order the content, hash them
@@ -659,8 +677,22 @@ impl Digest {
     // get the intervals of a given era
     pub fn get_era_content(&self, era: &EraType) -> HashMap<u64, u64> {
         let mut result = HashMap::new();
-        for int in self.eras.get(era).unwrap().content.clone() {
-            result.insert(int, self.intervals.get(&int).unwrap().checksum);
+        let content = match self.eras.get(era) {
+            Some(era) => era.content.clone(),
+            None => {
+                log::error!("failed to get era content: {era:?}");
+                return result;
+            }
+        };
+        for int in content {
+            let checksum = match self.intervals.get(&int) {
+                Some(interval) => interval.checksum,
+                None => {
+                    log::error!("failed to get interval checksum: {int:?}");
+                    continue;
+                }
+            };
+            result.insert(int, checksum);
         }
         result
     }
@@ -670,8 +702,22 @@ impl Digest {
         //return (subintervalid, checksum) for the set of intervals
         let mut result = HashMap::new();
         for each in intervals {
-            for sub in self.intervals.get(&each).unwrap().content.clone() {
-                result.insert(sub, self.subintervals.get(&sub).unwrap().checksum);
+            let content = match self.intervals.get(&each) {
+                Some(interval) => interval.content.clone(),
+                None => {
+                    log::error!("failed to get interval content: {each:?}");
+                    continue;
+                }
+            };
+            for sub in content {
+                let checksum = match self.subintervals.get(&sub) {
+                    Some(subinterval) => subinterval.checksum,
+                    None => {
+                        log::error!("failed to get subinterval checksum: {sub:?}");
+                        continue;
+                    }
+                };
+                result.insert(sub, checksum);
             }
         }
         result
@@ -684,7 +730,14 @@ impl Digest {
     ) -> HashMap<u64, BTreeSet<LogEntry>> {
         let mut result = HashMap::new();
         for each in subintervals {
-            result.insert(each, self.subintervals.get(&each).unwrap().content.clone());
+            let content = match self.subintervals.get(&each) {
+                Some(subinterval) => subinterval.content.clone(),
+                None => {
+                    log::error!("failed to get subinterval content: {each:?}");
+                    continue;
+                }
+            };
+            result.insert(each, content);
         }
         result
     }
