@@ -23,62 +23,13 @@ pub enum Permission {
 pub struct PolicyForSubject(Vec<Vec<KeTreeRule>>); //vec of actions over vec of permission for tree of ke for this
 pub struct PolicyMap(pub FxHashMap<i32, PolicyForSubject>); //index of subject_map instead of subject
 
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct Request {
-//     pub(crate) sub: Subject,
-//     pub(crate) obj: String,
-//     pub(crate) action: Action,
-// }
-
-// pub struct RequestBuilder {
-//     sub: Option<Subject>, //removed Attribute
-//     obj: Option<String>,
-//     action: Option<Action>,
-// }
-
 #[derive(Deserialize, Debug)]
 pub struct GetPolicy {
     policy_definition: String,
     ruleset: Vec<AttributeRules>,
 }
 type KeTreeRule = KeBoxTree<bool>;
-/*
-impl RequestBuilder {
-    pub fn default() -> Self {
-        RequestBuilder {
-            sub: None,
-            obj: None,
-            action: None,
-        }
-    }
-    pub fn new() -> Self {
-        RequestBuilder::default()
-    }
 
-    pub fn sub(&mut self, sub: impl Into<Subject>) -> &mut Self {
-        let _ = self.sub.insert(sub.into());
-        self
-    }
-
-    pub fn obj(&mut self, obj: impl Into<String>) -> &mut Self {
-        let _ = self.obj.insert(obj.into());
-        self
-    }
-
-    pub fn action(&mut self, action: impl Into<Action>) -> &mut Self {
-        let _ = self.action.insert(action.into());
-        self
-    }
-
-    pub fn build(&mut self) -> ZResult<Request> {
-        let sub = self.sub.clone().unwrap();
-        let obj = self.obj.clone().unwrap();
-        let action = self.action.clone().unwrap();
-
-        Ok(Request { sub, obj, action })
-    }
-}
-*/
 pub struct PolicyEnforcer {
     pub(crate) acl_enabled: bool,
     pub(crate) default_deny: bool,

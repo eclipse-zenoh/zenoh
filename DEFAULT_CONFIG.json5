@@ -283,13 +283,13 @@
             "attribute": "NetworkInterface",
             "rules": [
               {
-                "subject": "wifi0",
+                "subject": "lo0",
                 "ke": "test/thr",
                 "action": "Pub",
                 "permission": "Allow"
               },
               {
-                "subject": "wifi0",
+                "subject": "lo0",
                 "ke": "test/thr",
                 "action": "Sub",
                 "permission": "Allow"
