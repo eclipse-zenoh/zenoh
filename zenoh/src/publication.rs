@@ -656,8 +656,8 @@ impl<'a> Publication<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
     /// publisher.put("Value").with_source_info(SourceInfo {
-    ///     id: publisher.id(),
-    ///     sn: 0,
+    ///     source_id: Some(publisher.id()),
+    ///     source_sn: Some(0),
     /// }).res().await.unwrap();
     /// # })
     /// ```
