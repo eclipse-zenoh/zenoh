@@ -36,7 +36,7 @@ pub struct ZBuf {
 
 impl ZBuf {
     #[must_use]
-    // tags{rust.zbuf.empty, api.buffer.create.empty}
+    // tags{rust.zbuf.empty, api.buffer.create}
     pub fn empty() -> Self {
         Self::default()
     }

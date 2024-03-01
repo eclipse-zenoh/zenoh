@@ -28,7 +28,6 @@ mod bbuf;
 mod slice;
 // ignore_tagging
 pub mod vec;
-// ignore_tagging
 mod zbuf;
 // ignore_tagging
 mod zslice;
