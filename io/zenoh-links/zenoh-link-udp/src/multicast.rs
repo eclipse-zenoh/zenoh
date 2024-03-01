@@ -229,6 +229,8 @@ impl LinkManagerMulticastUdp {
             .bind(&SocketAddr::new(local_addr, 0).into())
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
 
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         ucast_sock.set_nonblocking(true)?;
         let ucast_sock = UdpSocket::from_std(ucast_sock.into())?;
 
@@ -290,8 +292,11 @@ impl LinkManagerMulticastUdp {
             }
         };
 
-        // Build the tokio multicast UdpSocket
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         mcast_sock.set_nonblocking(true)?;
+
+        // Build the tokio multicast UdpSocket
         let mcast_sock = UdpSocket::from_std(mcast_sock.into())?;
 
         let ucast_addr = ucast_sock

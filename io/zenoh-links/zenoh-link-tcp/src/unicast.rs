@@ -31,7 +31,7 @@ use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
     TCP_LOCATOR_PREFIX,
 };
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpSocket, TcpListener, TcpStream};
 
 pub struct LinkUnicastTcp {
     // The underlying socket as returned from the async-std library
@@ -213,7 +213,16 @@ impl LinkManagerUnicastTcp {
         dst_addr: &SocketAddr,
         iface: Option<&str>,
     ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
-        let stream = TcpStream::connect(dst_addr)
+        let socket = match dst_addr {
+            SocketAddr::V4(_) => TcpSocket::new_v4(),
+            SocketAddr::V6(_) => TcpSocket::new_v6(),
+        }?;
+
+        zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+
+        // Build a TcpStream from TcpSocket
+        // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
+        let stream = socket.connect(*dst_addr)
             .await
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
 
@@ -225,7 +234,6 @@ impl LinkManagerUnicastTcp {
             .peer_addr()
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
 
-        zenoh_util::net::set_bind_to_device_tcp_stream(&stream, iface);
 
         Ok((stream, src_addr, dst_addr))
     }
@@ -235,18 +243,27 @@ impl LinkManagerUnicastTcp {
         addr: &SocketAddr,
         iface: Option<&str>,
     ) -> ZResult<(TcpListener, SocketAddr)> {
-        // Bind the TCP socket
-        let socket = TcpListener::bind(addr)
-            .await
+        let socket = match addr {
+            SocketAddr::V4(_) => TcpSocket::new_v4(),
+            SocketAddr::V6(_) => TcpSocket::new_v6(),
+        }?;
+
+        zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+
+        // Build a TcpListener from TcpSocket
+        // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
+        socket.set_reuseaddr(true)?;
+        socket.bind(*addr)
+            .map_err(|e| zerror!("{}: {}", addr, e))?;
+        // backlog (the maximum number of pending connections are queued): 1024
+        let listener = socket.listen(1024)
             .map_err(|e| zerror!("{}: {}", addr, e))?;
 
-        zenoh_util::net::set_bind_to_device_tcp_listener(&socket, iface);
-
-        let local_addr = socket
+        let local_addr = listener
             .local_addr()
             .map_err(|e| zerror!("{}: {}", addr, e))?;
 
-        Ok((socket, local_addr))
+        Ok((listener, local_addr))
     }
 }
 

@@ -421,6 +421,7 @@ impl Runtime {
         log::info!("zenohd listening scout messages on {}", sockaddr);
 
         // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         socket.set_nonblocking(true)?;
         Ok(UdpSocket::from_std(socket.into())?)
     }
@@ -450,6 +451,7 @@ impl Runtime {
         }
 
         // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         socket.set_nonblocking(true)?;
         Ok(UdpSocket::from_std(socket.into())?)
     }

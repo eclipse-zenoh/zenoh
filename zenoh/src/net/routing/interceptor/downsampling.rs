@@ -127,7 +127,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
             if let Some(key_expr) = ctx.full_key_expr() {
                 let mut ke_state = zlock!(self.ke_state);
                 if let Some(state) = ke_state.weight_at_mut(&key_expr.clone()) {
-                    let timestamp = std::time::Instant::now();
+                    let timestamp = tokio::time::Instant::now();
 
                     if timestamp - state.latest_message_timestamp >= state.threshold {
                         state.latest_message_timestamp = timestamp;

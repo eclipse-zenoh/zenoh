@@ -16,6 +16,7 @@ use zenoh_core::zconfigurable;
 #[cfg(unix)]
 use zenoh_result::zerror;
 use zenoh_result::{bail, ZResult};
+use tokio::net::{TcpSocket, UdpSocket};
 
 zconfigurable! {
     static ref WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE: u32 = 8192;
@@ -422,52 +423,20 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
         .collect()
 }
 
-#[cfg(target_os = "linux")]
-fn set_bind_to_device(socket: std::os::raw::c_int, iface: Option<&str>) {
-    if let Some(iface) = iface {
-        // @TODO: switch to bind_device after tokio porting
-        log::debug!("Listen at the interface: {}", iface);
-        unsafe {
-            libc::setsockopt(
-                socket,
-                libc::SOL_SOCKET,
-                libc::SO_BINDTODEVICE,
-                iface.as_ptr() as *const std::os::raw::c_void,
-                iface.len() as libc::socklen_t,
-            );
-        }
-    }
+pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: Option<&str>) -> ZResult<()> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    bail!("Listen at the interface is not supported for macos and windows");
+
+    #[cfg(target_os = "linux")]
+    socket.bind_device(iface.map(|x| x.as_bytes()))?;
+    Ok(())
 }
 
-#[cfg(target_os = "linux")]
-pub fn set_bind_to_device_tcp_listener(socket: &TcpListener, iface: Option<&str>) {
-    use std::os::fd::AsRawFd;
-    set_bind_to_device(socket.as_raw_fd(), iface);
-}
+pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) -> ZResult<()> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    bail!("Listen at the interface is not supported for macos and windows");
 
-#[cfg(target_os = "linux")]
-pub fn set_bind_to_device_tcp_stream(socket: &TcpStream, iface: Option<&str>) {
-    use std::os::fd::AsRawFd;
-    set_bind_to_device(socket.as_raw_fd(), iface);
-}
-
-#[cfg(target_os = "linux")]
-pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) {
-    use std::os::fd::AsRawFd;
-    set_bind_to_device(socket.as_raw_fd(), iface);
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_tcp_listener(_socket: &TcpListener, _iface: Option<&str>) {
-    log::warn!("Listen at the interface is not supported for this platform");
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_tcp_stream(_socket: &TcpStream, _iface: Option<&str>) {
-    log::warn!("Listen at the interface is not supported for this platform");
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_udp_socket(_socket: &UdpSocket, _iface: Option<&str>) {
-    log::warn!("Listen at the interface is not supported for this platform");
+    #[cfg(target_os = "linux")]
+    socket.bind_device(iface.map(|x| x.as_bytes()))?;
+    Ok(())
 }
