@@ -30,6 +30,7 @@ impl IntervalCounter {
     }
 
     fn get_middle(&self) -> u32 {
+        assert!(self.count > 0);
         self.total_time.as_millis() as u32 / self.count
     }
 
@@ -64,6 +65,10 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
     if !egress {
         config_sub.insert_json5("downsampling", &ds_cfg).unwrap();
     }
+    config_sub
+        .insert_json5("listen/endpoints", r#"["tcp/127.0.0.1:38446"]"#)
+        .unwrap();
+    config_sub.scouting.multicast.set_enabled(Some(false)).unwrap();
     let zenoh_sub = zenoh::open(config_sub).res().unwrap();
 
     let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
@@ -93,6 +98,10 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
     if egress {
         config_pub.insert_json5("downsampling", &ds_cfg).unwrap();
     }
+    config_pub
+        .insert_json5("connect/endpoints", r#"["tcp/127.0.0.1:38446"]"#)
+        .unwrap();
+    config_pub.scouting.multicast.set_enabled(Some(false)).unwrap();
     let zenoh_pub = zenoh::open(config_pub).res().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples_by_keyexp/r100")
@@ -109,13 +118,12 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .res()
         .unwrap();
 
-    let interval = std::time::Duration::from_millis(1);
+    let interval = std::time::Duration::from_millis(2);
     let messages_count = 1000;
     for i in 0..messages_count {
         publisher_r100.put(format!("message {}", i)).res().unwrap();
         publisher_r50.put(format!("message {}", i)).res().unwrap();
         publisher_all.put(format!("message {}", i)).res().unwrap();
-
         std::thread::sleep(interval);
     }
 
@@ -166,7 +174,7 @@ fn downsampling_by_interface_impl(egress: bool) {
     // declare subscriber
     let mut config_sub = Config::default();
     config_sub
-        .insert_json5("listen/endpoints", r#"["tcp/127.0.0.1:7447"]"#)
+        .insert_json5("listen/endpoints", r#"["tcp/127.0.0.1:38447"]"#)
         .unwrap();
     if !egress {
         config_sub.insert_json5("downsampling", &ds_cfg).unwrap();
@@ -194,7 +202,7 @@ fn downsampling_by_interface_impl(egress: bool) {
     // declare publisher
     let mut config_pub = Config::default();
     config_pub
-        .insert_json5("connect/endpoints", r#"["tcp/127.0.0.1:7447"]"#)
+        .insert_json5("connect/endpoints", r#"["tcp/127.0.0.1:38447"]"#)
         .unwrap();
     if egress {
         config_pub.insert_json5("downsampling", &ds_cfg).unwrap();
@@ -210,7 +218,7 @@ fn downsampling_by_interface_impl(egress: bool) {
         .res()
         .unwrap();
 
-    let interval = std::time::Duration::from_millis(1);
+    let interval = std::time::Duration::from_millis(2);
     let messages_count = 1000;
     for i in 0..messages_count {
         publisher_r100.put(format!("message {}", i)).res().unwrap();

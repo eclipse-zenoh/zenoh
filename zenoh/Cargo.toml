@@ -63,7 +63,7 @@ default = [
 ]
 
 [dependencies]
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }

@@ -105,8 +105,8 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 }
 
 struct Timestate {
-    pub threshold: std::time::Duration,
-    pub latest_message_timestamp: std::time::Instant,
+    pub threshold: tokio::time::Duration,
+    pub latest_message_timestamp: tokio::time::Instant,
 }
 
 pub(crate) struct DownsamplingInterceptor {
@@ -149,11 +149,11 @@ impl DownsamplingInterceptor {
     pub fn new(rules: Vec<DownsamplingRuleConf>) -> Self {
         let mut ke_state = KeBoxTree::default();
         for rule in rules {
-            let mut threshold = std::time::Duration::MAX;
-            let mut latest_message_timestamp = std::time::Instant::now();
+            let mut threshold = tokio::time::Duration::MAX;
+            let mut latest_message_timestamp = tokio::time::Instant::now();
             if rule.rate != 0.0 {
                 threshold =
-                    std::time::Duration::from_nanos((1. / rule.rate * NANOS_PER_SEC) as u64);
+                    tokio::time::Duration::from_nanos((1. / rule.rate * NANOS_PER_SEC) as u64);
                 latest_message_timestamp -= threshold;
             }
             ke_state.insert(
