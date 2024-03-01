@@ -126,6 +126,7 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .res()
         .unwrap();
 
+    // WARN(yuyuan): 2 ms is the limit of tokio
     let interval = std::time::Duration::from_millis(2);
     let messages_count = 1000;
     for i in 0..messages_count {
@@ -226,6 +227,7 @@ fn downsampling_by_interface_impl(egress: bool) {
         .res()
         .unwrap();
 
+    // WARN(yuyuan): 2 ms is the limit of tokio
     let interval = std::time::Duration::from_millis(2);
     let messages_count = 1000;
     for i in 0..messages_count {
