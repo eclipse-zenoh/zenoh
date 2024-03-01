@@ -162,7 +162,7 @@ async fn openclose_transport(
     println!("Transport Open Close [1c1]");
     let open_res =
         ztimeout_expected!(client01_manager.open_transport_unicast(connect_endpoint.clone()));
-    println!("Transport Open Close [1c2]: {res:?}");
+    println!("Transport Open Close [1c2]: {open_res:?}");
     assert!(open_res.is_ok());
     let c_ses1 = open_res.unwrap();
     println!("Transport Open Close [1d1]");
@@ -753,7 +753,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 
 #[cfg(feature = "transport_tcp")]
 #[cfg(target_os = "linux")]
-#[should_panic(expected = "TimeoutError")]
+#[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
@@ -791,7 +791,7 @@ async fn openclose_tcp_only_listen_with_interface_restriction() {
 
 #[cfg(feature = "transport_udp")]
 #[cfg(target_os = "linux")]
-#[should_panic(expected = "TimeoutError")]
+#[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
@@ -810,9 +810,9 @@ async fn openclose_udp_only_connect_with_interface_restriction() {
 
 #[cfg(feature = "transport_udp")]
 #[cfg(target_os = "linux")]
-#[should_panic(expected = "assertion failed: open_res.is_ok()")]
+#[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn openclose_udp_onlyi_listen_with_interface_restriction() {
+async fn openclose_udp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
     let _ = env_logger::try_init();
