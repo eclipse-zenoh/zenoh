@@ -1,11 +1,11 @@
 use rustc_hash::FxHashMap;
-use zenoh_config::{AclConfig, Action, ConfigRule, Permission, PolicyRule, Subject};
+use zenoh_config::{
+    AclConfig, Action, ConfigRule, Permission, PolicyRule, Subject, NUMBER_OF_ACTIONS,
+    NUMBER_OF_PERMISSIONS,
+};
 use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
-
-const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum (small but might change)
-const NUMBER_OF_PERMISSIONS: usize = 2; //size of permission enum (fixed)
 
 pub struct PolicyForSubject(Vec<Vec<KeTreeRule>>); //vec of actions over vec of permission for tree of ke for this
 pub struct PolicyMap(pub FxHashMap<i32, PolicyForSubject>); //index of subject_map instead of subject
@@ -55,7 +55,7 @@ impl PolicyEnforcer {
                     let subject_map = policy_information.subject_map;
                     let mut main_policy: PolicyMap = PolicyMap(FxHashMap::default());
                     //first initialize the vector of vectors (needed to maintain the indices)
-                    for (_, index) in &subject_map {
+                    for index in subject_map.values() {
                         let mut rule: PolicyForSubject = PolicyForSubject(Vec::new());
                         for _i in 0..NUMBER_OF_ACTIONS {
                             let mut action_rule: Vec<KeTreeRule> = Vec::new();
@@ -71,7 +71,6 @@ impl PolicyEnforcer {
 
                     for rule in policy_information.policy_rules {
                         //add key-expression values to the ketree as per the policy rules
-
                         let index = subject_map.get(&rule.subject).unwrap();
                         main_policy.0.get_mut(index).unwrap().0[rule.action as usize]
                             [rule.permission as usize]

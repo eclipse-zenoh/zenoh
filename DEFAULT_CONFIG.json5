@@ -392,6 +392,18 @@
             "Get"
           ],
           "permission": "Allow"
+        },
+        {
+          "interface": [
+            "lo0"
+          ],
+          "key_expr": [
+            "test/thr"
+          ],
+          "action": [
+            "Sub"
+          ],
+          "permission": "Allow"
         }
       ]
     }

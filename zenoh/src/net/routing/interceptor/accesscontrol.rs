@@ -124,10 +124,31 @@ impl InterceptorTrait for IngressAclEnforcer {
             ..
         }) = &ctx.msg.body
         {
-            // let action = Action::Put;
             let mut decision = false;
             for subject in interface_list {
                 match self.pe.policy_decision_point(*subject, Action::Put, kexpr) {
+                    Ok(val) => {
+                        if val {
+                            decision = val;
+                            break;
+                        }
+                    }
+                    Err(_) => return None,
+                }
+            }
+            if !decision {
+                return None;
+            }
+        }
+
+        if let NetworkBody::Request(Request {
+            payload: RequestBody::Query(_),
+            ..
+        }) = &ctx.msg.body
+        {
+            let mut decision = false;
+            for subject in interface_list {
+                match self.pe.policy_decision_point(*subject, Action::Get, kexpr) {
                     Ok(val) => {
                         if val {
                             decision = val;
@@ -178,7 +199,6 @@ impl InterceptorTrait for EgressAclEnforcer {
                 return None;
             }
         }
-
         Some(ctx)
     }
 }

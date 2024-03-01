@@ -132,6 +132,8 @@ pub enum Action {
     Get,
     Reply,
 }
+pub const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum
+pub const NUMBER_OF_PERMISSIONS: usize = 2; //size of permission enum
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
