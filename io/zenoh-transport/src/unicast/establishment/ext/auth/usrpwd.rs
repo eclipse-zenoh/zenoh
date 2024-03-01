@@ -80,7 +80,7 @@ impl AuthUsrPwd {
             // I.e.: one <user>:<password> entry per line
             for l in content.lines() {
                 let line = l.trim();
-            	if line.is_empty() {
+                if line.is_empty() {
                     continue;
                 }
                 let idx = line.find(':').ok_or_else(|| {
