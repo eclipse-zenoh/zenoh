@@ -31,7 +31,7 @@ use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
     TCP_LOCATOR_PREFIX,
 };
-use tokio::net::{TcpSocket, TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
 pub struct LinkUnicastTcp {
     // The underlying socket as returned from the async-std library
@@ -222,7 +222,8 @@ impl LinkManagerUnicastTcp {
 
         // Build a TcpStream from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
-        let stream = socket.connect(*dst_addr)
+        let stream = socket
+            .connect(*dst_addr)
             .await
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
 
@@ -233,7 +234,6 @@ impl LinkManagerUnicastTcp {
         let dst_addr = stream
             .peer_addr()
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
-
 
         Ok((stream, src_addr, dst_addr))
     }
@@ -253,10 +253,10 @@ impl LinkManagerUnicastTcp {
         // Build a TcpListener from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
         socket.set_reuseaddr(true)?;
-        socket.bind(*addr)
-            .map_err(|e| zerror!("{}: {}", addr, e))?;
+        socket.bind(*addr).map_err(|e| zerror!("{}: {}", addr, e))?;
         // backlog (the maximum number of pending connections are queued): 1024
-        let listener = socket.listen(1024)
+        let listener = socket
+            .listen(1024)
             .map_err(|e| zerror!("{}: {}", addr, e))?;
 
         let local_addr = listener

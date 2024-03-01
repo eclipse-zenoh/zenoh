@@ -753,15 +753,12 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 
 #[cfg(feature = "transport_tcp")]
 #[cfg(target_os = "linux")]
-#[test]
 #[should_panic(expected = "TimeoutError")]
-fn openclose_tcp_only_connect_with_interface_restriction() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_tcp_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
 
     let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13001).parse().unwrap();
 
@@ -770,24 +767,21 @@ fn openclose_tcp_only_connect_with_interface_restriction() {
         .unwrap();
 
     // should not connect to local interface and external address
-    task::block_on(openclose_transport(
+    openclose_transport(
         &listen_endpoint,
         &connect_endpoint,
         false,
-    ));
+    ).await;
 }
 
 #[cfg(feature = "transport_tcp")]
 #[cfg(target_os = "linux")]
-#[test]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
-fn openclose_tcp_only_listen_with_interface_restriction() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_tcp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
 
     let listen_endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], 13002)
         .parse()
@@ -796,24 +790,21 @@ fn openclose_tcp_only_listen_with_interface_restriction() {
     let connect_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13002).parse().unwrap();
 
     // should not connect to local interface and external address
-    task::block_on(openclose_transport(
+    openclose_transport(
         &listen_endpoint,
         &connect_endpoint,
         false,
-    ));
+    ).await;
 }
 
 #[cfg(feature = "transport_udp")]
 #[cfg(target_os = "linux")]
-#[test]
 #[should_panic(expected = "TimeoutError")]
-fn openclose_udp_only_connect_with_interface_restriction() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_udp_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
 
     let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13003).parse().unwrap();
 
@@ -822,25 +813,21 @@ fn openclose_udp_only_connect_with_interface_restriction() {
         .unwrap();
 
     // should not connect to local interface and external address
-    task::block_on(openclose_transport(
+    openclose_transport(
         &listen_endpoint,
         &connect_endpoint,
         false,
-    ));
+    ).await;
 }
 
 #[cfg(feature = "transport_udp")]
 #[cfg(target_os = "linux")]
-#[test]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
-fn openclose_udp_onlyi_listen_with_interface_restriction() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_udp_onlyi_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     let listen_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13004)
         .parse()
         .unwrap();
@@ -848,9 +835,9 @@ fn openclose_udp_onlyi_listen_with_interface_restriction() {
     let connect_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13004).parse().unwrap();
 
     // should not connect to local interface and external address
-    task::block_on(openclose_transport(
+    openclose_transport(
         &listen_endpoint,
         &connect_endpoint,
         false,
-    ));
+    ).await;
 }

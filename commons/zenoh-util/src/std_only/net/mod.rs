@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::net::{IpAddr, Ipv6Addr};
+use tokio::net::{TcpSocket, UdpSocket};
 use zenoh_core::zconfigurable;
 #[cfg(unix)]
 use zenoh_result::zerror;
 use zenoh_result::{bail, ZResult};
-use tokio::net::{TcpSocket, UdpSocket};
 
 zconfigurable! {
     static ref WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE: u32 = 8192;

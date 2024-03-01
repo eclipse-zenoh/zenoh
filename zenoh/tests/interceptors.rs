@@ -68,7 +68,11 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
     config_sub
         .insert_json5("listen/endpoints", r#"["tcp/127.0.0.1:38446"]"#)
         .unwrap();
-    config_sub.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config_sub
+        .scouting
+        .multicast
+        .set_enabled(Some(false))
+        .unwrap();
     let zenoh_sub = zenoh::open(config_sub).res().unwrap();
 
     let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
@@ -101,7 +105,11 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
     config_pub
         .insert_json5("connect/endpoints", r#"["tcp/127.0.0.1:38446"]"#)
         .unwrap();
-    config_pub.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config_pub
+        .scouting
+        .multicast
+        .set_enabled(Some(false))
+        .unwrap();
     let zenoh_pub = zenoh::open(config_pub).res().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples_by_keyexp/r100")
