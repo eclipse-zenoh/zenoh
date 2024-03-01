@@ -267,7 +267,7 @@ mod tests {
                 .res_async())
             .unwrap();
 
-            let bs = unsafe { sbuf.as_mut_slice() };
+            let bs = unsafe { sbuf.as_mut() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let message: NetworkMessage = Push {
@@ -313,7 +313,7 @@ mod tests {
                 .res_async())
             .unwrap();
 
-            let bs = unsafe { sbuf.as_mut_slice() };
+            let bs = unsafe { sbuf.as_mut() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let message: NetworkMessage = Push {

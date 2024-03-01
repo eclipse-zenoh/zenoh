@@ -32,6 +32,7 @@ pub trait ZSliceBuffer: Send + Sync + fmt::Debug {
     fn as_slice(&self) -> &[u8];
     fn as_mut_slice(&mut self) -> &mut [u8];
     fn as_any(&self) -> &dyn Any;
+    fn unique(&self) -> bool;
 }
 
 impl ZSliceBuffer for Vec<u8> {
@@ -43,6 +44,9 @@ impl ZSliceBuffer for Vec<u8> {
     }
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn unique(&self) -> bool {
+        true
     }
 }
 
@@ -56,6 +60,9 @@ impl ZSliceBuffer for Box<[u8]> {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn unique(&self) -> bool {
+        true
+    }
 }
 
 impl<const N: usize> ZSliceBuffer for [u8; N] {
@@ -67,6 +74,9 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
     }
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn unique(&self) -> bool {
+        false
     }
 }
 
@@ -142,6 +152,36 @@ impl ZSlice {
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
         crate::unsafe_slice!(self.buf.as_slice(), self.range())
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn try_as_slice_mut(&mut self) -> Option<&mut [u8]> {
+        if self.buf.unique() {
+            let range = self.range();
+            return Arc::get_mut(&mut self.buf)
+                .map(|val_mut| crate::unsafe_slice_mut!(val_mut.as_mut_slice(), range));
+        }
+        None
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn as_slice_mut(&mut self) -> &mut [u8] {
+        // todo: try!
+        //let optimized = self.try_as_slice_mut();
+        //if let Some(val_mut) = optimized {
+        //    return val_mut;
+        //}
+        //drop(optimized);
+
+        // Copy-On-Write!
+        let newbuf = Arc::new(self.as_slice().to_vec());
+        self.buf = newbuf;
+        let range = self.range();
+        Arc::get_mut(&mut self.buf)
+            .map(|val_mut| crate::unsafe_slice_mut!(val_mut.as_mut_slice(), range))
+            .unwrap()
     }
 
     #[must_use]

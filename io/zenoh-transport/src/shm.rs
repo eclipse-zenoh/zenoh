@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,6 +11,7 @@ use std::collections::HashSet;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::collections::HashSet;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::zerror;
@@ -114,17 +113,17 @@ pub trait PartnerShmConfig {
 // rawbuf - usual non-shm buffer
 // shminfo - small SHM info that can be used to mount SHM buffer and get access to it's contents
 // shmbuf - mounted SHM buffer
-// At some places we do conversion:
+// On RX and TX we need to do the following conversion:
 trait MapShm {
-    // 1. RX:
+    // RX:
     // - shminfo -> shmbuf
     // - rawbuf -> rawbuf (no changes)
     fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<()>;
 
-    // 2. TX unicast:
-    //    - shmbuf -> shminfo if partner supports shmbuf's SHM protocol
-    //    - shmbuf -> rawbuf if partner does not support shmbuf's SHM protocol
-    //    - rawbuf -> rawbuf (no changes)
+    // TX:
+    // - shmbuf -> shminfo if partner supports shmbuf's SHM protocol
+    // - shmbuf -> rawbuf if partner does not support shmbuf's SHM protocol
+    // - rawbuf -> rawbuf (no changes)
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &Option<ShmCfg>,
@@ -287,7 +286,7 @@ pub fn shmbuf_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
         .write(&mut writer, &shmb.info)
         .map_err(|e| zerror!("{:?}", e))?;
     // Increase the reference count so to keep the SharedMemoryBuf valid
-    shmb.inc_ref_count();
+    unsafe { shmb.inc_ref_count() };
     // Replace the content of the slice
     let mut zslice: ZSlice = info.into();
     zslice.kind = ZSliceKind::ShmPtr;

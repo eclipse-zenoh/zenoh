@@ -221,6 +221,7 @@ mod tests {
             zasync_executor_init!();
             let _ = env_logger::try_init();
 
+            // Construct an SHM backend
             let backend = {
                 // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
                 // The initialisation of SHM backend is completely backend-specific and user is free to do

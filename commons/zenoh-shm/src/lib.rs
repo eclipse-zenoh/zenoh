@@ -104,10 +104,10 @@ impl SharedMemoryBufInfo {
 /// A zenoh buffer in shared memory.
 #[non_exhaustive]
 pub struct SharedMemoryBuf {
-    pub header: OwnedHeaderDescriptor,
-    pub buf: AtomicPtr<u8>,
+    pub(crate) header: OwnedHeaderDescriptor,
+    pub(crate) buf: AtomicPtr<u8>,
     pub info: SharedMemoryBufInfo,
-    pub watchdog: Arc<ConfirmedDescriptor>,
+    pub(crate) watchdog: Arc<ConfirmedDescriptor>,
 }
 
 impl std::fmt::Debug for SharedMemoryBuf {
@@ -137,21 +137,28 @@ impl SharedMemoryBuf {
         self.header.header().refcount.load(Ordering::SeqCst)
     }
 
-    pub fn inc_ref_count(&self) {
+    /// Increments buffer's reference count
+    ///
+    /// # Safety
+    /// You should understand what you are doing, as overestimation
+    /// of the reference counter can lead to memory being stalled until
+    /// recovered by watchdog subsystem or forcely deallocated
+    pub unsafe fn inc_ref_count(&self) {
         self.header.header().refcount.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub fn dec_ref_count(&self) {
-        self.header.header().refcount.fetch_sub(1, Ordering::SeqCst);
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
+    // PRIVATE:
+    fn as_slice(&self) -> &[u8] {
         log::trace!(
             "SharedMemoryBuf::as_slice() == len = {:?}",
             self.info.data_len
         );
         let bp = self.buf.load(Ordering::SeqCst);
         unsafe { std::slice::from_raw_parts(bp, self.info.data_len) }
+    }
+
+    unsafe fn dec_ref_count(&self) {
+        self.header.header().refcount.fetch_sub(1, Ordering::SeqCst);
     }
 
     /// Gets a mutable slice.
@@ -165,7 +172,7 @@ impl SharedMemoryBuf {
     ///
     /// In short, whilst this operation is marked as unsafe, you are safe if you can
     /// guarantee that your in applications only one process at the time will actually write.
-    pub unsafe fn as_mut_slice(&mut self) -> &mut [u8] {
+    unsafe fn as_mut_slice_inner(&mut self) -> &mut [u8] {
         let bp = self.buf.load(Ordering::SeqCst);
         std::slice::from_raw_parts_mut(bp, self.info.data_len)
     }
@@ -173,13 +180,17 @@ impl SharedMemoryBuf {
 
 impl Drop for SharedMemoryBuf {
     fn drop(&mut self) {
-        self.dec_ref_count();
+        // # Safety
+        // obviouly, we need to decrement refcount when dropping SharedMemoryBuf instance
+        unsafe { self.dec_ref_count() };
     }
 }
 
 impl Clone for SharedMemoryBuf {
     fn clone(&self) -> Self {
-        self.inc_ref_count();
+        // # Safety
+        // obviouly, we need to decrement refcount when cloning SharedMemoryBuf instance
+        unsafe { self.inc_ref_count() };
         let bp = self.buf.load(Ordering::SeqCst);
         SharedMemoryBuf {
             header: self.header.clone(),
@@ -200,7 +211,7 @@ impl AsRef<[u8]> for SharedMemoryBuf {
 
 impl AsMut<[u8]> for SharedMemoryBuf {
     fn as_mut(&mut self) -> &mut [u8] {
-        unsafe { self.as_mut_slice() }
+        unsafe { self.as_mut_slice_inner() }
     }
 }
 
@@ -213,5 +224,8 @@ impl ZSliceBuffer for SharedMemoryBuf {
     }
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn unique(&self) -> bool {
+        self.header.header().refcount.load(Ordering::Relaxed) == 1
     }
 }
