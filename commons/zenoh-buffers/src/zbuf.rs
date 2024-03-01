@@ -19,7 +19,7 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{string::FromUtf8Error, sync::Arc, vec::Vec};
 use core::{cmp, iter, mem, num::NonZeroUsize, ops::RangeBounds, ptr};
 use zenoh_collections::SingleOrVec;
 
@@ -74,6 +74,7 @@ impl ZBuf {
         }
         self.insert(start, replacement);
     }
+
     fn remove(&mut self, mut start: usize, mut end: usize) {
         assert!(start <= end);
         assert!(end <= self.len());
@@ -102,6 +103,7 @@ impl ZBuf {
         let drain_end = end_slice_idx + (end_slice.start >= end_slice.end) as usize;
         self.slices.drain(drain_start..drain_end);
     }
+
     fn insert(&mut self, mut at: usize, slice: &[u8]) {
         if slice.is_empty() {
             return;
@@ -208,6 +210,21 @@ where
         zbuf
     }
 }
+
+impl From<String> for ZBuf {
+    fn from(t: String) -> Self {
+        Self::from(t.into_bytes())
+    }
+}
+
+impl TryFrom<ZBuf> for String {
+    type Error = FromUtf8Error;
+
+    fn try_from(value: ZBuf) -> Result<Self, Self::Error> {
+        String::from_utf8(value.contiguous().to_vec())
+    }
+}
+
 // Reader
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ZBufPos {

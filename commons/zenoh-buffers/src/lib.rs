@@ -101,7 +101,8 @@ pub mod buffer {
             let mut slices = self.slices();
             match slices.len() {
                 0 => Cow::Borrowed(b""),
-                1 => Cow::Borrowed(slices.next().unwrap()),
+                // SAFETY: it's safe to use unwrap_unchecked() beacuse we are explicitly checking the length is 1.
+                1 => Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() }),
                 _ => Cow::Owned(slices.fold(Vec::new(), |mut acc, it| {
                     acc.extend(it);
                     acc
