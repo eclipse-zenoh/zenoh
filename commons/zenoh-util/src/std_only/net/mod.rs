@@ -437,10 +437,10 @@ pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) ->
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: Option<&str>) -> ZResult<()> {
-    bail!("Binding the socket {socket:?} to the interface {iface:?} is not supported on macOS and Windows");
+    log::warn!("Binding the socket {socket:?} to the interface {iface:?} is not supported on macOS and Windows");
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) -> ZResult<()> {
-    bail!("Binding the socket {socket:?} to the interface {iface:?} is not supported on macOS and Windows");
+    log::warn!("Binding the socket {socket:?} to the interface {iface:?} is not supported on macOS and Windows");
 }
