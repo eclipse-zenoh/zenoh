@@ -79,14 +79,18 @@ impl AuthUsrPwd {
             //      usr3:pwd3
             // I.e.: one <user>:<password> entry per line
             for l in content.lines() {
-                let idx = l.find(':').ok_or_else(|| {
+                let line = l.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let idx = line.find(':').ok_or_else(|| {
                     zerror!("{S} Invalid user-password dictionary file: invalid format.")
                 })?;
-                let user = l[..idx].as_bytes().to_owned();
+                let user = line[..idx].trim().as_bytes().to_owned();
                 if user.is_empty() {
                     bail!("{S} Invalid user-password dictionary file: empty user.")
                 }
-                let password = l[idx + 1..].as_bytes().to_owned();
+                let password = line[idx + 1..].trim().as_bytes().to_owned();
                 if password.is_empty() {
                     bail!("{S} Invalid user-password dictionary file: empty password.")
                 }
