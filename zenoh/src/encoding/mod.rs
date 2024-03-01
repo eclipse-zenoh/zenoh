@@ -21,24 +21,35 @@ use zenoh_result::ZResult;
 
 /// Trait to create, resolve, parse an [`Encoding`] mapping.
 pub trait EncodingMapping {
+    // The minimum prefix used by the EncodingMapping implementer
+    const MIN: EncodingPrefix;
+    // The maximum prefix used by the EncodingMapping implementer
+    const MAX: EncodingPrefix;
+
     /// Map a numerical prefix to its string representation.
-    fn prefix_to_str(&self, e: EncodingPrefix) -> &str;
+    fn prefix_to_str(&self, e: EncodingPrefix) -> Option<Cow<'_, str>>;
     /// Map a string to a known numerical prefix ID.
-    fn str_to_prefix(&self, s: &str) -> EncodingPrefix;
+    fn str_to_prefix(&self, s: &str) -> Option<EncodingPrefix>;
     /// Parse a string into a valid [`Encoding`].
     fn parse<S>(&self, s: S) -> ZResult<Encoding>
     where
         S: Into<Cow<'static, str>>;
-    fn to_str<'a>(&self, e: &'a Encoding) -> Cow<'a, str>;
+    fn to_str(&self, e: &Encoding) -> Cow<'_, str>;
 }
+
+pub trait ZEncoding {}
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Encoder<T> {
+    type Output;
+
     /// The implementer should take care of serializing the type `T` and set the proper [`Encoding`].
-    fn encode(self, t: T) -> Value;
+    fn encode(self, t: T) -> Self::Output;
 }
 
 pub trait Decoder<T> {
+    type Error;
+
     /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
-    fn decode(self, t: &Value) -> ZResult<T>;
+    fn decode(self, t: &Value) -> Result<T, Self::Error>;
 }

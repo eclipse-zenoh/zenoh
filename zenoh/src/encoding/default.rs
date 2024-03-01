@@ -16,30 +16,24 @@ use crate::{
     value::Value,
     Sample,
 };
-use phf::phf_ordered_map;
 use std::{borrow::Cow, sync::Arc};
 use zenoh_buffers::{buffer::SplitBuffer, ZBuf, ZSlice};
 use zenoh_protocol::core::{Encoding, EncodingPrefix};
-use zenoh_result::ZResult;
+use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
 
-/// Default encoding mapping used by the [`DefaultEncoding`]. Please note that Zenoh does not
-/// impose any encoding mapping and users are free to use any mapping they like. The mapping
-/// here below is provided for user convenience and does its best to cover the most common
-/// cases. To implement a custom mapping refer to [`EncodingMapping`] trait.
-///
-/// For compatibility purposes Zenoh reserves any prefix value from `0` to `1023` included.
-/// Any application is free to use any value from `1024` to `65535`.
-#[derive(Clone, Copy, Debug)]
-pub struct DefaultEncodingMapping;
+use super::ZEncoding;
 
-impl DefaultEncodingMapping {
+pub mod prefix {
+    use phf::phf_ordered_map;
+    use zenoh_protocol::core::EncodingPrefix;
+
+    // - Primitives types supported in all Zenoh bindings.
+
     /// Unspecified [`EncodingPrefix`].
     /// Note that an [`Encoding`] could have an empty [prefix](`Encoding::prefix`) and a non-empty [suffix](`Encoding::suffix`).
     pub const EMPTY: EncodingPrefix = 0;
-
-    // - Primitives types supported in all Zenoh bindings
     /// A stream of bytes.
     pub const APPLICATION_OCTET_STREAM: EncodingPrefix = 1;
     /// A signed integer.
@@ -48,12 +42,13 @@ impl DefaultEncodingMapping {
     pub const ZENOH_UINT: EncodingPrefix = 3;
     /// A float.
     pub const ZENOH_FLOAT: EncodingPrefix = 4;
-    /// A boolean. `0` is `false`, `1` is `true`. Other values are invalid.
+    /// A boolean.
     pub const ZENOH_BOOL: EncodingPrefix = 5;
-    /// A UTF-8 encoded string.
+    /// A string.
     pub const TEXT_PLAIN: EncodingPrefix = 6;
 
     // - Advanced types supported in some Zenoh bindings.
+
     /// A JSON intended to be consumed by an application.
     pub const APPLICATION_JSON: EncodingPrefix = 7;
     /// A JSON intended to be human readable.
@@ -61,43 +56,44 @@ impl DefaultEncodingMapping {
 
     // - 9-15 are reserved
 
-    // - A list of common prefixes
-    /// An application-specific encoding. Usually a [suffix](`Encoding::suffix`) is provided in the [`Encoding`].
-    pub const APPLICATION_CUSTOM: EncodingPrefix = 16;
-    /// A Common Data Representation (CDR)-encoded data. A [suffix](`Encoding::suffix`) may be provided in the [`Encoding`] to specify the concrete type.
-    pub const APPLICATION_CDR: EncodingPrefix = 17;
+    // - List of known mapping. Encoding capabilities may not be provided at all.
 
-    // - 18-58 are reserved
+    /// A Common Data Representation (CDR)-encoded data. A [suffix](`Encoding::suffix`) may be provided in the [`Encoding`] to specify the concrete type.
+    pub const APPLICATION_CDR: EncodingPrefix = 16;
+
+    // - 17-63 are reserved
+    // - The highest prefix value to fit in 1 byte on the wire is 63.
+    // - 64-1014 are reserved.
+
+    // - A list of known prefixes. Encoding capabilities may not be provided at all.
 
     /// Common prefix for Zenoh-defined types.
-    pub const ZENOH: EncodingPrefix = 58;
+    pub const ZENOH: EncodingPrefix = 1_014;
 
-    // - A list of most common registries from IANA.
-    // - The highest prefix value to fit in 1 byte on the wire is 63.
+    // - A list of IANA registries.
+
     /// Common prefix for *application* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#application).
-    pub const APPLICATION: EncodingPrefix = 59;
+    pub const APPLICATION: EncodingPrefix = 1_015;
     /// Common prefix for *audio* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#audio).
-    pub const AUDIO: EncodingPrefix = 60;
-    /// Common prefix for *image* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#image).
-    pub const IMAGE: EncodingPrefix = 61;
-    /// Common prefix for *text* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#text).
-    pub const TEXT: EncodingPrefix = 62;
-    /// Common prefix for *video* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#video).
-    pub const VIDEO: EncodingPrefix = 63;
-
-    // - 64-1019 are reserved.
-
-    // - A list of least common registries from IANA.
+    pub const AUDIO: EncodingPrefix = 1_016;
     /// Common prefix for *font* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#font).
-    pub const FONT: EncodingPrefix = 1_020;
+    pub const FONT: EncodingPrefix = 1_017;
+    /// Common prefix for *image* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#image).
+    pub const IMAGE: EncodingPrefix = 1_018;
     /// Common prefix for *message* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#message).
-    pub const MESSAGE: EncodingPrefix = 1_021;
+    pub const MESSAGE: EncodingPrefix = 1_019;
     /// Common prefix for *model* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#model).
-    pub const MODEL: EncodingPrefix = 1_022;
+    pub const MODEL: EncodingPrefix = 1_020;
     /// Common prefix for *multipart* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#multipart).
-    pub const MULTIPART: EncodingPrefix = 1_023;
+    pub const MULTIPART: EncodingPrefix = 1_021;
+    /// Common prefix for *text* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#text).
+    pub const TEXT: EncodingPrefix = 1_022;
+    /// Common prefix for *video* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#video).
+    pub const VIDEO: EncodingPrefix = 1_023;
 
     // - 1024-65535 are free to use.
+
+    // - End encoding prefix definition
 
     /// A perfect hashmap for fast lookup of [`EncodingPrefix`] to string represenation.
     pub(super) const KNOWN_PREFIX: phf::OrderedMap<EncodingPrefix, &'static str> = phf_ordered_map! {
@@ -113,20 +109,18 @@ impl DefaultEncodingMapping {
         7u16 =>  "application/json",
         8u16 =>  "text/json",
         // - 9-15 are reserved.
-        16u16 =>  "application/custom",
-        17u16 =>  "application/cdr",
-        // - 18-58 are reserved.
-        58u16 => "zenoh/",
-        59u16 => "application/",
-        60u16 => "audio/",
-        61u16 => "image/",
-        62u16 => "text/",
-        63u16 => "video/",
-        // - 64-1019 are reserved.
-        1_020u16 => "font/",
-        1_021u16 => "message/",
-        1_022u16 => "model/",
-        1_023u16 => "multipart/",
+        16u16 =>  "application/cdr",
+        // - 17-1019 are reserved.
+        1_014u16 => "zenoh/",
+        1_015u16 => "application/",
+        1_016u16 => "audio/",
+        1_017u16 => "font/",
+        1_018u16 => "image/",
+        1_019u16 => "message/",
+        1_020u16 => "model/",
+        1_021u16 => "multipart/",
+        1_022u16 => "text/",
+        1_023u16 => "video/",
         // - 1024-65535 are free to use.
     };
 
@@ -144,40 +138,110 @@ impl DefaultEncodingMapping {
         "application/json" =>  7u16,
         "text/json" =>  8u16,
         // - 9-15 are reserved.
-        "application/custom" =>  16u16,
-        "application/cdr" =>  17u16,
-        // - 18-58 are reserved.
-        "zenoh/" => 58u16,
-        "application/" => 59u16,
-        "audio/" => 60u16,
-        "image/" => 61u16,
-        "text/" => 62u16,
-        "video/" => 63u16,
-        // - 64-1019 are reserved.
-        "font/" => 1_020u16,
-        "message/" => 1_021u16,
-        "model/" => 1_022u16,
-        "multipart/" => 1_023u16,
+        "application/cdr" =>  16u16,
+        // - 17-1019 are reserved.
+        "zenoh/" => 1_014u16,
+        "application/" => 1_015u16,
+        "audio/" => 1_016u16,
+        "font/" => 1_017u16,
+        "image/" => 1_018u16,
+        "message/" => 1_019u16,
+        "model/" => 1_020u16,
+        "multipart/" => 1_021u16,
+        "text/" => 1_022u16,
+        "video/" => 1_023u16,
         // - 1024-65535 are free to use.
     };
 }
 
-impl EncodingMapping for DefaultEncodingMapping {
+/// Default encoding mapping used by the [`DefaultEncoding`]. Please note that Zenoh does not
+/// impose any encoding mapping and users are free to use any mapping they like. The mapping
+/// here below is provided for user convenience and does its best to cover the most common
+/// cases. To implement a custom mapping refer to [`EncodingMapping`] trait.
+
+/// Default [`Encoding`] provided with Zenoh to facilitate the encoding and decoding
+/// of [`Value`]s in the Rust API. Please note that Zenoh does not impose any
+/// encoding and users are free to use any encoder they like. [`DefaultEncoding`]
+/// is simply provided as convenience to the users.
+
+///
+/// For compatibility purposes Zenoh reserves any prefix value from `0` to `1023` included.
+/// Any application is free to use any value from `1024` to `65535`.
+#[derive(Clone, Copy, Debug)]
+pub struct DefaultEncoding;
+
+impl DefaultEncoding {
+    // - Primitives types supported in all Zenoh bindings
+
+    /// See [`DefaultEncodingMapping::EMPTY`].
+    pub const EMPTY: Encoding = Encoding::new(prefix::EMPTY);
+    /// An application-specific stream of bytes.
+    pub const APPLICATION_OCTET_STREAM: Encoding = Encoding::new(prefix::APPLICATION_OCTET_STREAM);
+    /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, or 64bit.
+    /// Binary reprensentation uses two's complement.
+    pub const ZENOH_INT: Encoding = Encoding::new(prefix::ZENOH_INT);
+    /// A VLE-encoded little-endian unsigned integer. Either 8bit, 16bit, 32bit, or 64bit.
+    pub const ZENOH_UINT: Encoding = Encoding::new(prefix::ZENOH_UINT);
+    /// A VLE-encoded float. Either little-endian 32bit or 64bit.
+    /// Binary representation uses *IEEE 754-2008* *binary32* or *binary64*, respectively.
+    pub const ZENOH_FLOAT: Encoding = Encoding::new(prefix::ZENOH_FLOAT);
+    /// A boolean. `0` is `false`, `1` is `true`. Other values are invalid.
+    pub const ZENOH_BOOL: Encoding = Encoding::new(prefix::ZENOH_BOOL);
+    /// A UTF-8 encoded string.
+    pub const TEXT_PLAIN: Encoding = Encoding::new(prefix::TEXT_PLAIN);
+
+    // - Advanced types supported in some Zenoh bindings.
+
+    /// A JSON intended to be consumed by an application.
+    pub const APPLICATION_JSON: Encoding = Encoding::new(prefix::APPLICATION_JSON);
+    /// A JSON intended to be human readable.
+    pub const TEXT_JSON: Encoding = Encoding::new(prefix::TEXT_JSON);
+
+    // - List of known mapping. Encoding capabilities may not be provided at all.
+
+    /// A Common Data Representation (CDR)-encoded data. A [suffix](`Encoding::suffix`) may be provided in the [`Encoding`] to specify the concrete type.
+    pub const APPLICATION_CDR: Encoding = Encoding::new(prefix::APPLICATION_CDR);
+
+    // - A list of known prefixes.
+
+    /// Common prefix for Zenoh-defined types.
+    pub const ZENOH: Encoding = Encoding::new(prefix::ZENOH);
+
+    // - A list of IANA registries.
+
+    /// Common prefix for *application* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#application).
+    pub const APPLICATION: Encoding = Encoding::new(prefix::APPLICATION);
+    /// Common prefix for *audio* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#audio).
+    pub const AUDIO: Encoding = Encoding::new(prefix::AUDIO);
+    /// Common prefix for *font* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#font).
+    pub const FONT: Encoding = Encoding::new(prefix::FONT);
+    /// Common prefix for *image* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#image).
+    pub const IMAGE: Encoding = Encoding::new(prefix::IMAGE);
+    /// Common prefix for *message* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#message).
+    pub const MESSAGE: Encoding = Encoding::new(prefix::MESSAGE);
+    /// Common prefix for *model* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#model).
+    pub const MODEL: Encoding = Encoding::new(prefix::MODEL);
+    /// Common prefix for *multipart* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#multipart).
+    pub const MULTIPART: Encoding = Encoding::new(prefix::MULTIPART);
+    /// Common prefix for *text* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#text).
+    pub const TEXT: Encoding = Encoding::new(prefix::TEXT);
+    /// Common prefix for *video* MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml#video).
+    pub const VIDEO: Encoding = Encoding::new(prefix::VIDEO);
+}
+
+impl EncodingMapping for DefaultEncoding {
+    const MIN: EncodingPrefix = 0;
+    const MAX: EncodingPrefix = 1023;
+
     /// Given a numerical [`EncodingPrefix`] returns its string representation.
-    fn prefix_to_str(&self, p: EncodingPrefix) -> &'static str {
-        match Self::KNOWN_PREFIX.get(&p) {
-            Some(p) => p,
-            None => "unknown",
-        }
+    fn prefix_to_str(&self, p: EncodingPrefix) -> Option<Cow<'static, str>> {
+        prefix::KNOWN_PREFIX.get(&p).map(|s| Cow::Borrowed(*s))
     }
 
     /// Given the string representation of a prefix returns its numerical representation as [`EncodingPrefix`].
     /// [EMPTY](`DefaultEncodingMapping::EMPTY`) is returned in case of unknown mapping.
-    fn str_to_prefix(&self, s: &str) -> EncodingPrefix {
-        match Self::KNOWN_STRING.get(s) {
-            Some(p) => *p,
-            None => Self::EMPTY,
-        }
+    fn str_to_prefix(&self, s: &str) -> Option<EncodingPrefix> {
+        prefix::KNOWN_STRING.get(s).copied()
     }
 
     /// Parse a string into a valid [`Encoding`]. This functions performs the necessary
@@ -188,20 +252,19 @@ impl EncodingMapping for DefaultEncodingMapping {
     where
         S: Into<Cow<'static, str>>,
     {
-        fn _parse(_self: &DefaultEncodingMapping, t: Cow<'static, str>) -> ZResult<Encoding> {
+        fn _parse(_self: &DefaultEncoding, t: Cow<'static, str>) -> ZResult<Encoding> {
             // Check if empty
             if t.is_empty() {
                 return Ok(DefaultEncoding::EMPTY);
             }
             // Try first an exact lookup of the string to prefix
-            let p = _self.str_to_prefix(t.as_ref());
-            if p != DefaultEncodingMapping::EMPTY {
+            if let Some(p) = _self.str_to_prefix(t.as_ref()) {
                 return Ok(Encoding::new(p));
             }
             // Check if the passed string matches one of the known prefixes. It will map the known string
             // prefix to the numerical prefix and carry the remaining part of the string in the suffix.
             // Skip empty string mapping. The order is guaranteed by the phf::OrderedMap.
-            for (s, p) in DefaultEncodingMapping::KNOWN_STRING.entries().skip(1) {
+            for (s, p) in prefix::KNOWN_STRING.entries().skip(1) {
                 if let Some(i) = t.find(s) {
                     let e = Encoding::new(*p);
                     match t {
@@ -218,50 +281,24 @@ impl EncodingMapping for DefaultEncodingMapping {
 
     /// Given an [`Encoding`] returns a full string representation.
     /// It concatenates the string represenation of the encoding prefix with the encoding suffix.
-    fn to_str<'a>(&self, e: &'a Encoding) -> Cow<'a, str> {
-        if e.prefix() == DefaultEncodingMapping::EMPTY {
-            Cow::Borrowed(e.suffix())
-        } else {
-            Cow::Owned(format!("{}{}", self.prefix_to_str(e.prefix()), e.suffix()))
+    fn to_str(&self, e: &Encoding) -> Cow<'_, str> {
+        let (p, s) = (e.prefix(), e.suffix());
+        match self.prefix_to_str(p) {
+            Some(p) if s.is_empty() => p,
+            Some(p) => Cow::Owned(format!("{}{}", p, s)),
+            None => Cow::Owned(format!("unknown({}){}", p, s)),
         }
     }
 }
 
-/// Default [`Encoding`] provided with Zenoh to facilitate the encoding and decoding
-/// of [`Value`]s in the Rust API. Please note that Zenoh does not impose any
-/// encoding and users are free to use any encoder they like. [`DefaultEncoding`]
-/// is simply provided as convenience to the users.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct DefaultEncoding;
-
-impl DefaultEncoding {
-    /// See [`DefaultEncodingMapping::EMPTY`].
-    pub const EMPTY: Encoding = Encoding::new(DefaultEncodingMapping::EMPTY);
-    /// An application-specific stream of bytes.
-    pub const APPLICATION_OCTET_STREAM: Encoding =
-        Encoding::new(DefaultEncodingMapping::APPLICATION_OCTET_STREAM);
-    /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, or 64bit.
-    /// Binary reprensentation uses two's complement.
-    pub const ZENOH_INT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_INT);
-    /// A VLE-encoded little-endian unsigned integer. Either 8bit, 16bit, 32bit, or 64bit.
-    pub const ZENOH_UINT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_UINT);
-    /// See [`DefaultEncodingMapping::ZENOH_FLOAT`].
-    pub const ZENOH_FLOAT: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_FLOAT);
-    /// See [`DefaultEncodingMapping::ZENOH_BOOL`].
-    pub const ZENOH_BOOL: Encoding = Encoding::new(DefaultEncodingMapping::ZENOH_BOOL);
-    pub const TEXT_PLAIN: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_PLAIN);
-    pub const APPLICATION_JSON: Encoding = Encoding::new(DefaultEncodingMapping::APPLICATION_JSON);
-    pub const TEXT_JSON: Encoding = Encoding::new(DefaultEncodingMapping::TEXT_JSON);
-
-    pub const APPLICATION_CUSTOM: Encoding =
-        Encoding::new(DefaultEncodingMapping::APPLICATION_CUSTOM);
-    pub const APPLICATION_CDR: Encoding = Encoding::new(DefaultEncodingMapping::APPLICATION_CDR);
-}
-
 // - Zenoh primitive types encoders/decoders
+impl ZEncoding for DefaultEncoding {}
+
 // Octect stream
 impl Encoder<ZBuf> for DefaultEncoding {
-    fn encode(self, t: ZBuf) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: ZBuf) -> Self::Output {
         Value {
             payload: t,
             encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,
@@ -270,47 +307,58 @@ impl Encoder<ZBuf> for DefaultEncoding {
 }
 
 impl Decoder<ZBuf> for DefaultEncoding {
-    fn decode(self, v: &Value) -> ZResult<ZBuf> {
+    type Error = ZError;
+
+    fn decode(self, v: &Value) -> Result<ZBuf, Self::Error> {
         if v.encoding == DefaultEncoding::APPLICATION_OCTET_STREAM {
             Ok(v.payload.clone())
         } else {
-            Err(zerror!(
+            bail!(
                 "Decode error: invalid encoding. Received '{}', expected '{}'.",
-                DefaultEncodingMapping.to_str(&v.encoding),
-                DefaultEncodingMapping.to_str(&DefaultEncoding::APPLICATION_OCTET_STREAM)
+                DefaultEncoding.to_str(&v.encoding),
+                DefaultEncoding.to_str(&DefaultEncoding::APPLICATION_OCTET_STREAM)
             )
-            .into())
         }
     }
 }
 
 impl Encoder<Vec<u8>> for DefaultEncoding {
-    fn encode(self, t: Vec<u8>) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: Vec<u8>) -> Self::Output {
         Self.encode(ZBuf::from(t))
     }
 }
 
 impl Encoder<&[u8]> for DefaultEncoding {
-    fn encode(self, t: &[u8]) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: &[u8]) -> Self::Output {
         Self.encode(t.to_vec())
     }
 }
 
 impl Decoder<Vec<u8>> for DefaultEncoding {
-    fn decode(self, v: &Value) -> ZResult<Vec<u8>> {
+    type Error = ZError;
+
+    fn decode(self, v: &Value) -> Result<Vec<u8>, Self::Error> {
         let v: ZBuf = Self.decode(v)?;
         Ok(v.contiguous().to_vec())
     }
 }
 
 impl<'a> Encoder<Cow<'a, [u8]>> for DefaultEncoding {
-    fn encode(self, t: Cow<'a, [u8]>) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: Cow<'a, [u8]>) -> Self::Output {
         Self.encode(ZBuf::from(t.to_vec()))
     }
 }
 
 impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoding {
-    fn decode(self, v: &Value) -> ZResult<Cow<'a, [u8]>> {
+    type Error = ZError;
+
+    fn decode(self, v: &Value) -> Result<Cow<'a, [u8]>, Self::Error> {
         let v: Vec<u8> = Self.decode(v)?;
         Ok(Cow::Owned(v))
     }
@@ -318,7 +366,9 @@ impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoding {
 
 // Text plain
 impl Encoder<String> for DefaultEncoding {
-    fn encode(self, s: String) -> Value {
+    type Output = Value;
+
+    fn encode(self, s: String) -> Self::Output {
         Value {
             payload: ZBuf::from(s.into_bytes()),
             encoding: DefaultEncoding::TEXT_PLAIN,
@@ -327,34 +377,41 @@ impl Encoder<String> for DefaultEncoding {
 }
 
 impl Encoder<&str> for DefaultEncoding {
-    fn encode(self, s: &str) -> Value {
+    type Output = Value;
+
+    fn encode(self, s: &str) -> Self::Output {
         Self.encode(s.to_string())
     }
 }
 
 impl Decoder<String> for DefaultEncoding {
-    fn decode(self, v: &Value) -> ZResult<String> {
+    type Error = ZError;
+
+    fn decode(self, v: &Value) -> Result<String, Self::Error> {
         if v.encoding == DefaultEncoding::TEXT_PLAIN {
-            String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
+            String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
         } else {
-            Err(zerror!(
+            bail!(
                 "Decode error: invalid encoding. Received '{}', expected '{}'.",
-                DefaultEncodingMapping.to_str(&v.encoding),
-                DefaultEncodingMapping.to_str(&DefaultEncoding::TEXT_PLAIN)
+                DefaultEncoding.to_str(&v.encoding),
+                DefaultEncoding.to_str(&DefaultEncoding::TEXT_PLAIN)
             )
-            .into())
         }
     }
 }
 
 impl<'a> Encoder<Cow<'a, str>> for DefaultEncoding {
-    fn encode(self, s: Cow<'a, str>) -> Value {
+    type Output = Value;
+
+    fn encode(self, s: Cow<'a, str>) -> Self::Output {
         Self.encode(s.to_string())
     }
 }
 
 impl<'a> Decoder<Cow<'a, str>> for DefaultEncoding {
-    fn decode(self, v: &Value) -> ZResult<Cow<'a, str>> {
+    type Error = ZError;
+
+    fn decode(self, v: &Value) -> Result<Cow<'a, str>, Self::Error> {
         let v: String = Self.decode(v)?;
         Ok(Cow::Owned(v))
     }
@@ -364,7 +421,9 @@ impl<'a> Decoder<Cow<'a, str>> for DefaultEncoding {
 macro_rules! impl_int {
     ($t:ty, $encoding:expr) => {
         impl Encoder<$t> for DefaultEncoding {
-            fn encode(self, t: $t) -> Value {
+            type Output = Value;
+
+            fn encode(self, t: $t) -> Self::Output {
                 let bs = t.to_le_bytes();
                 let end = 1 + bs.iter().rposition(|b| *b != 0).unwrap_or(bs.len() - 1);
                 let v = Value {
@@ -379,41 +438,45 @@ macro_rules! impl_int {
         }
 
         impl Encoder<&$t> for DefaultEncoding {
-            fn encode(self, t: &$t) -> Value {
+            type Output = Value;
+
+            fn encode(self, t: &$t) -> Self::Output {
                 Self.encode(*t)
             }
         }
 
         impl Encoder<&mut $t> for DefaultEncoding {
-            fn encode(self, t: &mut $t) -> Value {
+            type Output = Value;
+
+            fn encode(self, t: &mut $t) -> Self::Output {
                 Self.encode(*t)
             }
         }
 
         impl Decoder<$t> for DefaultEncoding {
-            fn decode(self, v: &Value) -> ZResult<$t> {
+            type Error = ZError;
+
+            fn decode(self, v: &Value) -> Result<$t, Self::Error> {
                 if v.encoding == $encoding {
                     let p = v.payload.contiguous();
                     let mut bs = (0 as $t).to_le_bytes();
                     if p.len() > bs.len() {
-                        return Err(zerror!(
+                        bail!(
                             "Decode error: {} invalid length ({} > {})",
                             std::any::type_name::<$t>(),
                             p.len(),
                             bs.len()
-                        )
-                        .into());
+                        );
                     }
                     bs[..p.len()].copy_from_slice(&p);
                     let t = <$t>::from_le_bytes(bs);
                     Ok(t)
                 } else {
-                    Err(zerror!(
+                    bail!(
                         "Decode error: invalid encoding. Received '{}', expected '{}'.",
-                        DefaultEncodingMapping.to_str(&v.encoding),
-                        DefaultEncodingMapping.to_str(&$encoding)
-                    )
-                    .into())
+                        DefaultEncoding.to_str(&v.encoding),
+                        DefaultEncoding.to_str(&$encoding)
+                    );
                 }
             }
         }
@@ -440,7 +503,9 @@ impl_int!(f64, DefaultEncoding::ZENOH_FLOAT);
 
 // Zenoh bool
 impl Encoder<bool> for DefaultEncoding {
-    fn encode(self, t: bool) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: bool) -> Self::Output {
         // SAFETY: casting a bool into an integer is well-defined behaviour.
         //      0 is false, 1 is true: https://doc.rust-lang.org/std/primitive.bool.html
         Value {
@@ -451,26 +516,25 @@ impl Encoder<bool> for DefaultEncoding {
 }
 
 impl Decoder<bool> for DefaultEncoding {
-    fn decode(self, v: &Value) -> ZResult<bool> {
+    type Error = ZError;
+
+    fn decode(self, v: &Value) -> Result<bool, Self::Error> {
         if v.encoding == DefaultEncoding::ZENOH_BOOL {
             let p = v.payload.contiguous();
             if p.len() != 1 {
-                return Err(
-                    zerror!("Decode error:: bool invalid length ({} != {})", p.len(), 1).into(),
-                );
+                bail!("Decode error:: bool invalid length ({} != {})", p.len(), 1);
             }
             match p[0] {
                 0 => Ok(false),
                 1 => Ok(true),
-                invalid => Err(zerror!("Decode error: bool invalid value ({})", invalid).into()),
+                invalid => bail!("Decode error: bool invalid value ({})", invalid),
             }
         } else {
-            Err(zerror!(
+            bail!(
                 "Decode error: invalid encoding. Received '{}', expected '{}'.",
-                DefaultEncodingMapping.to_str(&v.encoding),
-                DefaultEncodingMapping.to_str(&DefaultEncoding::ZENOH_BOOL)
-            )
-            .into())
+                DefaultEncoding.to_str(&v.encoding),
+                DefaultEncoding.to_str(&DefaultEncoding::ZENOH_BOOL)
+            );
         }
     }
 }
@@ -478,7 +542,9 @@ impl Decoder<bool> for DefaultEncoding {
 // - Zenoh advanced types encoders/decoders
 // JSON
 impl Encoder<&serde_json::Value> for DefaultEncoding {
-    fn encode(self, t: &serde_json::Value) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: &serde_json::Value) -> Self::Output {
         Value {
             payload: ZBuf::from(t.to_string().into_bytes()),
             encoding: DefaultEncoding::APPLICATION_JSON,
@@ -487,13 +553,17 @@ impl Encoder<&serde_json::Value> for DefaultEncoding {
 }
 
 impl Encoder<serde_json::Value> for DefaultEncoding {
-    fn encode(self, t: serde_json::Value) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: serde_json::Value) -> Self::Output {
         Self.encode(&t)
     }
 }
 
 impl Decoder<serde_json::Value> for DefaultEncoding {
-    fn decode(self, v: &Value) -> ZResult<serde_json::Value> {
+    type Error = ZError;
+
+    fn decode(self, v: &Value) -> Result<serde_json::Value, Self::Error> {
         if v.encoding == DefaultEncoding::APPLICATION_JSON
             || v.encoding == DefaultEncoding::TEXT_JSON
         {
@@ -503,13 +573,12 @@ impl Decoder<serde_json::Value> for DefaultEncoding {
             .map_err(|e| zerror!("Decode error: {}", e))?;
             Ok(r)
         } else {
-            Err(zerror!(
+            bail!(
                 "Decode error: invalid encoding. Received '{}', expected '{}' or '{}'.",
-                DefaultEncodingMapping.to_str(&v.encoding),
-                DefaultEncodingMapping.to_str(&DefaultEncoding::APPLICATION_JSON),
-                DefaultEncodingMapping.to_str(&DefaultEncoding::TEXT_JSON)
-            )
-            .into())
+                DefaultEncoding.to_str(&v.encoding),
+                DefaultEncoding.to_str(&DefaultEncoding::APPLICATION_JSON),
+                DefaultEncoding.to_str(&DefaultEncoding::TEXT_JSON)
+            );
         }
     }
 }
@@ -517,7 +586,9 @@ impl Decoder<serde_json::Value> for DefaultEncoding {
 // - Zenoh Rust-specific types encoders/decoders
 // Sample
 impl Encoder<Sample> for DefaultEncoding {
-    fn encode(self, t: Sample) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: Sample) -> Self::Output {
         t.value
     }
 }
@@ -525,7 +596,9 @@ impl Encoder<Sample> for DefaultEncoding {
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl Encoder<Arc<SharedMemoryBuf>> for DefaultEncoding {
-    fn encode(self, t: Arc<SharedMemoryBuf>) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: Arc<SharedMemoryBuf>) -> Self::Output {
         Value {
             payload: t.into(),
             encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,
@@ -535,7 +608,9 @@ impl Encoder<Arc<SharedMemoryBuf>> for DefaultEncoding {
 
 #[cfg(feature = "shared-memory")]
 impl Encoder<Box<SharedMemoryBuf>> for DefaultEncoding {
-    fn encode(self, t: Box<SharedMemoryBuf>) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: Box<SharedMemoryBuf>) -> Self::Output {
         let smb: Arc<SharedMemoryBuf> = t.into();
         Self.encode(smb)
     }
@@ -543,7 +618,9 @@ impl Encoder<Box<SharedMemoryBuf>> for DefaultEncoding {
 
 #[cfg(feature = "shared-memory")]
 impl Encoder<SharedMemoryBuf> for DefaultEncoding {
-    fn encode(self, t: SharedMemoryBuf) -> Value {
+    type Output = Value;
+
+    fn encode(self, t: SharedMemoryBuf) -> Self::Output {
         Value {
             payload: t.into(),
             encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,

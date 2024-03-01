@@ -27,7 +27,7 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::encoding::{DefaultEncodingMapping, EncodingMapping};
+use zenoh::encoding::{DefaultEncoding, EncodingMapping};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
@@ -69,9 +69,7 @@ fn value_to_json(value: Value) -> String {
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let encoding = DefaultEncodingMapping
-        .to_str(&sample.value.encoding)
-        .into_owned();
+    let encoding = DefaultEncoding.to_str(&sample.value.encoding).into_owned();
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
         sample.key_expr.as_str(),
@@ -89,7 +87,7 @@ fn result_to_json(sample: Result<Sample, Value>) -> String {
     match sample {
         Ok(sample) => sample_to_json(sample),
         Err(err) => {
-            let encoding = DefaultEncodingMapping.to_str(&err.encoding).into_owned();
+            let encoding = DefaultEncoding.to_str(&err.encoding).into_owned();
             format!(
                 r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
                 value_to_json(err),
@@ -156,14 +154,12 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
         Ok(reply) => match reply.sample {
             Ok(sample) => response(
                 StatusCode::Ok,
-                DefaultEncodingMapping
-                    .to_str(&sample.value.encoding)
-                    .as_ref(),
+                DefaultEncoding.to_str(&sample.value.encoding).as_ref(),
                 String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
-                DefaultEncodingMapping.to_str(&value.encoding).as_ref(),
+                DefaultEncoding.to_str(&value.encoding).as_ref(),
                 String::from_utf8_lossy(&value.payload.contiguous()).as_ref(),
             ),
         },
@@ -404,7 +400,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         let mut query = req.state().0.get(&selector).consolidation(consolidation);
         if !body.is_empty() {
             let encoding = match req.content_type() {
-                Some(m) => match DefaultEncodingMapping.parse(m.to_string()) {
+                Some(m) => match DefaultEncoding.parse(m.to_string()) {
                     Ok(e) => e,
                     Err(e) => {
                         return Ok(response(
@@ -453,7 +449,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             };
 
             let encoding = match req.content_type() {
-                Some(m) => match DefaultEncodingMapping.parse(m.to_string()) {
+                Some(m) => match DefaultEncoding.parse(m.to_string()) {
                     Ok(e) => e,
                     Err(e) => {
                         return Ok(response(

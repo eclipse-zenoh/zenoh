@@ -11,10 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use phf::phf_ordered_map;
 use std::borrow::Cow;
-use zenoh::encoding::{DefaultEncodingMapping, Encoding, EncodingMapping, EncodingPrefix};
+use zenoh::encoding::{Encoding, EncodingMapping, EncodingPrefix};
 use zenoh_result::ZResult;
+
+use super::ExtendedEncodingMapping;
 
 /// Encoding mapping used by the [`IanaEncoding`]. It has been generated starting from the
 /// MIME types defined by [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml).
@@ -22,9 +23,14 @@ use zenoh_result::ZResult;
 #[derive(Clone, Copy, Debug)]
 pub struct IanaEncodingMapping;
 
+// Extended Encoding Mapping
+pub type ExtendedIanaEncodingMapping = ExtendedEncodingMapping<IanaEncodingMapping>;
+
 // Start from 1024 - non-reserved prefixes.
-impl IanaEncodingMapping {
-    pub const EMPTY: EncodingPrefix = DefaultEncodingMapping::EMPTY;
+mod prefix {
+    use phf::phf_ordered_map;
+    use zenoh::encoding::EncodingPrefix;
+
     pub const APPLICATION_1D_INTERLEAVED_PARITYFEC: EncodingPrefix = 1024;
     pub const APPLICATION_3GPDASH_QOE_REPORT_XML: EncodingPrefix = 1025;
     pub const APPLICATION_3GPP_IMS_XML: EncodingPrefix = 1026;
@@ -2190,7 +2196,6 @@ impl IanaEncodingMapping {
     pub const VIDEO_VND_YOUTUBE_YT: EncodingPrefix = 3120;
 
     pub(super) const KNOWN_PREFIX: phf::OrderedMap<EncodingPrefix, &'static str> = phf_ordered_map! {
-        0u16 => "empty",
         1024u16 => "application/1d-interleaved-parityfec",
         1025u16 => "application/3gpdash-qoe-report+xml",
         1026u16 => "application/3gpp-ims+xml",
@@ -4291,7 +4296,6 @@ impl IanaEncodingMapping {
     };
 
     pub(super) const KNOWN_STRING: phf::OrderedMap<&'static str, EncodingPrefix> = phf_ordered_map! {
-        "empty" => 0u16,
         "application/1d-interleaved-parityfec" => 1024u16,
         "application/3gpdash-qoe-report+xml" => 1025u16,
         "application/3gpp-ims+xml" => 1026u16,
@@ -6392,39 +6396,3414 @@ impl IanaEncodingMapping {
     };
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct IanaEncoding;
+
+impl IanaEncoding {
+    pub const EMPTY: Encoding = Encoding::empty();
+    pub const APPLICATION_1D_INTERLEAVED_PARITYFEC: Encoding =
+        Encoding::new(prefix::APPLICATION_1D_INTERLEAVED_PARITYFEC);
+    pub const APPLICATION_3GPDASH_QOE_REPORT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_3GPDASH_QOE_REPORT_XML);
+    pub const APPLICATION_3GPP_IMS_XML: Encoding = Encoding::new(prefix::APPLICATION_3GPP_IMS_XML);
+    pub const APPLICATION_3GPPHAL_JSON: Encoding = Encoding::new(prefix::APPLICATION_3GPPHAL_JSON);
+    pub const APPLICATION_3GPPHALFORMS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_3GPPHALFORMS_JSON);
+    pub const APPLICATION_A2L: Encoding = Encoding::new(prefix::APPLICATION_A2L);
+    pub const APPLICATION_AML: Encoding = Encoding::new(prefix::APPLICATION_AML);
+    pub const APPLICATION_ATF: Encoding = Encoding::new(prefix::APPLICATION_ATF);
+    pub const APPLICATION_ATFX: Encoding = Encoding::new(prefix::APPLICATION_ATFX);
+    pub const APPLICATION_ATXML: Encoding = Encoding::new(prefix::APPLICATION_ATXML);
+    pub const APPLICATION_CALS_1840: Encoding = Encoding::new(prefix::APPLICATION_CALS_1840);
+    pub const APPLICATION_CDFX_XML: Encoding = Encoding::new(prefix::APPLICATION_CDFX_XML);
+    pub const APPLICATION_CEA: Encoding = Encoding::new(prefix::APPLICATION_CEA);
+    pub const APPLICATION_CSTADATA_XML: Encoding = Encoding::new(prefix::APPLICATION_CSTADATA_XML);
+    pub const APPLICATION_DCD: Encoding = Encoding::new(prefix::APPLICATION_DCD);
+    pub const APPLICATION_DII: Encoding = Encoding::new(prefix::APPLICATION_DII);
+    pub const APPLICATION_DIT: Encoding = Encoding::new(prefix::APPLICATION_DIT);
+    pub const APPLICATION_EDI_X12: Encoding = Encoding::new(prefix::APPLICATION_EDI_X12);
+    pub const APPLICATION_EDI_CONSENT: Encoding = Encoding::new(prefix::APPLICATION_EDI_CONSENT);
+    pub const APPLICATION_EDIFACT: Encoding = Encoding::new(prefix::APPLICATION_EDIFACT);
+    pub const APPLICATION_EMERGENCYCALLDATA_COMMENT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_COMMENT_XML);
+    pub const APPLICATION_EMERGENCYCALLDATA_CONTROL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_CONTROL_XML);
+    pub const APPLICATION_EMERGENCYCALLDATA_DEVICEINFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_DEVICEINFO_XML);
+    pub const APPLICATION_EMERGENCYCALLDATA_LEGACYESN_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_LEGACYESN_JSON);
+    pub const APPLICATION_EMERGENCYCALLDATA_PROVIDERINFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_PROVIDERINFO_XML);
+    pub const APPLICATION_EMERGENCYCALLDATA_SERVICEINFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_SERVICEINFO_XML);
+    pub const APPLICATION_EMERGENCYCALLDATA_SUBSCRIBERINFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_SUBSCRIBERINFO_XML);
+    pub const APPLICATION_EMERGENCYCALLDATA_VEDS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_VEDS_XML);
+    pub const APPLICATION_EMERGENCYCALLDATA_CAP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_CAP_XML);
+    pub const APPLICATION_EMERGENCYCALLDATA_ECALL_MSD: Encoding =
+        Encoding::new(prefix::APPLICATION_EMERGENCYCALLDATA_ECALL_MSD);
+    pub const APPLICATION_H224: Encoding = Encoding::new(prefix::APPLICATION_H224);
+    pub const APPLICATION_IOTP: Encoding = Encoding::new(prefix::APPLICATION_IOTP);
+    pub const APPLICATION_ISUP: Encoding = Encoding::new(prefix::APPLICATION_ISUP);
+    pub const APPLICATION_LXF: Encoding = Encoding::new(prefix::APPLICATION_LXF);
+    pub const APPLICATION_MF4: Encoding = Encoding::new(prefix::APPLICATION_MF4);
+    pub const APPLICATION_ODA: Encoding = Encoding::new(prefix::APPLICATION_ODA);
+    pub const APPLICATION_ODX: Encoding = Encoding::new(prefix::APPLICATION_ODX);
+    pub const APPLICATION_PDX: Encoding = Encoding::new(prefix::APPLICATION_PDX);
+    pub const APPLICATION_QSIG: Encoding = Encoding::new(prefix::APPLICATION_QSIG);
+    pub const APPLICATION_SGML: Encoding = Encoding::new(prefix::APPLICATION_SGML);
+    pub const APPLICATION_TETRA_ISI: Encoding = Encoding::new(prefix::APPLICATION_TETRA_ISI);
+    pub const APPLICATION_ACE_CBOR: Encoding = Encoding::new(prefix::APPLICATION_ACE_CBOR);
+    pub const APPLICATION_ACE_JSON: Encoding = Encoding::new(prefix::APPLICATION_ACE_JSON);
+    pub const APPLICATION_ACTIVEMESSAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_ACTIVEMESSAGE);
+    pub const APPLICATION_ACTIVITY_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ACTIVITY_JSON);
+    pub const APPLICATION_AIF_CBOR: Encoding = Encoding::new(prefix::APPLICATION_AIF_CBOR);
+    pub const APPLICATION_AIF_JSON: Encoding = Encoding::new(prefix::APPLICATION_AIF_JSON);
+    pub const APPLICATION_ALTO_CDNI_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_CDNI_JSON);
+    pub const APPLICATION_ALTO_CDNIFILTER_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_CDNIFILTER_JSON);
+    pub const APPLICATION_ALTO_COSTMAP_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_COSTMAP_JSON);
+    pub const APPLICATION_ALTO_COSTMAPFILTER_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_COSTMAPFILTER_JSON);
+    pub const APPLICATION_ALTO_DIRECTORY_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_DIRECTORY_JSON);
+    pub const APPLICATION_ALTO_ENDPOINTCOST_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_ENDPOINTCOST_JSON);
+    pub const APPLICATION_ALTO_ENDPOINTCOSTPARAMS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_ENDPOINTCOSTPARAMS_JSON);
+    pub const APPLICATION_ALTO_ENDPOINTPROP_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_ENDPOINTPROP_JSON);
+    pub const APPLICATION_ALTO_ENDPOINTPROPPARAMS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_ENDPOINTPROPPARAMS_JSON);
+    pub const APPLICATION_ALTO_ERROR_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_ERROR_JSON);
+    pub const APPLICATION_ALTO_NETWORKMAP_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_NETWORKMAP_JSON);
+    pub const APPLICATION_ALTO_NETWORKMAPFILTER_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_NETWORKMAPFILTER_JSON);
+    pub const APPLICATION_ALTO_PROPMAP_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_PROPMAP_JSON);
+    pub const APPLICATION_ALTO_PROPMAPPARAMS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_PROPMAPPARAMS_JSON);
+    pub const APPLICATION_ALTO_TIPS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_TIPS_JSON);
+    pub const APPLICATION_ALTO_TIPSPARAMS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_TIPSPARAMS_JSON);
+    pub const APPLICATION_ALTO_UPDATESTREAMCONTROL_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_UPDATESTREAMCONTROL_JSON);
+    pub const APPLICATION_ALTO_UPDATESTREAMPARAMS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ALTO_UPDATESTREAMPARAMS_JSON);
+    pub const APPLICATION_ANDREW_INSET: Encoding = Encoding::new(prefix::APPLICATION_ANDREW_INSET);
+    pub const APPLICATION_APPLEFILE: Encoding = Encoding::new(prefix::APPLICATION_APPLEFILE);
+    pub const APPLICATION_AT_JWT: Encoding = Encoding::new(prefix::APPLICATION_AT_JWT);
+    pub const APPLICATION_ATOM_XML: Encoding = Encoding::new(prefix::APPLICATION_ATOM_XML);
+    pub const APPLICATION_ATOMCAT_XML: Encoding = Encoding::new(prefix::APPLICATION_ATOMCAT_XML);
+    pub const APPLICATION_ATOMDELETED_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_ATOMDELETED_XML);
+    pub const APPLICATION_ATOMICMAIL: Encoding = Encoding::new(prefix::APPLICATION_ATOMICMAIL);
+    pub const APPLICATION_ATOMSVC_XML: Encoding = Encoding::new(prefix::APPLICATION_ATOMSVC_XML);
+    pub const APPLICATION_ATSC_DWD_XML: Encoding = Encoding::new(prefix::APPLICATION_ATSC_DWD_XML);
+    pub const APPLICATION_ATSC_DYNAMIC_EVENT_MESSAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_ATSC_DYNAMIC_EVENT_MESSAGE);
+    pub const APPLICATION_ATSC_HELD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_ATSC_HELD_XML);
+    pub const APPLICATION_ATSC_RDT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_ATSC_RDT_JSON);
+    pub const APPLICATION_ATSC_RSAT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_ATSC_RSAT_XML);
+    pub const APPLICATION_AUTH_POLICY_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_AUTH_POLICY_XML);
+    pub const APPLICATION_AUTOMATIONML_AML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_AUTOMATIONML_AML_XML);
+    pub const APPLICATION_AUTOMATIONML_AMLX_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_AUTOMATIONML_AMLX_ZIP);
+    pub const APPLICATION_BACNET_XDD_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_BACNET_XDD_ZIP);
+    pub const APPLICATION_BATCH_SMTP: Encoding = Encoding::new(prefix::APPLICATION_BATCH_SMTP);
+    pub const APPLICATION_BEEP_XML: Encoding = Encoding::new(prefix::APPLICATION_BEEP_XML);
+    pub const APPLICATION_C2PA: Encoding = Encoding::new(prefix::APPLICATION_C2PA);
+    pub const APPLICATION_CALENDAR_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_CALENDAR_JSON);
+    pub const APPLICATION_CALENDAR_XML: Encoding = Encoding::new(prefix::APPLICATION_CALENDAR_XML);
+    pub const APPLICATION_CALL_COMPLETION: Encoding =
+        Encoding::new(prefix::APPLICATION_CALL_COMPLETION);
+    pub const APPLICATION_CAPTIVE_JSON: Encoding = Encoding::new(prefix::APPLICATION_CAPTIVE_JSON);
+    pub const APPLICATION_CBOR: Encoding = Encoding::new(prefix::APPLICATION_CBOR);
+    pub const APPLICATION_CBOR_SEQ: Encoding = Encoding::new(prefix::APPLICATION_CBOR_SEQ);
+    pub const APPLICATION_CCCEX: Encoding = Encoding::new(prefix::APPLICATION_CCCEX);
+    pub const APPLICATION_CCMP_XML: Encoding = Encoding::new(prefix::APPLICATION_CCMP_XML);
+    pub const APPLICATION_CCXML_XML: Encoding = Encoding::new(prefix::APPLICATION_CCXML_XML);
+    pub const APPLICATION_CDA_XML: Encoding = Encoding::new(prefix::APPLICATION_CDA_XML);
+    pub const APPLICATION_CDMI_CAPABILITY: Encoding =
+        Encoding::new(prefix::APPLICATION_CDMI_CAPABILITY);
+    pub const APPLICATION_CDMI_CONTAINER: Encoding =
+        Encoding::new(prefix::APPLICATION_CDMI_CONTAINER);
+    pub const APPLICATION_CDMI_DOMAIN: Encoding = Encoding::new(prefix::APPLICATION_CDMI_DOMAIN);
+    pub const APPLICATION_CDMI_OBJECT: Encoding = Encoding::new(prefix::APPLICATION_CDMI_OBJECT);
+    pub const APPLICATION_CDMI_QUEUE: Encoding = Encoding::new(prefix::APPLICATION_CDMI_QUEUE);
+    pub const APPLICATION_CDNI: Encoding = Encoding::new(prefix::APPLICATION_CDNI);
+    pub const APPLICATION_CEA_2018_XML: Encoding = Encoding::new(prefix::APPLICATION_CEA_2018_XML);
+    pub const APPLICATION_CELLML_XML: Encoding = Encoding::new(prefix::APPLICATION_CELLML_XML);
+    pub const APPLICATION_CFW: Encoding = Encoding::new(prefix::APPLICATION_CFW);
+    pub const APPLICATION_CID_EDHOC_CBOR_SEQ: Encoding =
+        Encoding::new(prefix::APPLICATION_CID_EDHOC_CBOR_SEQ);
+    pub const APPLICATION_CITY_JSON: Encoding = Encoding::new(prefix::APPLICATION_CITY_JSON);
+    pub const APPLICATION_CLR: Encoding = Encoding::new(prefix::APPLICATION_CLR);
+    pub const APPLICATION_CLUE_XML: Encoding = Encoding::new(prefix::APPLICATION_CLUE_XML);
+    pub const APPLICATION_CLUE_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_CLUE_INFO_XML);
+    pub const APPLICATION_CMS: Encoding = Encoding::new(prefix::APPLICATION_CMS);
+    pub const APPLICATION_CNRP_XML: Encoding = Encoding::new(prefix::APPLICATION_CNRP_XML);
+    pub const APPLICATION_COAP_GROUP_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_COAP_GROUP_JSON);
+    pub const APPLICATION_COAP_PAYLOAD: Encoding = Encoding::new(prefix::APPLICATION_COAP_PAYLOAD);
+    pub const APPLICATION_COMMONGROUND: Encoding = Encoding::new(prefix::APPLICATION_COMMONGROUND);
+    pub const APPLICATION_CONCISE_PROBLEM_DETAILS_CBOR: Encoding =
+        Encoding::new(prefix::APPLICATION_CONCISE_PROBLEM_DETAILS_CBOR);
+    pub const APPLICATION_CONFERENCE_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_CONFERENCE_INFO_XML);
+    pub const APPLICATION_COSE: Encoding = Encoding::new(prefix::APPLICATION_COSE);
+    pub const APPLICATION_COSE_KEY: Encoding = Encoding::new(prefix::APPLICATION_COSE_KEY);
+    pub const APPLICATION_COSE_KEY_SET: Encoding = Encoding::new(prefix::APPLICATION_COSE_KEY_SET);
+    pub const APPLICATION_COSE_X509: Encoding = Encoding::new(prefix::APPLICATION_COSE_X509);
+    pub const APPLICATION_CPL_XML: Encoding = Encoding::new(prefix::APPLICATION_CPL_XML);
+    pub const APPLICATION_CSRATTRS: Encoding = Encoding::new(prefix::APPLICATION_CSRATTRS);
+    pub const APPLICATION_CSTA_XML: Encoding = Encoding::new(prefix::APPLICATION_CSTA_XML);
+    pub const APPLICATION_CSVM_JSON: Encoding = Encoding::new(prefix::APPLICATION_CSVM_JSON);
+    pub const APPLICATION_CWL: Encoding = Encoding::new(prefix::APPLICATION_CWL);
+    pub const APPLICATION_CWL_JSON: Encoding = Encoding::new(prefix::APPLICATION_CWL_JSON);
+    pub const APPLICATION_CWT: Encoding = Encoding::new(prefix::APPLICATION_CWT);
+    pub const APPLICATION_CYBERCASH: Encoding = Encoding::new(prefix::APPLICATION_CYBERCASH);
+    pub const APPLICATION_DASH_XML: Encoding = Encoding::new(prefix::APPLICATION_DASH_XML);
+    pub const APPLICATION_DASH_PATCH_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_DASH_PATCH_XML);
+    pub const APPLICATION_DASHDELTA: Encoding = Encoding::new(prefix::APPLICATION_DASHDELTA);
+    pub const APPLICATION_DAVMOUNT_XML: Encoding = Encoding::new(prefix::APPLICATION_DAVMOUNT_XML);
+    pub const APPLICATION_DCA_RFT: Encoding = Encoding::new(prefix::APPLICATION_DCA_RFT);
+    pub const APPLICATION_DEC_DX: Encoding = Encoding::new(prefix::APPLICATION_DEC_DX);
+    pub const APPLICATION_DIALOG_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_DIALOG_INFO_XML);
+    pub const APPLICATION_DICOM: Encoding = Encoding::new(prefix::APPLICATION_DICOM);
+    pub const APPLICATION_DICOM_JSON: Encoding = Encoding::new(prefix::APPLICATION_DICOM_JSON);
+    pub const APPLICATION_DICOM_XML: Encoding = Encoding::new(prefix::APPLICATION_DICOM_XML);
+    pub const APPLICATION_DNS: Encoding = Encoding::new(prefix::APPLICATION_DNS);
+    pub const APPLICATION_DNS_JSON: Encoding = Encoding::new(prefix::APPLICATION_DNS_JSON);
+    pub const APPLICATION_DNS_MESSAGE: Encoding = Encoding::new(prefix::APPLICATION_DNS_MESSAGE);
+    pub const APPLICATION_DOTS_CBOR: Encoding = Encoding::new(prefix::APPLICATION_DOTS_CBOR);
+    pub const APPLICATION_DPOP_JWT: Encoding = Encoding::new(prefix::APPLICATION_DPOP_JWT);
+    pub const APPLICATION_DSKPP_XML: Encoding = Encoding::new(prefix::APPLICATION_DSKPP_XML);
+    pub const APPLICATION_DSSC_DER: Encoding = Encoding::new(prefix::APPLICATION_DSSC_DER);
+    pub const APPLICATION_DSSC_XML: Encoding = Encoding::new(prefix::APPLICATION_DSSC_XML);
+    pub const APPLICATION_DVCS: Encoding = Encoding::new(prefix::APPLICATION_DVCS);
+    pub const APPLICATION_ECMASCRIPT: Encoding = Encoding::new(prefix::APPLICATION_ECMASCRIPT);
+    pub const APPLICATION_EDHOC_CBOR_SEQ: Encoding =
+        Encoding::new(prefix::APPLICATION_EDHOC_CBOR_SEQ);
+    pub const APPLICATION_EFI: Encoding = Encoding::new(prefix::APPLICATION_EFI);
+    pub const APPLICATION_ELM_JSON: Encoding = Encoding::new(prefix::APPLICATION_ELM_JSON);
+    pub const APPLICATION_ELM_XML: Encoding = Encoding::new(prefix::APPLICATION_ELM_XML);
+    pub const APPLICATION_EMMA_XML: Encoding = Encoding::new(prefix::APPLICATION_EMMA_XML);
+    pub const APPLICATION_EMOTIONML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_EMOTIONML_XML);
+    pub const APPLICATION_ENCAPRTP: Encoding = Encoding::new(prefix::APPLICATION_ENCAPRTP);
+    pub const APPLICATION_EPP_XML: Encoding = Encoding::new(prefix::APPLICATION_EPP_XML);
+    pub const APPLICATION_EPUB_ZIP: Encoding = Encoding::new(prefix::APPLICATION_EPUB_ZIP);
+    pub const APPLICATION_ESHOP: Encoding = Encoding::new(prefix::APPLICATION_ESHOP);
+    pub const APPLICATION_EXAMPLE: Encoding = Encoding::new(prefix::APPLICATION_EXAMPLE);
+    pub const APPLICATION_EXI: Encoding = Encoding::new(prefix::APPLICATION_EXI);
+    pub const APPLICATION_EXPECT_CT_REPORT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_EXPECT_CT_REPORT_JSON);
+    pub const APPLICATION_EXPRESS: Encoding = Encoding::new(prefix::APPLICATION_EXPRESS);
+    pub const APPLICATION_FASTINFOSET: Encoding = Encoding::new(prefix::APPLICATION_FASTINFOSET);
+    pub const APPLICATION_FASTSOAP: Encoding = Encoding::new(prefix::APPLICATION_FASTSOAP);
+    pub const APPLICATION_FDF: Encoding = Encoding::new(prefix::APPLICATION_FDF);
+    pub const APPLICATION_FDT_XML: Encoding = Encoding::new(prefix::APPLICATION_FDT_XML);
+    pub const APPLICATION_FHIR_JSON: Encoding = Encoding::new(prefix::APPLICATION_FHIR_JSON);
+    pub const APPLICATION_FHIR_XML: Encoding = Encoding::new(prefix::APPLICATION_FHIR_XML);
+    pub const APPLICATION_FITS: Encoding = Encoding::new(prefix::APPLICATION_FITS);
+    pub const APPLICATION_FLEXFEC: Encoding = Encoding::new(prefix::APPLICATION_FLEXFEC);
+    pub const APPLICATION_FONT_SFNT: Encoding = Encoding::new(prefix::APPLICATION_FONT_SFNT);
+    pub const APPLICATION_FONT_TDPFR: Encoding = Encoding::new(prefix::APPLICATION_FONT_TDPFR);
+    pub const APPLICATION_FONT_WOFF: Encoding = Encoding::new(prefix::APPLICATION_FONT_WOFF);
+    pub const APPLICATION_FRAMEWORK_ATTRIBUTES_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_FRAMEWORK_ATTRIBUTES_XML);
+    pub const APPLICATION_GEO_JSON: Encoding = Encoding::new(prefix::APPLICATION_GEO_JSON);
+    pub const APPLICATION_GEO_JSON_SEQ: Encoding = Encoding::new(prefix::APPLICATION_GEO_JSON_SEQ);
+    pub const APPLICATION_GEOPACKAGE_SQLITE3: Encoding =
+        Encoding::new(prefix::APPLICATION_GEOPACKAGE_SQLITE3);
+    pub const APPLICATION_GEOXACML_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_GEOXACML_JSON);
+    pub const APPLICATION_GEOXACML_XML: Encoding = Encoding::new(prefix::APPLICATION_GEOXACML_XML);
+    pub const APPLICATION_GLTF_BUFFER: Encoding = Encoding::new(prefix::APPLICATION_GLTF_BUFFER);
+    pub const APPLICATION_GML_XML: Encoding = Encoding::new(prefix::APPLICATION_GML_XML);
+    pub const APPLICATION_GZIP: Encoding = Encoding::new(prefix::APPLICATION_GZIP);
+    pub const APPLICATION_HELD_XML: Encoding = Encoding::new(prefix::APPLICATION_HELD_XML);
+    pub const APPLICATION_HL7V2_XML: Encoding = Encoding::new(prefix::APPLICATION_HL7V2_XML);
+    pub const APPLICATION_HTTP: Encoding = Encoding::new(prefix::APPLICATION_HTTP);
+    pub const APPLICATION_HYPERSTUDIO: Encoding = Encoding::new(prefix::APPLICATION_HYPERSTUDIO);
+    pub const APPLICATION_IBE_KEY_REQUEST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_IBE_KEY_REQUEST_XML);
+    pub const APPLICATION_IBE_PKG_REPLY_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_IBE_PKG_REPLY_XML);
+    pub const APPLICATION_IBE_PP_DATA: Encoding = Encoding::new(prefix::APPLICATION_IBE_PP_DATA);
+    pub const APPLICATION_IGES: Encoding = Encoding::new(prefix::APPLICATION_IGES);
+    pub const APPLICATION_IM_ISCOMPOSING_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_IM_ISCOMPOSING_XML);
+    pub const APPLICATION_INDEX: Encoding = Encoding::new(prefix::APPLICATION_INDEX);
+    pub const APPLICATION_INDEX_CMD: Encoding = Encoding::new(prefix::APPLICATION_INDEX_CMD);
+    pub const APPLICATION_INDEX_OBJ: Encoding = Encoding::new(prefix::APPLICATION_INDEX_OBJ);
+    pub const APPLICATION_INDEX_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_INDEX_RESPONSE);
+    pub const APPLICATION_INDEX_VND: Encoding = Encoding::new(prefix::APPLICATION_INDEX_VND);
+    pub const APPLICATION_INKML_XML: Encoding = Encoding::new(prefix::APPLICATION_INKML_XML);
+    pub const APPLICATION_IPFIX: Encoding = Encoding::new(prefix::APPLICATION_IPFIX);
+    pub const APPLICATION_IPP: Encoding = Encoding::new(prefix::APPLICATION_IPP);
+    pub const APPLICATION_ITS_XML: Encoding = Encoding::new(prefix::APPLICATION_ITS_XML);
+    pub const APPLICATION_JAVA_ARCHIVE: Encoding = Encoding::new(prefix::APPLICATION_JAVA_ARCHIVE);
+    pub const APPLICATION_JAVASCRIPT: Encoding = Encoding::new(prefix::APPLICATION_JAVASCRIPT);
+    pub const APPLICATION_JF2FEED_JSON: Encoding = Encoding::new(prefix::APPLICATION_JF2FEED_JSON);
+    pub const APPLICATION_JOSE: Encoding = Encoding::new(prefix::APPLICATION_JOSE);
+    pub const APPLICATION_JOSE_JSON: Encoding = Encoding::new(prefix::APPLICATION_JOSE_JSON);
+    pub const APPLICATION_JRD_JSON: Encoding = Encoding::new(prefix::APPLICATION_JRD_JSON);
+    pub const APPLICATION_JSCALENDAR_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_JSCALENDAR_JSON);
+    pub const APPLICATION_JSCONTACT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_JSCONTACT_JSON);
+    pub const APPLICATION_JSON: Encoding = Encoding::new(prefix::APPLICATION_JSON);
+    pub const APPLICATION_JSON_PATCH_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_JSON_PATCH_JSON);
+    pub const APPLICATION_JSON_SEQ: Encoding = Encoding::new(prefix::APPLICATION_JSON_SEQ);
+    pub const APPLICATION_JSONPATH: Encoding = Encoding::new(prefix::APPLICATION_JSONPATH);
+    pub const APPLICATION_JWK_JSON: Encoding = Encoding::new(prefix::APPLICATION_JWK_JSON);
+    pub const APPLICATION_JWK_SET_JSON: Encoding = Encoding::new(prefix::APPLICATION_JWK_SET_JSON);
+    pub const APPLICATION_JWT: Encoding = Encoding::new(prefix::APPLICATION_JWT);
+    pub const APPLICATION_KPML_REQUEST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_KPML_REQUEST_XML);
+    pub const APPLICATION_KPML_RESPONSE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_KPML_RESPONSE_XML);
+    pub const APPLICATION_LD_JSON: Encoding = Encoding::new(prefix::APPLICATION_LD_JSON);
+    pub const APPLICATION_LGR_XML: Encoding = Encoding::new(prefix::APPLICATION_LGR_XML);
+    pub const APPLICATION_LINK_FORMAT: Encoding = Encoding::new(prefix::APPLICATION_LINK_FORMAT);
+    pub const APPLICATION_LINKSET: Encoding = Encoding::new(prefix::APPLICATION_LINKSET);
+    pub const APPLICATION_LINKSET_JSON: Encoding = Encoding::new(prefix::APPLICATION_LINKSET_JSON);
+    pub const APPLICATION_LOAD_CONTROL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_LOAD_CONTROL_XML);
+    pub const APPLICATION_LOGOUT_JWT: Encoding = Encoding::new(prefix::APPLICATION_LOGOUT_JWT);
+    pub const APPLICATION_LOST_XML: Encoding = Encoding::new(prefix::APPLICATION_LOST_XML);
+    pub const APPLICATION_LOSTSYNC_XML: Encoding = Encoding::new(prefix::APPLICATION_LOSTSYNC_XML);
+    pub const APPLICATION_LPF_ZIP: Encoding = Encoding::new(prefix::APPLICATION_LPF_ZIP);
+    pub const APPLICATION_MAC_BINHEX40: Encoding = Encoding::new(prefix::APPLICATION_MAC_BINHEX40);
+    pub const APPLICATION_MACWRITEII: Encoding = Encoding::new(prefix::APPLICATION_MACWRITEII);
+    pub const APPLICATION_MADS_XML: Encoding = Encoding::new(prefix::APPLICATION_MADS_XML);
+    pub const APPLICATION_MANIFEST_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_MANIFEST_JSON);
+    pub const APPLICATION_MARC: Encoding = Encoding::new(prefix::APPLICATION_MARC);
+    pub const APPLICATION_MARCXML_XML: Encoding = Encoding::new(prefix::APPLICATION_MARCXML_XML);
+    pub const APPLICATION_MATHEMATICA: Encoding = Encoding::new(prefix::APPLICATION_MATHEMATICA);
+    pub const APPLICATION_MATHML_XML: Encoding = Encoding::new(prefix::APPLICATION_MATHML_XML);
+    pub const APPLICATION_MATHML_CONTENT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MATHML_CONTENT_XML);
+    pub const APPLICATION_MATHML_PRESENTATION_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MATHML_PRESENTATION_XML);
+    pub const APPLICATION_MBMS_ASSOCIATED_PROCEDURE_DESCRIPTION_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_ASSOCIATED_PROCEDURE_DESCRIPTION_XML);
+    pub const APPLICATION_MBMS_DEREGISTER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_DEREGISTER_XML);
+    pub const APPLICATION_MBMS_ENVELOPE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_ENVELOPE_XML);
+    pub const APPLICATION_MBMS_MSK_XML: Encoding = Encoding::new(prefix::APPLICATION_MBMS_MSK_XML);
+    pub const APPLICATION_MBMS_MSK_RESPONSE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_MSK_RESPONSE_XML);
+    pub const APPLICATION_MBMS_PROTECTION_DESCRIPTION_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_PROTECTION_DESCRIPTION_XML);
+    pub const APPLICATION_MBMS_RECEPTION_REPORT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_RECEPTION_REPORT_XML);
+    pub const APPLICATION_MBMS_REGISTER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_REGISTER_XML);
+    pub const APPLICATION_MBMS_REGISTER_RESPONSE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_REGISTER_RESPONSE_XML);
+    pub const APPLICATION_MBMS_SCHEDULE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_SCHEDULE_XML);
+    pub const APPLICATION_MBMS_USER_SERVICE_DESCRIPTION_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MBMS_USER_SERVICE_DESCRIPTION_XML);
+    pub const APPLICATION_MBOX: Encoding = Encoding::new(prefix::APPLICATION_MBOX);
+    pub const APPLICATION_MEDIA_POLICY_DATASET_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MEDIA_POLICY_DATASET_XML);
+    pub const APPLICATION_MEDIA_CONTROL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MEDIA_CONTROL_XML);
+    pub const APPLICATION_MEDIASERVERCONTROL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MEDIASERVERCONTROL_XML);
+    pub const APPLICATION_MERGE_PATCH_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_MERGE_PATCH_JSON);
+    pub const APPLICATION_METALINK4_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_METALINK4_XML);
+    pub const APPLICATION_METS_XML: Encoding = Encoding::new(prefix::APPLICATION_METS_XML);
+    pub const APPLICATION_MIKEY: Encoding = Encoding::new(prefix::APPLICATION_MIKEY);
+    pub const APPLICATION_MIPC: Encoding = Encoding::new(prefix::APPLICATION_MIPC);
+    pub const APPLICATION_MISSING_BLOCKS_CBOR_SEQ: Encoding =
+        Encoding::new(prefix::APPLICATION_MISSING_BLOCKS_CBOR_SEQ);
+    pub const APPLICATION_MMT_AEI_XML: Encoding = Encoding::new(prefix::APPLICATION_MMT_AEI_XML);
+    pub const APPLICATION_MMT_USD_XML: Encoding = Encoding::new(prefix::APPLICATION_MMT_USD_XML);
+    pub const APPLICATION_MODS_XML: Encoding = Encoding::new(prefix::APPLICATION_MODS_XML);
+    pub const APPLICATION_MOSS_KEYS: Encoding = Encoding::new(prefix::APPLICATION_MOSS_KEYS);
+    pub const APPLICATION_MOSS_SIGNATURE: Encoding =
+        Encoding::new(prefix::APPLICATION_MOSS_SIGNATURE);
+    pub const APPLICATION_MOSSKEY_DATA: Encoding = Encoding::new(prefix::APPLICATION_MOSSKEY_DATA);
+    pub const APPLICATION_MOSSKEY_REQUEST: Encoding =
+        Encoding::new(prefix::APPLICATION_MOSSKEY_REQUEST);
+    pub const APPLICATION_MP21: Encoding = Encoding::new(prefix::APPLICATION_MP21);
+    pub const APPLICATION_MP4: Encoding = Encoding::new(prefix::APPLICATION_MP4);
+    pub const APPLICATION_MPEG4_GENERIC: Encoding =
+        Encoding::new(prefix::APPLICATION_MPEG4_GENERIC);
+    pub const APPLICATION_MPEG4_IOD: Encoding = Encoding::new(prefix::APPLICATION_MPEG4_IOD);
+    pub const APPLICATION_MPEG4_IOD_XMT: Encoding =
+        Encoding::new(prefix::APPLICATION_MPEG4_IOD_XMT);
+    pub const APPLICATION_MRB_CONSUMER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MRB_CONSUMER_XML);
+    pub const APPLICATION_MRB_PUBLISH_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MRB_PUBLISH_XML);
+    pub const APPLICATION_MSC_IVR_XML: Encoding = Encoding::new(prefix::APPLICATION_MSC_IVR_XML);
+    pub const APPLICATION_MSC_MIXER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_MSC_MIXER_XML);
+    pub const APPLICATION_MSWORD: Encoding = Encoding::new(prefix::APPLICATION_MSWORD);
+    pub const APPLICATION_MUD_JSON: Encoding = Encoding::new(prefix::APPLICATION_MUD_JSON);
+    pub const APPLICATION_MULTIPART_CORE: Encoding =
+        Encoding::new(prefix::APPLICATION_MULTIPART_CORE);
+    pub const APPLICATION_MXF: Encoding = Encoding::new(prefix::APPLICATION_MXF);
+    pub const APPLICATION_N_QUADS: Encoding = Encoding::new(prefix::APPLICATION_N_QUADS);
+    pub const APPLICATION_N_TRIPLES: Encoding = Encoding::new(prefix::APPLICATION_N_TRIPLES);
+    pub const APPLICATION_NASDATA: Encoding = Encoding::new(prefix::APPLICATION_NASDATA);
+    pub const APPLICATION_NEWS_CHECKGROUPS: Encoding =
+        Encoding::new(prefix::APPLICATION_NEWS_CHECKGROUPS);
+    pub const APPLICATION_NEWS_GROUPINFO: Encoding =
+        Encoding::new(prefix::APPLICATION_NEWS_GROUPINFO);
+    pub const APPLICATION_NEWS_TRANSMISSION: Encoding =
+        Encoding::new(prefix::APPLICATION_NEWS_TRANSMISSION);
+    pub const APPLICATION_NLSML_XML: Encoding = Encoding::new(prefix::APPLICATION_NLSML_XML);
+    pub const APPLICATION_NODE: Encoding = Encoding::new(prefix::APPLICATION_NODE);
+    pub const APPLICATION_NSS: Encoding = Encoding::new(prefix::APPLICATION_NSS);
+    pub const APPLICATION_OAUTH_AUTHZ_REQ_JWT: Encoding =
+        Encoding::new(prefix::APPLICATION_OAUTH_AUTHZ_REQ_JWT);
+    pub const APPLICATION_OBLIVIOUS_DNS_MESSAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_OBLIVIOUS_DNS_MESSAGE);
+    pub const APPLICATION_OCSP_REQUEST: Encoding = Encoding::new(prefix::APPLICATION_OCSP_REQUEST);
+    pub const APPLICATION_OCSP_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_OCSP_RESPONSE);
+    pub const APPLICATION_OCTET_STREAM: Encoding = Encoding::new(prefix::APPLICATION_OCTET_STREAM);
+    pub const APPLICATION_ODM_XML: Encoding = Encoding::new(prefix::APPLICATION_ODM_XML);
+    pub const APPLICATION_OEBPS_PACKAGE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_OEBPS_PACKAGE_XML);
+    pub const APPLICATION_OGG: Encoding = Encoding::new(prefix::APPLICATION_OGG);
+    pub const APPLICATION_OHTTP_KEYS: Encoding = Encoding::new(prefix::APPLICATION_OHTTP_KEYS);
+    pub const APPLICATION_OPC_NODESET_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_OPC_NODESET_XML);
+    pub const APPLICATION_OSCORE: Encoding = Encoding::new(prefix::APPLICATION_OSCORE);
+    pub const APPLICATION_OXPS: Encoding = Encoding::new(prefix::APPLICATION_OXPS);
+    pub const APPLICATION_P21: Encoding = Encoding::new(prefix::APPLICATION_P21);
+    pub const APPLICATION_P21_ZIP: Encoding = Encoding::new(prefix::APPLICATION_P21_ZIP);
+    pub const APPLICATION_P2P_OVERLAY_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_P2P_OVERLAY_XML);
+    pub const APPLICATION_PARITYFEC: Encoding = Encoding::new(prefix::APPLICATION_PARITYFEC);
+    pub const APPLICATION_PASSPORT: Encoding = Encoding::new(prefix::APPLICATION_PASSPORT);
+    pub const APPLICATION_PATCH_OPS_ERROR_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_PATCH_OPS_ERROR_XML);
+    pub const APPLICATION_PDF: Encoding = Encoding::new(prefix::APPLICATION_PDF);
+    pub const APPLICATION_PEM_CERTIFICATE_CHAIN: Encoding =
+        Encoding::new(prefix::APPLICATION_PEM_CERTIFICATE_CHAIN);
+    pub const APPLICATION_PGP_ENCRYPTED: Encoding =
+        Encoding::new(prefix::APPLICATION_PGP_ENCRYPTED);
+    pub const APPLICATION_PGP_KEYS: Encoding = Encoding::new(prefix::APPLICATION_PGP_KEYS);
+    pub const APPLICATION_PGP_SIGNATURE: Encoding =
+        Encoding::new(prefix::APPLICATION_PGP_SIGNATURE);
+    pub const APPLICATION_PIDF_XML: Encoding = Encoding::new(prefix::APPLICATION_PIDF_XML);
+    pub const APPLICATION_PIDF_DIFF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_PIDF_DIFF_XML);
+    pub const APPLICATION_PKCS10: Encoding = Encoding::new(prefix::APPLICATION_PKCS10);
+    pub const APPLICATION_PKCS12: Encoding = Encoding::new(prefix::APPLICATION_PKCS12);
+    pub const APPLICATION_PKCS7_MIME: Encoding = Encoding::new(prefix::APPLICATION_PKCS7_MIME);
+    pub const APPLICATION_PKCS7_SIGNATURE: Encoding =
+        Encoding::new(prefix::APPLICATION_PKCS7_SIGNATURE);
+    pub const APPLICATION_PKCS8: Encoding = Encoding::new(prefix::APPLICATION_PKCS8);
+    pub const APPLICATION_PKCS8_ENCRYPTED: Encoding =
+        Encoding::new(prefix::APPLICATION_PKCS8_ENCRYPTED);
+    pub const APPLICATION_PKIX_ATTR_CERT: Encoding =
+        Encoding::new(prefix::APPLICATION_PKIX_ATTR_CERT);
+    pub const APPLICATION_PKIX_CERT: Encoding = Encoding::new(prefix::APPLICATION_PKIX_CERT);
+    pub const APPLICATION_PKIX_CRL: Encoding = Encoding::new(prefix::APPLICATION_PKIX_CRL);
+    pub const APPLICATION_PKIX_PKIPATH: Encoding = Encoding::new(prefix::APPLICATION_PKIX_PKIPATH);
+    pub const APPLICATION_PKIXCMP: Encoding = Encoding::new(prefix::APPLICATION_PKIXCMP);
+    pub const APPLICATION_PLS_XML: Encoding = Encoding::new(prefix::APPLICATION_PLS_XML);
+    pub const APPLICATION_POC_SETTINGS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_POC_SETTINGS_XML);
+    pub const APPLICATION_POSTSCRIPT: Encoding = Encoding::new(prefix::APPLICATION_POSTSCRIPT);
+    pub const APPLICATION_PPSP_TRACKER_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_PPSP_TRACKER_JSON);
+    pub const APPLICATION_PRIVATE_TOKEN_ISSUER_DIRECTORY: Encoding =
+        Encoding::new(prefix::APPLICATION_PRIVATE_TOKEN_ISSUER_DIRECTORY);
+    pub const APPLICATION_PRIVATE_TOKEN_REQUEST: Encoding =
+        Encoding::new(prefix::APPLICATION_PRIVATE_TOKEN_REQUEST);
+    pub const APPLICATION_PRIVATE_TOKEN_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_PRIVATE_TOKEN_RESPONSE);
+    pub const APPLICATION_PROBLEM_JSON: Encoding = Encoding::new(prefix::APPLICATION_PROBLEM_JSON);
+    pub const APPLICATION_PROBLEM_XML: Encoding = Encoding::new(prefix::APPLICATION_PROBLEM_XML);
+    pub const APPLICATION_PROVENANCE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_PROVENANCE_XML);
+    pub const APPLICATION_PRS_ALVESTRAND_TITRAX_SHEET: Encoding =
+        Encoding::new(prefix::APPLICATION_PRS_ALVESTRAND_TITRAX_SHEET);
+    pub const APPLICATION_PRS_CWW: Encoding = Encoding::new(prefix::APPLICATION_PRS_CWW);
+    pub const APPLICATION_PRS_CYN: Encoding = Encoding::new(prefix::APPLICATION_PRS_CYN);
+    pub const APPLICATION_PRS_HPUB_ZIP: Encoding = Encoding::new(prefix::APPLICATION_PRS_HPUB_ZIP);
+    pub const APPLICATION_PRS_IMPLIED_DOCUMENT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_PRS_IMPLIED_DOCUMENT_XML);
+    pub const APPLICATION_PRS_IMPLIED_EXECUTABLE: Encoding =
+        Encoding::new(prefix::APPLICATION_PRS_IMPLIED_EXECUTABLE);
+    pub const APPLICATION_PRS_IMPLIED_OBJECT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_PRS_IMPLIED_OBJECT_JSON);
+    pub const APPLICATION_PRS_IMPLIED_OBJECT_JSON_SEQ: Encoding =
+        Encoding::new(prefix::APPLICATION_PRS_IMPLIED_OBJECT_JSON_SEQ);
+    pub const APPLICATION_PRS_IMPLIED_OBJECT_YAML: Encoding =
+        Encoding::new(prefix::APPLICATION_PRS_IMPLIED_OBJECT_YAML);
+    pub const APPLICATION_PRS_IMPLIED_STRUCTURE: Encoding =
+        Encoding::new(prefix::APPLICATION_PRS_IMPLIED_STRUCTURE);
+    pub const APPLICATION_PRS_NPREND: Encoding = Encoding::new(prefix::APPLICATION_PRS_NPREND);
+    pub const APPLICATION_PRS_PLUCKER: Encoding = Encoding::new(prefix::APPLICATION_PRS_PLUCKER);
+    pub const APPLICATION_PRS_RDF_XML_CRYPT: Encoding =
+        Encoding::new(prefix::APPLICATION_PRS_RDF_XML_CRYPT);
+    pub const APPLICATION_PRS_VCFBZIP2: Encoding = Encoding::new(prefix::APPLICATION_PRS_VCFBZIP2);
+    pub const APPLICATION_PRS_XSF_XML: Encoding = Encoding::new(prefix::APPLICATION_PRS_XSF_XML);
+    pub const APPLICATION_PSKC_XML: Encoding = Encoding::new(prefix::APPLICATION_PSKC_XML);
+    pub const APPLICATION_PVD_JSON: Encoding = Encoding::new(prefix::APPLICATION_PVD_JSON);
+    pub const APPLICATION_RAPTORFEC: Encoding = Encoding::new(prefix::APPLICATION_RAPTORFEC);
+    pub const APPLICATION_RDAP_JSON: Encoding = Encoding::new(prefix::APPLICATION_RDAP_JSON);
+    pub const APPLICATION_RDF_XML: Encoding = Encoding::new(prefix::APPLICATION_RDF_XML);
+    pub const APPLICATION_REGINFO_XML: Encoding = Encoding::new(prefix::APPLICATION_REGINFO_XML);
+    pub const APPLICATION_RELAX_NG_COMPACT_SYNTAX: Encoding =
+        Encoding::new(prefix::APPLICATION_RELAX_NG_COMPACT_SYNTAX);
+    pub const APPLICATION_REMOTE_PRINTING: Encoding =
+        Encoding::new(prefix::APPLICATION_REMOTE_PRINTING);
+    pub const APPLICATION_REPUTON_JSON: Encoding = Encoding::new(prefix::APPLICATION_REPUTON_JSON);
+    pub const APPLICATION_RESOURCE_LISTS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_RESOURCE_LISTS_XML);
+    pub const APPLICATION_RESOURCE_LISTS_DIFF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_RESOURCE_LISTS_DIFF_XML);
+    pub const APPLICATION_RFC_XML: Encoding = Encoding::new(prefix::APPLICATION_RFC_XML);
+    pub const APPLICATION_RISCOS: Encoding = Encoding::new(prefix::APPLICATION_RISCOS);
+    pub const APPLICATION_RLMI_XML: Encoding = Encoding::new(prefix::APPLICATION_RLMI_XML);
+    pub const APPLICATION_RLS_SERVICES_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_RLS_SERVICES_XML);
+    pub const APPLICATION_ROUTE_APD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_ROUTE_APD_XML);
+    pub const APPLICATION_ROUTE_S_TSID_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_ROUTE_S_TSID_XML);
+    pub const APPLICATION_ROUTE_USD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_ROUTE_USD_XML);
+    pub const APPLICATION_RPKI_CHECKLIST: Encoding =
+        Encoding::new(prefix::APPLICATION_RPKI_CHECKLIST);
+    pub const APPLICATION_RPKI_GHOSTBUSTERS: Encoding =
+        Encoding::new(prefix::APPLICATION_RPKI_GHOSTBUSTERS);
+    pub const APPLICATION_RPKI_MANIFEST: Encoding =
+        Encoding::new(prefix::APPLICATION_RPKI_MANIFEST);
+    pub const APPLICATION_RPKI_PUBLICATION: Encoding =
+        Encoding::new(prefix::APPLICATION_RPKI_PUBLICATION);
+    pub const APPLICATION_RPKI_ROA: Encoding = Encoding::new(prefix::APPLICATION_RPKI_ROA);
+    pub const APPLICATION_RPKI_UPDOWN: Encoding = Encoding::new(prefix::APPLICATION_RPKI_UPDOWN);
+    pub const APPLICATION_RTF: Encoding = Encoding::new(prefix::APPLICATION_RTF);
+    pub const APPLICATION_RTPLOOPBACK: Encoding = Encoding::new(prefix::APPLICATION_RTPLOOPBACK);
+    pub const APPLICATION_RTX: Encoding = Encoding::new(prefix::APPLICATION_RTX);
+    pub const APPLICATION_SAMLASSERTION_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_SAMLASSERTION_XML);
+    pub const APPLICATION_SAMLMETADATA_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_SAMLMETADATA_XML);
+    pub const APPLICATION_SARIF_JSON: Encoding = Encoding::new(prefix::APPLICATION_SARIF_JSON);
+    pub const APPLICATION_SARIF_EXTERNAL_PROPERTIES_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_SARIF_EXTERNAL_PROPERTIES_JSON);
+    pub const APPLICATION_SBE: Encoding = Encoding::new(prefix::APPLICATION_SBE);
+    pub const APPLICATION_SBML_XML: Encoding = Encoding::new(prefix::APPLICATION_SBML_XML);
+    pub const APPLICATION_SCAIP_XML: Encoding = Encoding::new(prefix::APPLICATION_SCAIP_XML);
+    pub const APPLICATION_SCIM_JSON: Encoding = Encoding::new(prefix::APPLICATION_SCIM_JSON);
+    pub const APPLICATION_SCVP_CV_REQUEST: Encoding =
+        Encoding::new(prefix::APPLICATION_SCVP_CV_REQUEST);
+    pub const APPLICATION_SCVP_CV_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_SCVP_CV_RESPONSE);
+    pub const APPLICATION_SCVP_VP_REQUEST: Encoding =
+        Encoding::new(prefix::APPLICATION_SCVP_VP_REQUEST);
+    pub const APPLICATION_SCVP_VP_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_SCVP_VP_RESPONSE);
+    pub const APPLICATION_SDP: Encoding = Encoding::new(prefix::APPLICATION_SDP);
+    pub const APPLICATION_SECEVENT_JWT: Encoding = Encoding::new(prefix::APPLICATION_SECEVENT_JWT);
+    pub const APPLICATION_SENML_CBOR: Encoding = Encoding::new(prefix::APPLICATION_SENML_CBOR);
+    pub const APPLICATION_SENML_JSON: Encoding = Encoding::new(prefix::APPLICATION_SENML_JSON);
+    pub const APPLICATION_SENML_XML: Encoding = Encoding::new(prefix::APPLICATION_SENML_XML);
+    pub const APPLICATION_SENML_ETCH_CBOR: Encoding =
+        Encoding::new(prefix::APPLICATION_SENML_ETCH_CBOR);
+    pub const APPLICATION_SENML_ETCH_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_SENML_ETCH_JSON);
+    pub const APPLICATION_SENML_EXI: Encoding = Encoding::new(prefix::APPLICATION_SENML_EXI);
+    pub const APPLICATION_SENSML_CBOR: Encoding = Encoding::new(prefix::APPLICATION_SENSML_CBOR);
+    pub const APPLICATION_SENSML_JSON: Encoding = Encoding::new(prefix::APPLICATION_SENSML_JSON);
+    pub const APPLICATION_SENSML_XML: Encoding = Encoding::new(prefix::APPLICATION_SENSML_XML);
+    pub const APPLICATION_SENSML_EXI: Encoding = Encoding::new(prefix::APPLICATION_SENSML_EXI);
+    pub const APPLICATION_SEP_XML: Encoding = Encoding::new(prefix::APPLICATION_SEP_XML);
+    pub const APPLICATION_SEP_EXI: Encoding = Encoding::new(prefix::APPLICATION_SEP_EXI);
+    pub const APPLICATION_SESSION_INFO: Encoding = Encoding::new(prefix::APPLICATION_SESSION_INFO);
+    pub const APPLICATION_SET_PAYMENT: Encoding = Encoding::new(prefix::APPLICATION_SET_PAYMENT);
+    pub const APPLICATION_SET_PAYMENT_INITIATION: Encoding =
+        Encoding::new(prefix::APPLICATION_SET_PAYMENT_INITIATION);
+    pub const APPLICATION_SET_REGISTRATION: Encoding =
+        Encoding::new(prefix::APPLICATION_SET_REGISTRATION);
+    pub const APPLICATION_SET_REGISTRATION_INITIATION: Encoding =
+        Encoding::new(prefix::APPLICATION_SET_REGISTRATION_INITIATION);
+    pub const APPLICATION_SGML_OPEN_CATALOG: Encoding =
+        Encoding::new(prefix::APPLICATION_SGML_OPEN_CATALOG);
+    pub const APPLICATION_SHF_XML: Encoding = Encoding::new(prefix::APPLICATION_SHF_XML);
+    pub const APPLICATION_SIEVE: Encoding = Encoding::new(prefix::APPLICATION_SIEVE);
+    pub const APPLICATION_SIMPLE_FILTER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_SIMPLE_FILTER_XML);
+    pub const APPLICATION_SIMPLE_MESSAGE_SUMMARY: Encoding =
+        Encoding::new(prefix::APPLICATION_SIMPLE_MESSAGE_SUMMARY);
+    pub const APPLICATION_SIMPLESYMBOLCONTAINER: Encoding =
+        Encoding::new(prefix::APPLICATION_SIMPLESYMBOLCONTAINER);
+    pub const APPLICATION_SIPC: Encoding = Encoding::new(prefix::APPLICATION_SIPC);
+    pub const APPLICATION_SLATE: Encoding = Encoding::new(prefix::APPLICATION_SLATE);
+    pub const APPLICATION_SMIL: Encoding = Encoding::new(prefix::APPLICATION_SMIL);
+    pub const APPLICATION_SMIL_XML: Encoding = Encoding::new(prefix::APPLICATION_SMIL_XML);
+    pub const APPLICATION_SMPTE336M: Encoding = Encoding::new(prefix::APPLICATION_SMPTE336M);
+    pub const APPLICATION_SOAP_FASTINFOSET: Encoding =
+        Encoding::new(prefix::APPLICATION_SOAP_FASTINFOSET);
+    pub const APPLICATION_SOAP_XML: Encoding = Encoding::new(prefix::APPLICATION_SOAP_XML);
+    pub const APPLICATION_SPARQL_QUERY: Encoding = Encoding::new(prefix::APPLICATION_SPARQL_QUERY);
+    pub const APPLICATION_SPARQL_RESULTS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_SPARQL_RESULTS_XML);
+    pub const APPLICATION_SPDX_JSON: Encoding = Encoding::new(prefix::APPLICATION_SPDX_JSON);
+    pub const APPLICATION_SPIRITS_EVENT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_SPIRITS_EVENT_XML);
+    pub const APPLICATION_SQL: Encoding = Encoding::new(prefix::APPLICATION_SQL);
+    pub const APPLICATION_SRGS: Encoding = Encoding::new(prefix::APPLICATION_SRGS);
+    pub const APPLICATION_SRGS_XML: Encoding = Encoding::new(prefix::APPLICATION_SRGS_XML);
+    pub const APPLICATION_SRU_XML: Encoding = Encoding::new(prefix::APPLICATION_SRU_XML);
+    pub const APPLICATION_SSML_XML: Encoding = Encoding::new(prefix::APPLICATION_SSML_XML);
+    pub const APPLICATION_STIX_JSON: Encoding = Encoding::new(prefix::APPLICATION_STIX_JSON);
+    pub const APPLICATION_SWID_CBOR: Encoding = Encoding::new(prefix::APPLICATION_SWID_CBOR);
+    pub const APPLICATION_SWID_XML: Encoding = Encoding::new(prefix::APPLICATION_SWID_XML);
+    pub const APPLICATION_TAMP_APEX_UPDATE: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_APEX_UPDATE);
+    pub const APPLICATION_TAMP_APEX_UPDATE_CONFIRM: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_APEX_UPDATE_CONFIRM);
+    pub const APPLICATION_TAMP_COMMUNITY_UPDATE: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_COMMUNITY_UPDATE);
+    pub const APPLICATION_TAMP_COMMUNITY_UPDATE_CONFIRM: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_COMMUNITY_UPDATE_CONFIRM);
+    pub const APPLICATION_TAMP_ERROR: Encoding = Encoding::new(prefix::APPLICATION_TAMP_ERROR);
+    pub const APPLICATION_TAMP_SEQUENCE_ADJUST: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_SEQUENCE_ADJUST);
+    pub const APPLICATION_TAMP_SEQUENCE_ADJUST_CONFIRM: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_SEQUENCE_ADJUST_CONFIRM);
+    pub const APPLICATION_TAMP_STATUS_QUERY: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_STATUS_QUERY);
+    pub const APPLICATION_TAMP_STATUS_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_STATUS_RESPONSE);
+    pub const APPLICATION_TAMP_UPDATE: Encoding = Encoding::new(prefix::APPLICATION_TAMP_UPDATE);
+    pub const APPLICATION_TAMP_UPDATE_CONFIRM: Encoding =
+        Encoding::new(prefix::APPLICATION_TAMP_UPDATE_CONFIRM);
+    pub const APPLICATION_TAXII_JSON: Encoding = Encoding::new(prefix::APPLICATION_TAXII_JSON);
+    pub const APPLICATION_TD_JSON: Encoding = Encoding::new(prefix::APPLICATION_TD_JSON);
+    pub const APPLICATION_TEI_XML: Encoding = Encoding::new(prefix::APPLICATION_TEI_XML);
+    pub const APPLICATION_THRAUD_XML: Encoding = Encoding::new(prefix::APPLICATION_THRAUD_XML);
+    pub const APPLICATION_TIMESTAMP_QUERY: Encoding =
+        Encoding::new(prefix::APPLICATION_TIMESTAMP_QUERY);
+    pub const APPLICATION_TIMESTAMP_REPLY: Encoding =
+        Encoding::new(prefix::APPLICATION_TIMESTAMP_REPLY);
+    pub const APPLICATION_TIMESTAMPED_DATA: Encoding =
+        Encoding::new(prefix::APPLICATION_TIMESTAMPED_DATA);
+    pub const APPLICATION_TLSRPT_GZIP: Encoding = Encoding::new(prefix::APPLICATION_TLSRPT_GZIP);
+    pub const APPLICATION_TLSRPT_JSON: Encoding = Encoding::new(prefix::APPLICATION_TLSRPT_JSON);
+    pub const APPLICATION_TM_JSON: Encoding = Encoding::new(prefix::APPLICATION_TM_JSON);
+    pub const APPLICATION_TNAUTHLIST: Encoding = Encoding::new(prefix::APPLICATION_TNAUTHLIST);
+    pub const APPLICATION_TOKEN_INTROSPECTION_JWT: Encoding =
+        Encoding::new(prefix::APPLICATION_TOKEN_INTROSPECTION_JWT);
+    pub const APPLICATION_TRICKLE_ICE_SDPFRAG: Encoding =
+        Encoding::new(prefix::APPLICATION_TRICKLE_ICE_SDPFRAG);
+    pub const APPLICATION_TRIG: Encoding = Encoding::new(prefix::APPLICATION_TRIG);
+    pub const APPLICATION_TTML_XML: Encoding = Encoding::new(prefix::APPLICATION_TTML_XML);
+    pub const APPLICATION_TVE_TRIGGER: Encoding = Encoding::new(prefix::APPLICATION_TVE_TRIGGER);
+    pub const APPLICATION_TZIF: Encoding = Encoding::new(prefix::APPLICATION_TZIF);
+    pub const APPLICATION_TZIF_LEAP: Encoding = Encoding::new(prefix::APPLICATION_TZIF_LEAP);
+    pub const APPLICATION_ULPFEC: Encoding = Encoding::new(prefix::APPLICATION_ULPFEC);
+    pub const APPLICATION_URC_GRPSHEET_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_URC_GRPSHEET_XML);
+    pub const APPLICATION_URC_RESSHEET_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_URC_RESSHEET_XML);
+    pub const APPLICATION_URC_TARGETDESC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_URC_TARGETDESC_XML);
+    pub const APPLICATION_URC_UISOCKETDESC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_URC_UISOCKETDESC_XML);
+    pub const APPLICATION_VCARD_JSON: Encoding = Encoding::new(prefix::APPLICATION_VCARD_JSON);
+    pub const APPLICATION_VCARD_XML: Encoding = Encoding::new(prefix::APPLICATION_VCARD_XML);
+    pub const APPLICATION_VEMMI: Encoding = Encoding::new(prefix::APPLICATION_VEMMI);
+    pub const APPLICATION_VND_1000MINDS_DECISION_MODEL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_1000MINDS_DECISION_MODEL_XML);
+    pub const APPLICATION_VND_1OB: Encoding = Encoding::new(prefix::APPLICATION_VND_1OB);
+    pub const APPLICATION_VND_3M_POST_IT_NOTES: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3M_POST_IT_NOTES);
+    pub const APPLICATION_VND_3GPP_PROSE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PROSE_XML);
+    pub const APPLICATION_VND_3GPP_PROSE_PC3A_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PROSE_PC3A_XML);
+    pub const APPLICATION_VND_3GPP_PROSE_PC3ACH_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PROSE_PC3ACH_XML);
+    pub const APPLICATION_VND_3GPP_PROSE_PC3CH_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PROSE_PC3CH_XML);
+    pub const APPLICATION_VND_3GPP_PROSE_PC8_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PROSE_PC8_XML);
+    pub const APPLICATION_VND_3GPP_V2X_LOCAL_SERVICE_INFORMATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_V2X_LOCAL_SERVICE_INFORMATION);
+    pub const APPLICATION_VND_3GPP_5GNAS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_5GNAS);
+    pub const APPLICATION_VND_3GPP_GMOP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_GMOP_XML);
+    pub const APPLICATION_VND_3GPP_SRVCC_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SRVCC_INFO_XML);
+    pub const APPLICATION_VND_3GPP_ACCESS_TRANSFER_EVENTS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_ACCESS_TRANSFER_EVENTS_XML);
+    pub const APPLICATION_VND_3GPP_BSF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_BSF_XML);
+    pub const APPLICATION_VND_3GPP_CRS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_CRS_XML);
+    pub const APPLICATION_VND_3GPP_CURRENT_LOCATION_DISCOVERY_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_CURRENT_LOCATION_DISCOVERY_XML);
+    pub const APPLICATION_VND_3GPP_GTPC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_GTPC);
+    pub const APPLICATION_VND_3GPP_INTERWORKING_DATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_INTERWORKING_DATA);
+    pub const APPLICATION_VND_3GPP_LPP: Encoding = Encoding::new(prefix::APPLICATION_VND_3GPP_LPP);
+    pub const APPLICATION_VND_3GPP_MC_SIGNALLING_EAR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MC_SIGNALLING_EAR);
+    pub const APPLICATION_VND_3GPP_MCDATA_AFFILIATION_COMMAND_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_AFFILIATION_COMMAND_XML);
+    pub const APPLICATION_VND_3GPP_MCDATA_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_INFO_XML);
+    pub const APPLICATION_VND_3GPP_MCDATA_MSGSTORE_CTRL_REQUEST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_MSGSTORE_CTRL_REQUEST_XML);
+    pub const APPLICATION_VND_3GPP_MCDATA_PAYLOAD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_PAYLOAD);
+    pub const APPLICATION_VND_3GPP_MCDATA_REGROUP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_REGROUP_XML);
+    pub const APPLICATION_VND_3GPP_MCDATA_SERVICE_CONFIG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_SERVICE_CONFIG_XML);
+    pub const APPLICATION_VND_3GPP_MCDATA_SIGNALLING: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_SIGNALLING);
+    pub const APPLICATION_VND_3GPP_MCDATA_UE_CONFIG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_UE_CONFIG_XML);
+    pub const APPLICATION_VND_3GPP_MCDATA_USER_PROFILE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCDATA_USER_PROFILE_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_AFFILIATION_COMMAND_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_AFFILIATION_COMMAND_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_FLOOR_REQUEST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_FLOOR_REQUEST_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_INFO_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_LOCATION_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_LOCATION_INFO_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_MBMS_USAGE_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_MBMS_USAGE_INFO_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_REGROUP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_REGROUP_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_SERVICE_CONFIG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_SERVICE_CONFIG_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_SIGNED_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_SIGNED_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_UE_CONFIG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_UE_CONFIG_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_UE_INIT_CONFIG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_UE_INIT_CONFIG_XML);
+    pub const APPLICATION_VND_3GPP_MCPTT_USER_PROFILE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCPTT_USER_PROFILE_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_AFFILIATION_COMMAND_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_AFFILIATION_COMMAND_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_AFFILIATION_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_AFFILIATION_INFO_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_INFO_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_LOCATION_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_LOCATION_INFO_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_MBMS_USAGE_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_MBMS_USAGE_INFO_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_REGROUP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_REGROUP_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_SERVICE_CONFIG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_SERVICE_CONFIG_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_TRANSMISSION_REQUEST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_TRANSMISSION_REQUEST_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_UE_CONFIG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_UE_CONFIG_XML);
+    pub const APPLICATION_VND_3GPP_MCVIDEO_USER_PROFILE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MCVIDEO_USER_PROFILE_XML);
+    pub const APPLICATION_VND_3GPP_MID_CALL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_MID_CALL_XML);
+    pub const APPLICATION_VND_3GPP_NGAP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_NGAP);
+    pub const APPLICATION_VND_3GPP_PFCP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PFCP);
+    pub const APPLICATION_VND_3GPP_PIC_BW_LARGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PIC_BW_LARGE);
+    pub const APPLICATION_VND_3GPP_PIC_BW_SMALL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PIC_BW_SMALL);
+    pub const APPLICATION_VND_3GPP_PIC_BW_VAR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_PIC_BW_VAR);
+    pub const APPLICATION_VND_3GPP_S1AP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_S1AP);
+    pub const APPLICATION_VND_3GPP_SEAL_GROUP_DOC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SEAL_GROUP_DOC_XML);
+    pub const APPLICATION_VND_3GPP_SEAL_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SEAL_INFO_XML);
+    pub const APPLICATION_VND_3GPP_SEAL_LOCATION_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SEAL_LOCATION_INFO_XML);
+    pub const APPLICATION_VND_3GPP_SEAL_MBMS_USAGE_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SEAL_MBMS_USAGE_INFO_XML);
+    pub const APPLICATION_VND_3GPP_SEAL_NETWORK_QOS_MANAGEMENT_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SEAL_NETWORK_QOS_MANAGEMENT_INFO_XML);
+    pub const APPLICATION_VND_3GPP_SEAL_UE_CONFIG_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SEAL_UE_CONFIG_INFO_XML);
+    pub const APPLICATION_VND_3GPP_SEAL_UNICAST_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SEAL_UNICAST_INFO_XML);
+    pub const APPLICATION_VND_3GPP_SEAL_USER_PROFILE_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SEAL_USER_PROFILE_INFO_XML);
+    pub const APPLICATION_VND_3GPP_SMS: Encoding = Encoding::new(prefix::APPLICATION_VND_3GPP_SMS);
+    pub const APPLICATION_VND_3GPP_SMS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SMS_XML);
+    pub const APPLICATION_VND_3GPP_SRVCC_EXT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_SRVCC_EXT_XML);
+    pub const APPLICATION_VND_3GPP_STATE_AND_EVENT_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_STATE_AND_EVENT_INFO_XML);
+    pub const APPLICATION_VND_3GPP_USSD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_USSD_XML);
+    pub const APPLICATION_VND_3GPP_V2X: Encoding = Encoding::new(prefix::APPLICATION_VND_3GPP_V2X);
+    pub const APPLICATION_VND_3GPP_VAE_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP_VAE_INFO_XML);
+    pub const APPLICATION_VND_3GPP2_BCMCSINFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP2_BCMCSINFO_XML);
+    pub const APPLICATION_VND_3GPP2_SMS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP2_SMS);
+    pub const APPLICATION_VND_3GPP2_TCAP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3GPP2_TCAP);
+    pub const APPLICATION_VND_3LIGHTSSOFTWARE_IMAGESCAL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_3LIGHTSSOFTWARE_IMAGESCAL);
+    pub const APPLICATION_VND_FLOGRAPHIT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FLOGRAPHIT);
+    pub const APPLICATION_VND_HANDHELD_ENTERTAINMENT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HANDHELD_ENTERTAINMENT_XML);
+    pub const APPLICATION_VND_KINAR: Encoding = Encoding::new(prefix::APPLICATION_VND_KINAR);
+    pub const APPLICATION_VND_MFER: Encoding = Encoding::new(prefix::APPLICATION_VND_MFER);
+    pub const APPLICATION_VND_MOBIUS_DAF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOBIUS_DAF);
+    pub const APPLICATION_VND_MOBIUS_DIS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOBIUS_DIS);
+    pub const APPLICATION_VND_MOBIUS_MBK: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOBIUS_MBK);
+    pub const APPLICATION_VND_MOBIUS_MQY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOBIUS_MQY);
+    pub const APPLICATION_VND_MOBIUS_MSL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOBIUS_MSL);
+    pub const APPLICATION_VND_MOBIUS_PLC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOBIUS_PLC);
+    pub const APPLICATION_VND_MOBIUS_TXF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOBIUS_TXF);
+    pub const APPLICATION_VND_QUARK_QUARKXPRESS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_QUARK_QUARKXPRESS);
+    pub const APPLICATION_VND_RENLEARN_RLPRINT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RENLEARN_RLPRINT);
+    pub const APPLICATION_VND_SIMTECH_MINDMAPPER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SIMTECH_MINDMAPPER);
+    pub const APPLICATION_VND_ACCPAC_SIMPLY_ASO: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ACCPAC_SIMPLY_ASO);
+    pub const APPLICATION_VND_ACCPAC_SIMPLY_IMP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ACCPAC_SIMPLY_IMP);
+    pub const APPLICATION_VND_ACM_ADDRESSXFER_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ACM_ADDRESSXFER_JSON);
+    pub const APPLICATION_VND_ACM_CHATBOT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ACM_CHATBOT_JSON);
+    pub const APPLICATION_VND_ACUCOBOL: Encoding = Encoding::new(prefix::APPLICATION_VND_ACUCOBOL);
+    pub const APPLICATION_VND_ACUCORP: Encoding = Encoding::new(prefix::APPLICATION_VND_ACUCORP);
+    pub const APPLICATION_VND_ADOBE_FLASH_MOVIE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ADOBE_FLASH_MOVIE);
+    pub const APPLICATION_VND_ADOBE_FORMSCENTRAL_FCDT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ADOBE_FORMSCENTRAL_FCDT);
+    pub const APPLICATION_VND_ADOBE_FXP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ADOBE_FXP);
+    pub const APPLICATION_VND_ADOBE_PARTIAL_UPLOAD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ADOBE_PARTIAL_UPLOAD);
+    pub const APPLICATION_VND_ADOBE_XDP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ADOBE_XDP_XML);
+    pub const APPLICATION_VND_AETHER_IMP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AETHER_IMP);
+    pub const APPLICATION_VND_AFPC_AFPLINEDATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_AFPLINEDATA);
+    pub const APPLICATION_VND_AFPC_AFPLINEDATA_PAGEDEF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_AFPLINEDATA_PAGEDEF);
+    pub const APPLICATION_VND_AFPC_CMOCA_CMRESOURCE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_CMOCA_CMRESOURCE);
+    pub const APPLICATION_VND_AFPC_FOCA_CHARSET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_FOCA_CHARSET);
+    pub const APPLICATION_VND_AFPC_FOCA_CODEDFONT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_FOCA_CODEDFONT);
+    pub const APPLICATION_VND_AFPC_FOCA_CODEPAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_FOCA_CODEPAGE);
+    pub const APPLICATION_VND_AFPC_MODCA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_MODCA);
+    pub const APPLICATION_VND_AFPC_MODCA_CMTABLE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_MODCA_CMTABLE);
+    pub const APPLICATION_VND_AFPC_MODCA_FORMDEF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_MODCA_FORMDEF);
+    pub const APPLICATION_VND_AFPC_MODCA_MEDIUMMAP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_MODCA_MEDIUMMAP);
+    pub const APPLICATION_VND_AFPC_MODCA_OBJECTCONTAINER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_MODCA_OBJECTCONTAINER);
+    pub const APPLICATION_VND_AFPC_MODCA_OVERLAY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_MODCA_OVERLAY);
+    pub const APPLICATION_VND_AFPC_MODCA_PAGESEGMENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AFPC_MODCA_PAGESEGMENT);
+    pub const APPLICATION_VND_AGE: Encoding = Encoding::new(prefix::APPLICATION_VND_AGE);
+    pub const APPLICATION_VND_AH_BARCODE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AH_BARCODE);
+    pub const APPLICATION_VND_AHEAD_SPACE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AHEAD_SPACE);
+    pub const APPLICATION_VND_AIRZIP_FILESECURE_AZF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AIRZIP_FILESECURE_AZF);
+    pub const APPLICATION_VND_AIRZIP_FILESECURE_AZS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AIRZIP_FILESECURE_AZS);
+    pub const APPLICATION_VND_AMADEUS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AMADEUS_JSON);
+    pub const APPLICATION_VND_AMAZON_MOBI8_EBOOK: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AMAZON_MOBI8_EBOOK);
+    pub const APPLICATION_VND_AMERICANDYNAMICS_ACC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AMERICANDYNAMICS_ACC);
+    pub const APPLICATION_VND_AMIGA_AMI: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AMIGA_AMI);
+    pub const APPLICATION_VND_AMUNDSEN_MAZE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AMUNDSEN_MAZE_XML);
+    pub const APPLICATION_VND_ANDROID_OTA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ANDROID_OTA);
+    pub const APPLICATION_VND_ANKI: Encoding = Encoding::new(prefix::APPLICATION_VND_ANKI);
+    pub const APPLICATION_VND_ANSER_WEB_CERTIFICATE_ISSUE_INITIATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ANSER_WEB_CERTIFICATE_ISSUE_INITIATION);
+    pub const APPLICATION_VND_ANTIX_GAME_COMPONENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ANTIX_GAME_COMPONENT);
+    pub const APPLICATION_VND_APACHE_ARROW_FILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APACHE_ARROW_FILE);
+    pub const APPLICATION_VND_APACHE_ARROW_STREAM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APACHE_ARROW_STREAM);
+    pub const APPLICATION_VND_APACHE_PARQUET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APACHE_PARQUET);
+    pub const APPLICATION_VND_APACHE_THRIFT_BINARY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APACHE_THRIFT_BINARY);
+    pub const APPLICATION_VND_APACHE_THRIFT_COMPACT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APACHE_THRIFT_COMPACT);
+    pub const APPLICATION_VND_APACHE_THRIFT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APACHE_THRIFT_JSON);
+    pub const APPLICATION_VND_APEXLANG: Encoding = Encoding::new(prefix::APPLICATION_VND_APEXLANG);
+    pub const APPLICATION_VND_API_JSON: Encoding = Encoding::new(prefix::APPLICATION_VND_API_JSON);
+    pub const APPLICATION_VND_APLEXTOR_WARRP_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APLEXTOR_WARRP_JSON);
+    pub const APPLICATION_VND_APOTHEKENDE_RESERVATION_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APOTHEKENDE_RESERVATION_JSON);
+    pub const APPLICATION_VND_APPLE_INSTALLER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APPLE_INSTALLER_XML);
+    pub const APPLICATION_VND_APPLE_KEYNOTE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APPLE_KEYNOTE);
+    pub const APPLICATION_VND_APPLE_MPEGURL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APPLE_MPEGURL);
+    pub const APPLICATION_VND_APPLE_NUMBERS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APPLE_NUMBERS);
+    pub const APPLICATION_VND_APPLE_PAGES: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_APPLE_PAGES);
+    pub const APPLICATION_VND_ARASTRA_SWI: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ARASTRA_SWI);
+    pub const APPLICATION_VND_ARISTANETWORKS_SWI: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ARISTANETWORKS_SWI);
+    pub const APPLICATION_VND_ARTISAN_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ARTISAN_JSON);
+    pub const APPLICATION_VND_ARTSQUARE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ARTSQUARE);
+    pub const APPLICATION_VND_ASTRAEA_SOFTWARE_IOTA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ASTRAEA_SOFTWARE_IOTA);
+    pub const APPLICATION_VND_AUDIOGRAPH: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AUDIOGRAPH);
+    pub const APPLICATION_VND_AUTOPACKAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AUTOPACKAGE);
+    pub const APPLICATION_VND_AVALON_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AVALON_JSON);
+    pub const APPLICATION_VND_AVISTAR_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_AVISTAR_XML);
+    pub const APPLICATION_VND_BALSAMIQ_BMML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BALSAMIQ_BMML_XML);
+    pub const APPLICATION_VND_BALSAMIQ_BMPR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BALSAMIQ_BMPR);
+    pub const APPLICATION_VND_BANANA_ACCOUNTING: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BANANA_ACCOUNTING);
+    pub const APPLICATION_VND_BBF_USP_ERROR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BBF_USP_ERROR);
+    pub const APPLICATION_VND_BBF_USP_MSG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BBF_USP_MSG);
+    pub const APPLICATION_VND_BBF_USP_MSG_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BBF_USP_MSG_JSON);
+    pub const APPLICATION_VND_BEKITZUR_STECH_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BEKITZUR_STECH_JSON);
+    pub const APPLICATION_VND_BELIGHTSOFT_LHZD_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BELIGHTSOFT_LHZD_ZIP);
+    pub const APPLICATION_VND_BELIGHTSOFT_LHZL_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BELIGHTSOFT_LHZL_ZIP);
+    pub const APPLICATION_VND_BINT_MED_CONTENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BINT_MED_CONTENT);
+    pub const APPLICATION_VND_BIOPAX_RDF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BIOPAX_RDF_XML);
+    pub const APPLICATION_VND_BLINK_IDB_VALUE_WRAPPER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BLINK_IDB_VALUE_WRAPPER);
+    pub const APPLICATION_VND_BLUEICE_MULTIPASS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BLUEICE_MULTIPASS);
+    pub const APPLICATION_VND_BLUETOOTH_EP_OOB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BLUETOOTH_EP_OOB);
+    pub const APPLICATION_VND_BLUETOOTH_LE_OOB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BLUETOOTH_LE_OOB);
+    pub const APPLICATION_VND_BMI: Encoding = Encoding::new(prefix::APPLICATION_VND_BMI);
+    pub const APPLICATION_VND_BPF: Encoding = Encoding::new(prefix::APPLICATION_VND_BPF);
+    pub const APPLICATION_VND_BPF3: Encoding = Encoding::new(prefix::APPLICATION_VND_BPF3);
+    pub const APPLICATION_VND_BUSINESSOBJECTS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BUSINESSOBJECTS);
+    pub const APPLICATION_VND_BYU_UAPI_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_BYU_UAPI_JSON);
+    pub const APPLICATION_VND_BZIP3: Encoding = Encoding::new(prefix::APPLICATION_VND_BZIP3);
+    pub const APPLICATION_VND_CAB_JSCRIPT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CAB_JSCRIPT);
+    pub const APPLICATION_VND_CANON_CPDL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CANON_CPDL);
+    pub const APPLICATION_VND_CANON_LIPS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CANON_LIPS);
+    pub const APPLICATION_VND_CAPASYSTEMS_PG_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CAPASYSTEMS_PG_JSON);
+    pub const APPLICATION_VND_CENDIO_THINLINC_CLIENTCONF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CENDIO_THINLINC_CLIENTCONF);
+    pub const APPLICATION_VND_CENTURY_SYSTEMS_TCP_STREAM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CENTURY_SYSTEMS_TCP_STREAM);
+    pub const APPLICATION_VND_CHEMDRAW_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CHEMDRAW_XML);
+    pub const APPLICATION_VND_CHESS_PGN: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CHESS_PGN);
+    pub const APPLICATION_VND_CHIPNUTS_KARAOKE_MMD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CHIPNUTS_KARAOKE_MMD);
+    pub const APPLICATION_VND_CIEDI: Encoding = Encoding::new(prefix::APPLICATION_VND_CIEDI);
+    pub const APPLICATION_VND_CINDERELLA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CINDERELLA);
+    pub const APPLICATION_VND_CIRPACK_ISDN_EXT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CIRPACK_ISDN_EXT);
+    pub const APPLICATION_VND_CITATIONSTYLES_STYLE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CITATIONSTYLES_STYLE_XML);
+    pub const APPLICATION_VND_CLAYMORE: Encoding = Encoding::new(prefix::APPLICATION_VND_CLAYMORE);
+    pub const APPLICATION_VND_CLOANTO_RP9: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CLOANTO_RP9);
+    pub const APPLICATION_VND_CLONK_C4GROUP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CLONK_C4GROUP);
+    pub const APPLICATION_VND_CLUETRUST_CARTOMOBILE_CONFIG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CLUETRUST_CARTOMOBILE_CONFIG);
+    pub const APPLICATION_VND_CLUETRUST_CARTOMOBILE_CONFIG_PKG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CLUETRUST_CARTOMOBILE_CONFIG_PKG);
+    pub const APPLICATION_VND_CNCF_HELM_CHART_CONTENT_V1_TAR_GZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CNCF_HELM_CHART_CONTENT_V1_TAR_GZIP);
+    pub const APPLICATION_VND_CNCF_HELM_CHART_PROVENANCE_V1_PROV: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CNCF_HELM_CHART_PROVENANCE_V1_PROV);
+    pub const APPLICATION_VND_CNCF_HELM_CONFIG_V1_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CNCF_HELM_CONFIG_V1_JSON);
+    pub const APPLICATION_VND_COFFEESCRIPT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COFFEESCRIPT);
+    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_DOCUMENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLABIO_XODOCUMENTS_DOCUMENT);
+    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_DOCUMENT_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLABIO_XODOCUMENTS_DOCUMENT_TEMPLATE);
+    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_PRESENTATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLABIO_XODOCUMENTS_PRESENTATION);
+    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_PRESENTATION_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLABIO_XODOCUMENTS_PRESENTATION_TEMPLATE);
+    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_SPREADSHEET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLABIO_XODOCUMENTS_SPREADSHEET);
+    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_SPREADSHEET_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLABIO_XODOCUMENTS_SPREADSHEET_TEMPLATE);
+    pub const APPLICATION_VND_COLLECTION_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLECTION_JSON);
+    pub const APPLICATION_VND_COLLECTION_DOC_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLECTION_DOC_JSON);
+    pub const APPLICATION_VND_COLLECTION_NEXT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COLLECTION_NEXT_JSON);
+    pub const APPLICATION_VND_COMICBOOK_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COMICBOOK_ZIP);
+    pub const APPLICATION_VND_COMICBOOK_RAR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COMICBOOK_RAR);
+    pub const APPLICATION_VND_COMMERCE_BATTELLE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COMMERCE_BATTELLE);
+    pub const APPLICATION_VND_COMMONSPACE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COMMONSPACE);
+    pub const APPLICATION_VND_CONTACT_CMSG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CONTACT_CMSG);
+    pub const APPLICATION_VND_COREOS_IGNITION_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COREOS_IGNITION_JSON);
+    pub const APPLICATION_VND_COSMOCALLER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_COSMOCALLER);
+    pub const APPLICATION_VND_CRICK_CLICKER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRICK_CLICKER);
+    pub const APPLICATION_VND_CRICK_CLICKER_KEYBOARD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRICK_CLICKER_KEYBOARD);
+    pub const APPLICATION_VND_CRICK_CLICKER_PALETTE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRICK_CLICKER_PALETTE);
+    pub const APPLICATION_VND_CRICK_CLICKER_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRICK_CLICKER_TEMPLATE);
+    pub const APPLICATION_VND_CRICK_CLICKER_WORDBANK: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRICK_CLICKER_WORDBANK);
+    pub const APPLICATION_VND_CRITICALTOOLS_WBS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRITICALTOOLS_WBS_XML);
+    pub const APPLICATION_VND_CRYPTII_PIPE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRYPTII_PIPE_JSON);
+    pub const APPLICATION_VND_CRYPTO_SHADE_FILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRYPTO_SHADE_FILE);
+    pub const APPLICATION_VND_CRYPTOMATOR_ENCRYPTED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRYPTOMATOR_ENCRYPTED);
+    pub const APPLICATION_VND_CRYPTOMATOR_VAULT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CRYPTOMATOR_VAULT);
+    pub const APPLICATION_VND_CTC_POSML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CTC_POSML);
+    pub const APPLICATION_VND_CTCT_WS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CTCT_WS_XML);
+    pub const APPLICATION_VND_CUPS_PDF: Encoding = Encoding::new(prefix::APPLICATION_VND_CUPS_PDF);
+    pub const APPLICATION_VND_CUPS_POSTSCRIPT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CUPS_POSTSCRIPT);
+    pub const APPLICATION_VND_CUPS_PPD: Encoding = Encoding::new(prefix::APPLICATION_VND_CUPS_PPD);
+    pub const APPLICATION_VND_CUPS_RASTER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CUPS_RASTER);
+    pub const APPLICATION_VND_CUPS_RAW: Encoding = Encoding::new(prefix::APPLICATION_VND_CUPS_RAW);
+    pub const APPLICATION_VND_CURL: Encoding = Encoding::new(prefix::APPLICATION_VND_CURL);
+    pub const APPLICATION_VND_CYAN_DEAN_ROOT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CYAN_DEAN_ROOT_XML);
+    pub const APPLICATION_VND_CYBANK: Encoding = Encoding::new(prefix::APPLICATION_VND_CYBANK);
+    pub const APPLICATION_VND_CYCLONEDX_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CYCLONEDX_JSON);
+    pub const APPLICATION_VND_CYCLONEDX_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_CYCLONEDX_XML);
+    pub const APPLICATION_VND_D2L_COURSEPACKAGE1P0_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_D2L_COURSEPACKAGE1P0_ZIP);
+    pub const APPLICATION_VND_D3M_DATASET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_D3M_DATASET);
+    pub const APPLICATION_VND_D3M_PROBLEM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_D3M_PROBLEM);
+    pub const APPLICATION_VND_DART: Encoding = Encoding::new(prefix::APPLICATION_VND_DART);
+    pub const APPLICATION_VND_DATA_VISION_RDZ: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DATA_VISION_RDZ);
+    pub const APPLICATION_VND_DATALOG: Encoding = Encoding::new(prefix::APPLICATION_VND_DATALOG);
+    pub const APPLICATION_VND_DATAPACKAGE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DATAPACKAGE_JSON);
+    pub const APPLICATION_VND_DATARESOURCE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DATARESOURCE_JSON);
+    pub const APPLICATION_VND_DBF: Encoding = Encoding::new(prefix::APPLICATION_VND_DBF);
+    pub const APPLICATION_VND_DEBIAN_BINARY_PACKAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DEBIAN_BINARY_PACKAGE);
+    pub const APPLICATION_VND_DECE_DATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DECE_DATA);
+    pub const APPLICATION_VND_DECE_TTML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DECE_TTML_XML);
+    pub const APPLICATION_VND_DECE_UNSPECIFIED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DECE_UNSPECIFIED);
+    pub const APPLICATION_VND_DECE_ZIP: Encoding = Encoding::new(prefix::APPLICATION_VND_DECE_ZIP);
+    pub const APPLICATION_VND_DENOVO_FCSELAYOUT_LINK: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DENOVO_FCSELAYOUT_LINK);
+    pub const APPLICATION_VND_DESMUME_MOVIE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DESMUME_MOVIE);
+    pub const APPLICATION_VND_DIR_BI_PLATE_DL_NOSUFFIX: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DIR_BI_PLATE_DL_NOSUFFIX);
+    pub const APPLICATION_VND_DM_DELEGATION_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DM_DELEGATION_XML);
+    pub const APPLICATION_VND_DNA: Encoding = Encoding::new(prefix::APPLICATION_VND_DNA);
+    pub const APPLICATION_VND_DOCUMENT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DOCUMENT_JSON);
+    pub const APPLICATION_VND_DOLBY_MOBILE_1: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DOLBY_MOBILE_1);
+    pub const APPLICATION_VND_DOLBY_MOBILE_2: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DOLBY_MOBILE_2);
+    pub const APPLICATION_VND_DOREMIR_SCORECLOUD_BINARY_DOCUMENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DOREMIR_SCORECLOUD_BINARY_DOCUMENT);
+    pub const APPLICATION_VND_DPGRAPH: Encoding = Encoding::new(prefix::APPLICATION_VND_DPGRAPH);
+    pub const APPLICATION_VND_DREAMFACTORY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DREAMFACTORY);
+    pub const APPLICATION_VND_DRIVE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DRIVE_JSON);
+    pub const APPLICATION_VND_DTG_LOCAL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DTG_LOCAL);
+    pub const APPLICATION_VND_DTG_LOCAL_FLASH: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DTG_LOCAL_FLASH);
+    pub const APPLICATION_VND_DTG_LOCAL_HTML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DTG_LOCAL_HTML);
+    pub const APPLICATION_VND_DVB_AIT: Encoding = Encoding::new(prefix::APPLICATION_VND_DVB_AIT);
+    pub const APPLICATION_VND_DVB_DVBISL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_DVBISL_XML);
+    pub const APPLICATION_VND_DVB_DVBJ: Encoding = Encoding::new(prefix::APPLICATION_VND_DVB_DVBJ);
+    pub const APPLICATION_VND_DVB_ESGCONTAINER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_ESGCONTAINER);
+    pub const APPLICATION_VND_DVB_IPDCDFTNOTIFACCESS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_IPDCDFTNOTIFACCESS);
+    pub const APPLICATION_VND_DVB_IPDCESGACCESS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_IPDCESGACCESS);
+    pub const APPLICATION_VND_DVB_IPDCESGACCESS2: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_IPDCESGACCESS2);
+    pub const APPLICATION_VND_DVB_IPDCESGPDD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_IPDCESGPDD);
+    pub const APPLICATION_VND_DVB_IPDCROAMING: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_IPDCROAMING);
+    pub const APPLICATION_VND_DVB_IPTV_ALFEC_BASE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_IPTV_ALFEC_BASE);
+    pub const APPLICATION_VND_DVB_IPTV_ALFEC_ENHANCEMENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_IPTV_ALFEC_ENHANCEMENT);
+    pub const APPLICATION_VND_DVB_NOTIF_AGGREGATE_ROOT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_NOTIF_AGGREGATE_ROOT_XML);
+    pub const APPLICATION_VND_DVB_NOTIF_CONTAINER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_NOTIF_CONTAINER_XML);
+    pub const APPLICATION_VND_DVB_NOTIF_GENERIC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_NOTIF_GENERIC_XML);
+    pub const APPLICATION_VND_DVB_NOTIF_IA_MSGLIST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_NOTIF_IA_MSGLIST_XML);
+    pub const APPLICATION_VND_DVB_NOTIF_IA_REGISTRATION_REQUEST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_NOTIF_IA_REGISTRATION_REQUEST_XML);
+    pub const APPLICATION_VND_DVB_NOTIF_IA_REGISTRATION_RESPONSE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_NOTIF_IA_REGISTRATION_RESPONSE_XML);
+    pub const APPLICATION_VND_DVB_NOTIF_INIT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_NOTIF_INIT_XML);
+    pub const APPLICATION_VND_DVB_PFR: Encoding = Encoding::new(prefix::APPLICATION_VND_DVB_PFR);
+    pub const APPLICATION_VND_DVB_SERVICE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_DVB_SERVICE);
+    pub const APPLICATION_VND_DXR: Encoding = Encoding::new(prefix::APPLICATION_VND_DXR);
+    pub const APPLICATION_VND_DYNAGEO: Encoding = Encoding::new(prefix::APPLICATION_VND_DYNAGEO);
+    pub const APPLICATION_VND_DZR: Encoding = Encoding::new(prefix::APPLICATION_VND_DZR);
+    pub const APPLICATION_VND_EASYKARAOKE_CDGDOWNLOAD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EASYKARAOKE_CDGDOWNLOAD);
+    pub const APPLICATION_VND_ECDIS_UPDATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ECDIS_UPDATE);
+    pub const APPLICATION_VND_ECIP_RLP: Encoding = Encoding::new(prefix::APPLICATION_VND_ECIP_RLP);
+    pub const APPLICATION_VND_ECLIPSE_DITTO_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ECLIPSE_DITTO_JSON);
+    pub const APPLICATION_VND_ECOWIN_CHART: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ECOWIN_CHART);
+    pub const APPLICATION_VND_ECOWIN_FILEREQUEST: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ECOWIN_FILEREQUEST);
+    pub const APPLICATION_VND_ECOWIN_FILEUPDATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ECOWIN_FILEUPDATE);
+    pub const APPLICATION_VND_ECOWIN_SERIES: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ECOWIN_SERIES);
+    pub const APPLICATION_VND_ECOWIN_SERIESREQUEST: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ECOWIN_SERIESREQUEST);
+    pub const APPLICATION_VND_ECOWIN_SERIESUPDATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ECOWIN_SERIESUPDATE);
+    pub const APPLICATION_VND_EFI_IMG: Encoding = Encoding::new(prefix::APPLICATION_VND_EFI_IMG);
+    pub const APPLICATION_VND_EFI_ISO: Encoding = Encoding::new(prefix::APPLICATION_VND_EFI_ISO);
+    pub const APPLICATION_VND_ELN_ZIP: Encoding = Encoding::new(prefix::APPLICATION_VND_ELN_ZIP);
+    pub const APPLICATION_VND_EMCLIENT_ACCESSREQUEST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EMCLIENT_ACCESSREQUEST_XML);
+    pub const APPLICATION_VND_ENLIVEN: Encoding = Encoding::new(prefix::APPLICATION_VND_ENLIVEN);
+    pub const APPLICATION_VND_ENPHASE_ENVOY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ENPHASE_ENVOY);
+    pub const APPLICATION_VND_EPRINTS_DATA_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EPRINTS_DATA_XML);
+    pub const APPLICATION_VND_EPSON_ESF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EPSON_ESF);
+    pub const APPLICATION_VND_EPSON_MSF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EPSON_MSF);
+    pub const APPLICATION_VND_EPSON_QUICKANIME: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EPSON_QUICKANIME);
+    pub const APPLICATION_VND_EPSON_SALT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EPSON_SALT);
+    pub const APPLICATION_VND_EPSON_SSF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EPSON_SSF);
+    pub const APPLICATION_VND_ERICSSON_QUICKCALL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ERICSSON_QUICKCALL);
+    pub const APPLICATION_VND_EROFS: Encoding = Encoding::new(prefix::APPLICATION_VND_EROFS);
+    pub const APPLICATION_VND_ESPASS_ESPASS_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ESPASS_ESPASS_ZIP);
+    pub const APPLICATION_VND_ESZIGNO3_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ESZIGNO3_XML);
+    pub const APPLICATION_VND_ETSI_AOC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_AOC_XML);
+    pub const APPLICATION_VND_ETSI_ASIC_E_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_ASIC_E_ZIP);
+    pub const APPLICATION_VND_ETSI_ASIC_S_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_ASIC_S_ZIP);
+    pub const APPLICATION_VND_ETSI_CUG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_CUG_XML);
+    pub const APPLICATION_VND_ETSI_IPTVCOMMAND_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVCOMMAND_XML);
+    pub const APPLICATION_VND_ETSI_IPTVDISCOVERY_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVDISCOVERY_XML);
+    pub const APPLICATION_VND_ETSI_IPTVPROFILE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVPROFILE_XML);
+    pub const APPLICATION_VND_ETSI_IPTVSAD_BC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVSAD_BC_XML);
+    pub const APPLICATION_VND_ETSI_IPTVSAD_COD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVSAD_COD_XML);
+    pub const APPLICATION_VND_ETSI_IPTVSAD_NPVR_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVSAD_NPVR_XML);
+    pub const APPLICATION_VND_ETSI_IPTVSERVICE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVSERVICE_XML);
+    pub const APPLICATION_VND_ETSI_IPTVSYNC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVSYNC_XML);
+    pub const APPLICATION_VND_ETSI_IPTVUEPROFILE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_IPTVUEPROFILE_XML);
+    pub const APPLICATION_VND_ETSI_MCID_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_MCID_XML);
+    pub const APPLICATION_VND_ETSI_MHEG5: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_MHEG5);
+    pub const APPLICATION_VND_ETSI_OVERLOAD_CONTROL_POLICY_DATASET_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_OVERLOAD_CONTROL_POLICY_DATASET_XML);
+    pub const APPLICATION_VND_ETSI_PSTN_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_PSTN_XML);
+    pub const APPLICATION_VND_ETSI_SCI_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_SCI_XML);
+    pub const APPLICATION_VND_ETSI_SIMSERVS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_SIMSERVS_XML);
+    pub const APPLICATION_VND_ETSI_TIMESTAMP_TOKEN: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_TIMESTAMP_TOKEN);
+    pub const APPLICATION_VND_ETSI_TSL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_TSL_XML);
+    pub const APPLICATION_VND_ETSI_TSL_DER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ETSI_TSL_DER);
+    pub const APPLICATION_VND_EU_KASPARIAN_CAR_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EU_KASPARIAN_CAR_JSON);
+    pub const APPLICATION_VND_EUDORA_DATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EUDORA_DATA);
+    pub const APPLICATION_VND_EVOLV_ECIG_PROFILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EVOLV_ECIG_PROFILE);
+    pub const APPLICATION_VND_EVOLV_ECIG_SETTINGS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EVOLV_ECIG_SETTINGS);
+    pub const APPLICATION_VND_EVOLV_ECIG_THEME: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EVOLV_ECIG_THEME);
+    pub const APPLICATION_VND_EXSTREAM_EMPOWER_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EXSTREAM_EMPOWER_ZIP);
+    pub const APPLICATION_VND_EXSTREAM_PACKAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EXSTREAM_PACKAGE);
+    pub const APPLICATION_VND_EZPIX_ALBUM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EZPIX_ALBUM);
+    pub const APPLICATION_VND_EZPIX_PACKAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_EZPIX_PACKAGE);
+    pub const APPLICATION_VND_F_SECURE_MOBILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_F_SECURE_MOBILE);
+    pub const APPLICATION_VND_FAMILYSEARCH_GEDCOM_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FAMILYSEARCH_GEDCOM_ZIP);
+    pub const APPLICATION_VND_FASTCOPY_DISK_IMAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FASTCOPY_DISK_IMAGE);
+    pub const APPLICATION_VND_FDSN_MSEED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FDSN_MSEED);
+    pub const APPLICATION_VND_FDSN_SEED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FDSN_SEED);
+    pub const APPLICATION_VND_FFSNS: Encoding = Encoding::new(prefix::APPLICATION_VND_FFSNS);
+    pub const APPLICATION_VND_FICLAB_FLB_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FICLAB_FLB_ZIP);
+    pub const APPLICATION_VND_FILMIT_ZFC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FILMIT_ZFC);
+    pub const APPLICATION_VND_FINTS: Encoding = Encoding::new(prefix::APPLICATION_VND_FINTS);
+    pub const APPLICATION_VND_FIREMONKEYS_CLOUDCELL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FIREMONKEYS_CLOUDCELL);
+    pub const APPLICATION_VND_FLUXTIME_CLIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FLUXTIME_CLIP);
+    pub const APPLICATION_VND_FONT_FONTFORGE_SFD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FONT_FONTFORGE_SFD);
+    pub const APPLICATION_VND_FRAMEMAKER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FRAMEMAKER);
+    pub const APPLICATION_VND_FREELOG_COMIC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FREELOG_COMIC);
+    pub const APPLICATION_VND_FROGANS_FNC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FROGANS_FNC);
+    pub const APPLICATION_VND_FROGANS_LTF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FROGANS_LTF);
+    pub const APPLICATION_VND_FSC_WEBLAUNCH: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FSC_WEBLAUNCH);
+    pub const APPLICATION_VND_FUJIFILM_FB_DOCUWORKS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIFILM_FB_DOCUWORKS);
+    pub const APPLICATION_VND_FUJIFILM_FB_DOCUWORKS_BINDER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIFILM_FB_DOCUWORKS_BINDER);
+    pub const APPLICATION_VND_FUJIFILM_FB_DOCUWORKS_CONTAINER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIFILM_FB_DOCUWORKS_CONTAINER);
+    pub const APPLICATION_VND_FUJIFILM_FB_JFI_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIFILM_FB_JFI_XML);
+    pub const APPLICATION_VND_FUJITSU_OASYS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJITSU_OASYS);
+    pub const APPLICATION_VND_FUJITSU_OASYS2: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJITSU_OASYS2);
+    pub const APPLICATION_VND_FUJITSU_OASYS3: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJITSU_OASYS3);
+    pub const APPLICATION_VND_FUJITSU_OASYSGP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJITSU_OASYSGP);
+    pub const APPLICATION_VND_FUJITSU_OASYSPRS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJITSU_OASYSPRS);
+    pub const APPLICATION_VND_FUJIXEROX_ART_EX: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIXEROX_ART_EX);
+    pub const APPLICATION_VND_FUJIXEROX_ART4: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIXEROX_ART4);
+    pub const APPLICATION_VND_FUJIXEROX_HBPL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIXEROX_HBPL);
+    pub const APPLICATION_VND_FUJIXEROX_DDD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIXEROX_DDD);
+    pub const APPLICATION_VND_FUJIXEROX_DOCUWORKS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIXEROX_DOCUWORKS);
+    pub const APPLICATION_VND_FUJIXEROX_DOCUWORKS_BINDER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIXEROX_DOCUWORKS_BINDER);
+    pub const APPLICATION_VND_FUJIXEROX_DOCUWORKS_CONTAINER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUJIXEROX_DOCUWORKS_CONTAINER);
+    pub const APPLICATION_VND_FUT_MISNET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUT_MISNET);
+    pub const APPLICATION_VND_FUTOIN_CBOR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUTOIN_CBOR);
+    pub const APPLICATION_VND_FUTOIN_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUTOIN_JSON);
+    pub const APPLICATION_VND_FUZZYSHEET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_FUZZYSHEET);
+    pub const APPLICATION_VND_GENOMATIX_TUXEDO: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENOMATIX_TUXEDO);
+    pub const APPLICATION_VND_GENOZIP: Encoding = Encoding::new(prefix::APPLICATION_VND_GENOZIP);
+    pub const APPLICATION_VND_GENTICS_GRD_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENTICS_GRD_JSON);
+    pub const APPLICATION_VND_GENTOO_CATMETADATA_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENTOO_CATMETADATA_XML);
+    pub const APPLICATION_VND_GENTOO_EBUILD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENTOO_EBUILD);
+    pub const APPLICATION_VND_GENTOO_ECLASS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENTOO_ECLASS);
+    pub const APPLICATION_VND_GENTOO_GPKG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENTOO_GPKG);
+    pub const APPLICATION_VND_GENTOO_MANIFEST: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENTOO_MANIFEST);
+    pub const APPLICATION_VND_GENTOO_PKGMETADATA_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENTOO_PKGMETADATA_XML);
+    pub const APPLICATION_VND_GENTOO_XPAK: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GENTOO_XPAK);
+    pub const APPLICATION_VND_GEO_JSON: Encoding = Encoding::new(prefix::APPLICATION_VND_GEO_JSON);
+    pub const APPLICATION_VND_GEOCUBE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GEOCUBE_XML);
+    pub const APPLICATION_VND_GEOGEBRA_FILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GEOGEBRA_FILE);
+    pub const APPLICATION_VND_GEOGEBRA_SLIDES: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GEOGEBRA_SLIDES);
+    pub const APPLICATION_VND_GEOGEBRA_TOOL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GEOGEBRA_TOOL);
+    pub const APPLICATION_VND_GEOMETRY_EXPLORER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GEOMETRY_EXPLORER);
+    pub const APPLICATION_VND_GEONEXT: Encoding = Encoding::new(prefix::APPLICATION_VND_GEONEXT);
+    pub const APPLICATION_VND_GEOPLAN: Encoding = Encoding::new(prefix::APPLICATION_VND_GEOPLAN);
+    pub const APPLICATION_VND_GEOSPACE: Encoding = Encoding::new(prefix::APPLICATION_VND_GEOSPACE);
+    pub const APPLICATION_VND_GERBER: Encoding = Encoding::new(prefix::APPLICATION_VND_GERBER);
+    pub const APPLICATION_VND_GLOBALPLATFORM_CARD_CONTENT_MGT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GLOBALPLATFORM_CARD_CONTENT_MGT);
+    pub const APPLICATION_VND_GLOBALPLATFORM_CARD_CONTENT_MGT_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GLOBALPLATFORM_CARD_CONTENT_MGT_RESPONSE);
+    pub const APPLICATION_VND_GMX: Encoding = Encoding::new(prefix::APPLICATION_VND_GMX);
+    pub const APPLICATION_VND_GNU_TALER_EXCHANGE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GNU_TALER_EXCHANGE_JSON);
+    pub const APPLICATION_VND_GNU_TALER_MERCHANT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GNU_TALER_MERCHANT_JSON);
+    pub const APPLICATION_VND_GOOGLE_EARTH_KML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GOOGLE_EARTH_KML_XML);
+    pub const APPLICATION_VND_GOOGLE_EARTH_KMZ: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GOOGLE_EARTH_KMZ);
+    pub const APPLICATION_VND_GOV_SK_E_FORM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GOV_SK_E_FORM_XML);
+    pub const APPLICATION_VND_GOV_SK_E_FORM_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GOV_SK_E_FORM_ZIP);
+    pub const APPLICATION_VND_GOV_SK_XMLDATACONTAINER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GOV_SK_XMLDATACONTAINER_XML);
+    pub const APPLICATION_VND_GPXSEE_MAP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GPXSEE_MAP_XML);
+    pub const APPLICATION_VND_GRAFEQ: Encoding = Encoding::new(prefix::APPLICATION_VND_GRAFEQ);
+    pub const APPLICATION_VND_GRIDMP: Encoding = Encoding::new(prefix::APPLICATION_VND_GRIDMP);
+    pub const APPLICATION_VND_GROOVE_ACCOUNT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GROOVE_ACCOUNT);
+    pub const APPLICATION_VND_GROOVE_HELP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GROOVE_HELP);
+    pub const APPLICATION_VND_GROOVE_IDENTITY_MESSAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GROOVE_IDENTITY_MESSAGE);
+    pub const APPLICATION_VND_GROOVE_INJECTOR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GROOVE_INJECTOR);
+    pub const APPLICATION_VND_GROOVE_TOOL_MESSAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GROOVE_TOOL_MESSAGE);
+    pub const APPLICATION_VND_GROOVE_TOOL_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GROOVE_TOOL_TEMPLATE);
+    pub const APPLICATION_VND_GROOVE_VCARD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_GROOVE_VCARD);
+    pub const APPLICATION_VND_HAL_JSON: Encoding = Encoding::new(prefix::APPLICATION_VND_HAL_JSON);
+    pub const APPLICATION_VND_HAL_XML: Encoding = Encoding::new(prefix::APPLICATION_VND_HAL_XML);
+    pub const APPLICATION_VND_HBCI: Encoding = Encoding::new(prefix::APPLICATION_VND_HBCI);
+    pub const APPLICATION_VND_HC_JSON: Encoding = Encoding::new(prefix::APPLICATION_VND_HC_JSON);
+    pub const APPLICATION_VND_HCL_BIREPORTS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HCL_BIREPORTS);
+    pub const APPLICATION_VND_HDT: Encoding = Encoding::new(prefix::APPLICATION_VND_HDT);
+    pub const APPLICATION_VND_HEROKU_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HEROKU_JSON);
+    pub const APPLICATION_VND_HHE_LESSON_PLAYER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HHE_LESSON_PLAYER);
+    pub const APPLICATION_VND_HP_HPGL: Encoding = Encoding::new(prefix::APPLICATION_VND_HP_HPGL);
+    pub const APPLICATION_VND_HP_PCL: Encoding = Encoding::new(prefix::APPLICATION_VND_HP_PCL);
+    pub const APPLICATION_VND_HP_PCLXL: Encoding = Encoding::new(prefix::APPLICATION_VND_HP_PCLXL);
+    pub const APPLICATION_VND_HP_HPID: Encoding = Encoding::new(prefix::APPLICATION_VND_HP_HPID);
+    pub const APPLICATION_VND_HP_HPS: Encoding = Encoding::new(prefix::APPLICATION_VND_HP_HPS);
+    pub const APPLICATION_VND_HP_JLYT: Encoding = Encoding::new(prefix::APPLICATION_VND_HP_JLYT);
+    pub const APPLICATION_VND_HSL: Encoding = Encoding::new(prefix::APPLICATION_VND_HSL);
+    pub const APPLICATION_VND_HTTPHONE: Encoding = Encoding::new(prefix::APPLICATION_VND_HTTPHONE);
+    pub const APPLICATION_VND_HYDROSTATIX_SOF_DATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HYDROSTATIX_SOF_DATA);
+    pub const APPLICATION_VND_HYPER_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HYPER_JSON);
+    pub const APPLICATION_VND_HYPER_ITEM_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HYPER_ITEM_JSON);
+    pub const APPLICATION_VND_HYPERDRIVE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HYPERDRIVE_JSON);
+    pub const APPLICATION_VND_HZN_3D_CROSSWORD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_HZN_3D_CROSSWORD);
+    pub const APPLICATION_VND_IBM_MINIPAY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IBM_MINIPAY);
+    pub const APPLICATION_VND_IBM_AFPLINEDATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IBM_AFPLINEDATA);
+    pub const APPLICATION_VND_IBM_ELECTRONIC_MEDIA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IBM_ELECTRONIC_MEDIA);
+    pub const APPLICATION_VND_IBM_MODCAP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IBM_MODCAP);
+    pub const APPLICATION_VND_IBM_RIGHTS_MANAGEMENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IBM_RIGHTS_MANAGEMENT);
+    pub const APPLICATION_VND_IBM_SECURE_CONTAINER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IBM_SECURE_CONTAINER);
+    pub const APPLICATION_VND_ICCPROFILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ICCPROFILE);
+    pub const APPLICATION_VND_IEEE_1905: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IEEE_1905);
+    pub const APPLICATION_VND_IGLOADER: Encoding = Encoding::new(prefix::APPLICATION_VND_IGLOADER);
+    pub const APPLICATION_VND_IMAGEMETER_FOLDER_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMAGEMETER_FOLDER_ZIP);
+    pub const APPLICATION_VND_IMAGEMETER_IMAGE_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMAGEMETER_IMAGE_ZIP);
+    pub const APPLICATION_VND_IMMERVISION_IVP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMMERVISION_IVP);
+    pub const APPLICATION_VND_IMMERVISION_IVU: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMMERVISION_IVU);
+    pub const APPLICATION_VND_IMS_IMSCCV1P1: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_IMSCCV1P1);
+    pub const APPLICATION_VND_IMS_IMSCCV1P2: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_IMSCCV1P2);
+    pub const APPLICATION_VND_IMS_IMSCCV1P3: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_IMSCCV1P3);
+    pub const APPLICATION_VND_IMS_LIS_V2_RESULT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_LIS_V2_RESULT_JSON);
+    pub const APPLICATION_VND_IMS_LTI_V2_TOOLCONSUMERPROFILE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_LTI_V2_TOOLCONSUMERPROFILE_JSON);
+    pub const APPLICATION_VND_IMS_LTI_V2_TOOLPROXY_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_LTI_V2_TOOLPROXY_JSON);
+    pub const APPLICATION_VND_IMS_LTI_V2_TOOLPROXY_ID_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_LTI_V2_TOOLPROXY_ID_JSON);
+    pub const APPLICATION_VND_IMS_LTI_V2_TOOLSETTINGS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_LTI_V2_TOOLSETTINGS_JSON);
+    pub const APPLICATION_VND_IMS_LTI_V2_TOOLSETTINGS_SIMPLE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IMS_LTI_V2_TOOLSETTINGS_SIMPLE_JSON);
+    pub const APPLICATION_VND_INFORMEDCONTROL_RMS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INFORMEDCONTROL_RMS_XML);
+    pub const APPLICATION_VND_INFORMIX_VISIONARY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INFORMIX_VISIONARY);
+    pub const APPLICATION_VND_INFOTECH_PROJECT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INFOTECH_PROJECT);
+    pub const APPLICATION_VND_INFOTECH_PROJECT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INFOTECH_PROJECT_XML);
+    pub const APPLICATION_VND_INNOPATH_WAMP_NOTIFICATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INNOPATH_WAMP_NOTIFICATION);
+    pub const APPLICATION_VND_INSORS_IGM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INSORS_IGM);
+    pub const APPLICATION_VND_INTERCON_FORMNET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INTERCON_FORMNET);
+    pub const APPLICATION_VND_INTERGEO: Encoding = Encoding::new(prefix::APPLICATION_VND_INTERGEO);
+    pub const APPLICATION_VND_INTERTRUST_DIGIBOX: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INTERTRUST_DIGIBOX);
+    pub const APPLICATION_VND_INTERTRUST_NNCP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_INTERTRUST_NNCP);
+    pub const APPLICATION_VND_INTU_QBO: Encoding = Encoding::new(prefix::APPLICATION_VND_INTU_QBO);
+    pub const APPLICATION_VND_INTU_QFX: Encoding = Encoding::new(prefix::APPLICATION_VND_INTU_QFX);
+    pub const APPLICATION_VND_IPFS_IPNS_RECORD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPFS_IPNS_RECORD);
+    pub const APPLICATION_VND_IPLD_CAR: Encoding = Encoding::new(prefix::APPLICATION_VND_IPLD_CAR);
+    pub const APPLICATION_VND_IPLD_DAG_CBOR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPLD_DAG_CBOR);
+    pub const APPLICATION_VND_IPLD_DAG_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPLD_DAG_JSON);
+    pub const APPLICATION_VND_IPLD_RAW: Encoding = Encoding::new(prefix::APPLICATION_VND_IPLD_RAW);
+    pub const APPLICATION_VND_IPTC_G2_CATALOGITEM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPTC_G2_CATALOGITEM_XML);
+    pub const APPLICATION_VND_IPTC_G2_CONCEPTITEM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPTC_G2_CONCEPTITEM_XML);
+    pub const APPLICATION_VND_IPTC_G2_KNOWLEDGEITEM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPTC_G2_KNOWLEDGEITEM_XML);
+    pub const APPLICATION_VND_IPTC_G2_NEWSITEM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPTC_G2_NEWSITEM_XML);
+    pub const APPLICATION_VND_IPTC_G2_NEWSMESSAGE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPTC_G2_NEWSMESSAGE_XML);
+    pub const APPLICATION_VND_IPTC_G2_PACKAGEITEM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPTC_G2_PACKAGEITEM_XML);
+    pub const APPLICATION_VND_IPTC_G2_PLANNINGITEM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPTC_G2_PLANNINGITEM_XML);
+    pub const APPLICATION_VND_IPUNPLUGGED_RCPROFILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IPUNPLUGGED_RCPROFILE);
+    pub const APPLICATION_VND_IREPOSITORY_PACKAGE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_IREPOSITORY_PACKAGE_XML);
+    pub const APPLICATION_VND_IS_XPR: Encoding = Encoding::new(prefix::APPLICATION_VND_IS_XPR);
+    pub const APPLICATION_VND_ISAC_FCS: Encoding = Encoding::new(prefix::APPLICATION_VND_ISAC_FCS);
+    pub const APPLICATION_VND_ISO11783_10_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ISO11783_10_ZIP);
+    pub const APPLICATION_VND_JAM: Encoding = Encoding::new(prefix::APPLICATION_VND_JAM);
+    pub const APPLICATION_VND_JAPANNET_DIRECTORY_SERVICE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JAPANNET_DIRECTORY_SERVICE);
+    pub const APPLICATION_VND_JAPANNET_JPNSTORE_WAKEUP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JAPANNET_JPNSTORE_WAKEUP);
+    pub const APPLICATION_VND_JAPANNET_PAYMENT_WAKEUP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JAPANNET_PAYMENT_WAKEUP);
+    pub const APPLICATION_VND_JAPANNET_REGISTRATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JAPANNET_REGISTRATION);
+    pub const APPLICATION_VND_JAPANNET_REGISTRATION_WAKEUP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JAPANNET_REGISTRATION_WAKEUP);
+    pub const APPLICATION_VND_JAPANNET_SETSTORE_WAKEUP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JAPANNET_SETSTORE_WAKEUP);
+    pub const APPLICATION_VND_JAPANNET_VERIFICATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JAPANNET_VERIFICATION);
+    pub const APPLICATION_VND_JAPANNET_VERIFICATION_WAKEUP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JAPANNET_VERIFICATION_WAKEUP);
+    pub const APPLICATION_VND_JCP_JAVAME_MIDLET_RMS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JCP_JAVAME_MIDLET_RMS);
+    pub const APPLICATION_VND_JISP: Encoding = Encoding::new(prefix::APPLICATION_VND_JISP);
+    pub const APPLICATION_VND_JOOST_JODA_ARCHIVE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JOOST_JODA_ARCHIVE);
+    pub const APPLICATION_VND_JSK_ISDN_NGN: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_JSK_ISDN_NGN);
+    pub const APPLICATION_VND_KAHOOTZ: Encoding = Encoding::new(prefix::APPLICATION_VND_KAHOOTZ);
+    pub const APPLICATION_VND_KDE_KARBON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KDE_KARBON);
+    pub const APPLICATION_VND_KDE_KCHART: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KDE_KCHART);
+    pub const APPLICATION_VND_KDE_KFORMULA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KDE_KFORMULA);
+    pub const APPLICATION_VND_KDE_KIVIO: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KDE_KIVIO);
+    pub const APPLICATION_VND_KDE_KONTOUR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KDE_KONTOUR);
+    pub const APPLICATION_VND_KDE_KPRESENTER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KDE_KPRESENTER);
+    pub const APPLICATION_VND_KDE_KSPREAD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KDE_KSPREAD);
+    pub const APPLICATION_VND_KDE_KWORD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KDE_KWORD);
+    pub const APPLICATION_VND_KENAMEAAPP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KENAMEAAPP);
+    pub const APPLICATION_VND_KIDSPIRATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KIDSPIRATION);
+    pub const APPLICATION_VND_KOAN: Encoding = Encoding::new(prefix::APPLICATION_VND_KOAN);
+    pub const APPLICATION_VND_KODAK_DESCRIPTOR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_KODAK_DESCRIPTOR);
+    pub const APPLICATION_VND_LAS: Encoding = Encoding::new(prefix::APPLICATION_VND_LAS);
+    pub const APPLICATION_VND_LAS_LAS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LAS_LAS_JSON);
+    pub const APPLICATION_VND_LAS_LAS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LAS_LAS_XML);
+    pub const APPLICATION_VND_LASZIP: Encoding = Encoding::new(prefix::APPLICATION_VND_LASZIP);
+    pub const APPLICATION_VND_LDEV_PRODUCTLICENSING: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LDEV_PRODUCTLICENSING);
+    pub const APPLICATION_VND_LEAP_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LEAP_JSON);
+    pub const APPLICATION_VND_LIBERTY_REQUEST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LIBERTY_REQUEST_XML);
+    pub const APPLICATION_VND_LLAMAGRAPHICS_LIFE_BALANCE_DESKTOP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LLAMAGRAPHICS_LIFE_BALANCE_DESKTOP);
+    pub const APPLICATION_VND_LLAMAGRAPHICS_LIFE_BALANCE_EXCHANGE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LLAMAGRAPHICS_LIFE_BALANCE_EXCHANGE_XML);
+    pub const APPLICATION_VND_LOGIPIPE_CIRCUIT_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LOGIPIPE_CIRCUIT_ZIP);
+    pub const APPLICATION_VND_LOOM: Encoding = Encoding::new(prefix::APPLICATION_VND_LOOM);
+    pub const APPLICATION_VND_LOTUS_1_2_3: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LOTUS_1_2_3);
+    pub const APPLICATION_VND_LOTUS_APPROACH: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LOTUS_APPROACH);
+    pub const APPLICATION_VND_LOTUS_FREELANCE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LOTUS_FREELANCE);
+    pub const APPLICATION_VND_LOTUS_NOTES: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LOTUS_NOTES);
+    pub const APPLICATION_VND_LOTUS_ORGANIZER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LOTUS_ORGANIZER);
+    pub const APPLICATION_VND_LOTUS_SCREENCAM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LOTUS_SCREENCAM);
+    pub const APPLICATION_VND_LOTUS_WORDPRO: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_LOTUS_WORDPRO);
+    pub const APPLICATION_VND_MACPORTS_PORTPKG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MACPORTS_PORTPKG);
+    pub const APPLICATION_VND_MAPBOX_VECTOR_TILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MAPBOX_VECTOR_TILE);
+    pub const APPLICATION_VND_MARLIN_DRM_ACTIONTOKEN_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MARLIN_DRM_ACTIONTOKEN_XML);
+    pub const APPLICATION_VND_MARLIN_DRM_CONFTOKEN_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MARLIN_DRM_CONFTOKEN_XML);
+    pub const APPLICATION_VND_MARLIN_DRM_LICENSE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MARLIN_DRM_LICENSE_XML);
+    pub const APPLICATION_VND_MARLIN_DRM_MDCF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MARLIN_DRM_MDCF);
+    pub const APPLICATION_VND_MASON_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MASON_JSON);
+    pub const APPLICATION_VND_MAXAR_ARCHIVE_3TZ_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MAXAR_ARCHIVE_3TZ_ZIP);
+    pub const APPLICATION_VND_MAXMIND_MAXMIND_DB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MAXMIND_MAXMIND_DB);
+    pub const APPLICATION_VND_MCD: Encoding = Encoding::new(prefix::APPLICATION_VND_MCD);
+    pub const APPLICATION_VND_MDL: Encoding = Encoding::new(prefix::APPLICATION_VND_MDL);
+    pub const APPLICATION_VND_MDL_MBSDF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MDL_MBSDF);
+    pub const APPLICATION_VND_MEDCALCDATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MEDCALCDATA);
+    pub const APPLICATION_VND_MEDIASTATION_CDKEY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MEDIASTATION_CDKEY);
+    pub const APPLICATION_VND_MEDICALHOLODECK_RECORDXR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MEDICALHOLODECK_RECORDXR);
+    pub const APPLICATION_VND_MERIDIAN_SLINGSHOT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MERIDIAN_SLINGSHOT);
+    pub const APPLICATION_VND_MERMAID: Encoding = Encoding::new(prefix::APPLICATION_VND_MERMAID);
+    pub const APPLICATION_VND_MFMP: Encoding = Encoding::new(prefix::APPLICATION_VND_MFMP);
+    pub const APPLICATION_VND_MICRO_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MICRO_JSON);
+    pub const APPLICATION_VND_MICROGRAFX_FLO: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MICROGRAFX_FLO);
+    pub const APPLICATION_VND_MICROGRAFX_IGX: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MICROGRAFX_IGX);
+    pub const APPLICATION_VND_MICROSOFT_PORTABLE_EXECUTABLE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MICROSOFT_PORTABLE_EXECUTABLE);
+    pub const APPLICATION_VND_MICROSOFT_WINDOWS_THUMBNAIL_CACHE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MICROSOFT_WINDOWS_THUMBNAIL_CACHE);
+    pub const APPLICATION_VND_MIELE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MIELE_JSON);
+    pub const APPLICATION_VND_MIF: Encoding = Encoding::new(prefix::APPLICATION_VND_MIF);
+    pub const APPLICATION_VND_MINISOFT_HP3000_SAVE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MINISOFT_HP3000_SAVE);
+    pub const APPLICATION_VND_MITSUBISHI_MISTY_GUARD_TRUSTWEB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MITSUBISHI_MISTY_GUARD_TRUSTWEB);
+    pub const APPLICATION_VND_MODL: Encoding = Encoding::new(prefix::APPLICATION_VND_MODL);
+    pub const APPLICATION_VND_MOPHUN_APPLICATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOPHUN_APPLICATION);
+    pub const APPLICATION_VND_MOPHUN_CERTIFICATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOPHUN_CERTIFICATE);
+    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOTOROLA_FLEXSUITE);
+    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_ADSI: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOTOROLA_FLEXSUITE_ADSI);
+    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_FIS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOTOROLA_FLEXSUITE_FIS);
+    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_GOTAP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOTOROLA_FLEXSUITE_GOTAP);
+    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_KMR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOTOROLA_FLEXSUITE_KMR);
+    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_TTC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOTOROLA_FLEXSUITE_TTC);
+    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_WEM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOTOROLA_FLEXSUITE_WEM);
+    pub const APPLICATION_VND_MOTOROLA_IPRM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOTOROLA_IPRM);
+    pub const APPLICATION_VND_MOZILLA_XUL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MOZILLA_XUL_XML);
+    pub const APPLICATION_VND_MS_3MFDOCUMENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_3MFDOCUMENT);
+    pub const APPLICATION_VND_MS_PRINTDEVICECAPABILITIES_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_PRINTDEVICECAPABILITIES_XML);
+    pub const APPLICATION_VND_MS_PRINTSCHEMATICKET_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_PRINTSCHEMATICKET_XML);
+    pub const APPLICATION_VND_MS_ARTGALRY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_ARTGALRY);
+    pub const APPLICATION_VND_MS_ASF: Encoding = Encoding::new(prefix::APPLICATION_VND_MS_ASF);
+    pub const APPLICATION_VND_MS_CAB_COMPRESSED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_CAB_COMPRESSED);
+    pub const APPLICATION_VND_MS_EXCEL: Encoding = Encoding::new(prefix::APPLICATION_VND_MS_EXCEL);
+    pub const APPLICATION_VND_MS_EXCEL_ADDIN_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_EXCEL_ADDIN_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_EXCEL_SHEET_BINARY_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_EXCEL_SHEET_BINARY_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_EXCEL_SHEET_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_EXCEL_SHEET_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_EXCEL_TEMPLATE_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_EXCEL_TEMPLATE_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_FONTOBJECT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_FONTOBJECT);
+    pub const APPLICATION_VND_MS_HTMLHELP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_HTMLHELP);
+    pub const APPLICATION_VND_MS_IMS: Encoding = Encoding::new(prefix::APPLICATION_VND_MS_IMS);
+    pub const APPLICATION_VND_MS_LRM: Encoding = Encoding::new(prefix::APPLICATION_VND_MS_LRM);
+    pub const APPLICATION_VND_MS_OFFICE_ACTIVEX_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_OFFICE_ACTIVEX_XML);
+    pub const APPLICATION_VND_MS_OFFICETHEME: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_OFFICETHEME);
+    pub const APPLICATION_VND_MS_PLAYREADY_INITIATOR_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_PLAYREADY_INITIATOR_XML);
+    pub const APPLICATION_VND_MS_POWERPOINT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_POWERPOINT);
+    pub const APPLICATION_VND_MS_POWERPOINT_ADDIN_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_POWERPOINT_ADDIN_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_POWERPOINT_PRESENTATION_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_POWERPOINT_PRESENTATION_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_POWERPOINT_SLIDE_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_POWERPOINT_SLIDE_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_POWERPOINT_SLIDESHOW_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_POWERPOINT_SLIDESHOW_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_POWERPOINT_TEMPLATE_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_POWERPOINT_TEMPLATE_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_PROJECT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_PROJECT);
+    pub const APPLICATION_VND_MS_TNEF: Encoding = Encoding::new(prefix::APPLICATION_VND_MS_TNEF);
+    pub const APPLICATION_VND_MS_WINDOWS_DEVICEPAIRING: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WINDOWS_DEVICEPAIRING);
+    pub const APPLICATION_VND_MS_WINDOWS_NWPRINTING_OOB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WINDOWS_NWPRINTING_OOB);
+    pub const APPLICATION_VND_MS_WINDOWS_PRINTERPAIRING: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WINDOWS_PRINTERPAIRING);
+    pub const APPLICATION_VND_MS_WINDOWS_WSD_OOB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WINDOWS_WSD_OOB);
+    pub const APPLICATION_VND_MS_WMDRM_LIC_CHLG_REQ: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WMDRM_LIC_CHLG_REQ);
+    pub const APPLICATION_VND_MS_WMDRM_LIC_RESP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WMDRM_LIC_RESP);
+    pub const APPLICATION_VND_MS_WMDRM_METER_CHLG_REQ: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WMDRM_METER_CHLG_REQ);
+    pub const APPLICATION_VND_MS_WMDRM_METER_RESP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WMDRM_METER_RESP);
+    pub const APPLICATION_VND_MS_WORD_DOCUMENT_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WORD_DOCUMENT_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_WORD_TEMPLATE_MACROENABLED_12: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_WORD_TEMPLATE_MACROENABLED_12);
+    pub const APPLICATION_VND_MS_WORKS: Encoding = Encoding::new(prefix::APPLICATION_VND_MS_WORKS);
+    pub const APPLICATION_VND_MS_WPL: Encoding = Encoding::new(prefix::APPLICATION_VND_MS_WPL);
+    pub const APPLICATION_VND_MS_XPSDOCUMENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MS_XPSDOCUMENT);
+    pub const APPLICATION_VND_MSA_DISK_IMAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MSA_DISK_IMAGE);
+    pub const APPLICATION_VND_MSEQ: Encoding = Encoding::new(prefix::APPLICATION_VND_MSEQ);
+    pub const APPLICATION_VND_MSIGN: Encoding = Encoding::new(prefix::APPLICATION_VND_MSIGN);
+    pub const APPLICATION_VND_MULTIAD_CREATOR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MULTIAD_CREATOR);
+    pub const APPLICATION_VND_MULTIAD_CREATOR_CIF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MULTIAD_CREATOR_CIF);
+    pub const APPLICATION_VND_MUSIC_NIFF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MUSIC_NIFF);
+    pub const APPLICATION_VND_MUSICIAN: Encoding = Encoding::new(prefix::APPLICATION_VND_MUSICIAN);
+    pub const APPLICATION_VND_MUVEE_STYLE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_MUVEE_STYLE);
+    pub const APPLICATION_VND_MYNFC: Encoding = Encoding::new(prefix::APPLICATION_VND_MYNFC);
+    pub const APPLICATION_VND_NACAMAR_YBRID_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NACAMAR_YBRID_JSON);
+    pub const APPLICATION_VND_NATO_BINDINGDATAOBJECT_CBOR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NATO_BINDINGDATAOBJECT_CBOR);
+    pub const APPLICATION_VND_NATO_BINDINGDATAOBJECT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NATO_BINDINGDATAOBJECT_JSON);
+    pub const APPLICATION_VND_NATO_BINDINGDATAOBJECT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NATO_BINDINGDATAOBJECT_XML);
+    pub const APPLICATION_VND_NATO_OPENXMLFORMATS_PACKAGE_IEPD_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NATO_OPENXMLFORMATS_PACKAGE_IEPD_ZIP);
+    pub const APPLICATION_VND_NCD_CONTROL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NCD_CONTROL);
+    pub const APPLICATION_VND_NCD_REFERENCE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NCD_REFERENCE);
+    pub const APPLICATION_VND_NEARST_INV_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NEARST_INV_JSON);
+    pub const APPLICATION_VND_NEBUMIND_LINE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NEBUMIND_LINE);
+    pub const APPLICATION_VND_NERVANA: Encoding = Encoding::new(prefix::APPLICATION_VND_NERVANA);
+    pub const APPLICATION_VND_NETFPX: Encoding = Encoding::new(prefix::APPLICATION_VND_NETFPX);
+    pub const APPLICATION_VND_NEUROLANGUAGE_NLU: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NEUROLANGUAGE_NLU);
+    pub const APPLICATION_VND_NIMN: Encoding = Encoding::new(prefix::APPLICATION_VND_NIMN);
+    pub const APPLICATION_VND_NINTENDO_NITRO_ROM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NINTENDO_NITRO_ROM);
+    pub const APPLICATION_VND_NINTENDO_SNES_ROM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NINTENDO_SNES_ROM);
+    pub const APPLICATION_VND_NITF: Encoding = Encoding::new(prefix::APPLICATION_VND_NITF);
+    pub const APPLICATION_VND_NOBLENET_DIRECTORY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOBLENET_DIRECTORY);
+    pub const APPLICATION_VND_NOBLENET_SEALER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOBLENET_SEALER);
+    pub const APPLICATION_VND_NOBLENET_WEB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOBLENET_WEB);
+    pub const APPLICATION_VND_NOKIA_CATALOGS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_CATALOGS);
+    pub const APPLICATION_VND_NOKIA_CONML_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_CONML_WBXML);
+    pub const APPLICATION_VND_NOKIA_CONML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_CONML_XML);
+    pub const APPLICATION_VND_NOKIA_ISDS_RADIO_PRESETS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_ISDS_RADIO_PRESETS);
+    pub const APPLICATION_VND_NOKIA_IPTV_CONFIG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_IPTV_CONFIG_XML);
+    pub const APPLICATION_VND_NOKIA_LANDMARK_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_LANDMARK_WBXML);
+    pub const APPLICATION_VND_NOKIA_LANDMARK_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_LANDMARK_XML);
+    pub const APPLICATION_VND_NOKIA_LANDMARKCOLLECTION_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_LANDMARKCOLLECTION_XML);
+    pub const APPLICATION_VND_NOKIA_N_GAGE_AC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_N_GAGE_AC_XML);
+    pub const APPLICATION_VND_NOKIA_N_GAGE_DATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_N_GAGE_DATA);
+    pub const APPLICATION_VND_NOKIA_N_GAGE_SYMBIAN_INSTALL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_N_GAGE_SYMBIAN_INSTALL);
+    pub const APPLICATION_VND_NOKIA_NCD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_NCD);
+    pub const APPLICATION_VND_NOKIA_PCD_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_PCD_WBXML);
+    pub const APPLICATION_VND_NOKIA_PCD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_PCD_XML);
+    pub const APPLICATION_VND_NOKIA_RADIO_PRESET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_RADIO_PRESET);
+    pub const APPLICATION_VND_NOKIA_RADIO_PRESETS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOKIA_RADIO_PRESETS);
+    pub const APPLICATION_VND_NOVADIGM_EDM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOVADIGM_EDM);
+    pub const APPLICATION_VND_NOVADIGM_EDX: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOVADIGM_EDX);
+    pub const APPLICATION_VND_NOVADIGM_EXT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NOVADIGM_EXT);
+    pub const APPLICATION_VND_NTT_LOCAL_CONTENT_SHARE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NTT_LOCAL_CONTENT_SHARE);
+    pub const APPLICATION_VND_NTT_LOCAL_FILE_TRANSFER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NTT_LOCAL_FILE_TRANSFER);
+    pub const APPLICATION_VND_NTT_LOCAL_OGW_REMOTE_ACCESS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NTT_LOCAL_OGW_REMOTE_ACCESS);
+    pub const APPLICATION_VND_NTT_LOCAL_SIP_TA_REMOTE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NTT_LOCAL_SIP_TA_REMOTE);
+    pub const APPLICATION_VND_NTT_LOCAL_SIP_TA_TCP_STREAM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_NTT_LOCAL_SIP_TA_TCP_STREAM);
+    pub const APPLICATION_VND_OAI_WORKFLOWS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OAI_WORKFLOWS);
+    pub const APPLICATION_VND_OAI_WORKFLOWS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OAI_WORKFLOWS_JSON);
+    pub const APPLICATION_VND_OAI_WORKFLOWS_YAML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OAI_WORKFLOWS_YAML);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_BASE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_BASE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_CHART: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_CHART);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_CHART_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_CHART_TEMPLATE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_DATABASE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_DATABASE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_FORMULA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_FORMULA);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_FORMULA_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_FORMULA_TEMPLATE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_GRAPHICS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_GRAPHICS);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_GRAPHICS_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_GRAPHICS_TEMPLATE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_IMAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_IMAGE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_IMAGE_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_IMAGE_TEMPLATE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION_TEMPLATE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET_TEMPLATE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_MASTER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_MASTER);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_MASTER_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_MASTER_TEMPLATE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_TEMPLATE);
+    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_WEB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_WEB);
+    pub const APPLICATION_VND_OBN: Encoding = Encoding::new(prefix::APPLICATION_VND_OBN);
+    pub const APPLICATION_VND_OCF_CBOR: Encoding = Encoding::new(prefix::APPLICATION_VND_OCF_CBOR);
+    pub const APPLICATION_VND_OCI_IMAGE_MANIFEST_V1_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OCI_IMAGE_MANIFEST_V1_JSON);
+    pub const APPLICATION_VND_OFTN_L10N_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OFTN_L10N_JSON);
+    pub const APPLICATION_VND_OIPF_CONTENTACCESSDOWNLOAD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_CONTENTACCESSDOWNLOAD_XML);
+    pub const APPLICATION_VND_OIPF_CONTENTACCESSSTREAMING_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_CONTENTACCESSSTREAMING_XML);
+    pub const APPLICATION_VND_OIPF_CSPG_HEXBINARY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_CSPG_HEXBINARY);
+    pub const APPLICATION_VND_OIPF_DAE_SVG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_DAE_SVG_XML);
+    pub const APPLICATION_VND_OIPF_DAE_XHTML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_DAE_XHTML_XML);
+    pub const APPLICATION_VND_OIPF_MIPPVCONTROLMESSAGE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_MIPPVCONTROLMESSAGE_XML);
+    pub const APPLICATION_VND_OIPF_PAE_GEM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_PAE_GEM);
+    pub const APPLICATION_VND_OIPF_SPDISCOVERY_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_SPDISCOVERY_XML);
+    pub const APPLICATION_VND_OIPF_SPDLIST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_SPDLIST_XML);
+    pub const APPLICATION_VND_OIPF_UEPROFILE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_UEPROFILE_XML);
+    pub const APPLICATION_VND_OIPF_USERPROFILE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OIPF_USERPROFILE_XML);
+    pub const APPLICATION_VND_OLPC_SUGAR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OLPC_SUGAR);
+    pub const APPLICATION_VND_OMA_SCWS_CONFIG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_SCWS_CONFIG);
+    pub const APPLICATION_VND_OMA_SCWS_HTTP_REQUEST: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_SCWS_HTTP_REQUEST);
+    pub const APPLICATION_VND_OMA_SCWS_HTTP_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_SCWS_HTTP_RESPONSE);
+    pub const APPLICATION_VND_OMA_BCAST_ASSOCIATED_PROCEDURE_PARAMETER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_ASSOCIATED_PROCEDURE_PARAMETER_XML);
+    pub const APPLICATION_VND_OMA_BCAST_DRM_TRIGGER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_DRM_TRIGGER_XML);
+    pub const APPLICATION_VND_OMA_BCAST_IMD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_IMD_XML);
+    pub const APPLICATION_VND_OMA_BCAST_LTKM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_LTKM);
+    pub const APPLICATION_VND_OMA_BCAST_NOTIFICATION_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_NOTIFICATION_XML);
+    pub const APPLICATION_VND_OMA_BCAST_PROVISIONINGTRIGGER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_PROVISIONINGTRIGGER);
+    pub const APPLICATION_VND_OMA_BCAST_SGBOOT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_SGBOOT);
+    pub const APPLICATION_VND_OMA_BCAST_SGDD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_SGDD_XML);
+    pub const APPLICATION_VND_OMA_BCAST_SGDU: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_SGDU);
+    pub const APPLICATION_VND_OMA_BCAST_SIMPLE_SYMBOL_CONTAINER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_SIMPLE_SYMBOL_CONTAINER);
+    pub const APPLICATION_VND_OMA_BCAST_SMARTCARD_TRIGGER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_SMARTCARD_TRIGGER_XML);
+    pub const APPLICATION_VND_OMA_BCAST_SPROV_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_SPROV_XML);
+    pub const APPLICATION_VND_OMA_BCAST_STKM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_BCAST_STKM);
+    pub const APPLICATION_VND_OMA_CAB_ADDRESS_BOOK_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_CAB_ADDRESS_BOOK_XML);
+    pub const APPLICATION_VND_OMA_CAB_FEATURE_HANDLER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_CAB_FEATURE_HANDLER_XML);
+    pub const APPLICATION_VND_OMA_CAB_PCC_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_CAB_PCC_XML);
+    pub const APPLICATION_VND_OMA_CAB_SUBS_INVITE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_CAB_SUBS_INVITE_XML);
+    pub const APPLICATION_VND_OMA_CAB_USER_PREFS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_CAB_USER_PREFS_XML);
+    pub const APPLICATION_VND_OMA_DCD: Encoding = Encoding::new(prefix::APPLICATION_VND_OMA_DCD);
+    pub const APPLICATION_VND_OMA_DCDC: Encoding = Encoding::new(prefix::APPLICATION_VND_OMA_DCDC);
+    pub const APPLICATION_VND_OMA_DD2_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_DD2_XML);
+    pub const APPLICATION_VND_OMA_DRM_RISD_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_DRM_RISD_XML);
+    pub const APPLICATION_VND_OMA_GROUP_USAGE_LIST_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_GROUP_USAGE_LIST_XML);
+    pub const APPLICATION_VND_OMA_LWM2M_CBOR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_LWM2M_CBOR);
+    pub const APPLICATION_VND_OMA_LWM2M_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_LWM2M_JSON);
+    pub const APPLICATION_VND_OMA_LWM2M_TLV: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_LWM2M_TLV);
+    pub const APPLICATION_VND_OMA_PAL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_PAL_XML);
+    pub const APPLICATION_VND_OMA_POC_DETAILED_PROGRESS_REPORT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_POC_DETAILED_PROGRESS_REPORT_XML);
+    pub const APPLICATION_VND_OMA_POC_FINAL_REPORT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_POC_FINAL_REPORT_XML);
+    pub const APPLICATION_VND_OMA_POC_GROUPS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_POC_GROUPS_XML);
+    pub const APPLICATION_VND_OMA_POC_INVOCATION_DESCRIPTOR_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_POC_INVOCATION_DESCRIPTOR_XML);
+    pub const APPLICATION_VND_OMA_POC_OPTIMIZED_PROGRESS_REPORT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_POC_OPTIMIZED_PROGRESS_REPORT_XML);
+    pub const APPLICATION_VND_OMA_PUSH: Encoding = Encoding::new(prefix::APPLICATION_VND_OMA_PUSH);
+    pub const APPLICATION_VND_OMA_SCIDM_MESSAGES_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_SCIDM_MESSAGES_XML);
+    pub const APPLICATION_VND_OMA_XCAP_DIRECTORY_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMA_XCAP_DIRECTORY_XML);
+    pub const APPLICATION_VND_OMADS_EMAIL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMADS_EMAIL_XML);
+    pub const APPLICATION_VND_OMADS_FILE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMADS_FILE_XML);
+    pub const APPLICATION_VND_OMADS_FOLDER_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMADS_FOLDER_XML);
+    pub const APPLICATION_VND_OMALOC_SUPL_INIT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OMALOC_SUPL_INIT);
+    pub const APPLICATION_VND_ONEPAGER: Encoding = Encoding::new(prefix::APPLICATION_VND_ONEPAGER);
+    pub const APPLICATION_VND_ONEPAGERTAMP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ONEPAGERTAMP);
+    pub const APPLICATION_VND_ONEPAGERTAMX: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ONEPAGERTAMX);
+    pub const APPLICATION_VND_ONEPAGERTAT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ONEPAGERTAT);
+    pub const APPLICATION_VND_ONEPAGERTATP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ONEPAGERTATP);
+    pub const APPLICATION_VND_ONEPAGERTATX: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ONEPAGERTATX);
+    pub const APPLICATION_VND_ONVIF_METADATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ONVIF_METADATA);
+    pub const APPLICATION_VND_OPENBLOX_GAME_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENBLOX_GAME_XML);
+    pub const APPLICATION_VND_OPENBLOX_GAME_BINARY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENBLOX_GAME_BINARY);
+    pub const APPLICATION_VND_OPENEYE_OEB: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENEYE_OEB);
+    pub const APPLICATION_VND_OPENSTREETMAP_DATA_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENSTREETMAP_DATA_XML);
+    pub const APPLICATION_VND_OPENTIMESTAMPS_OTS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENTIMESTAMPS_OTS);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_CUSTOM_PROPERTIES_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_CUSTOM_PROPERTIES_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_CUSTOMXMLPROPERTIES_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_CUSTOMXMLPROPERTIES_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWING_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWING_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_CHART_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_CHART_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_CHARTSHAPES_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_CHARTSHAPES_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMCOLORS_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMCOLORS_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMDATA_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMDATA_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMLAYOUT_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMLAYOUT_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMSTYLE_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMSTYLE_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_EXTENDED_PROPERTIES_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_EXTENDED_PROPERTIES_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_COMMENTAUTHORS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_COMMENTAUTHORS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_COMMENTS_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_COMMENTS_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_HANDOUTMASTER_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_HANDOUTMASTER_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_NOTESMASTER_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_NOTESMASTER_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_NOTESSLIDE_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_NOTESSLIDE_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESPROPS_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESPROPS_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION_MAIN_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION_MAIN_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDE);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDE_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDE_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDELAYOUT_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDELAYOUT_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDEMASTER_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDEMASTER_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDEUPDATEINFO_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDEUPDATEINFO_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDESHOW: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDESHOW,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDESHOW_MAIN_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDESHOW_MAIN_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TABLESTYLES_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TABLESTYLES_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TAGS_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TAGS_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TEMPLATE: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TEMPLATE,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TEMPLATE_MAIN_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TEMPLATE_MAIN_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_VIEWPROPS_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_VIEWPROPS_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CALCCHAIN_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CALCCHAIN_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CHARTSHEET_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CHARTSHEET_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_COMMENTS_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_COMMENTS_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CONNECTIONS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CONNECTIONS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_DIALOGSHEET_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_DIALOGSHEET_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_EXTERNALLINK_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_EXTERNALLINK_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTCACHEDEFINITION_XML: Encoding = Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTCACHEDEFINITION_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTCACHERECORDS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTCACHERECORDS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTTABLE_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTTABLE_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_QUERYTABLE_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_QUERYTABLE_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_REVISIONHEADERS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_REVISIONHEADERS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_REVISIONLOG_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_REVISIONLOG_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHAREDSTRINGS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHAREDSTRINGS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET_MAIN_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET_MAIN_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEETMETADATA_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEETMETADATA_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_STYLES_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_STYLES_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TABLE_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TABLE_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TABLESINGLECELLS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TABLESINGLECELLS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TEMPLATE);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TEMPLATE_MAIN_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TEMPLATE_MAIN_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_USERNAMES_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_USERNAMES_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_VOLATILEDEPENDENCIES_XML: Encoding = Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_VOLATILEDEPENDENCIES_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_WORKSHEET_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_WORKSHEET_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_THEME_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_THEME_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_THEMEOVERRIDE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_THEMEOVERRIDE_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_VMLDRAWING: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_VMLDRAWING);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_COMMENTS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_COMMENTS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT_GLOSSARY_XML: Encoding = Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT_GLOSSARY_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT_MAIN_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT_MAIN_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_ENDNOTES_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_ENDNOTES_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FONTTABLE_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FONTTABLE_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FOOTER_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FOOTER_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FOOTNOTES_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FOOTNOTES_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_NUMBERING_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_NUMBERING_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_SETTINGS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_SETTINGS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_STYLES_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_STYLES_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_TEMPLATE: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_TEMPLATE,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_TEMPLATE_MAIN_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_TEMPLATE_MAIN_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_WEBSETTINGS_XML:
+        Encoding = Encoding::new(
+        prefix::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_WEBSETTINGS_XML,
+    );
+    pub const APPLICATION_VND_OPENXMLFORMATS_PACKAGE_CORE_PROPERTIES_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_PACKAGE_CORE_PROPERTIES_XML);
+    pub const APPLICATION_VND_OPENXMLFORMATS_PACKAGE_DIGITAL_SIGNATURE_XMLSIGNATURE_XML: Encoding =
+        Encoding::new(
+            prefix::APPLICATION_VND_OPENXMLFORMATS_PACKAGE_DIGITAL_SIGNATURE_XMLSIGNATURE_XML,
+        );
+    pub const APPLICATION_VND_OPENXMLFORMATS_PACKAGE_RELATIONSHIPS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OPENXMLFORMATS_PACKAGE_RELATIONSHIPS_XML);
+    pub const APPLICATION_VND_ORACLE_RESOURCE_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ORACLE_RESOURCE_JSON);
+    pub const APPLICATION_VND_ORANGE_INDATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ORANGE_INDATA);
+    pub const APPLICATION_VND_OSA_NETDEPLOY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OSA_NETDEPLOY);
+    pub const APPLICATION_VND_OSGEO_MAPGUIDE_PACKAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OSGEO_MAPGUIDE_PACKAGE);
+    pub const APPLICATION_VND_OSGI_BUNDLE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OSGI_BUNDLE);
+    pub const APPLICATION_VND_OSGI_DP: Encoding = Encoding::new(prefix::APPLICATION_VND_OSGI_DP);
+    pub const APPLICATION_VND_OSGI_SUBSYSTEM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OSGI_SUBSYSTEM);
+    pub const APPLICATION_VND_OTPS_CT_KIP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OTPS_CT_KIP_XML);
+    pub const APPLICATION_VND_OXLI_COUNTGRAPH: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_OXLI_COUNTGRAPH);
+    pub const APPLICATION_VND_PAGERDUTY_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PAGERDUTY_JSON);
+    pub const APPLICATION_VND_PALM: Encoding = Encoding::new(prefix::APPLICATION_VND_PALM);
+    pub const APPLICATION_VND_PANOPLY: Encoding = Encoding::new(prefix::APPLICATION_VND_PANOPLY);
+    pub const APPLICATION_VND_PAOS_XML: Encoding = Encoding::new(prefix::APPLICATION_VND_PAOS_XML);
+    pub const APPLICATION_VND_PATENTDIVE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PATENTDIVE);
+    pub const APPLICATION_VND_PATIENTECOMMSDOC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PATIENTECOMMSDOC);
+    pub const APPLICATION_VND_PAWAAFILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PAWAAFILE);
+    pub const APPLICATION_VND_PCOS: Encoding = Encoding::new(prefix::APPLICATION_VND_PCOS);
+    pub const APPLICATION_VND_PG_FORMAT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PG_FORMAT);
+    pub const APPLICATION_VND_PG_OSASLI: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PG_OSASLI);
+    pub const APPLICATION_VND_PIACCESS_APPLICATION_LICENCE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PIACCESS_APPLICATION_LICENCE);
+    pub const APPLICATION_VND_PICSEL: Encoding = Encoding::new(prefix::APPLICATION_VND_PICSEL);
+    pub const APPLICATION_VND_PMI_WIDGET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PMI_WIDGET);
+    pub const APPLICATION_VND_POC_GROUP_ADVERTISEMENT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_POC_GROUP_ADVERTISEMENT_XML);
+    pub const APPLICATION_VND_POCKETLEARN: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_POCKETLEARN);
+    pub const APPLICATION_VND_POWERBUILDER6: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_POWERBUILDER6);
+    pub const APPLICATION_VND_POWERBUILDER6_S: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_POWERBUILDER6_S);
+    pub const APPLICATION_VND_POWERBUILDER7: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_POWERBUILDER7);
+    pub const APPLICATION_VND_POWERBUILDER7_S: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_POWERBUILDER7_S);
+    pub const APPLICATION_VND_POWERBUILDER75: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_POWERBUILDER75);
+    pub const APPLICATION_VND_POWERBUILDER75_S: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_POWERBUILDER75_S);
+    pub const APPLICATION_VND_PREMINET: Encoding = Encoding::new(prefix::APPLICATION_VND_PREMINET);
+    pub const APPLICATION_VND_PREVIEWSYSTEMS_BOX: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PREVIEWSYSTEMS_BOX);
+    pub const APPLICATION_VND_PROTEUS_MAGAZINE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PROTEUS_MAGAZINE);
+    pub const APPLICATION_VND_PSFS: Encoding = Encoding::new(prefix::APPLICATION_VND_PSFS);
+    pub const APPLICATION_VND_PT_MUNDUSMUNDI: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PT_MUNDUSMUNDI);
+    pub const APPLICATION_VND_PUBLISHARE_DELTA_TREE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PUBLISHARE_DELTA_TREE);
+    pub const APPLICATION_VND_PVI_PTID1: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PVI_PTID1);
+    pub const APPLICATION_VND_PWG_MULTIPLEXED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PWG_MULTIPLEXED);
+    pub const APPLICATION_VND_PWG_XHTML_PRINT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_PWG_XHTML_PRINT_XML);
+    pub const APPLICATION_VND_QUALCOMM_BREW_APP_RES: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_QUALCOMM_BREW_APP_RES);
+    pub const APPLICATION_VND_QUARANTAINENET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_QUARANTAINENET);
+    pub const APPLICATION_VND_QUOBJECT_QUOXDOCUMENT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_QUOBJECT_QUOXDOCUMENT);
+    pub const APPLICATION_VND_RADISYS_MOML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MOML_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_AUDIT_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_CONF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_AUDIT_CONF_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_CONN_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_AUDIT_CONN_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_DIALOG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_AUDIT_DIALOG_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_STREAM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_AUDIT_STREAM_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_CONF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_CONF_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_DIALOG_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_BASE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_DIALOG_BASE_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_FAX_DETECT_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_DIALOG_FAX_DETECT_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_FAX_SENDRECV_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_DIALOG_FAX_SENDRECV_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_GROUP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_DIALOG_GROUP_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_SPEECH_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_DIALOG_SPEECH_XML);
+    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_TRANSFORM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RADISYS_MSML_DIALOG_TRANSFORM_XML);
+    pub const APPLICATION_VND_RAINSTOR_DATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RAINSTOR_DATA);
+    pub const APPLICATION_VND_RAPID: Encoding = Encoding::new(prefix::APPLICATION_VND_RAPID);
+    pub const APPLICATION_VND_RAR: Encoding = Encoding::new(prefix::APPLICATION_VND_RAR);
+    pub const APPLICATION_VND_REALVNC_BED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_REALVNC_BED);
+    pub const APPLICATION_VND_RECORDARE_MUSICXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RECORDARE_MUSICXML);
+    pub const APPLICATION_VND_RECORDARE_MUSICXML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RECORDARE_MUSICXML_XML);
+    pub const APPLICATION_VND_RELPIPE: Encoding = Encoding::new(prefix::APPLICATION_VND_RELPIPE);
+    pub const APPLICATION_VND_RESILIENT_LOGIC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RESILIENT_LOGIC);
+    pub const APPLICATION_VND_RESTFUL_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RESTFUL_JSON);
+    pub const APPLICATION_VND_RIG_CRYPTONOTE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RIG_CRYPTONOTE);
+    pub const APPLICATION_VND_ROUTE66_LINK66_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ROUTE66_LINK66_XML);
+    pub const APPLICATION_VND_RS_274X: Encoding = Encoding::new(prefix::APPLICATION_VND_RS_274X);
+    pub const APPLICATION_VND_RUCKUS_DOWNLOAD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_RUCKUS_DOWNLOAD);
+    pub const APPLICATION_VND_S3SMS: Encoding = Encoding::new(prefix::APPLICATION_VND_S3SMS);
+    pub const APPLICATION_VND_SAILINGTRACKER_TRACK: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SAILINGTRACKER_TRACK);
+    pub const APPLICATION_VND_SAR: Encoding = Encoding::new(prefix::APPLICATION_VND_SAR);
+    pub const APPLICATION_VND_SBM_CID: Encoding = Encoding::new(prefix::APPLICATION_VND_SBM_CID);
+    pub const APPLICATION_VND_SBM_MID2: Encoding = Encoding::new(prefix::APPLICATION_VND_SBM_MID2);
+    pub const APPLICATION_VND_SCRIBUS: Encoding = Encoding::new(prefix::APPLICATION_VND_SCRIBUS);
+    pub const APPLICATION_VND_SEALED_3DF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_3DF);
+    pub const APPLICATION_VND_SEALED_CSF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_CSF);
+    pub const APPLICATION_VND_SEALED_DOC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_DOC);
+    pub const APPLICATION_VND_SEALED_EML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_EML);
+    pub const APPLICATION_VND_SEALED_MHT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_MHT);
+    pub const APPLICATION_VND_SEALED_NET: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_NET);
+    pub const APPLICATION_VND_SEALED_PPT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_PPT);
+    pub const APPLICATION_VND_SEALED_TIFF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_TIFF);
+    pub const APPLICATION_VND_SEALED_XLS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALED_XLS);
+    pub const APPLICATION_VND_SEALEDMEDIA_SOFTSEAL_HTML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALEDMEDIA_SOFTSEAL_HTML);
+    pub const APPLICATION_VND_SEALEDMEDIA_SOFTSEAL_PDF: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEALEDMEDIA_SOFTSEAL_PDF);
+    pub const APPLICATION_VND_SEEMAIL: Encoding = Encoding::new(prefix::APPLICATION_VND_SEEMAIL);
+    pub const APPLICATION_VND_SEIS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SEIS_JSON);
+    pub const APPLICATION_VND_SEMA: Encoding = Encoding::new(prefix::APPLICATION_VND_SEMA);
+    pub const APPLICATION_VND_SEMD: Encoding = Encoding::new(prefix::APPLICATION_VND_SEMD);
+    pub const APPLICATION_VND_SEMF: Encoding = Encoding::new(prefix::APPLICATION_VND_SEMF);
+    pub const APPLICATION_VND_SHADE_SAVE_FILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SHADE_SAVE_FILE);
+    pub const APPLICATION_VND_SHANA_INFORMED_FORMDATA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SHANA_INFORMED_FORMDATA);
+    pub const APPLICATION_VND_SHANA_INFORMED_FORMTEMPLATE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SHANA_INFORMED_FORMTEMPLATE);
+    pub const APPLICATION_VND_SHANA_INFORMED_INTERCHANGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SHANA_INFORMED_INTERCHANGE);
+    pub const APPLICATION_VND_SHANA_INFORMED_PACKAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SHANA_INFORMED_PACKAGE);
+    pub const APPLICATION_VND_SHOOTPROOF_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SHOOTPROOF_JSON);
+    pub const APPLICATION_VND_SHOPKICK_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SHOPKICK_JSON);
+    pub const APPLICATION_VND_SHP: Encoding = Encoding::new(prefix::APPLICATION_VND_SHP);
+    pub const APPLICATION_VND_SHX: Encoding = Encoding::new(prefix::APPLICATION_VND_SHX);
+    pub const APPLICATION_VND_SIGROK_SESSION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SIGROK_SESSION);
+    pub const APPLICATION_VND_SIREN_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SIREN_JSON);
+    pub const APPLICATION_VND_SMAF: Encoding = Encoding::new(prefix::APPLICATION_VND_SMAF);
+    pub const APPLICATION_VND_SMART_NOTEBOOK: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SMART_NOTEBOOK);
+    pub const APPLICATION_VND_SMART_TEACHER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SMART_TEACHER);
+    pub const APPLICATION_VND_SMINTIO_PORTALS_ARCHIVE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SMINTIO_PORTALS_ARCHIVE);
+    pub const APPLICATION_VND_SNESDEV_PAGE_TABLE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SNESDEV_PAGE_TABLE);
+    pub const APPLICATION_VND_SOFTWARE602_FILLER_FORM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SOFTWARE602_FILLER_FORM_XML);
+    pub const APPLICATION_VND_SOFTWARE602_FILLER_FORM_XML_ZIP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SOFTWARE602_FILLER_FORM_XML_ZIP);
+    pub const APPLICATION_VND_SOLENT_SDKM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SOLENT_SDKM_XML);
+    pub const APPLICATION_VND_SPOTFIRE_DXP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SPOTFIRE_DXP);
+    pub const APPLICATION_VND_SPOTFIRE_SFS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SPOTFIRE_SFS);
+    pub const APPLICATION_VND_SQLITE3: Encoding = Encoding::new(prefix::APPLICATION_VND_SQLITE3);
+    pub const APPLICATION_VND_SSS_COD: Encoding = Encoding::new(prefix::APPLICATION_VND_SSS_COD);
+    pub const APPLICATION_VND_SSS_DTF: Encoding = Encoding::new(prefix::APPLICATION_VND_SSS_DTF);
+    pub const APPLICATION_VND_SSS_NTF: Encoding = Encoding::new(prefix::APPLICATION_VND_SSS_NTF);
+    pub const APPLICATION_VND_STEPMANIA_PACKAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_STEPMANIA_PACKAGE);
+    pub const APPLICATION_VND_STEPMANIA_STEPCHART: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_STEPMANIA_STEPCHART);
+    pub const APPLICATION_VND_STREET_STREAM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_STREET_STREAM);
+    pub const APPLICATION_VND_SUN_WADL_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SUN_WADL_XML);
+    pub const APPLICATION_VND_SUS_CALENDAR: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SUS_CALENDAR);
+    pub const APPLICATION_VND_SVD: Encoding = Encoding::new(prefix::APPLICATION_VND_SVD);
+    pub const APPLICATION_VND_SWIFTVIEW_ICS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SWIFTVIEW_ICS);
+    pub const APPLICATION_VND_SYBYL_MOL2: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYBYL_MOL2);
+    pub const APPLICATION_VND_SYCLE_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYCLE_XML);
+    pub const APPLICATION_VND_SYFT_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYFT_JSON);
+    pub const APPLICATION_VND_SYNCML_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_XML);
+    pub const APPLICATION_VND_SYNCML_DM_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_DM_WBXML);
+    pub const APPLICATION_VND_SYNCML_DM_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_DM_XML);
+    pub const APPLICATION_VND_SYNCML_DM_NOTIFICATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_DM_NOTIFICATION);
+    pub const APPLICATION_VND_SYNCML_DMDDF_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_DMDDF_WBXML);
+    pub const APPLICATION_VND_SYNCML_DMDDF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_DMDDF_XML);
+    pub const APPLICATION_VND_SYNCML_DMTNDS_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_DMTNDS_WBXML);
+    pub const APPLICATION_VND_SYNCML_DMTNDS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_DMTNDS_XML);
+    pub const APPLICATION_VND_SYNCML_DS_NOTIFICATION: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_SYNCML_DS_NOTIFICATION);
+    pub const APPLICATION_VND_TABLESCHEMA_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_TABLESCHEMA_JSON);
+    pub const APPLICATION_VND_TAO_INTENT_MODULE_ARCHIVE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_TAO_INTENT_MODULE_ARCHIVE);
+    pub const APPLICATION_VND_TCPDUMP_PCAP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_TCPDUMP_PCAP);
+    pub const APPLICATION_VND_THINK_CELL_PPTTC_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_THINK_CELL_PPTTC_JSON);
+    pub const APPLICATION_VND_TMD_MEDIAFLEX_API_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_TMD_MEDIAFLEX_API_XML);
+    pub const APPLICATION_VND_TML: Encoding = Encoding::new(prefix::APPLICATION_VND_TML);
+    pub const APPLICATION_VND_TMOBILE_LIVETV: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_TMOBILE_LIVETV);
+    pub const APPLICATION_VND_TRI_ONESOURCE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_TRI_ONESOURCE);
+    pub const APPLICATION_VND_TRID_TPT: Encoding = Encoding::new(prefix::APPLICATION_VND_TRID_TPT);
+    pub const APPLICATION_VND_TRISCAPE_MXS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_TRISCAPE_MXS);
+    pub const APPLICATION_VND_TRUEAPP: Encoding = Encoding::new(prefix::APPLICATION_VND_TRUEAPP);
+    pub const APPLICATION_VND_TRUEDOC: Encoding = Encoding::new(prefix::APPLICATION_VND_TRUEDOC);
+    pub const APPLICATION_VND_UBISOFT_WEBPLAYER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UBISOFT_WEBPLAYER);
+    pub const APPLICATION_VND_UFDL: Encoding = Encoding::new(prefix::APPLICATION_VND_UFDL);
+    pub const APPLICATION_VND_UIQ_THEME: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UIQ_THEME);
+    pub const APPLICATION_VND_UMAJIN: Encoding = Encoding::new(prefix::APPLICATION_VND_UMAJIN);
+    pub const APPLICATION_VND_UNITY: Encoding = Encoding::new(prefix::APPLICATION_VND_UNITY);
+    pub const APPLICATION_VND_UOML_XML: Encoding = Encoding::new(prefix::APPLICATION_VND_UOML_XML);
+    pub const APPLICATION_VND_UPLANET_ALERT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_ALERT);
+    pub const APPLICATION_VND_UPLANET_ALERT_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_ALERT_WBXML);
+    pub const APPLICATION_VND_UPLANET_BEARER_CHOICE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_BEARER_CHOICE);
+    pub const APPLICATION_VND_UPLANET_BEARER_CHOICE_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_BEARER_CHOICE_WBXML);
+    pub const APPLICATION_VND_UPLANET_CACHEOP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_CACHEOP);
+    pub const APPLICATION_VND_UPLANET_CACHEOP_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_CACHEOP_WBXML);
+    pub const APPLICATION_VND_UPLANET_CHANNEL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_CHANNEL);
+    pub const APPLICATION_VND_UPLANET_CHANNEL_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_CHANNEL_WBXML);
+    pub const APPLICATION_VND_UPLANET_LIST: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_LIST);
+    pub const APPLICATION_VND_UPLANET_LIST_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_LIST_WBXML);
+    pub const APPLICATION_VND_UPLANET_LISTCMD: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_LISTCMD);
+    pub const APPLICATION_VND_UPLANET_LISTCMD_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_LISTCMD_WBXML);
+    pub const APPLICATION_VND_UPLANET_SIGNAL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_UPLANET_SIGNAL);
+    pub const APPLICATION_VND_URI_MAP: Encoding = Encoding::new(prefix::APPLICATION_VND_URI_MAP);
+    pub const APPLICATION_VND_VALVE_SOURCE_MATERIAL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VALVE_SOURCE_MATERIAL);
+    pub const APPLICATION_VND_VCX: Encoding = Encoding::new(prefix::APPLICATION_VND_VCX);
+    pub const APPLICATION_VND_VD_STUDY: Encoding = Encoding::new(prefix::APPLICATION_VND_VD_STUDY);
+    pub const APPLICATION_VND_VECTORWORKS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VECTORWORKS);
+    pub const APPLICATION_VND_VEL_JSON: Encoding = Encoding::new(prefix::APPLICATION_VND_VEL_JSON);
+    pub const APPLICATION_VND_VERIMATRIX_VCAS: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VERIMATRIX_VCAS);
+    pub const APPLICATION_VND_VERITONE_AION_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VERITONE_AION_JSON);
+    pub const APPLICATION_VND_VERYANT_THIN: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VERYANT_THIN);
+    pub const APPLICATION_VND_VES_ENCRYPTED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VES_ENCRYPTED);
+    pub const APPLICATION_VND_VIDSOFT_VIDCONFERENCE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VIDSOFT_VIDCONFERENCE);
+    pub const APPLICATION_VND_VISIO: Encoding = Encoding::new(prefix::APPLICATION_VND_VISIO);
+    pub const APPLICATION_VND_VISIONARY: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VISIONARY);
+    pub const APPLICATION_VND_VIVIDENCE_SCRIPTFILE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_VIVIDENCE_SCRIPTFILE);
+    pub const APPLICATION_VND_VSF: Encoding = Encoding::new(prefix::APPLICATION_VND_VSF);
+    pub const APPLICATION_VND_WAP_SIC: Encoding = Encoding::new(prefix::APPLICATION_VND_WAP_SIC);
+    pub const APPLICATION_VND_WAP_SLC: Encoding = Encoding::new(prefix::APPLICATION_VND_WAP_SLC);
+    pub const APPLICATION_VND_WAP_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WAP_WBXML);
+    pub const APPLICATION_VND_WAP_WMLC: Encoding = Encoding::new(prefix::APPLICATION_VND_WAP_WMLC);
+    pub const APPLICATION_VND_WAP_WMLSCRIPTC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WAP_WMLSCRIPTC);
+    pub const APPLICATION_VND_WASMFLOW_WAFL: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WASMFLOW_WAFL);
+    pub const APPLICATION_VND_WEBTURBO: Encoding = Encoding::new(prefix::APPLICATION_VND_WEBTURBO);
+    pub const APPLICATION_VND_WFA_DPP: Encoding = Encoding::new(prefix::APPLICATION_VND_WFA_DPP);
+    pub const APPLICATION_VND_WFA_P2P: Encoding = Encoding::new(prefix::APPLICATION_VND_WFA_P2P);
+    pub const APPLICATION_VND_WFA_WSC: Encoding = Encoding::new(prefix::APPLICATION_VND_WFA_WSC);
+    pub const APPLICATION_VND_WINDOWS_DEVICEPAIRING: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WINDOWS_DEVICEPAIRING);
+    pub const APPLICATION_VND_WMC: Encoding = Encoding::new(prefix::APPLICATION_VND_WMC);
+    pub const APPLICATION_VND_WMF_BOOTSTRAP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WMF_BOOTSTRAP);
+    pub const APPLICATION_VND_WOLFRAM_MATHEMATICA: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WOLFRAM_MATHEMATICA);
+    pub const APPLICATION_VND_WOLFRAM_MATHEMATICA_PACKAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WOLFRAM_MATHEMATICA_PACKAGE);
+    pub const APPLICATION_VND_WOLFRAM_PLAYER: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WOLFRAM_PLAYER);
+    pub const APPLICATION_VND_WORDLIFT: Encoding = Encoding::new(prefix::APPLICATION_VND_WORDLIFT);
+    pub const APPLICATION_VND_WORDPERFECT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WORDPERFECT);
+    pub const APPLICATION_VND_WQD: Encoding = Encoding::new(prefix::APPLICATION_VND_WQD);
+    pub const APPLICATION_VND_WRQ_HP3000_LABELLED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WRQ_HP3000_LABELLED);
+    pub const APPLICATION_VND_WT_STF: Encoding = Encoding::new(prefix::APPLICATION_VND_WT_STF);
+    pub const APPLICATION_VND_WV_CSP_WBXML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WV_CSP_WBXML);
+    pub const APPLICATION_VND_WV_CSP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WV_CSP_XML);
+    pub const APPLICATION_VND_WV_SSP_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_WV_SSP_XML);
+    pub const APPLICATION_VND_XACML_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_XACML_JSON);
+    pub const APPLICATION_VND_XARA: Encoding = Encoding::new(prefix::APPLICATION_VND_XARA);
+    pub const APPLICATION_VND_XECRETS_ENCRYPTED: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_XECRETS_ENCRYPTED);
+    pub const APPLICATION_VND_XFDL: Encoding = Encoding::new(prefix::APPLICATION_VND_XFDL);
+    pub const APPLICATION_VND_XFDL_WEBFORM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_XFDL_WEBFORM);
+    pub const APPLICATION_VND_XMI_XML: Encoding = Encoding::new(prefix::APPLICATION_VND_XMI_XML);
+    pub const APPLICATION_VND_XMPIE_CPKG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_XMPIE_CPKG);
+    pub const APPLICATION_VND_XMPIE_DPKG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_XMPIE_DPKG);
+    pub const APPLICATION_VND_XMPIE_PLAN: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_XMPIE_PLAN);
+    pub const APPLICATION_VND_XMPIE_PPKG: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_XMPIE_PPKG);
+    pub const APPLICATION_VND_XMPIE_XLIM: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_XMPIE_XLIM);
+    pub const APPLICATION_VND_YAMAHA_HV_DIC: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_HV_DIC);
+    pub const APPLICATION_VND_YAMAHA_HV_SCRIPT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_HV_SCRIPT);
+    pub const APPLICATION_VND_YAMAHA_HV_VOICE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_HV_VOICE);
+    pub const APPLICATION_VND_YAMAHA_OPENSCOREFORMAT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_OPENSCOREFORMAT);
+    pub const APPLICATION_VND_YAMAHA_OPENSCOREFORMAT_OSFPVG_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_OPENSCOREFORMAT_OSFPVG_XML);
+    pub const APPLICATION_VND_YAMAHA_REMOTE_SETUP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_REMOTE_SETUP);
+    pub const APPLICATION_VND_YAMAHA_SMAF_AUDIO: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_SMAF_AUDIO);
+    pub const APPLICATION_VND_YAMAHA_SMAF_PHRASE: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_SMAF_PHRASE);
+    pub const APPLICATION_VND_YAMAHA_THROUGH_NGN: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_THROUGH_NGN);
+    pub const APPLICATION_VND_YAMAHA_TUNNEL_UDPENCAP: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YAMAHA_TUNNEL_UDPENCAP);
+    pub const APPLICATION_VND_YAOWEME: Encoding = Encoding::new(prefix::APPLICATION_VND_YAOWEME);
+    pub const APPLICATION_VND_YELLOWRIVER_CUSTOM_MENU: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YELLOWRIVER_CUSTOM_MENU);
+    pub const APPLICATION_VND_YOUTUBE_YT: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_YOUTUBE_YT);
+    pub const APPLICATION_VND_ZUL: Encoding = Encoding::new(prefix::APPLICATION_VND_ZUL);
+    pub const APPLICATION_VND_ZZAZZ_DECK_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_VND_ZZAZZ_DECK_XML);
+    pub const APPLICATION_VOICEXML_XML: Encoding = Encoding::new(prefix::APPLICATION_VOICEXML_XML);
+    pub const APPLICATION_VOUCHER_CMS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_VOUCHER_CMS_JSON);
+    pub const APPLICATION_VQ_RTCPXR: Encoding = Encoding::new(prefix::APPLICATION_VQ_RTCPXR);
+    pub const APPLICATION_WASM: Encoding = Encoding::new(prefix::APPLICATION_WASM);
+    pub const APPLICATION_WATCHERINFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_WATCHERINFO_XML);
+    pub const APPLICATION_WEBPUSH_OPTIONS_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_WEBPUSH_OPTIONS_JSON);
+    pub const APPLICATION_WHOISPP_QUERY: Encoding =
+        Encoding::new(prefix::APPLICATION_WHOISPP_QUERY);
+    pub const APPLICATION_WHOISPP_RESPONSE: Encoding =
+        Encoding::new(prefix::APPLICATION_WHOISPP_RESPONSE);
+    pub const APPLICATION_WIDGET: Encoding = Encoding::new(prefix::APPLICATION_WIDGET);
+    pub const APPLICATION_WITA: Encoding = Encoding::new(prefix::APPLICATION_WITA);
+    pub const APPLICATION_WORDPERFECT5_1: Encoding =
+        Encoding::new(prefix::APPLICATION_WORDPERFECT5_1);
+    pub const APPLICATION_WSDL_XML: Encoding = Encoding::new(prefix::APPLICATION_WSDL_XML);
+    pub const APPLICATION_WSPOLICY_XML: Encoding = Encoding::new(prefix::APPLICATION_WSPOLICY_XML);
+    pub const APPLICATION_X_PKI_MESSAGE: Encoding =
+        Encoding::new(prefix::APPLICATION_X_PKI_MESSAGE);
+    pub const APPLICATION_X_WWW_FORM_URLENCODED: Encoding =
+        Encoding::new(prefix::APPLICATION_X_WWW_FORM_URLENCODED);
+    pub const APPLICATION_X_X509_CA_CERT: Encoding =
+        Encoding::new(prefix::APPLICATION_X_X509_CA_CERT);
+    pub const APPLICATION_X_X509_CA_RA_CERT: Encoding =
+        Encoding::new(prefix::APPLICATION_X_X509_CA_RA_CERT);
+    pub const APPLICATION_X_X509_NEXT_CA_CERT: Encoding =
+        Encoding::new(prefix::APPLICATION_X_X509_NEXT_CA_CERT);
+    pub const APPLICATION_X400_BP: Encoding = Encoding::new(prefix::APPLICATION_X400_BP);
+    pub const APPLICATION_XACML_XML: Encoding = Encoding::new(prefix::APPLICATION_XACML_XML);
+    pub const APPLICATION_XCAP_ATT_XML: Encoding = Encoding::new(prefix::APPLICATION_XCAP_ATT_XML);
+    pub const APPLICATION_XCAP_CAPS_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_XCAP_CAPS_XML);
+    pub const APPLICATION_XCAP_DIFF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_XCAP_DIFF_XML);
+    pub const APPLICATION_XCAP_EL_XML: Encoding = Encoding::new(prefix::APPLICATION_XCAP_EL_XML);
+    pub const APPLICATION_XCAP_ERROR_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_XCAP_ERROR_XML);
+    pub const APPLICATION_XCAP_NS_XML: Encoding = Encoding::new(prefix::APPLICATION_XCAP_NS_XML);
+    pub const APPLICATION_XCON_CONFERENCE_INFO_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_XCON_CONFERENCE_INFO_XML);
+    pub const APPLICATION_XCON_CONFERENCE_INFO_DIFF_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_XCON_CONFERENCE_INFO_DIFF_XML);
+    pub const APPLICATION_XENC_XML: Encoding = Encoding::new(prefix::APPLICATION_XENC_XML);
+    pub const APPLICATION_XFDF: Encoding = Encoding::new(prefix::APPLICATION_XFDF);
+    pub const APPLICATION_XHTML_XML: Encoding = Encoding::new(prefix::APPLICATION_XHTML_XML);
+    pub const APPLICATION_XLIFF_XML: Encoding = Encoding::new(prefix::APPLICATION_XLIFF_XML);
+    pub const APPLICATION_XML: Encoding = Encoding::new(prefix::APPLICATION_XML);
+    pub const APPLICATION_XML_DTD: Encoding = Encoding::new(prefix::APPLICATION_XML_DTD);
+    pub const APPLICATION_XML_EXTERNAL_PARSED_ENTITY: Encoding =
+        Encoding::new(prefix::APPLICATION_XML_EXTERNAL_PARSED_ENTITY);
+    pub const APPLICATION_XML_PATCH_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_XML_PATCH_XML);
+    pub const APPLICATION_XMPP_XML: Encoding = Encoding::new(prefix::APPLICATION_XMPP_XML);
+    pub const APPLICATION_XOP_XML: Encoding = Encoding::new(prefix::APPLICATION_XOP_XML);
+    pub const APPLICATION_XSLT_XML: Encoding = Encoding::new(prefix::APPLICATION_XSLT_XML);
+    pub const APPLICATION_XV_XML: Encoding = Encoding::new(prefix::APPLICATION_XV_XML);
+    pub const APPLICATION_YAML: Encoding = Encoding::new(prefix::APPLICATION_YAML);
+    pub const APPLICATION_YANG: Encoding = Encoding::new(prefix::APPLICATION_YANG);
+    pub const APPLICATION_YANG_DATA_CBOR: Encoding =
+        Encoding::new(prefix::APPLICATION_YANG_DATA_CBOR);
+    pub const APPLICATION_YANG_DATA_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_YANG_DATA_JSON);
+    pub const APPLICATION_YANG_DATA_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_YANG_DATA_XML);
+    pub const APPLICATION_YANG_PATCH_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_YANG_PATCH_JSON);
+    pub const APPLICATION_YANG_PATCH_XML: Encoding =
+        Encoding::new(prefix::APPLICATION_YANG_PATCH_XML);
+    pub const APPLICATION_YANG_SID_JSON: Encoding =
+        Encoding::new(prefix::APPLICATION_YANG_SID_JSON);
+    pub const APPLICATION_YIN_XML: Encoding = Encoding::new(prefix::APPLICATION_YIN_XML);
+    pub const APPLICATION_ZIP: Encoding = Encoding::new(prefix::APPLICATION_ZIP);
+    pub const APPLICATION_ZLIB: Encoding = Encoding::new(prefix::APPLICATION_ZLIB);
+    pub const APPLICATION_ZSTD: Encoding = Encoding::new(prefix::APPLICATION_ZSTD);
+    pub const AUDIO_1D_INTERLEAVED_PARITYFEC: Encoding =
+        Encoding::new(prefix::AUDIO_1D_INTERLEAVED_PARITYFEC);
+    pub const AUDIO_32KADPCM: Encoding = Encoding::new(prefix::AUDIO_32KADPCM);
+    pub const AUDIO_3GPP: Encoding = Encoding::new(prefix::AUDIO_3GPP);
+    pub const AUDIO_3GPP2: Encoding = Encoding::new(prefix::AUDIO_3GPP2);
+    pub const AUDIO_AMR: Encoding = Encoding::new(prefix::AUDIO_AMR);
+    pub const AUDIO_AMR_WB: Encoding = Encoding::new(prefix::AUDIO_AMR_WB);
+    pub const AUDIO_ATRAC_ADVANCED_LOSSLESS: Encoding =
+        Encoding::new(prefix::AUDIO_ATRAC_ADVANCED_LOSSLESS);
+    pub const AUDIO_ATRAC_X: Encoding = Encoding::new(prefix::AUDIO_ATRAC_X);
+    pub const AUDIO_ATRAC3: Encoding = Encoding::new(prefix::AUDIO_ATRAC3);
+    pub const AUDIO_BV16: Encoding = Encoding::new(prefix::AUDIO_BV16);
+    pub const AUDIO_BV32: Encoding = Encoding::new(prefix::AUDIO_BV32);
+    pub const AUDIO_CN: Encoding = Encoding::new(prefix::AUDIO_CN);
+    pub const AUDIO_DAT12: Encoding = Encoding::new(prefix::AUDIO_DAT12);
+    pub const AUDIO_DV: Encoding = Encoding::new(prefix::AUDIO_DV);
+    pub const AUDIO_DVI4: Encoding = Encoding::new(prefix::AUDIO_DVI4);
+    pub const AUDIO_EVRC: Encoding = Encoding::new(prefix::AUDIO_EVRC);
+    pub const AUDIO_EVRC_QCP: Encoding = Encoding::new(prefix::AUDIO_EVRC_QCP);
+    pub const AUDIO_EVRC0: Encoding = Encoding::new(prefix::AUDIO_EVRC0);
+    pub const AUDIO_EVRC1: Encoding = Encoding::new(prefix::AUDIO_EVRC1);
+    pub const AUDIO_EVRCB: Encoding = Encoding::new(prefix::AUDIO_EVRCB);
+    pub const AUDIO_EVRCB0: Encoding = Encoding::new(prefix::AUDIO_EVRCB0);
+    pub const AUDIO_EVRCB1: Encoding = Encoding::new(prefix::AUDIO_EVRCB1);
+    pub const AUDIO_EVRCNW: Encoding = Encoding::new(prefix::AUDIO_EVRCNW);
+    pub const AUDIO_EVRCNW0: Encoding = Encoding::new(prefix::AUDIO_EVRCNW0);
+    pub const AUDIO_EVRCNW1: Encoding = Encoding::new(prefix::AUDIO_EVRCNW1);
+    pub const AUDIO_EVRCWB: Encoding = Encoding::new(prefix::AUDIO_EVRCWB);
+    pub const AUDIO_EVRCWB0: Encoding = Encoding::new(prefix::AUDIO_EVRCWB0);
+    pub const AUDIO_EVRCWB1: Encoding = Encoding::new(prefix::AUDIO_EVRCWB1);
+    pub const AUDIO_EVS: Encoding = Encoding::new(prefix::AUDIO_EVS);
+    pub const AUDIO_G711_0: Encoding = Encoding::new(prefix::AUDIO_G711_0);
+    pub const AUDIO_G719: Encoding = Encoding::new(prefix::AUDIO_G719);
+    pub const AUDIO_G722: Encoding = Encoding::new(prefix::AUDIO_G722);
+    pub const AUDIO_G7221: Encoding = Encoding::new(prefix::AUDIO_G7221);
+    pub const AUDIO_G723: Encoding = Encoding::new(prefix::AUDIO_G723);
+    pub const AUDIO_G726_16: Encoding = Encoding::new(prefix::AUDIO_G726_16);
+    pub const AUDIO_G726_24: Encoding = Encoding::new(prefix::AUDIO_G726_24);
+    pub const AUDIO_G726_32: Encoding = Encoding::new(prefix::AUDIO_G726_32);
+    pub const AUDIO_G726_40: Encoding = Encoding::new(prefix::AUDIO_G726_40);
+    pub const AUDIO_G728: Encoding = Encoding::new(prefix::AUDIO_G728);
+    pub const AUDIO_G729: Encoding = Encoding::new(prefix::AUDIO_G729);
+    pub const AUDIO_G7291: Encoding = Encoding::new(prefix::AUDIO_G7291);
+    pub const AUDIO_G729D: Encoding = Encoding::new(prefix::AUDIO_G729D);
+    pub const AUDIO_G729E: Encoding = Encoding::new(prefix::AUDIO_G729E);
+    pub const AUDIO_GSM: Encoding = Encoding::new(prefix::AUDIO_GSM);
+    pub const AUDIO_GSM_EFR: Encoding = Encoding::new(prefix::AUDIO_GSM_EFR);
+    pub const AUDIO_GSM_HR_08: Encoding = Encoding::new(prefix::AUDIO_GSM_HR_08);
+    pub const AUDIO_L16: Encoding = Encoding::new(prefix::AUDIO_L16);
+    pub const AUDIO_L20: Encoding = Encoding::new(prefix::AUDIO_L20);
+    pub const AUDIO_L24: Encoding = Encoding::new(prefix::AUDIO_L24);
+    pub const AUDIO_L8: Encoding = Encoding::new(prefix::AUDIO_L8);
+    pub const AUDIO_LPC: Encoding = Encoding::new(prefix::AUDIO_LPC);
+    pub const AUDIO_MELP: Encoding = Encoding::new(prefix::AUDIO_MELP);
+    pub const AUDIO_MELP1200: Encoding = Encoding::new(prefix::AUDIO_MELP1200);
+    pub const AUDIO_MELP2400: Encoding = Encoding::new(prefix::AUDIO_MELP2400);
+    pub const AUDIO_MELP600: Encoding = Encoding::new(prefix::AUDIO_MELP600);
+    pub const AUDIO_MP4A_LATM: Encoding = Encoding::new(prefix::AUDIO_MP4A_LATM);
+    pub const AUDIO_MPA: Encoding = Encoding::new(prefix::AUDIO_MPA);
+    pub const AUDIO_PCMA: Encoding = Encoding::new(prefix::AUDIO_PCMA);
+    pub const AUDIO_PCMA_WB: Encoding = Encoding::new(prefix::AUDIO_PCMA_WB);
+    pub const AUDIO_PCMU: Encoding = Encoding::new(prefix::AUDIO_PCMU);
+    pub const AUDIO_PCMU_WB: Encoding = Encoding::new(prefix::AUDIO_PCMU_WB);
+    pub const AUDIO_QCELP: Encoding = Encoding::new(prefix::AUDIO_QCELP);
+    pub const AUDIO_RED: Encoding = Encoding::new(prefix::AUDIO_RED);
+    pub const AUDIO_SMV: Encoding = Encoding::new(prefix::AUDIO_SMV);
+    pub const AUDIO_SMV_QCP: Encoding = Encoding::new(prefix::AUDIO_SMV_QCP);
+    pub const AUDIO_SMV0: Encoding = Encoding::new(prefix::AUDIO_SMV0);
+    pub const AUDIO_TETRA_ACELP: Encoding = Encoding::new(prefix::AUDIO_TETRA_ACELP);
+    pub const AUDIO_TETRA_ACELP_BB: Encoding = Encoding::new(prefix::AUDIO_TETRA_ACELP_BB);
+    pub const AUDIO_TSVCIS: Encoding = Encoding::new(prefix::AUDIO_TSVCIS);
+    pub const AUDIO_UEMCLIP: Encoding = Encoding::new(prefix::AUDIO_UEMCLIP);
+    pub const AUDIO_VDVI: Encoding = Encoding::new(prefix::AUDIO_VDVI);
+    pub const AUDIO_VMR_WB: Encoding = Encoding::new(prefix::AUDIO_VMR_WB);
+    pub const AUDIO_AAC: Encoding = Encoding::new(prefix::AUDIO_AAC);
+    pub const AUDIO_AC3: Encoding = Encoding::new(prefix::AUDIO_AC3);
+    pub const AUDIO_AMR_WB_P: Encoding = Encoding::new(prefix::AUDIO_AMR_WB_P);
+    pub const AUDIO_APTX: Encoding = Encoding::new(prefix::AUDIO_APTX);
+    pub const AUDIO_ASC: Encoding = Encoding::new(prefix::AUDIO_ASC);
+    pub const AUDIO_BASIC: Encoding = Encoding::new(prefix::AUDIO_BASIC);
+    pub const AUDIO_CLEARMODE: Encoding = Encoding::new(prefix::AUDIO_CLEARMODE);
+    pub const AUDIO_DLS: Encoding = Encoding::new(prefix::AUDIO_DLS);
+    pub const AUDIO_DSR_ES201108: Encoding = Encoding::new(prefix::AUDIO_DSR_ES201108);
+    pub const AUDIO_DSR_ES202050: Encoding = Encoding::new(prefix::AUDIO_DSR_ES202050);
+    pub const AUDIO_DSR_ES202211: Encoding = Encoding::new(prefix::AUDIO_DSR_ES202211);
+    pub const AUDIO_DSR_ES202212: Encoding = Encoding::new(prefix::AUDIO_DSR_ES202212);
+    pub const AUDIO_EAC3: Encoding = Encoding::new(prefix::AUDIO_EAC3);
+    pub const AUDIO_ENCAPRTP: Encoding = Encoding::new(prefix::AUDIO_ENCAPRTP);
+    pub const AUDIO_EXAMPLE: Encoding = Encoding::new(prefix::AUDIO_EXAMPLE);
+    pub const AUDIO_FLEXFEC: Encoding = Encoding::new(prefix::AUDIO_FLEXFEC);
+    pub const AUDIO_FWDRED: Encoding = Encoding::new(prefix::AUDIO_FWDRED);
+    pub const AUDIO_ILBC: Encoding = Encoding::new(prefix::AUDIO_ILBC);
+    pub const AUDIO_IP_MR_V2_5: Encoding = Encoding::new(prefix::AUDIO_IP_MR_V2_5);
+    pub const AUDIO_MATROSKA: Encoding = Encoding::new(prefix::AUDIO_MATROSKA);
+    pub const AUDIO_MHAS: Encoding = Encoding::new(prefix::AUDIO_MHAS);
+    pub const AUDIO_MOBILE_XMF: Encoding = Encoding::new(prefix::AUDIO_MOBILE_XMF);
+    pub const AUDIO_MP4: Encoding = Encoding::new(prefix::AUDIO_MP4);
+    pub const AUDIO_MPA_ROBUST: Encoding = Encoding::new(prefix::AUDIO_MPA_ROBUST);
+    pub const AUDIO_MPEG: Encoding = Encoding::new(prefix::AUDIO_MPEG);
+    pub const AUDIO_MPEG4_GENERIC: Encoding = Encoding::new(prefix::AUDIO_MPEG4_GENERIC);
+    pub const AUDIO_OGG: Encoding = Encoding::new(prefix::AUDIO_OGG);
+    pub const AUDIO_OPUS: Encoding = Encoding::new(prefix::AUDIO_OPUS);
+    pub const AUDIO_PARITYFEC: Encoding = Encoding::new(prefix::AUDIO_PARITYFEC);
+    pub const AUDIO_PRS_SID: Encoding = Encoding::new(prefix::AUDIO_PRS_SID);
+    pub const AUDIO_RAPTORFEC: Encoding = Encoding::new(prefix::AUDIO_RAPTORFEC);
+    pub const AUDIO_RTP_ENC_AESCM128: Encoding = Encoding::new(prefix::AUDIO_RTP_ENC_AESCM128);
+    pub const AUDIO_RTP_MIDI: Encoding = Encoding::new(prefix::AUDIO_RTP_MIDI);
+    pub const AUDIO_RTPLOOPBACK: Encoding = Encoding::new(prefix::AUDIO_RTPLOOPBACK);
+    pub const AUDIO_RTX: Encoding = Encoding::new(prefix::AUDIO_RTX);
+    pub const AUDIO_SCIP: Encoding = Encoding::new(prefix::AUDIO_SCIP);
+    pub const AUDIO_SOFA: Encoding = Encoding::new(prefix::AUDIO_SOFA);
+    pub const AUDIO_SP_MIDI: Encoding = Encoding::new(prefix::AUDIO_SP_MIDI);
+    pub const AUDIO_SPEEX: Encoding = Encoding::new(prefix::AUDIO_SPEEX);
+    pub const AUDIO_T140C: Encoding = Encoding::new(prefix::AUDIO_T140C);
+    pub const AUDIO_T38: Encoding = Encoding::new(prefix::AUDIO_T38);
+    pub const AUDIO_TELEPHONE_EVENT: Encoding = Encoding::new(prefix::AUDIO_TELEPHONE_EVENT);
+    pub const AUDIO_TONE: Encoding = Encoding::new(prefix::AUDIO_TONE);
+    pub const AUDIO_ULPFEC: Encoding = Encoding::new(prefix::AUDIO_ULPFEC);
+    pub const AUDIO_USAC: Encoding = Encoding::new(prefix::AUDIO_USAC);
+    pub const AUDIO_VND_3GPP_IUFP: Encoding = Encoding::new(prefix::AUDIO_VND_3GPP_IUFP);
+    pub const AUDIO_VND_4SB: Encoding = Encoding::new(prefix::AUDIO_VND_4SB);
+    pub const AUDIO_VND_CELP: Encoding = Encoding::new(prefix::AUDIO_VND_CELP);
+    pub const AUDIO_VND_AUDIOKOZ: Encoding = Encoding::new(prefix::AUDIO_VND_AUDIOKOZ);
+    pub const AUDIO_VND_CISCO_NSE: Encoding = Encoding::new(prefix::AUDIO_VND_CISCO_NSE);
+    pub const AUDIO_VND_CMLES_RADIO_EVENTS: Encoding =
+        Encoding::new(prefix::AUDIO_VND_CMLES_RADIO_EVENTS);
+    pub const AUDIO_VND_CNS_ANP1: Encoding = Encoding::new(prefix::AUDIO_VND_CNS_ANP1);
+    pub const AUDIO_VND_CNS_INF1: Encoding = Encoding::new(prefix::AUDIO_VND_CNS_INF1);
+    pub const AUDIO_VND_DECE_AUDIO: Encoding = Encoding::new(prefix::AUDIO_VND_DECE_AUDIO);
+    pub const AUDIO_VND_DIGITAL_WINDS: Encoding = Encoding::new(prefix::AUDIO_VND_DIGITAL_WINDS);
+    pub const AUDIO_VND_DLNA_ADTS: Encoding = Encoding::new(prefix::AUDIO_VND_DLNA_ADTS);
+    pub const AUDIO_VND_DOLBY_HEAAC_1: Encoding = Encoding::new(prefix::AUDIO_VND_DOLBY_HEAAC_1);
+    pub const AUDIO_VND_DOLBY_HEAAC_2: Encoding = Encoding::new(prefix::AUDIO_VND_DOLBY_HEAAC_2);
+    pub const AUDIO_VND_DOLBY_MLP: Encoding = Encoding::new(prefix::AUDIO_VND_DOLBY_MLP);
+    pub const AUDIO_VND_DOLBY_MPS: Encoding = Encoding::new(prefix::AUDIO_VND_DOLBY_MPS);
+    pub const AUDIO_VND_DOLBY_PL2: Encoding = Encoding::new(prefix::AUDIO_VND_DOLBY_PL2);
+    pub const AUDIO_VND_DOLBY_PL2X: Encoding = Encoding::new(prefix::AUDIO_VND_DOLBY_PL2X);
+    pub const AUDIO_VND_DOLBY_PL2Z: Encoding = Encoding::new(prefix::AUDIO_VND_DOLBY_PL2Z);
+    pub const AUDIO_VND_DOLBY_PULSE_1: Encoding = Encoding::new(prefix::AUDIO_VND_DOLBY_PULSE_1);
+    pub const AUDIO_VND_DRA: Encoding = Encoding::new(prefix::AUDIO_VND_DRA);
+    pub const AUDIO_VND_DTS: Encoding = Encoding::new(prefix::AUDIO_VND_DTS);
+    pub const AUDIO_VND_DTS_HD: Encoding = Encoding::new(prefix::AUDIO_VND_DTS_HD);
+    pub const AUDIO_VND_DTS_UHD: Encoding = Encoding::new(prefix::AUDIO_VND_DTS_UHD);
+    pub const AUDIO_VND_DVB_FILE: Encoding = Encoding::new(prefix::AUDIO_VND_DVB_FILE);
+    pub const AUDIO_VND_EVERAD_PLJ: Encoding = Encoding::new(prefix::AUDIO_VND_EVERAD_PLJ);
+    pub const AUDIO_VND_HNS_AUDIO: Encoding = Encoding::new(prefix::AUDIO_VND_HNS_AUDIO);
+    pub const AUDIO_VND_LUCENT_VOICE: Encoding = Encoding::new(prefix::AUDIO_VND_LUCENT_VOICE);
+    pub const AUDIO_VND_MS_PLAYREADY_MEDIA_PYA: Encoding =
+        Encoding::new(prefix::AUDIO_VND_MS_PLAYREADY_MEDIA_PYA);
+    pub const AUDIO_VND_NOKIA_MOBILE_XMF: Encoding =
+        Encoding::new(prefix::AUDIO_VND_NOKIA_MOBILE_XMF);
+    pub const AUDIO_VND_NORTEL_VBK: Encoding = Encoding::new(prefix::AUDIO_VND_NORTEL_VBK);
+    pub const AUDIO_VND_NUERA_ECELP4800: Encoding =
+        Encoding::new(prefix::AUDIO_VND_NUERA_ECELP4800);
+    pub const AUDIO_VND_NUERA_ECELP7470: Encoding =
+        Encoding::new(prefix::AUDIO_VND_NUERA_ECELP7470);
+    pub const AUDIO_VND_NUERA_ECELP9600: Encoding =
+        Encoding::new(prefix::AUDIO_VND_NUERA_ECELP9600);
+    pub const AUDIO_VND_OCTEL_SBC: Encoding = Encoding::new(prefix::AUDIO_VND_OCTEL_SBC);
+    pub const AUDIO_VND_PRESONUS_MULTITRACK: Encoding =
+        Encoding::new(prefix::AUDIO_VND_PRESONUS_MULTITRACK);
+    pub const AUDIO_VND_QCELP: Encoding = Encoding::new(prefix::AUDIO_VND_QCELP);
+    pub const AUDIO_VND_RHETOREX_32KADPCM: Encoding =
+        Encoding::new(prefix::AUDIO_VND_RHETOREX_32KADPCM);
+    pub const AUDIO_VND_RIP: Encoding = Encoding::new(prefix::AUDIO_VND_RIP);
+    pub const AUDIO_VND_SEALEDMEDIA_SOFTSEAL_MPEG: Encoding =
+        Encoding::new(prefix::AUDIO_VND_SEALEDMEDIA_SOFTSEAL_MPEG);
+    pub const AUDIO_VND_VMX_CVSD: Encoding = Encoding::new(prefix::AUDIO_VND_VMX_CVSD);
+    pub const AUDIO_VORBIS: Encoding = Encoding::new(prefix::AUDIO_VORBIS);
+    pub const AUDIO_VORBIS_CONFIG: Encoding = Encoding::new(prefix::AUDIO_VORBIS_CONFIG);
+    pub const FONT_COLLECTION: Encoding = Encoding::new(prefix::FONT_COLLECTION);
+    pub const FONT_OTF: Encoding = Encoding::new(prefix::FONT_OTF);
+    pub const FONT_SFNT: Encoding = Encoding::new(prefix::FONT_SFNT);
+    pub const FONT_TTF: Encoding = Encoding::new(prefix::FONT_TTF);
+    pub const FONT_WOFF: Encoding = Encoding::new(prefix::FONT_WOFF);
+    pub const FONT_WOFF2: Encoding = Encoding::new(prefix::FONT_WOFF2);
+    pub const IMAGE_ACES: Encoding = Encoding::new(prefix::IMAGE_ACES);
+    pub const IMAGE_APNG: Encoding = Encoding::new(prefix::IMAGE_APNG);
+    pub const IMAGE_AVCI: Encoding = Encoding::new(prefix::IMAGE_AVCI);
+    pub const IMAGE_AVCS: Encoding = Encoding::new(prefix::IMAGE_AVCS);
+    pub const IMAGE_AVIF: Encoding = Encoding::new(prefix::IMAGE_AVIF);
+    pub const IMAGE_BMP: Encoding = Encoding::new(prefix::IMAGE_BMP);
+    pub const IMAGE_CGM: Encoding = Encoding::new(prefix::IMAGE_CGM);
+    pub const IMAGE_DICOM_RLE: Encoding = Encoding::new(prefix::IMAGE_DICOM_RLE);
+    pub const IMAGE_DPX: Encoding = Encoding::new(prefix::IMAGE_DPX);
+    pub const IMAGE_EMF: Encoding = Encoding::new(prefix::IMAGE_EMF);
+    pub const IMAGE_EXAMPLE: Encoding = Encoding::new(prefix::IMAGE_EXAMPLE);
+    pub const IMAGE_FITS: Encoding = Encoding::new(prefix::IMAGE_FITS);
+    pub const IMAGE_G3FAX: Encoding = Encoding::new(prefix::IMAGE_G3FAX);
+    pub const IMAGE_GIF: Encoding = Encoding::new(prefix::IMAGE_GIF);
+    pub const IMAGE_HEIC: Encoding = Encoding::new(prefix::IMAGE_HEIC);
+    pub const IMAGE_HEIC_SEQUENCE: Encoding = Encoding::new(prefix::IMAGE_HEIC_SEQUENCE);
+    pub const IMAGE_HEIF: Encoding = Encoding::new(prefix::IMAGE_HEIF);
+    pub const IMAGE_HEIF_SEQUENCE: Encoding = Encoding::new(prefix::IMAGE_HEIF_SEQUENCE);
+    pub const IMAGE_HEJ2K: Encoding = Encoding::new(prefix::IMAGE_HEJ2K);
+    pub const IMAGE_HSJ2: Encoding = Encoding::new(prefix::IMAGE_HSJ2);
+    pub const IMAGE_IEF: Encoding = Encoding::new(prefix::IMAGE_IEF);
+    pub const IMAGE_J2C: Encoding = Encoding::new(prefix::IMAGE_J2C);
+    pub const IMAGE_JLS: Encoding = Encoding::new(prefix::IMAGE_JLS);
+    pub const IMAGE_JP2: Encoding = Encoding::new(prefix::IMAGE_JP2);
+    pub const IMAGE_JPEG: Encoding = Encoding::new(prefix::IMAGE_JPEG);
+    pub const IMAGE_JPH: Encoding = Encoding::new(prefix::IMAGE_JPH);
+    pub const IMAGE_JPHC: Encoding = Encoding::new(prefix::IMAGE_JPHC);
+    pub const IMAGE_JPM: Encoding = Encoding::new(prefix::IMAGE_JPM);
+    pub const IMAGE_JPX: Encoding = Encoding::new(prefix::IMAGE_JPX);
+    pub const IMAGE_JXR: Encoding = Encoding::new(prefix::IMAGE_JXR);
+    pub const IMAGE_JXRA: Encoding = Encoding::new(prefix::IMAGE_JXRA);
+    pub const IMAGE_JXRS: Encoding = Encoding::new(prefix::IMAGE_JXRS);
+    pub const IMAGE_JXS: Encoding = Encoding::new(prefix::IMAGE_JXS);
+    pub const IMAGE_JXSC: Encoding = Encoding::new(prefix::IMAGE_JXSC);
+    pub const IMAGE_JXSI: Encoding = Encoding::new(prefix::IMAGE_JXSI);
+    pub const IMAGE_JXSS: Encoding = Encoding::new(prefix::IMAGE_JXSS);
+    pub const IMAGE_KTX: Encoding = Encoding::new(prefix::IMAGE_KTX);
+    pub const IMAGE_KTX2: Encoding = Encoding::new(prefix::IMAGE_KTX2);
+    pub const IMAGE_NAPLPS: Encoding = Encoding::new(prefix::IMAGE_NAPLPS);
+    pub const IMAGE_PNG: Encoding = Encoding::new(prefix::IMAGE_PNG);
+    pub const IMAGE_PRS_BTIF: Encoding = Encoding::new(prefix::IMAGE_PRS_BTIF);
+    pub const IMAGE_PRS_PTI: Encoding = Encoding::new(prefix::IMAGE_PRS_PTI);
+    pub const IMAGE_PWG_RASTER: Encoding = Encoding::new(prefix::IMAGE_PWG_RASTER);
+    pub const IMAGE_SVG_XML: Encoding = Encoding::new(prefix::IMAGE_SVG_XML);
+    pub const IMAGE_T38: Encoding = Encoding::new(prefix::IMAGE_T38);
+    pub const IMAGE_TIFF: Encoding = Encoding::new(prefix::IMAGE_TIFF);
+    pub const IMAGE_TIFF_FX: Encoding = Encoding::new(prefix::IMAGE_TIFF_FX);
+    pub const IMAGE_VND_ADOBE_PHOTOSHOP: Encoding =
+        Encoding::new(prefix::IMAGE_VND_ADOBE_PHOTOSHOP);
+    pub const IMAGE_VND_AIRZIP_ACCELERATOR_AZV: Encoding =
+        Encoding::new(prefix::IMAGE_VND_AIRZIP_ACCELERATOR_AZV);
+    pub const IMAGE_VND_CNS_INF2: Encoding = Encoding::new(prefix::IMAGE_VND_CNS_INF2);
+    pub const IMAGE_VND_DECE_GRAPHIC: Encoding = Encoding::new(prefix::IMAGE_VND_DECE_GRAPHIC);
+    pub const IMAGE_VND_DJVU: Encoding = Encoding::new(prefix::IMAGE_VND_DJVU);
+    pub const IMAGE_VND_DVB_SUBTITLE: Encoding = Encoding::new(prefix::IMAGE_VND_DVB_SUBTITLE);
+    pub const IMAGE_VND_DWG: Encoding = Encoding::new(prefix::IMAGE_VND_DWG);
+    pub const IMAGE_VND_DXF: Encoding = Encoding::new(prefix::IMAGE_VND_DXF);
+    pub const IMAGE_VND_FASTBIDSHEET: Encoding = Encoding::new(prefix::IMAGE_VND_FASTBIDSHEET);
+    pub const IMAGE_VND_FPX: Encoding = Encoding::new(prefix::IMAGE_VND_FPX);
+    pub const IMAGE_VND_FST: Encoding = Encoding::new(prefix::IMAGE_VND_FST);
+    pub const IMAGE_VND_FUJIXEROX_EDMICS_MMR: Encoding =
+        Encoding::new(prefix::IMAGE_VND_FUJIXEROX_EDMICS_MMR);
+    pub const IMAGE_VND_FUJIXEROX_EDMICS_RLC: Encoding =
+        Encoding::new(prefix::IMAGE_VND_FUJIXEROX_EDMICS_RLC);
+    pub const IMAGE_VND_GLOBALGRAPHICS_PGB: Encoding =
+        Encoding::new(prefix::IMAGE_VND_GLOBALGRAPHICS_PGB);
+    pub const IMAGE_VND_MICROSOFT_ICON: Encoding = Encoding::new(prefix::IMAGE_VND_MICROSOFT_ICON);
+    pub const IMAGE_VND_MIX: Encoding = Encoding::new(prefix::IMAGE_VND_MIX);
+    pub const IMAGE_VND_MOZILLA_APNG: Encoding = Encoding::new(prefix::IMAGE_VND_MOZILLA_APNG);
+    pub const IMAGE_VND_MS_MODI: Encoding = Encoding::new(prefix::IMAGE_VND_MS_MODI);
+    pub const IMAGE_VND_NET_FPX: Encoding = Encoding::new(prefix::IMAGE_VND_NET_FPX);
+    pub const IMAGE_VND_PCO_B16: Encoding = Encoding::new(prefix::IMAGE_VND_PCO_B16);
+    pub const IMAGE_VND_RADIANCE: Encoding = Encoding::new(prefix::IMAGE_VND_RADIANCE);
+    pub const IMAGE_VND_SEALED_PNG: Encoding = Encoding::new(prefix::IMAGE_VND_SEALED_PNG);
+    pub const IMAGE_VND_SEALEDMEDIA_SOFTSEAL_GIF: Encoding =
+        Encoding::new(prefix::IMAGE_VND_SEALEDMEDIA_SOFTSEAL_GIF);
+    pub const IMAGE_VND_SEALEDMEDIA_SOFTSEAL_JPG: Encoding =
+        Encoding::new(prefix::IMAGE_VND_SEALEDMEDIA_SOFTSEAL_JPG);
+    pub const IMAGE_VND_SVF: Encoding = Encoding::new(prefix::IMAGE_VND_SVF);
+    pub const IMAGE_VND_TENCENT_TAP: Encoding = Encoding::new(prefix::IMAGE_VND_TENCENT_TAP);
+    pub const IMAGE_VND_VALVE_SOURCE_TEXTURE: Encoding =
+        Encoding::new(prefix::IMAGE_VND_VALVE_SOURCE_TEXTURE);
+    pub const IMAGE_VND_WAP_WBMP: Encoding = Encoding::new(prefix::IMAGE_VND_WAP_WBMP);
+    pub const IMAGE_VND_XIFF: Encoding = Encoding::new(prefix::IMAGE_VND_XIFF);
+    pub const IMAGE_VND_ZBRUSH_PCX: Encoding = Encoding::new(prefix::IMAGE_VND_ZBRUSH_PCX);
+    pub const IMAGE_WEBP: Encoding = Encoding::new(prefix::IMAGE_WEBP);
+    pub const IMAGE_WMF: Encoding = Encoding::new(prefix::IMAGE_WMF);
+    pub const MESSAGE_CPIM: Encoding = Encoding::new(prefix::MESSAGE_CPIM);
+    pub const MESSAGE_BHTTP: Encoding = Encoding::new(prefix::MESSAGE_BHTTP);
+    pub const MESSAGE_DELIVERY_STATUS: Encoding = Encoding::new(prefix::MESSAGE_DELIVERY_STATUS);
+    pub const MESSAGE_DISPOSITION_NOTIFICATION: Encoding =
+        Encoding::new(prefix::MESSAGE_DISPOSITION_NOTIFICATION);
+    pub const MESSAGE_EXAMPLE: Encoding = Encoding::new(prefix::MESSAGE_EXAMPLE);
+    pub const MESSAGE_EXTERNAL_BODY: Encoding = Encoding::new(prefix::MESSAGE_EXTERNAL_BODY);
+    pub const MESSAGE_FEEDBACK_REPORT: Encoding = Encoding::new(prefix::MESSAGE_FEEDBACK_REPORT);
+    pub const MESSAGE_GLOBAL: Encoding = Encoding::new(prefix::MESSAGE_GLOBAL);
+    pub const MESSAGE_GLOBAL_DELIVERY_STATUS: Encoding =
+        Encoding::new(prefix::MESSAGE_GLOBAL_DELIVERY_STATUS);
+    pub const MESSAGE_GLOBAL_DISPOSITION_NOTIFICATION: Encoding =
+        Encoding::new(prefix::MESSAGE_GLOBAL_DISPOSITION_NOTIFICATION);
+    pub const MESSAGE_GLOBAL_HEADERS: Encoding = Encoding::new(prefix::MESSAGE_GLOBAL_HEADERS);
+    pub const MESSAGE_HTTP: Encoding = Encoding::new(prefix::MESSAGE_HTTP);
+    pub const MESSAGE_IMDN_XML: Encoding = Encoding::new(prefix::MESSAGE_IMDN_XML);
+    pub const MESSAGE_MLS: Encoding = Encoding::new(prefix::MESSAGE_MLS);
+    pub const MESSAGE_NEWS: Encoding = Encoding::new(prefix::MESSAGE_NEWS);
+    pub const MESSAGE_OHTTP_REQ: Encoding = Encoding::new(prefix::MESSAGE_OHTTP_REQ);
+    pub const MESSAGE_OHTTP_RES: Encoding = Encoding::new(prefix::MESSAGE_OHTTP_RES);
+    pub const MESSAGE_PARTIAL: Encoding = Encoding::new(prefix::MESSAGE_PARTIAL);
+    pub const MESSAGE_RFC822: Encoding = Encoding::new(prefix::MESSAGE_RFC822);
+    pub const MESSAGE_S_HTTP: Encoding = Encoding::new(prefix::MESSAGE_S_HTTP);
+    pub const MESSAGE_SIP: Encoding = Encoding::new(prefix::MESSAGE_SIP);
+    pub const MESSAGE_SIPFRAG: Encoding = Encoding::new(prefix::MESSAGE_SIPFRAG);
+    pub const MESSAGE_TRACKING_STATUS: Encoding = Encoding::new(prefix::MESSAGE_TRACKING_STATUS);
+    pub const MESSAGE_VND_SI_SIMP: Encoding = Encoding::new(prefix::MESSAGE_VND_SI_SIMP);
+    pub const MESSAGE_VND_WFA_WSC: Encoding = Encoding::new(prefix::MESSAGE_VND_WFA_WSC);
+    pub const MODEL_3MF: Encoding = Encoding::new(prefix::MODEL_3MF);
+    pub const MODEL_JT: Encoding = Encoding::new(prefix::MODEL_JT);
+    pub const MODEL_E57: Encoding = Encoding::new(prefix::MODEL_E57);
+    pub const MODEL_EXAMPLE: Encoding = Encoding::new(prefix::MODEL_EXAMPLE);
+    pub const MODEL_GLTF_JSON: Encoding = Encoding::new(prefix::MODEL_GLTF_JSON);
+    pub const MODEL_GLTF_BINARY: Encoding = Encoding::new(prefix::MODEL_GLTF_BINARY);
+    pub const MODEL_IGES: Encoding = Encoding::new(prefix::MODEL_IGES);
+    pub const MODEL_MESH: Encoding = Encoding::new(prefix::MODEL_MESH);
+    pub const MODEL_MTL: Encoding = Encoding::new(prefix::MODEL_MTL);
+    pub const MODEL_OBJ: Encoding = Encoding::new(prefix::MODEL_OBJ);
+    pub const MODEL_PRC: Encoding = Encoding::new(prefix::MODEL_PRC);
+    pub const MODEL_STEP: Encoding = Encoding::new(prefix::MODEL_STEP);
+    pub const MODEL_STEP_XML: Encoding = Encoding::new(prefix::MODEL_STEP_XML);
+    pub const MODEL_STEP_ZIP: Encoding = Encoding::new(prefix::MODEL_STEP_ZIP);
+    pub const MODEL_STEP_XML_ZIP: Encoding = Encoding::new(prefix::MODEL_STEP_XML_ZIP);
+    pub const MODEL_STL: Encoding = Encoding::new(prefix::MODEL_STL);
+    pub const MODEL_U3D: Encoding = Encoding::new(prefix::MODEL_U3D);
+    pub const MODEL_VND_BARY: Encoding = Encoding::new(prefix::MODEL_VND_BARY);
+    pub const MODEL_VND_CLD: Encoding = Encoding::new(prefix::MODEL_VND_CLD);
+    pub const MODEL_VND_COLLADA_XML: Encoding = Encoding::new(prefix::MODEL_VND_COLLADA_XML);
+    pub const MODEL_VND_DWF: Encoding = Encoding::new(prefix::MODEL_VND_DWF);
+    pub const MODEL_VND_FLATLAND_3DML: Encoding = Encoding::new(prefix::MODEL_VND_FLATLAND_3DML);
+    pub const MODEL_VND_GDL: Encoding = Encoding::new(prefix::MODEL_VND_GDL);
+    pub const MODEL_VND_GS_GDL: Encoding = Encoding::new(prefix::MODEL_VND_GS_GDL);
+    pub const MODEL_VND_GTW: Encoding = Encoding::new(prefix::MODEL_VND_GTW);
+    pub const MODEL_VND_MOML_XML: Encoding = Encoding::new(prefix::MODEL_VND_MOML_XML);
+    pub const MODEL_VND_MTS: Encoding = Encoding::new(prefix::MODEL_VND_MTS);
+    pub const MODEL_VND_OPENGEX: Encoding = Encoding::new(prefix::MODEL_VND_OPENGEX);
+    pub const MODEL_VND_PARASOLID_TRANSMIT_BINARY: Encoding =
+        Encoding::new(prefix::MODEL_VND_PARASOLID_TRANSMIT_BINARY);
+    pub const MODEL_VND_PARASOLID_TRANSMIT_TEXT: Encoding =
+        Encoding::new(prefix::MODEL_VND_PARASOLID_TRANSMIT_TEXT);
+    pub const MODEL_VND_PYTHA_PYOX: Encoding = Encoding::new(prefix::MODEL_VND_PYTHA_PYOX);
+    pub const MODEL_VND_ROSETTE_ANNOTATED_DATA_MODEL: Encoding =
+        Encoding::new(prefix::MODEL_VND_ROSETTE_ANNOTATED_DATA_MODEL);
+    pub const MODEL_VND_SAP_VDS: Encoding = Encoding::new(prefix::MODEL_VND_SAP_VDS);
+    pub const MODEL_VND_USDA: Encoding = Encoding::new(prefix::MODEL_VND_USDA);
+    pub const MODEL_VND_USDZ_ZIP: Encoding = Encoding::new(prefix::MODEL_VND_USDZ_ZIP);
+    pub const MODEL_VND_VALVE_SOURCE_COMPILED_MAP: Encoding =
+        Encoding::new(prefix::MODEL_VND_VALVE_SOURCE_COMPILED_MAP);
+    pub const MODEL_VND_VTU: Encoding = Encoding::new(prefix::MODEL_VND_VTU);
+    pub const MODEL_VRML: Encoding = Encoding::new(prefix::MODEL_VRML);
+    pub const MODEL_X3D_FASTINFOSET: Encoding = Encoding::new(prefix::MODEL_X3D_FASTINFOSET);
+    pub const MODEL_X3D_XML: Encoding = Encoding::new(prefix::MODEL_X3D_XML);
+    pub const MODEL_X3D_VRML: Encoding = Encoding::new(prefix::MODEL_X3D_VRML);
+    pub const MULTIPART_ALTERNATIVE: Encoding = Encoding::new(prefix::MULTIPART_ALTERNATIVE);
+    pub const MULTIPART_APPLEDOUBLE: Encoding = Encoding::new(prefix::MULTIPART_APPLEDOUBLE);
+    pub const MULTIPART_BYTERANGES: Encoding = Encoding::new(prefix::MULTIPART_BYTERANGES);
+    pub const MULTIPART_DIGEST: Encoding = Encoding::new(prefix::MULTIPART_DIGEST);
+    pub const MULTIPART_ENCRYPTED: Encoding = Encoding::new(prefix::MULTIPART_ENCRYPTED);
+    pub const MULTIPART_EXAMPLE: Encoding = Encoding::new(prefix::MULTIPART_EXAMPLE);
+    pub const MULTIPART_FORM_DATA: Encoding = Encoding::new(prefix::MULTIPART_FORM_DATA);
+    pub const MULTIPART_HEADER_SET: Encoding = Encoding::new(prefix::MULTIPART_HEADER_SET);
+    pub const MULTIPART_MIXED: Encoding = Encoding::new(prefix::MULTIPART_MIXED);
+    pub const MULTIPART_MULTILINGUAL: Encoding = Encoding::new(prefix::MULTIPART_MULTILINGUAL);
+    pub const MULTIPART_PARALLEL: Encoding = Encoding::new(prefix::MULTIPART_PARALLEL);
+    pub const MULTIPART_RELATED: Encoding = Encoding::new(prefix::MULTIPART_RELATED);
+    pub const MULTIPART_REPORT: Encoding = Encoding::new(prefix::MULTIPART_REPORT);
+    pub const MULTIPART_SIGNED: Encoding = Encoding::new(prefix::MULTIPART_SIGNED);
+    pub const MULTIPART_VND_BINT_MED_PLUS: Encoding =
+        Encoding::new(prefix::MULTIPART_VND_BINT_MED_PLUS);
+    pub const MULTIPART_VOICE_MESSAGE: Encoding = Encoding::new(prefix::MULTIPART_VOICE_MESSAGE);
+    pub const MULTIPART_X_MIXED_REPLACE: Encoding =
+        Encoding::new(prefix::MULTIPART_X_MIXED_REPLACE);
+    pub const TEXT_1D_INTERLEAVED_PARITYFEC: Encoding =
+        Encoding::new(prefix::TEXT_1D_INTERLEAVED_PARITYFEC);
+    pub const TEXT_RED: Encoding = Encoding::new(prefix::TEXT_RED);
+    pub const TEXT_SGML: Encoding = Encoding::new(prefix::TEXT_SGML);
+    pub const TEXT_CACHE_MANIFEST: Encoding = Encoding::new(prefix::TEXT_CACHE_MANIFEST);
+    pub const TEXT_CALENDAR: Encoding = Encoding::new(prefix::TEXT_CALENDAR);
+    pub const TEXT_CQL: Encoding = Encoding::new(prefix::TEXT_CQL);
+    pub const TEXT_CQL_EXPRESSION: Encoding = Encoding::new(prefix::TEXT_CQL_EXPRESSION);
+    pub const TEXT_CQL_IDENTIFIER: Encoding = Encoding::new(prefix::TEXT_CQL_IDENTIFIER);
+    pub const TEXT_CSS: Encoding = Encoding::new(prefix::TEXT_CSS);
+    pub const TEXT_CSV: Encoding = Encoding::new(prefix::TEXT_CSV);
+    pub const TEXT_CSV_SCHEMA: Encoding = Encoding::new(prefix::TEXT_CSV_SCHEMA);
+    pub const TEXT_DIRECTORY: Encoding = Encoding::new(prefix::TEXT_DIRECTORY);
+    pub const TEXT_DNS: Encoding = Encoding::new(prefix::TEXT_DNS);
+    pub const TEXT_ECMASCRIPT: Encoding = Encoding::new(prefix::TEXT_ECMASCRIPT);
+    pub const TEXT_ENCAPRTP: Encoding = Encoding::new(prefix::TEXT_ENCAPRTP);
+    pub const TEXT_ENRICHED: Encoding = Encoding::new(prefix::TEXT_ENRICHED);
+    pub const TEXT_EXAMPLE: Encoding = Encoding::new(prefix::TEXT_EXAMPLE);
+    pub const TEXT_FHIRPATH: Encoding = Encoding::new(prefix::TEXT_FHIRPATH);
+    pub const TEXT_FLEXFEC: Encoding = Encoding::new(prefix::TEXT_FLEXFEC);
+    pub const TEXT_FWDRED: Encoding = Encoding::new(prefix::TEXT_FWDRED);
+    pub const TEXT_GFF3: Encoding = Encoding::new(prefix::TEXT_GFF3);
+    pub const TEXT_GRAMMAR_REF_LIST: Encoding = Encoding::new(prefix::TEXT_GRAMMAR_REF_LIST);
+    pub const TEXT_HL7V2: Encoding = Encoding::new(prefix::TEXT_HL7V2);
+    pub const TEXT_HTML: Encoding = Encoding::new(prefix::TEXT_HTML);
+    pub const TEXT_JAVASCRIPT: Encoding = Encoding::new(prefix::TEXT_JAVASCRIPT);
+    pub const TEXT_JCR_CND: Encoding = Encoding::new(prefix::TEXT_JCR_CND);
+    pub const TEXT_MARKDOWN: Encoding = Encoding::new(prefix::TEXT_MARKDOWN);
+    pub const TEXT_MIZAR: Encoding = Encoding::new(prefix::TEXT_MIZAR);
+    pub const TEXT_N3: Encoding = Encoding::new(prefix::TEXT_N3);
+    pub const TEXT_PARAMETERS: Encoding = Encoding::new(prefix::TEXT_PARAMETERS);
+    pub const TEXT_PARITYFEC: Encoding = Encoding::new(prefix::TEXT_PARITYFEC);
+    pub const TEXT_PLAIN: Encoding = Encoding::new(prefix::TEXT_PLAIN);
+    pub const TEXT_PROVENANCE_NOTATION: Encoding = Encoding::new(prefix::TEXT_PROVENANCE_NOTATION);
+    pub const TEXT_PRS_FALLENSTEIN_RST: Encoding = Encoding::new(prefix::TEXT_PRS_FALLENSTEIN_RST);
+    pub const TEXT_PRS_LINES_TAG: Encoding = Encoding::new(prefix::TEXT_PRS_LINES_TAG);
+    pub const TEXT_PRS_PROP_LOGIC: Encoding = Encoding::new(prefix::TEXT_PRS_PROP_LOGIC);
+    pub const TEXT_PRS_TEXI: Encoding = Encoding::new(prefix::TEXT_PRS_TEXI);
+    pub const TEXT_RAPTORFEC: Encoding = Encoding::new(prefix::TEXT_RAPTORFEC);
+    pub const TEXT_RFC822_HEADERS: Encoding = Encoding::new(prefix::TEXT_RFC822_HEADERS);
+    pub const TEXT_RICHTEXT: Encoding = Encoding::new(prefix::TEXT_RICHTEXT);
+    pub const TEXT_RTF: Encoding = Encoding::new(prefix::TEXT_RTF);
+    pub const TEXT_RTP_ENC_AESCM128: Encoding = Encoding::new(prefix::TEXT_RTP_ENC_AESCM128);
+    pub const TEXT_RTPLOOPBACK: Encoding = Encoding::new(prefix::TEXT_RTPLOOPBACK);
+    pub const TEXT_RTX: Encoding = Encoding::new(prefix::TEXT_RTX);
+    pub const TEXT_SHACLC: Encoding = Encoding::new(prefix::TEXT_SHACLC);
+    pub const TEXT_SHEX: Encoding = Encoding::new(prefix::TEXT_SHEX);
+    pub const TEXT_SPDX: Encoding = Encoding::new(prefix::TEXT_SPDX);
+    pub const TEXT_STRINGS: Encoding = Encoding::new(prefix::TEXT_STRINGS);
+    pub const TEXT_T140: Encoding = Encoding::new(prefix::TEXT_T140);
+    pub const TEXT_TAB_SEPARATED_VALUES: Encoding =
+        Encoding::new(prefix::TEXT_TAB_SEPARATED_VALUES);
+    pub const TEXT_TROFF: Encoding = Encoding::new(prefix::TEXT_TROFF);
+    pub const TEXT_TURTLE: Encoding = Encoding::new(prefix::TEXT_TURTLE);
+    pub const TEXT_ULPFEC: Encoding = Encoding::new(prefix::TEXT_ULPFEC);
+    pub const TEXT_URI_LIST: Encoding = Encoding::new(prefix::TEXT_URI_LIST);
+    pub const TEXT_VCARD: Encoding = Encoding::new(prefix::TEXT_VCARD);
+    pub const TEXT_VND_DMCLIENTSCRIPT: Encoding = Encoding::new(prefix::TEXT_VND_DMCLIENTSCRIPT);
+    pub const TEXT_VND_IPTC_NITF: Encoding = Encoding::new(prefix::TEXT_VND_IPTC_NITF);
+    pub const TEXT_VND_IPTC_NEWSML: Encoding = Encoding::new(prefix::TEXT_VND_IPTC_NEWSML);
+    pub const TEXT_VND_A: Encoding = Encoding::new(prefix::TEXT_VND_A);
+    pub const TEXT_VND_ABC: Encoding = Encoding::new(prefix::TEXT_VND_ABC);
+    pub const TEXT_VND_ASCII_ART: Encoding = Encoding::new(prefix::TEXT_VND_ASCII_ART);
+    pub const TEXT_VND_CURL: Encoding = Encoding::new(prefix::TEXT_VND_CURL);
+    pub const TEXT_VND_DEBIAN_COPYRIGHT: Encoding =
+        Encoding::new(prefix::TEXT_VND_DEBIAN_COPYRIGHT);
+    pub const TEXT_VND_DVB_SUBTITLE: Encoding = Encoding::new(prefix::TEXT_VND_DVB_SUBTITLE);
+    pub const TEXT_VND_ESMERTEC_THEME_DESCRIPTOR: Encoding =
+        Encoding::new(prefix::TEXT_VND_ESMERTEC_THEME_DESCRIPTOR);
+    pub const TEXT_VND_EXCHANGEABLE: Encoding = Encoding::new(prefix::TEXT_VND_EXCHANGEABLE);
+    pub const TEXT_VND_FAMILYSEARCH_GEDCOM: Encoding =
+        Encoding::new(prefix::TEXT_VND_FAMILYSEARCH_GEDCOM);
+    pub const TEXT_VND_FICLAB_FLT: Encoding = Encoding::new(prefix::TEXT_VND_FICLAB_FLT);
+    pub const TEXT_VND_FLY: Encoding = Encoding::new(prefix::TEXT_VND_FLY);
+    pub const TEXT_VND_FMI_FLEXSTOR: Encoding = Encoding::new(prefix::TEXT_VND_FMI_FLEXSTOR);
+    pub const TEXT_VND_GML: Encoding = Encoding::new(prefix::TEXT_VND_GML);
+    pub const TEXT_VND_GRAPHVIZ: Encoding = Encoding::new(prefix::TEXT_VND_GRAPHVIZ);
+    pub const TEXT_VND_HANS: Encoding = Encoding::new(prefix::TEXT_VND_HANS);
+    pub const TEXT_VND_HGL: Encoding = Encoding::new(prefix::TEXT_VND_HGL);
+    pub const TEXT_VND_IN3D_3DML: Encoding = Encoding::new(prefix::TEXT_VND_IN3D_3DML);
+    pub const TEXT_VND_IN3D_SPOT: Encoding = Encoding::new(prefix::TEXT_VND_IN3D_SPOT);
+    pub const TEXT_VND_LATEX_Z: Encoding = Encoding::new(prefix::TEXT_VND_LATEX_Z);
+    pub const TEXT_VND_MOTOROLA_REFLEX: Encoding = Encoding::new(prefix::TEXT_VND_MOTOROLA_REFLEX);
+    pub const TEXT_VND_MS_MEDIAPACKAGE: Encoding = Encoding::new(prefix::TEXT_VND_MS_MEDIAPACKAGE);
+    pub const TEXT_VND_NET2PHONE_COMMCENTER_COMMAND: Encoding =
+        Encoding::new(prefix::TEXT_VND_NET2PHONE_COMMCENTER_COMMAND);
+    pub const TEXT_VND_RADISYS_MSML_BASIC_LAYOUT: Encoding =
+        Encoding::new(prefix::TEXT_VND_RADISYS_MSML_BASIC_LAYOUT);
+    pub const TEXT_VND_SENX_WARPSCRIPT: Encoding = Encoding::new(prefix::TEXT_VND_SENX_WARPSCRIPT);
+    pub const TEXT_VND_SI_URICATALOGUE: Encoding = Encoding::new(prefix::TEXT_VND_SI_URICATALOGUE);
+    pub const TEXT_VND_SOSI: Encoding = Encoding::new(prefix::TEXT_VND_SOSI);
+    pub const TEXT_VND_SUN_J2ME_APP_DESCRIPTOR: Encoding =
+        Encoding::new(prefix::TEXT_VND_SUN_J2ME_APP_DESCRIPTOR);
+    pub const TEXT_VND_TROLLTECH_LINGUIST: Encoding =
+        Encoding::new(prefix::TEXT_VND_TROLLTECH_LINGUIST);
+    pub const TEXT_VND_WAP_SI: Encoding = Encoding::new(prefix::TEXT_VND_WAP_SI);
+    pub const TEXT_VND_WAP_SL: Encoding = Encoding::new(prefix::TEXT_VND_WAP_SL);
+    pub const TEXT_VND_WAP_WML: Encoding = Encoding::new(prefix::TEXT_VND_WAP_WML);
+    pub const TEXT_VND_WAP_WMLSCRIPT: Encoding = Encoding::new(prefix::TEXT_VND_WAP_WMLSCRIPT);
+    pub const TEXT_VTT: Encoding = Encoding::new(prefix::TEXT_VTT);
+    pub const TEXT_WGSL: Encoding = Encoding::new(prefix::TEXT_WGSL);
+    pub const TEXT_XML: Encoding = Encoding::new(prefix::TEXT_XML);
+    pub const TEXT_XML_EXTERNAL_PARSED_ENTITY: Encoding =
+        Encoding::new(prefix::TEXT_XML_EXTERNAL_PARSED_ENTITY);
+    pub const VIDEO_1D_INTERLEAVED_PARITYFEC: Encoding =
+        Encoding::new(prefix::VIDEO_1D_INTERLEAVED_PARITYFEC);
+    pub const VIDEO_3GPP: Encoding = Encoding::new(prefix::VIDEO_3GPP);
+    pub const VIDEO_3GPP_TT: Encoding = Encoding::new(prefix::VIDEO_3GPP_TT);
+    pub const VIDEO_3GPP2: Encoding = Encoding::new(prefix::VIDEO_3GPP2);
+    pub const VIDEO_AV1: Encoding = Encoding::new(prefix::VIDEO_AV1);
+    pub const VIDEO_BMPEG: Encoding = Encoding::new(prefix::VIDEO_BMPEG);
+    pub const VIDEO_BT656: Encoding = Encoding::new(prefix::VIDEO_BT656);
+    pub const VIDEO_CELB: Encoding = Encoding::new(prefix::VIDEO_CELB);
+    pub const VIDEO_DV: Encoding = Encoding::new(prefix::VIDEO_DV);
+    pub const VIDEO_FFV1: Encoding = Encoding::new(prefix::VIDEO_FFV1);
+    pub const VIDEO_H261: Encoding = Encoding::new(prefix::VIDEO_H261);
+    pub const VIDEO_H263: Encoding = Encoding::new(prefix::VIDEO_H263);
+    pub const VIDEO_H263_1998: Encoding = Encoding::new(prefix::VIDEO_H263_1998);
+    pub const VIDEO_H263_2000: Encoding = Encoding::new(prefix::VIDEO_H263_2000);
+    pub const VIDEO_H264: Encoding = Encoding::new(prefix::VIDEO_H264);
+    pub const VIDEO_H264_RCDO: Encoding = Encoding::new(prefix::VIDEO_H264_RCDO);
+    pub const VIDEO_H264_SVC: Encoding = Encoding::new(prefix::VIDEO_H264_SVC);
+    pub const VIDEO_H265: Encoding = Encoding::new(prefix::VIDEO_H265);
+    pub const VIDEO_H266: Encoding = Encoding::new(prefix::VIDEO_H266);
+    pub const VIDEO_JPEG: Encoding = Encoding::new(prefix::VIDEO_JPEG);
+    pub const VIDEO_MP1S: Encoding = Encoding::new(prefix::VIDEO_MP1S);
+    pub const VIDEO_MP2P: Encoding = Encoding::new(prefix::VIDEO_MP2P);
+    pub const VIDEO_MP2T: Encoding = Encoding::new(prefix::VIDEO_MP2T);
+    pub const VIDEO_MP4V_ES: Encoding = Encoding::new(prefix::VIDEO_MP4V_ES);
+    pub const VIDEO_MPV: Encoding = Encoding::new(prefix::VIDEO_MPV);
+    pub const VIDEO_SMPTE292M: Encoding = Encoding::new(prefix::VIDEO_SMPTE292M);
+    pub const VIDEO_VP8: Encoding = Encoding::new(prefix::VIDEO_VP8);
+    pub const VIDEO_VP9: Encoding = Encoding::new(prefix::VIDEO_VP9);
+    pub const VIDEO_ENCAPRTP: Encoding = Encoding::new(prefix::VIDEO_ENCAPRTP);
+    pub const VIDEO_EVC: Encoding = Encoding::new(prefix::VIDEO_EVC);
+    pub const VIDEO_EXAMPLE: Encoding = Encoding::new(prefix::VIDEO_EXAMPLE);
+    pub const VIDEO_FLEXFEC: Encoding = Encoding::new(prefix::VIDEO_FLEXFEC);
+    pub const VIDEO_ISO_SEGMENT: Encoding = Encoding::new(prefix::VIDEO_ISO_SEGMENT);
+    pub const VIDEO_JPEG2000: Encoding = Encoding::new(prefix::VIDEO_JPEG2000);
+    pub const VIDEO_JXSV: Encoding = Encoding::new(prefix::VIDEO_JXSV);
+    pub const VIDEO_MATROSKA: Encoding = Encoding::new(prefix::VIDEO_MATROSKA);
+    pub const VIDEO_MATROSKA_3D: Encoding = Encoding::new(prefix::VIDEO_MATROSKA_3D);
+    pub const VIDEO_MJ2: Encoding = Encoding::new(prefix::VIDEO_MJ2);
+    pub const VIDEO_MP4: Encoding = Encoding::new(prefix::VIDEO_MP4);
+    pub const VIDEO_MPEG: Encoding = Encoding::new(prefix::VIDEO_MPEG);
+    pub const VIDEO_MPEG4_GENERIC: Encoding = Encoding::new(prefix::VIDEO_MPEG4_GENERIC);
+    pub const VIDEO_NV: Encoding = Encoding::new(prefix::VIDEO_NV);
+    pub const VIDEO_OGG: Encoding = Encoding::new(prefix::VIDEO_OGG);
+    pub const VIDEO_PARITYFEC: Encoding = Encoding::new(prefix::VIDEO_PARITYFEC);
+    pub const VIDEO_POINTER: Encoding = Encoding::new(prefix::VIDEO_POINTER);
+    pub const VIDEO_QUICKTIME: Encoding = Encoding::new(prefix::VIDEO_QUICKTIME);
+    pub const VIDEO_RAPTORFEC: Encoding = Encoding::new(prefix::VIDEO_RAPTORFEC);
+    pub const VIDEO_RAW: Encoding = Encoding::new(prefix::VIDEO_RAW);
+    pub const VIDEO_RTP_ENC_AESCM128: Encoding = Encoding::new(prefix::VIDEO_RTP_ENC_AESCM128);
+    pub const VIDEO_RTPLOOPBACK: Encoding = Encoding::new(prefix::VIDEO_RTPLOOPBACK);
+    pub const VIDEO_RTX: Encoding = Encoding::new(prefix::VIDEO_RTX);
+    pub const VIDEO_SCIP: Encoding = Encoding::new(prefix::VIDEO_SCIP);
+    pub const VIDEO_SMPTE291: Encoding = Encoding::new(prefix::VIDEO_SMPTE291);
+    pub const VIDEO_ULPFEC: Encoding = Encoding::new(prefix::VIDEO_ULPFEC);
+    pub const VIDEO_VC1: Encoding = Encoding::new(prefix::VIDEO_VC1);
+    pub const VIDEO_VC2: Encoding = Encoding::new(prefix::VIDEO_VC2);
+    pub const VIDEO_VND_CCTV: Encoding = Encoding::new(prefix::VIDEO_VND_CCTV);
+    pub const VIDEO_VND_DECE_HD: Encoding = Encoding::new(prefix::VIDEO_VND_DECE_HD);
+    pub const VIDEO_VND_DECE_MOBILE: Encoding = Encoding::new(prefix::VIDEO_VND_DECE_MOBILE);
+    pub const VIDEO_VND_DECE_MP4: Encoding = Encoding::new(prefix::VIDEO_VND_DECE_MP4);
+    pub const VIDEO_VND_DECE_PD: Encoding = Encoding::new(prefix::VIDEO_VND_DECE_PD);
+    pub const VIDEO_VND_DECE_SD: Encoding = Encoding::new(prefix::VIDEO_VND_DECE_SD);
+    pub const VIDEO_VND_DECE_VIDEO: Encoding = Encoding::new(prefix::VIDEO_VND_DECE_VIDEO);
+    pub const VIDEO_VND_DIRECTV_MPEG: Encoding = Encoding::new(prefix::VIDEO_VND_DIRECTV_MPEG);
+    pub const VIDEO_VND_DIRECTV_MPEG_TTS: Encoding =
+        Encoding::new(prefix::VIDEO_VND_DIRECTV_MPEG_TTS);
+    pub const VIDEO_VND_DLNA_MPEG_TTS: Encoding = Encoding::new(prefix::VIDEO_VND_DLNA_MPEG_TTS);
+    pub const VIDEO_VND_DVB_FILE: Encoding = Encoding::new(prefix::VIDEO_VND_DVB_FILE);
+    pub const VIDEO_VND_FVT: Encoding = Encoding::new(prefix::VIDEO_VND_FVT);
+    pub const VIDEO_VND_HNS_VIDEO: Encoding = Encoding::new(prefix::VIDEO_VND_HNS_VIDEO);
+    pub const VIDEO_VND_IPTVFORUM_1DPARITYFEC_1010: Encoding =
+        Encoding::new(prefix::VIDEO_VND_IPTVFORUM_1DPARITYFEC_1010);
+    pub const VIDEO_VND_IPTVFORUM_1DPARITYFEC_2005: Encoding =
+        Encoding::new(prefix::VIDEO_VND_IPTVFORUM_1DPARITYFEC_2005);
+    pub const VIDEO_VND_IPTVFORUM_2DPARITYFEC_1010: Encoding =
+        Encoding::new(prefix::VIDEO_VND_IPTVFORUM_2DPARITYFEC_1010);
+    pub const VIDEO_VND_IPTVFORUM_2DPARITYFEC_2005: Encoding =
+        Encoding::new(prefix::VIDEO_VND_IPTVFORUM_2DPARITYFEC_2005);
+    pub const VIDEO_VND_IPTVFORUM_TTSAVC: Encoding =
+        Encoding::new(prefix::VIDEO_VND_IPTVFORUM_TTSAVC);
+    pub const VIDEO_VND_IPTVFORUM_TTSMPEG2: Encoding =
+        Encoding::new(prefix::VIDEO_VND_IPTVFORUM_TTSMPEG2);
+    pub const VIDEO_VND_MOTOROLA_VIDEO: Encoding = Encoding::new(prefix::VIDEO_VND_MOTOROLA_VIDEO);
+    pub const VIDEO_VND_MOTOROLA_VIDEOP: Encoding =
+        Encoding::new(prefix::VIDEO_VND_MOTOROLA_VIDEOP);
+    pub const VIDEO_VND_MPEGURL: Encoding = Encoding::new(prefix::VIDEO_VND_MPEGURL);
+    pub const VIDEO_VND_MS_PLAYREADY_MEDIA_PYV: Encoding =
+        Encoding::new(prefix::VIDEO_VND_MS_PLAYREADY_MEDIA_PYV);
+    pub const VIDEO_VND_NOKIA_INTERLEAVED_MULTIMEDIA: Encoding =
+        Encoding::new(prefix::VIDEO_VND_NOKIA_INTERLEAVED_MULTIMEDIA);
+    pub const VIDEO_VND_NOKIA_MP4VR: Encoding = Encoding::new(prefix::VIDEO_VND_NOKIA_MP4VR);
+    pub const VIDEO_VND_NOKIA_VIDEOVOIP: Encoding =
+        Encoding::new(prefix::VIDEO_VND_NOKIA_VIDEOVOIP);
+    pub const VIDEO_VND_OBJECTVIDEO: Encoding = Encoding::new(prefix::VIDEO_VND_OBJECTVIDEO);
+    pub const VIDEO_VND_RADGAMETTOOLS_BINK: Encoding =
+        Encoding::new(prefix::VIDEO_VND_RADGAMETTOOLS_BINK);
+    pub const VIDEO_VND_RADGAMETTOOLS_SMACKER: Encoding =
+        Encoding::new(prefix::VIDEO_VND_RADGAMETTOOLS_SMACKER);
+    pub const VIDEO_VND_SEALED_MPEG1: Encoding = Encoding::new(prefix::VIDEO_VND_SEALED_MPEG1);
+    pub const VIDEO_VND_SEALED_MPEG4: Encoding = Encoding::new(prefix::VIDEO_VND_SEALED_MPEG4);
+    pub const VIDEO_VND_SEALED_SWF: Encoding = Encoding::new(prefix::VIDEO_VND_SEALED_SWF);
+    pub const VIDEO_VND_SEALEDMEDIA_SOFTSEAL_MOV: Encoding =
+        Encoding::new(prefix::VIDEO_VND_SEALEDMEDIA_SOFTSEAL_MOV);
+    pub const VIDEO_VND_UVVU_MP4: Encoding = Encoding::new(prefix::VIDEO_VND_UVVU_MP4);
+    pub const VIDEO_VND_VIVO: Encoding = Encoding::new(prefix::VIDEO_VND_VIVO);
+    pub const VIDEO_VND_YOUTUBE_YT: Encoding = Encoding::new(prefix::VIDEO_VND_YOUTUBE_YT);
+}
+
 impl EncodingMapping for IanaEncodingMapping {
+    const MIN: EncodingPrefix = 1024;
+    const MAX: EncodingPrefix = 3120;
+
     /// Given a numerical [`EncodingPrefix`] returns its string representation.
-    fn prefix_to_str(&self, p: EncodingPrefix) -> &'static str {
-        match Self::KNOWN_PREFIX.get(&p) {
-            Some(p) => p,
-            None => "unknown",
-        }
+    fn prefix_to_str(&self, p: EncodingPrefix) -> Option<Cow<'static, str>> {
+        prefix::KNOWN_PREFIX.get(&p).map(|s| Cow::Borrowed(*s))
     }
 
     /// Given the string representation of a prefix returns its numerical representation as [`EncodingPrefix`].
-    /// [EMPTY](`IanaEncodingMapping::EMPTY`) is returned in case of unknown mapping.
-    fn str_to_prefix(&self, s: &str) -> EncodingPrefix {
-        match Self::KNOWN_STRING.get(s) {
-            Some(p) => *p,
-            None => Self::EMPTY,
-        }
+    /// [EMPTY](`prefix::EMPTY`) is returned in case of unknown mapping.
+    fn str_to_prefix(&self, s: &str) -> Option<EncodingPrefix> {
+        prefix::KNOWN_STRING.get(s).copied()
     }
 
     /// Parse a string into a valid [`Encoding`]. This functions performs the necessary
     /// prefix mapping and suffix substring when parsing the input. In case of unknown prefix mapping,
-    /// the [prefix](`Encoding::prefix`) will be set to [EMPTY](`IanaEncodingMapping::EMPTY`) and the
+    /// the [prefix](`Encoding::prefix`) will be set to [EMPTY](`prefix::EMPTY`) and the
     /// full string will be part of the [suffix](`Encoding::suffix`).
     fn parse<S>(&self, t: S) -> ZResult<Encoding>
     where
         S: Into<Cow<'static, str>>,
     {
-        fn _parse(t: Cow<'static, str>) -> ZResult<Encoding> {
+        fn _parse(_self: &IanaEncodingMapping, t: Cow<'static, str>) -> ZResult<Encoding> {
+            // Check if empty
             if t.is_empty() {
                 return Ok(IanaEncoding::EMPTY);
             }
-
+            // Try then an lookup of the string to prefix for the IanaEncodingMapping
+            if let Some(p) = _self.str_to_prefix(t.as_ref()) {
+                return Ok(Encoding::new(p));
+            }
+            // Check if the passed string matches one of the known prefixes. It will map the known string
+            // prefix to the numerical prefix and carry the remaining part of the string in the suffix.
             // Skip empty string mapping. The order is guaranteed by the phf::OrderedMap.
-            for (s, p) in IanaEncodingMapping::KNOWN_STRING.entries().skip(1) {
+            for (s, p) in prefix::KNOWN_STRING.entries().skip(1) {
                 if let Some(i) = t.find(s) {
                     let e = Encoding::new(*p);
                     match t {
@@ -6435,3706 +9814,19 @@ impl EncodingMapping for IanaEncodingMapping {
             }
             IanaEncoding::EMPTY.with_suffix(t)
         }
-        _parse(t.into())
+        _parse(self, t.into())
     }
 
     /// Given an [`Encoding`] returns a full string representation.
     /// It concatenates the string represenation of the encoding prefix with the encoding suffix.
-    fn to_str<'a>(&self, e: &'a Encoding) -> Cow<'a, str> {
-        if e.prefix() == IanaEncodingMapping::EMPTY {
-            Cow::Borrowed(e.suffix())
-        } else {
-            Cow::Owned(format!("{}{}", self.prefix_to_str(e.prefix()), e.suffix()))
+    fn to_str(&self, e: &Encoding) -> Cow<'_, str> {
+        let (p, s) = (e.prefix(), e.suffix());
+        match self.prefix_to_str(p) {
+            Some(p) if s.is_empty() => p,
+            Some(p) => Cow::Owned(format!("{}{}", p, s)),
+            None => Cow::Owned(format!("unknown({}){}", p, s)),
         }
     }
 }
-#[derive(Clone, Copy, Debug)]
-pub struct IanaEncoding;
 
-impl IanaEncoding {
-    pub const EMPTY: Encoding = Encoding::new(IanaEncodingMapping::EMPTY);
-    pub const APPLICATION_1D_INTERLEAVED_PARITYFEC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_1D_INTERLEAVED_PARITYFEC);
-    pub const APPLICATION_3GPDASH_QOE_REPORT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_3GPDASH_QOE_REPORT_XML);
-    pub const APPLICATION_3GPP_IMS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_3GPP_IMS_XML);
-    pub const APPLICATION_3GPPHAL_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_3GPPHAL_JSON);
-    pub const APPLICATION_3GPPHALFORMS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_3GPPHALFORMS_JSON);
-    pub const APPLICATION_A2L: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_A2L);
-    pub const APPLICATION_AML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_AML);
-    pub const APPLICATION_ATF: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ATF);
-    pub const APPLICATION_ATFX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ATFX);
-    pub const APPLICATION_ATXML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ATXML);
-    pub const APPLICATION_CALS_1840: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CALS_1840);
-    pub const APPLICATION_CDFX_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CDFX_XML);
-    pub const APPLICATION_CEA: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CEA);
-    pub const APPLICATION_CSTADATA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CSTADATA_XML);
-    pub const APPLICATION_DCD: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_DCD);
-    pub const APPLICATION_DII: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_DII);
-    pub const APPLICATION_DIT: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_DIT);
-    pub const APPLICATION_EDI_X12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EDI_X12);
-    pub const APPLICATION_EDI_CONSENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EDI_CONSENT);
-    pub const APPLICATION_EDIFACT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EDIFACT);
-    pub const APPLICATION_EMERGENCYCALLDATA_COMMENT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_COMMENT_XML);
-    pub const APPLICATION_EMERGENCYCALLDATA_CONTROL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_CONTROL_XML);
-    pub const APPLICATION_EMERGENCYCALLDATA_DEVICEINFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_DEVICEINFO_XML);
-    pub const APPLICATION_EMERGENCYCALLDATA_LEGACYESN_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_LEGACYESN_JSON);
-    pub const APPLICATION_EMERGENCYCALLDATA_PROVIDERINFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_PROVIDERINFO_XML);
-    pub const APPLICATION_EMERGENCYCALLDATA_SERVICEINFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_SERVICEINFO_XML);
-    pub const APPLICATION_EMERGENCYCALLDATA_SUBSCRIBERINFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_SUBSCRIBERINFO_XML);
-    pub const APPLICATION_EMERGENCYCALLDATA_VEDS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_VEDS_XML);
-    pub const APPLICATION_EMERGENCYCALLDATA_CAP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_CAP_XML);
-    pub const APPLICATION_EMERGENCYCALLDATA_ECALL_MSD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMERGENCYCALLDATA_ECALL_MSD);
-    pub const APPLICATION_H224: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_H224);
-    pub const APPLICATION_IOTP: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_IOTP);
-    pub const APPLICATION_ISUP: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ISUP);
-    pub const APPLICATION_LXF: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_LXF);
-    pub const APPLICATION_MF4: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MF4);
-    pub const APPLICATION_ODA: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ODA);
-    pub const APPLICATION_ODX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ODX);
-    pub const APPLICATION_PDX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_PDX);
-    pub const APPLICATION_QSIG: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_QSIG);
-    pub const APPLICATION_SGML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SGML);
-    pub const APPLICATION_TETRA_ISI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TETRA_ISI);
-    pub const APPLICATION_ACE_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ACE_CBOR);
-    pub const APPLICATION_ACE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ACE_JSON);
-    pub const APPLICATION_ACTIVEMESSAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ACTIVEMESSAGE);
-    pub const APPLICATION_ACTIVITY_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ACTIVITY_JSON);
-    pub const APPLICATION_AIF_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_AIF_CBOR);
-    pub const APPLICATION_AIF_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_AIF_JSON);
-    pub const APPLICATION_ALTO_CDNI_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_CDNI_JSON);
-    pub const APPLICATION_ALTO_CDNIFILTER_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_CDNIFILTER_JSON);
-    pub const APPLICATION_ALTO_COSTMAP_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_COSTMAP_JSON);
-    pub const APPLICATION_ALTO_COSTMAPFILTER_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_COSTMAPFILTER_JSON);
-    pub const APPLICATION_ALTO_DIRECTORY_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_DIRECTORY_JSON);
-    pub const APPLICATION_ALTO_ENDPOINTCOST_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_ENDPOINTCOST_JSON);
-    pub const APPLICATION_ALTO_ENDPOINTCOSTPARAMS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_ENDPOINTCOSTPARAMS_JSON);
-    pub const APPLICATION_ALTO_ENDPOINTPROP_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_ENDPOINTPROP_JSON);
-    pub const APPLICATION_ALTO_ENDPOINTPROPPARAMS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_ENDPOINTPROPPARAMS_JSON);
-    pub const APPLICATION_ALTO_ERROR_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_ERROR_JSON);
-    pub const APPLICATION_ALTO_NETWORKMAP_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_NETWORKMAP_JSON);
-    pub const APPLICATION_ALTO_NETWORKMAPFILTER_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_NETWORKMAPFILTER_JSON);
-    pub const APPLICATION_ALTO_PROPMAP_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_PROPMAP_JSON);
-    pub const APPLICATION_ALTO_PROPMAPPARAMS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_PROPMAPPARAMS_JSON);
-    pub const APPLICATION_ALTO_TIPS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_TIPS_JSON);
-    pub const APPLICATION_ALTO_TIPSPARAMS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_TIPSPARAMS_JSON);
-    pub const APPLICATION_ALTO_UPDATESTREAMCONTROL_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_UPDATESTREAMCONTROL_JSON);
-    pub const APPLICATION_ALTO_UPDATESTREAMPARAMS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ALTO_UPDATESTREAMPARAMS_JSON);
-    pub const APPLICATION_ANDREW_INSET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ANDREW_INSET);
-    pub const APPLICATION_APPLEFILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_APPLEFILE);
-    pub const APPLICATION_AT_JWT: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_AT_JWT);
-    pub const APPLICATION_ATOM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATOM_XML);
-    pub const APPLICATION_ATOMCAT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATOMCAT_XML);
-    pub const APPLICATION_ATOMDELETED_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATOMDELETED_XML);
-    pub const APPLICATION_ATOMICMAIL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATOMICMAIL);
-    pub const APPLICATION_ATOMSVC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATOMSVC_XML);
-    pub const APPLICATION_ATSC_DWD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATSC_DWD_XML);
-    pub const APPLICATION_ATSC_DYNAMIC_EVENT_MESSAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATSC_DYNAMIC_EVENT_MESSAGE);
-    pub const APPLICATION_ATSC_HELD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATSC_HELD_XML);
-    pub const APPLICATION_ATSC_RDT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATSC_RDT_JSON);
-    pub const APPLICATION_ATSC_RSAT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ATSC_RSAT_XML);
-    pub const APPLICATION_AUTH_POLICY_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_AUTH_POLICY_XML);
-    pub const APPLICATION_AUTOMATIONML_AML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_AUTOMATIONML_AML_XML);
-    pub const APPLICATION_AUTOMATIONML_AMLX_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_AUTOMATIONML_AMLX_ZIP);
-    pub const APPLICATION_BACNET_XDD_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_BACNET_XDD_ZIP);
-    pub const APPLICATION_BATCH_SMTP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_BATCH_SMTP);
-    pub const APPLICATION_BEEP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_BEEP_XML);
-    pub const APPLICATION_C2PA: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_C2PA);
-    pub const APPLICATION_CALENDAR_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CALENDAR_JSON);
-    pub const APPLICATION_CALENDAR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CALENDAR_XML);
-    pub const APPLICATION_CALL_COMPLETION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CALL_COMPLETION);
-    pub const APPLICATION_CAPTIVE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CAPTIVE_JSON);
-    pub const APPLICATION_CBOR: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CBOR);
-    pub const APPLICATION_CBOR_SEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CBOR_SEQ);
-    pub const APPLICATION_CCCEX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CCCEX);
-    pub const APPLICATION_CCMP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CCMP_XML);
-    pub const APPLICATION_CCXML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CCXML_XML);
-    pub const APPLICATION_CDA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CDA_XML);
-    pub const APPLICATION_CDMI_CAPABILITY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CDMI_CAPABILITY);
-    pub const APPLICATION_CDMI_CONTAINER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CDMI_CONTAINER);
-    pub const APPLICATION_CDMI_DOMAIN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CDMI_DOMAIN);
-    pub const APPLICATION_CDMI_OBJECT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CDMI_OBJECT);
-    pub const APPLICATION_CDMI_QUEUE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CDMI_QUEUE);
-    pub const APPLICATION_CDNI: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CDNI);
-    pub const APPLICATION_CEA_2018_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CEA_2018_XML);
-    pub const APPLICATION_CELLML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CELLML_XML);
-    pub const APPLICATION_CFW: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CFW);
-    pub const APPLICATION_CID_EDHOC_CBOR_SEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CID_EDHOC_CBOR_SEQ);
-    pub const APPLICATION_CITY_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CITY_JSON);
-    pub const APPLICATION_CLR: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CLR);
-    pub const APPLICATION_CLUE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CLUE_XML);
-    pub const APPLICATION_CLUE_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CLUE_INFO_XML);
-    pub const APPLICATION_CMS: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CMS);
-    pub const APPLICATION_CNRP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CNRP_XML);
-    pub const APPLICATION_COAP_GROUP_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_COAP_GROUP_JSON);
-    pub const APPLICATION_COAP_PAYLOAD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_COAP_PAYLOAD);
-    pub const APPLICATION_COMMONGROUND: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_COMMONGROUND);
-    pub const APPLICATION_CONCISE_PROBLEM_DETAILS_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CONCISE_PROBLEM_DETAILS_CBOR);
-    pub const APPLICATION_CONFERENCE_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CONFERENCE_INFO_XML);
-    pub const APPLICATION_COSE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_COSE);
-    pub const APPLICATION_COSE_KEY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_COSE_KEY);
-    pub const APPLICATION_COSE_KEY_SET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_COSE_KEY_SET);
-    pub const APPLICATION_COSE_X509: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_COSE_X509);
-    pub const APPLICATION_CPL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CPL_XML);
-    pub const APPLICATION_CSRATTRS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CSRATTRS);
-    pub const APPLICATION_CSTA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CSTA_XML);
-    pub const APPLICATION_CSVM_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CSVM_JSON);
-    pub const APPLICATION_CWL: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CWL);
-    pub const APPLICATION_CWL_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CWL_JSON);
-    pub const APPLICATION_CWT: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_CWT);
-    pub const APPLICATION_CYBERCASH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_CYBERCASH);
-    pub const APPLICATION_DASH_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DASH_XML);
-    pub const APPLICATION_DASH_PATCH_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DASH_PATCH_XML);
-    pub const APPLICATION_DASHDELTA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DASHDELTA);
-    pub const APPLICATION_DAVMOUNT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DAVMOUNT_XML);
-    pub const APPLICATION_DCA_RFT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DCA_RFT);
-    pub const APPLICATION_DEC_DX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_DEC_DX);
-    pub const APPLICATION_DIALOG_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DIALOG_INFO_XML);
-    pub const APPLICATION_DICOM: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_DICOM);
-    pub const APPLICATION_DICOM_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DICOM_JSON);
-    pub const APPLICATION_DICOM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DICOM_XML);
-    pub const APPLICATION_DNS: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_DNS);
-    pub const APPLICATION_DNS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DNS_JSON);
-    pub const APPLICATION_DNS_MESSAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DNS_MESSAGE);
-    pub const APPLICATION_DOTS_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DOTS_CBOR);
-    pub const APPLICATION_DPOP_JWT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DPOP_JWT);
-    pub const APPLICATION_DSKPP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DSKPP_XML);
-    pub const APPLICATION_DSSC_DER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DSSC_DER);
-    pub const APPLICATION_DSSC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_DSSC_XML);
-    pub const APPLICATION_DVCS: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_DVCS);
-    pub const APPLICATION_ECMASCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ECMASCRIPT);
-    pub const APPLICATION_EDHOC_CBOR_SEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EDHOC_CBOR_SEQ);
-    pub const APPLICATION_EFI: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_EFI);
-    pub const APPLICATION_ELM_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ELM_JSON);
-    pub const APPLICATION_ELM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ELM_XML);
-    pub const APPLICATION_EMMA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMMA_XML);
-    pub const APPLICATION_EMOTIONML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EMOTIONML_XML);
-    pub const APPLICATION_ENCAPRTP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ENCAPRTP);
-    pub const APPLICATION_EPP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EPP_XML);
-    pub const APPLICATION_EPUB_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EPUB_ZIP);
-    pub const APPLICATION_ESHOP: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ESHOP);
-    pub const APPLICATION_EXAMPLE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EXAMPLE);
-    pub const APPLICATION_EXI: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_EXI);
-    pub const APPLICATION_EXPECT_CT_REPORT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EXPECT_CT_REPORT_JSON);
-    pub const APPLICATION_EXPRESS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_EXPRESS);
-    pub const APPLICATION_FASTINFOSET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FASTINFOSET);
-    pub const APPLICATION_FASTSOAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FASTSOAP);
-    pub const APPLICATION_FDF: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_FDF);
-    pub const APPLICATION_FDT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FDT_XML);
-    pub const APPLICATION_FHIR_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FHIR_JSON);
-    pub const APPLICATION_FHIR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FHIR_XML);
-    pub const APPLICATION_FITS: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_FITS);
-    pub const APPLICATION_FLEXFEC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FLEXFEC);
-    pub const APPLICATION_FONT_SFNT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FONT_SFNT);
-    pub const APPLICATION_FONT_TDPFR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FONT_TDPFR);
-    pub const APPLICATION_FONT_WOFF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FONT_WOFF);
-    pub const APPLICATION_FRAMEWORK_ATTRIBUTES_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_FRAMEWORK_ATTRIBUTES_XML);
-    pub const APPLICATION_GEO_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_GEO_JSON);
-    pub const APPLICATION_GEO_JSON_SEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_GEO_JSON_SEQ);
-    pub const APPLICATION_GEOPACKAGE_SQLITE3: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_GEOPACKAGE_SQLITE3);
-    pub const APPLICATION_GEOXACML_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_GEOXACML_JSON);
-    pub const APPLICATION_GEOXACML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_GEOXACML_XML);
-    pub const APPLICATION_GLTF_BUFFER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_GLTF_BUFFER);
-    pub const APPLICATION_GML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_GML_XML);
-    pub const APPLICATION_GZIP: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_GZIP);
-    pub const APPLICATION_HELD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_HELD_XML);
-    pub const APPLICATION_HL7V2_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_HL7V2_XML);
-    pub const APPLICATION_HTTP: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_HTTP);
-    pub const APPLICATION_HYPERSTUDIO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_HYPERSTUDIO);
-    pub const APPLICATION_IBE_KEY_REQUEST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_IBE_KEY_REQUEST_XML);
-    pub const APPLICATION_IBE_PKG_REPLY_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_IBE_PKG_REPLY_XML);
-    pub const APPLICATION_IBE_PP_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_IBE_PP_DATA);
-    pub const APPLICATION_IGES: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_IGES);
-    pub const APPLICATION_IM_ISCOMPOSING_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_IM_ISCOMPOSING_XML);
-    pub const APPLICATION_INDEX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_INDEX);
-    pub const APPLICATION_INDEX_CMD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_INDEX_CMD);
-    pub const APPLICATION_INDEX_OBJ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_INDEX_OBJ);
-    pub const APPLICATION_INDEX_RESPONSE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_INDEX_RESPONSE);
-    pub const APPLICATION_INDEX_VND: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_INDEX_VND);
-    pub const APPLICATION_INKML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_INKML_XML);
-    pub const APPLICATION_IPFIX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_IPFIX);
-    pub const APPLICATION_IPP: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_IPP);
-    pub const APPLICATION_ITS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ITS_XML);
-    pub const APPLICATION_JAVA_ARCHIVE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JAVA_ARCHIVE);
-    pub const APPLICATION_JAVASCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JAVASCRIPT);
-    pub const APPLICATION_JF2FEED_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JF2FEED_JSON);
-    pub const APPLICATION_JOSE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_JOSE);
-    pub const APPLICATION_JOSE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JOSE_JSON);
-    pub const APPLICATION_JRD_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JRD_JSON);
-    pub const APPLICATION_JSCALENDAR_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JSCALENDAR_JSON);
-    pub const APPLICATION_JSCONTACT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JSCONTACT_JSON);
-    pub const APPLICATION_JSON: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_JSON);
-    pub const APPLICATION_JSON_PATCH_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JSON_PATCH_JSON);
-    pub const APPLICATION_JSON_SEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JSON_SEQ);
-    pub const APPLICATION_JSONPATH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JSONPATH);
-    pub const APPLICATION_JWK_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JWK_JSON);
-    pub const APPLICATION_JWK_SET_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_JWK_SET_JSON);
-    pub const APPLICATION_JWT: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_JWT);
-    pub const APPLICATION_KPML_REQUEST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_KPML_REQUEST_XML);
-    pub const APPLICATION_KPML_RESPONSE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_KPML_RESPONSE_XML);
-    pub const APPLICATION_LD_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LD_JSON);
-    pub const APPLICATION_LGR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LGR_XML);
-    pub const APPLICATION_LINK_FORMAT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LINK_FORMAT);
-    pub const APPLICATION_LINKSET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LINKSET);
-    pub const APPLICATION_LINKSET_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LINKSET_JSON);
-    pub const APPLICATION_LOAD_CONTROL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LOAD_CONTROL_XML);
-    pub const APPLICATION_LOGOUT_JWT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LOGOUT_JWT);
-    pub const APPLICATION_LOST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LOST_XML);
-    pub const APPLICATION_LOSTSYNC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LOSTSYNC_XML);
-    pub const APPLICATION_LPF_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_LPF_ZIP);
-    pub const APPLICATION_MAC_BINHEX40: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MAC_BINHEX40);
-    pub const APPLICATION_MACWRITEII: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MACWRITEII);
-    pub const APPLICATION_MADS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MADS_XML);
-    pub const APPLICATION_MANIFEST_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MANIFEST_JSON);
-    pub const APPLICATION_MARC: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MARC);
-    pub const APPLICATION_MARCXML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MARCXML_XML);
-    pub const APPLICATION_MATHEMATICA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MATHEMATICA);
-    pub const APPLICATION_MATHML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MATHML_XML);
-    pub const APPLICATION_MATHML_CONTENT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MATHML_CONTENT_XML);
-    pub const APPLICATION_MATHML_PRESENTATION_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MATHML_PRESENTATION_XML);
-    pub const APPLICATION_MBMS_ASSOCIATED_PROCEDURE_DESCRIPTION_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_ASSOCIATED_PROCEDURE_DESCRIPTION_XML);
-    pub const APPLICATION_MBMS_DEREGISTER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_DEREGISTER_XML);
-    pub const APPLICATION_MBMS_ENVELOPE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_ENVELOPE_XML);
-    pub const APPLICATION_MBMS_MSK_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_MSK_XML);
-    pub const APPLICATION_MBMS_MSK_RESPONSE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_MSK_RESPONSE_XML);
-    pub const APPLICATION_MBMS_PROTECTION_DESCRIPTION_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_PROTECTION_DESCRIPTION_XML);
-    pub const APPLICATION_MBMS_RECEPTION_REPORT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_RECEPTION_REPORT_XML);
-    pub const APPLICATION_MBMS_REGISTER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_REGISTER_XML);
-    pub const APPLICATION_MBMS_REGISTER_RESPONSE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_REGISTER_RESPONSE_XML);
-    pub const APPLICATION_MBMS_SCHEDULE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_SCHEDULE_XML);
-    pub const APPLICATION_MBMS_USER_SERVICE_DESCRIPTION_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MBMS_USER_SERVICE_DESCRIPTION_XML);
-    pub const APPLICATION_MBOX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MBOX);
-    pub const APPLICATION_MEDIA_POLICY_DATASET_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MEDIA_POLICY_DATASET_XML);
-    pub const APPLICATION_MEDIA_CONTROL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MEDIA_CONTROL_XML);
-    pub const APPLICATION_MEDIASERVERCONTROL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MEDIASERVERCONTROL_XML);
-    pub const APPLICATION_MERGE_PATCH_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MERGE_PATCH_JSON);
-    pub const APPLICATION_METALINK4_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_METALINK4_XML);
-    pub const APPLICATION_METS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_METS_XML);
-    pub const APPLICATION_MIKEY: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MIKEY);
-    pub const APPLICATION_MIPC: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MIPC);
-    pub const APPLICATION_MISSING_BLOCKS_CBOR_SEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MISSING_BLOCKS_CBOR_SEQ);
-    pub const APPLICATION_MMT_AEI_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MMT_AEI_XML);
-    pub const APPLICATION_MMT_USD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MMT_USD_XML);
-    pub const APPLICATION_MODS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MODS_XML);
-    pub const APPLICATION_MOSS_KEYS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MOSS_KEYS);
-    pub const APPLICATION_MOSS_SIGNATURE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MOSS_SIGNATURE);
-    pub const APPLICATION_MOSSKEY_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MOSSKEY_DATA);
-    pub const APPLICATION_MOSSKEY_REQUEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MOSSKEY_REQUEST);
-    pub const APPLICATION_MP21: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MP21);
-    pub const APPLICATION_MP4: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MP4);
-    pub const APPLICATION_MPEG4_GENERIC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MPEG4_GENERIC);
-    pub const APPLICATION_MPEG4_IOD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MPEG4_IOD);
-    pub const APPLICATION_MPEG4_IOD_XMT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MPEG4_IOD_XMT);
-    pub const APPLICATION_MRB_CONSUMER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MRB_CONSUMER_XML);
-    pub const APPLICATION_MRB_PUBLISH_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MRB_PUBLISH_XML);
-    pub const APPLICATION_MSC_IVR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MSC_IVR_XML);
-    pub const APPLICATION_MSC_MIXER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MSC_MIXER_XML);
-    pub const APPLICATION_MSWORD: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MSWORD);
-    pub const APPLICATION_MUD_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MUD_JSON);
-    pub const APPLICATION_MULTIPART_CORE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_MULTIPART_CORE);
-    pub const APPLICATION_MXF: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_MXF);
-    pub const APPLICATION_N_QUADS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_N_QUADS);
-    pub const APPLICATION_N_TRIPLES: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_N_TRIPLES);
-    pub const APPLICATION_NASDATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_NASDATA);
-    pub const APPLICATION_NEWS_CHECKGROUPS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_NEWS_CHECKGROUPS);
-    pub const APPLICATION_NEWS_GROUPINFO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_NEWS_GROUPINFO);
-    pub const APPLICATION_NEWS_TRANSMISSION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_NEWS_TRANSMISSION);
-    pub const APPLICATION_NLSML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_NLSML_XML);
-    pub const APPLICATION_NODE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_NODE);
-    pub const APPLICATION_NSS: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_NSS);
-    pub const APPLICATION_OAUTH_AUTHZ_REQ_JWT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_OAUTH_AUTHZ_REQ_JWT);
-    pub const APPLICATION_OBLIVIOUS_DNS_MESSAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_OBLIVIOUS_DNS_MESSAGE);
-    pub const APPLICATION_OCSP_REQUEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_OCSP_REQUEST);
-    pub const APPLICATION_OCSP_RESPONSE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_OCSP_RESPONSE);
-    pub const APPLICATION_OCTET_STREAM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_OCTET_STREAM);
-    pub const APPLICATION_ODM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ODM_XML);
-    pub const APPLICATION_OEBPS_PACKAGE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_OEBPS_PACKAGE_XML);
-    pub const APPLICATION_OGG: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_OGG);
-    pub const APPLICATION_OHTTP_KEYS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_OHTTP_KEYS);
-    pub const APPLICATION_OPC_NODESET_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_OPC_NODESET_XML);
-    pub const APPLICATION_OSCORE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_OSCORE);
-    pub const APPLICATION_OXPS: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_OXPS);
-    pub const APPLICATION_P21: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_P21);
-    pub const APPLICATION_P21_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_P21_ZIP);
-    pub const APPLICATION_P2P_OVERLAY_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_P2P_OVERLAY_XML);
-    pub const APPLICATION_PARITYFEC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PARITYFEC);
-    pub const APPLICATION_PASSPORT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PASSPORT);
-    pub const APPLICATION_PATCH_OPS_ERROR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PATCH_OPS_ERROR_XML);
-    pub const APPLICATION_PDF: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_PDF);
-    pub const APPLICATION_PEM_CERTIFICATE_CHAIN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PEM_CERTIFICATE_CHAIN);
-    pub const APPLICATION_PGP_ENCRYPTED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PGP_ENCRYPTED);
-    pub const APPLICATION_PGP_KEYS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PGP_KEYS);
-    pub const APPLICATION_PGP_SIGNATURE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PGP_SIGNATURE);
-    pub const APPLICATION_PIDF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PIDF_XML);
-    pub const APPLICATION_PIDF_DIFF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PIDF_DIFF_XML);
-    pub const APPLICATION_PKCS10: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_PKCS10);
-    pub const APPLICATION_PKCS12: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_PKCS12);
-    pub const APPLICATION_PKCS7_MIME: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PKCS7_MIME);
-    pub const APPLICATION_PKCS7_SIGNATURE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PKCS7_SIGNATURE);
-    pub const APPLICATION_PKCS8: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_PKCS8);
-    pub const APPLICATION_PKCS8_ENCRYPTED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PKCS8_ENCRYPTED);
-    pub const APPLICATION_PKIX_ATTR_CERT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PKIX_ATTR_CERT);
-    pub const APPLICATION_PKIX_CERT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PKIX_CERT);
-    pub const APPLICATION_PKIX_CRL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PKIX_CRL);
-    pub const APPLICATION_PKIX_PKIPATH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PKIX_PKIPATH);
-    pub const APPLICATION_PKIXCMP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PKIXCMP);
-    pub const APPLICATION_PLS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PLS_XML);
-    pub const APPLICATION_POC_SETTINGS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_POC_SETTINGS_XML);
-    pub const APPLICATION_POSTSCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_POSTSCRIPT);
-    pub const APPLICATION_PPSP_TRACKER_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PPSP_TRACKER_JSON);
-    pub const APPLICATION_PRIVATE_TOKEN_ISSUER_DIRECTORY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRIVATE_TOKEN_ISSUER_DIRECTORY);
-    pub const APPLICATION_PRIVATE_TOKEN_REQUEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRIVATE_TOKEN_REQUEST);
-    pub const APPLICATION_PRIVATE_TOKEN_RESPONSE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRIVATE_TOKEN_RESPONSE);
-    pub const APPLICATION_PROBLEM_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PROBLEM_JSON);
-    pub const APPLICATION_PROBLEM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PROBLEM_XML);
-    pub const APPLICATION_PROVENANCE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PROVENANCE_XML);
-    pub const APPLICATION_PRS_ALVESTRAND_TITRAX_SHEET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_ALVESTRAND_TITRAX_SHEET);
-    pub const APPLICATION_PRS_CWW: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_CWW);
-    pub const APPLICATION_PRS_CYN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_CYN);
-    pub const APPLICATION_PRS_HPUB_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_HPUB_ZIP);
-    pub const APPLICATION_PRS_IMPLIED_DOCUMENT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_IMPLIED_DOCUMENT_XML);
-    pub const APPLICATION_PRS_IMPLIED_EXECUTABLE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_IMPLIED_EXECUTABLE);
-    pub const APPLICATION_PRS_IMPLIED_OBJECT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_IMPLIED_OBJECT_JSON);
-    pub const APPLICATION_PRS_IMPLIED_OBJECT_JSON_SEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_IMPLIED_OBJECT_JSON_SEQ);
-    pub const APPLICATION_PRS_IMPLIED_OBJECT_YAML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_IMPLIED_OBJECT_YAML);
-    pub const APPLICATION_PRS_IMPLIED_STRUCTURE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_IMPLIED_STRUCTURE);
-    pub const APPLICATION_PRS_NPREND: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_NPREND);
-    pub const APPLICATION_PRS_PLUCKER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_PLUCKER);
-    pub const APPLICATION_PRS_RDF_XML_CRYPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_RDF_XML_CRYPT);
-    pub const APPLICATION_PRS_VCFBZIP2: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_VCFBZIP2);
-    pub const APPLICATION_PRS_XSF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PRS_XSF_XML);
-    pub const APPLICATION_PSKC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PSKC_XML);
-    pub const APPLICATION_PVD_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_PVD_JSON);
-    pub const APPLICATION_RAPTORFEC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RAPTORFEC);
-    pub const APPLICATION_RDAP_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RDAP_JSON);
-    pub const APPLICATION_RDF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RDF_XML);
-    pub const APPLICATION_REGINFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_REGINFO_XML);
-    pub const APPLICATION_RELAX_NG_COMPACT_SYNTAX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RELAX_NG_COMPACT_SYNTAX);
-    pub const APPLICATION_REMOTE_PRINTING: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_REMOTE_PRINTING);
-    pub const APPLICATION_REPUTON_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_REPUTON_JSON);
-    pub const APPLICATION_RESOURCE_LISTS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RESOURCE_LISTS_XML);
-    pub const APPLICATION_RESOURCE_LISTS_DIFF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RESOURCE_LISTS_DIFF_XML);
-    pub const APPLICATION_RFC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RFC_XML);
-    pub const APPLICATION_RISCOS: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_RISCOS);
-    pub const APPLICATION_RLMI_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RLMI_XML);
-    pub const APPLICATION_RLS_SERVICES_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RLS_SERVICES_XML);
-    pub const APPLICATION_ROUTE_APD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ROUTE_APD_XML);
-    pub const APPLICATION_ROUTE_S_TSID_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ROUTE_S_TSID_XML);
-    pub const APPLICATION_ROUTE_USD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_ROUTE_USD_XML);
-    pub const APPLICATION_RPKI_CHECKLIST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RPKI_CHECKLIST);
-    pub const APPLICATION_RPKI_GHOSTBUSTERS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RPKI_GHOSTBUSTERS);
-    pub const APPLICATION_RPKI_MANIFEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RPKI_MANIFEST);
-    pub const APPLICATION_RPKI_PUBLICATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RPKI_PUBLICATION);
-    pub const APPLICATION_RPKI_ROA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RPKI_ROA);
-    pub const APPLICATION_RPKI_UPDOWN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RPKI_UPDOWN);
-    pub const APPLICATION_RTF: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_RTF);
-    pub const APPLICATION_RTPLOOPBACK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_RTPLOOPBACK);
-    pub const APPLICATION_RTX: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_RTX);
-    pub const APPLICATION_SAMLASSERTION_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SAMLASSERTION_XML);
-    pub const APPLICATION_SAMLMETADATA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SAMLMETADATA_XML);
-    pub const APPLICATION_SARIF_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SARIF_JSON);
-    pub const APPLICATION_SARIF_EXTERNAL_PROPERTIES_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SARIF_EXTERNAL_PROPERTIES_JSON);
-    pub const APPLICATION_SBE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SBE);
-    pub const APPLICATION_SBML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SBML_XML);
-    pub const APPLICATION_SCAIP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SCAIP_XML);
-    pub const APPLICATION_SCIM_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SCIM_JSON);
-    pub const APPLICATION_SCVP_CV_REQUEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SCVP_CV_REQUEST);
-    pub const APPLICATION_SCVP_CV_RESPONSE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SCVP_CV_RESPONSE);
-    pub const APPLICATION_SCVP_VP_REQUEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SCVP_VP_REQUEST);
-    pub const APPLICATION_SCVP_VP_RESPONSE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SCVP_VP_RESPONSE);
-    pub const APPLICATION_SDP: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SDP);
-    pub const APPLICATION_SECEVENT_JWT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SECEVENT_JWT);
-    pub const APPLICATION_SENML_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENML_CBOR);
-    pub const APPLICATION_SENML_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENML_JSON);
-    pub const APPLICATION_SENML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENML_XML);
-    pub const APPLICATION_SENML_ETCH_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENML_ETCH_CBOR);
-    pub const APPLICATION_SENML_ETCH_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENML_ETCH_JSON);
-    pub const APPLICATION_SENML_EXI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENML_EXI);
-    pub const APPLICATION_SENSML_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENSML_CBOR);
-    pub const APPLICATION_SENSML_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENSML_JSON);
-    pub const APPLICATION_SENSML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENSML_XML);
-    pub const APPLICATION_SENSML_EXI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SENSML_EXI);
-    pub const APPLICATION_SEP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SEP_XML);
-    pub const APPLICATION_SEP_EXI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SEP_EXI);
-    pub const APPLICATION_SESSION_INFO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SESSION_INFO);
-    pub const APPLICATION_SET_PAYMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SET_PAYMENT);
-    pub const APPLICATION_SET_PAYMENT_INITIATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SET_PAYMENT_INITIATION);
-    pub const APPLICATION_SET_REGISTRATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SET_REGISTRATION);
-    pub const APPLICATION_SET_REGISTRATION_INITIATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SET_REGISTRATION_INITIATION);
-    pub const APPLICATION_SGML_OPEN_CATALOG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SGML_OPEN_CATALOG);
-    pub const APPLICATION_SHF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SHF_XML);
-    pub const APPLICATION_SIEVE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SIEVE);
-    pub const APPLICATION_SIMPLE_FILTER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SIMPLE_FILTER_XML);
-    pub const APPLICATION_SIMPLE_MESSAGE_SUMMARY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SIMPLE_MESSAGE_SUMMARY);
-    pub const APPLICATION_SIMPLESYMBOLCONTAINER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SIMPLESYMBOLCONTAINER);
-    pub const APPLICATION_SIPC: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SIPC);
-    pub const APPLICATION_SLATE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SLATE);
-    pub const APPLICATION_SMIL: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SMIL);
-    pub const APPLICATION_SMIL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SMIL_XML);
-    pub const APPLICATION_SMPTE336M: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SMPTE336M);
-    pub const APPLICATION_SOAP_FASTINFOSET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SOAP_FASTINFOSET);
-    pub const APPLICATION_SOAP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SOAP_XML);
-    pub const APPLICATION_SPARQL_QUERY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SPARQL_QUERY);
-    pub const APPLICATION_SPARQL_RESULTS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SPARQL_RESULTS_XML);
-    pub const APPLICATION_SPDX_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SPDX_JSON);
-    pub const APPLICATION_SPIRITS_EVENT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SPIRITS_EVENT_XML);
-    pub const APPLICATION_SQL: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SQL);
-    pub const APPLICATION_SRGS: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_SRGS);
-    pub const APPLICATION_SRGS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SRGS_XML);
-    pub const APPLICATION_SRU_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SRU_XML);
-    pub const APPLICATION_SSML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SSML_XML);
-    pub const APPLICATION_STIX_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_STIX_JSON);
-    pub const APPLICATION_SWID_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SWID_CBOR);
-    pub const APPLICATION_SWID_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_SWID_XML);
-    pub const APPLICATION_TAMP_APEX_UPDATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_APEX_UPDATE);
-    pub const APPLICATION_TAMP_APEX_UPDATE_CONFIRM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_APEX_UPDATE_CONFIRM);
-    pub const APPLICATION_TAMP_COMMUNITY_UPDATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_COMMUNITY_UPDATE);
-    pub const APPLICATION_TAMP_COMMUNITY_UPDATE_CONFIRM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_COMMUNITY_UPDATE_CONFIRM);
-    pub const APPLICATION_TAMP_ERROR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_ERROR);
-    pub const APPLICATION_TAMP_SEQUENCE_ADJUST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_SEQUENCE_ADJUST);
-    pub const APPLICATION_TAMP_SEQUENCE_ADJUST_CONFIRM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_SEQUENCE_ADJUST_CONFIRM);
-    pub const APPLICATION_TAMP_STATUS_QUERY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_STATUS_QUERY);
-    pub const APPLICATION_TAMP_STATUS_RESPONSE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_STATUS_RESPONSE);
-    pub const APPLICATION_TAMP_UPDATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_UPDATE);
-    pub const APPLICATION_TAMP_UPDATE_CONFIRM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAMP_UPDATE_CONFIRM);
-    pub const APPLICATION_TAXII_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TAXII_JSON);
-    pub const APPLICATION_TD_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TD_JSON);
-    pub const APPLICATION_TEI_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TEI_XML);
-    pub const APPLICATION_THRAUD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_THRAUD_XML);
-    pub const APPLICATION_TIMESTAMP_QUERY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TIMESTAMP_QUERY);
-    pub const APPLICATION_TIMESTAMP_REPLY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TIMESTAMP_REPLY);
-    pub const APPLICATION_TIMESTAMPED_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TIMESTAMPED_DATA);
-    pub const APPLICATION_TLSRPT_GZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TLSRPT_GZIP);
-    pub const APPLICATION_TLSRPT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TLSRPT_JSON);
-    pub const APPLICATION_TM_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TM_JSON);
-    pub const APPLICATION_TNAUTHLIST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TNAUTHLIST);
-    pub const APPLICATION_TOKEN_INTROSPECTION_JWT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TOKEN_INTROSPECTION_JWT);
-    pub const APPLICATION_TRICKLE_ICE_SDPFRAG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TRICKLE_ICE_SDPFRAG);
-    pub const APPLICATION_TRIG: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_TRIG);
-    pub const APPLICATION_TTML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TTML_XML);
-    pub const APPLICATION_TVE_TRIGGER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TVE_TRIGGER);
-    pub const APPLICATION_TZIF: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_TZIF);
-    pub const APPLICATION_TZIF_LEAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_TZIF_LEAP);
-    pub const APPLICATION_ULPFEC: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ULPFEC);
-    pub const APPLICATION_URC_GRPSHEET_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_URC_GRPSHEET_XML);
-    pub const APPLICATION_URC_RESSHEET_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_URC_RESSHEET_XML);
-    pub const APPLICATION_URC_TARGETDESC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_URC_TARGETDESC_XML);
-    pub const APPLICATION_URC_UISOCKETDESC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_URC_UISOCKETDESC_XML);
-    pub const APPLICATION_VCARD_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VCARD_JSON);
-    pub const APPLICATION_VCARD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VCARD_XML);
-    pub const APPLICATION_VEMMI: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VEMMI);
-    pub const APPLICATION_VND_1000MINDS_DECISION_MODEL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_1000MINDS_DECISION_MODEL_XML);
-    pub const APPLICATION_VND_1OB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_1OB);
-    pub const APPLICATION_VND_3M_POST_IT_NOTES: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3M_POST_IT_NOTES);
-    pub const APPLICATION_VND_3GPP_PROSE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PROSE_XML);
-    pub const APPLICATION_VND_3GPP_PROSE_PC3A_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PROSE_PC3A_XML);
-    pub const APPLICATION_VND_3GPP_PROSE_PC3ACH_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PROSE_PC3ACH_XML);
-    pub const APPLICATION_VND_3GPP_PROSE_PC3CH_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PROSE_PC3CH_XML);
-    pub const APPLICATION_VND_3GPP_PROSE_PC8_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PROSE_PC8_XML);
-    pub const APPLICATION_VND_3GPP_V2X_LOCAL_SERVICE_INFORMATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_V2X_LOCAL_SERVICE_INFORMATION);
-    pub const APPLICATION_VND_3GPP_5GNAS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_5GNAS);
-    pub const APPLICATION_VND_3GPP_GMOP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_GMOP_XML);
-    pub const APPLICATION_VND_3GPP_SRVCC_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SRVCC_INFO_XML);
-    pub const APPLICATION_VND_3GPP_ACCESS_TRANSFER_EVENTS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_ACCESS_TRANSFER_EVENTS_XML);
-    pub const APPLICATION_VND_3GPP_BSF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_BSF_XML);
-    pub const APPLICATION_VND_3GPP_CRS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_CRS_XML);
-    pub const APPLICATION_VND_3GPP_CURRENT_LOCATION_DISCOVERY_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_CURRENT_LOCATION_DISCOVERY_XML);
-    pub const APPLICATION_VND_3GPP_GTPC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_GTPC);
-    pub const APPLICATION_VND_3GPP_INTERWORKING_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_INTERWORKING_DATA);
-    pub const APPLICATION_VND_3GPP_LPP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_LPP);
-    pub const APPLICATION_VND_3GPP_MC_SIGNALLING_EAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MC_SIGNALLING_EAR);
-    pub const APPLICATION_VND_3GPP_MCDATA_AFFILIATION_COMMAND_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_AFFILIATION_COMMAND_XML);
-    pub const APPLICATION_VND_3GPP_MCDATA_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_INFO_XML);
-    pub const APPLICATION_VND_3GPP_MCDATA_MSGSTORE_CTRL_REQUEST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_MSGSTORE_CTRL_REQUEST_XML);
-    pub const APPLICATION_VND_3GPP_MCDATA_PAYLOAD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_PAYLOAD);
-    pub const APPLICATION_VND_3GPP_MCDATA_REGROUP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_REGROUP_XML);
-    pub const APPLICATION_VND_3GPP_MCDATA_SERVICE_CONFIG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_SERVICE_CONFIG_XML);
-    pub const APPLICATION_VND_3GPP_MCDATA_SIGNALLING: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_SIGNALLING);
-    pub const APPLICATION_VND_3GPP_MCDATA_UE_CONFIG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_UE_CONFIG_XML);
-    pub const APPLICATION_VND_3GPP_MCDATA_USER_PROFILE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCDATA_USER_PROFILE_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_AFFILIATION_COMMAND_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_AFFILIATION_COMMAND_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_FLOOR_REQUEST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_FLOOR_REQUEST_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_INFO_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_LOCATION_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_LOCATION_INFO_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_MBMS_USAGE_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_MBMS_USAGE_INFO_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_REGROUP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_REGROUP_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_SERVICE_CONFIG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_SERVICE_CONFIG_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_SIGNED_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_SIGNED_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_UE_CONFIG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_UE_CONFIG_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_UE_INIT_CONFIG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_UE_INIT_CONFIG_XML);
-    pub const APPLICATION_VND_3GPP_MCPTT_USER_PROFILE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCPTT_USER_PROFILE_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_AFFILIATION_COMMAND_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_AFFILIATION_COMMAND_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_AFFILIATION_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_AFFILIATION_INFO_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_INFO_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_LOCATION_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_LOCATION_INFO_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_MBMS_USAGE_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_MBMS_USAGE_INFO_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_REGROUP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_REGROUP_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_SERVICE_CONFIG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_SERVICE_CONFIG_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_TRANSMISSION_REQUEST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_TRANSMISSION_REQUEST_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_UE_CONFIG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_UE_CONFIG_XML);
-    pub const APPLICATION_VND_3GPP_MCVIDEO_USER_PROFILE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MCVIDEO_USER_PROFILE_XML);
-    pub const APPLICATION_VND_3GPP_MID_CALL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_MID_CALL_XML);
-    pub const APPLICATION_VND_3GPP_NGAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_NGAP);
-    pub const APPLICATION_VND_3GPP_PFCP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PFCP);
-    pub const APPLICATION_VND_3GPP_PIC_BW_LARGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PIC_BW_LARGE);
-    pub const APPLICATION_VND_3GPP_PIC_BW_SMALL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PIC_BW_SMALL);
-    pub const APPLICATION_VND_3GPP_PIC_BW_VAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_PIC_BW_VAR);
-    pub const APPLICATION_VND_3GPP_S1AP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_S1AP);
-    pub const APPLICATION_VND_3GPP_SEAL_GROUP_DOC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SEAL_GROUP_DOC_XML);
-    pub const APPLICATION_VND_3GPP_SEAL_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SEAL_INFO_XML);
-    pub const APPLICATION_VND_3GPP_SEAL_LOCATION_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SEAL_LOCATION_INFO_XML);
-    pub const APPLICATION_VND_3GPP_SEAL_MBMS_USAGE_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SEAL_MBMS_USAGE_INFO_XML);
-    pub const APPLICATION_VND_3GPP_SEAL_NETWORK_QOS_MANAGEMENT_INFO_XML: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_3GPP_SEAL_NETWORK_QOS_MANAGEMENT_INFO_XML,
-    );
-    pub const APPLICATION_VND_3GPP_SEAL_UE_CONFIG_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SEAL_UE_CONFIG_INFO_XML);
-    pub const APPLICATION_VND_3GPP_SEAL_UNICAST_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SEAL_UNICAST_INFO_XML);
-    pub const APPLICATION_VND_3GPP_SEAL_USER_PROFILE_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SEAL_USER_PROFILE_INFO_XML);
-    pub const APPLICATION_VND_3GPP_SMS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SMS);
-    pub const APPLICATION_VND_3GPP_SMS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SMS_XML);
-    pub const APPLICATION_VND_3GPP_SRVCC_EXT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_SRVCC_EXT_XML);
-    pub const APPLICATION_VND_3GPP_STATE_AND_EVENT_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_STATE_AND_EVENT_INFO_XML);
-    pub const APPLICATION_VND_3GPP_USSD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_USSD_XML);
-    pub const APPLICATION_VND_3GPP_V2X: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_V2X);
-    pub const APPLICATION_VND_3GPP_VAE_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP_VAE_INFO_XML);
-    pub const APPLICATION_VND_3GPP2_BCMCSINFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP2_BCMCSINFO_XML);
-    pub const APPLICATION_VND_3GPP2_SMS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP2_SMS);
-    pub const APPLICATION_VND_3GPP2_TCAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3GPP2_TCAP);
-    pub const APPLICATION_VND_3LIGHTSSOFTWARE_IMAGESCAL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_3LIGHTSSOFTWARE_IMAGESCAL);
-    pub const APPLICATION_VND_FLOGRAPHIT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FLOGRAPHIT);
-    pub const APPLICATION_VND_HANDHELD_ENTERTAINMENT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HANDHELD_ENTERTAINMENT_XML);
-    pub const APPLICATION_VND_KINAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KINAR);
-    pub const APPLICATION_VND_MFER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MFER);
-    pub const APPLICATION_VND_MOBIUS_DAF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOBIUS_DAF);
-    pub const APPLICATION_VND_MOBIUS_DIS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOBIUS_DIS);
-    pub const APPLICATION_VND_MOBIUS_MBK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOBIUS_MBK);
-    pub const APPLICATION_VND_MOBIUS_MQY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOBIUS_MQY);
-    pub const APPLICATION_VND_MOBIUS_MSL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOBIUS_MSL);
-    pub const APPLICATION_VND_MOBIUS_PLC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOBIUS_PLC);
-    pub const APPLICATION_VND_MOBIUS_TXF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOBIUS_TXF);
-    pub const APPLICATION_VND_QUARK_QUARKXPRESS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_QUARK_QUARKXPRESS);
-    pub const APPLICATION_VND_RENLEARN_RLPRINT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RENLEARN_RLPRINT);
-    pub const APPLICATION_VND_SIMTECH_MINDMAPPER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SIMTECH_MINDMAPPER);
-    pub const APPLICATION_VND_ACCPAC_SIMPLY_ASO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ACCPAC_SIMPLY_ASO);
-    pub const APPLICATION_VND_ACCPAC_SIMPLY_IMP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ACCPAC_SIMPLY_IMP);
-    pub const APPLICATION_VND_ACM_ADDRESSXFER_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ACM_ADDRESSXFER_JSON);
-    pub const APPLICATION_VND_ACM_CHATBOT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ACM_CHATBOT_JSON);
-    pub const APPLICATION_VND_ACUCOBOL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ACUCOBOL);
-    pub const APPLICATION_VND_ACUCORP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ACUCORP);
-    pub const APPLICATION_VND_ADOBE_FLASH_MOVIE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ADOBE_FLASH_MOVIE);
-    pub const APPLICATION_VND_ADOBE_FORMSCENTRAL_FCDT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ADOBE_FORMSCENTRAL_FCDT);
-    pub const APPLICATION_VND_ADOBE_FXP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ADOBE_FXP);
-    pub const APPLICATION_VND_ADOBE_PARTIAL_UPLOAD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ADOBE_PARTIAL_UPLOAD);
-    pub const APPLICATION_VND_ADOBE_XDP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ADOBE_XDP_XML);
-    pub const APPLICATION_VND_AETHER_IMP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AETHER_IMP);
-    pub const APPLICATION_VND_AFPC_AFPLINEDATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_AFPLINEDATA);
-    pub const APPLICATION_VND_AFPC_AFPLINEDATA_PAGEDEF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_AFPLINEDATA_PAGEDEF);
-    pub const APPLICATION_VND_AFPC_CMOCA_CMRESOURCE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_CMOCA_CMRESOURCE);
-    pub const APPLICATION_VND_AFPC_FOCA_CHARSET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_FOCA_CHARSET);
-    pub const APPLICATION_VND_AFPC_FOCA_CODEDFONT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_FOCA_CODEDFONT);
-    pub const APPLICATION_VND_AFPC_FOCA_CODEPAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_FOCA_CODEPAGE);
-    pub const APPLICATION_VND_AFPC_MODCA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_MODCA);
-    pub const APPLICATION_VND_AFPC_MODCA_CMTABLE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_MODCA_CMTABLE);
-    pub const APPLICATION_VND_AFPC_MODCA_FORMDEF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_MODCA_FORMDEF);
-    pub const APPLICATION_VND_AFPC_MODCA_MEDIUMMAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_MODCA_MEDIUMMAP);
-    pub const APPLICATION_VND_AFPC_MODCA_OBJECTCONTAINER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_MODCA_OBJECTCONTAINER);
-    pub const APPLICATION_VND_AFPC_MODCA_OVERLAY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_MODCA_OVERLAY);
-    pub const APPLICATION_VND_AFPC_MODCA_PAGESEGMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AFPC_MODCA_PAGESEGMENT);
-    pub const APPLICATION_VND_AGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AGE);
-    pub const APPLICATION_VND_AH_BARCODE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AH_BARCODE);
-    pub const APPLICATION_VND_AHEAD_SPACE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AHEAD_SPACE);
-    pub const APPLICATION_VND_AIRZIP_FILESECURE_AZF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AIRZIP_FILESECURE_AZF);
-    pub const APPLICATION_VND_AIRZIP_FILESECURE_AZS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AIRZIP_FILESECURE_AZS);
-    pub const APPLICATION_VND_AMADEUS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AMADEUS_JSON);
-    pub const APPLICATION_VND_AMAZON_MOBI8_EBOOK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AMAZON_MOBI8_EBOOK);
-    pub const APPLICATION_VND_AMERICANDYNAMICS_ACC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AMERICANDYNAMICS_ACC);
-    pub const APPLICATION_VND_AMIGA_AMI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AMIGA_AMI);
-    pub const APPLICATION_VND_AMUNDSEN_MAZE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AMUNDSEN_MAZE_XML);
-    pub const APPLICATION_VND_ANDROID_OTA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ANDROID_OTA);
-    pub const APPLICATION_VND_ANKI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ANKI);
-    pub const APPLICATION_VND_ANSER_WEB_CERTIFICATE_ISSUE_INITIATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ANSER_WEB_CERTIFICATE_ISSUE_INITIATION);
-    pub const APPLICATION_VND_ANTIX_GAME_COMPONENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ANTIX_GAME_COMPONENT);
-    pub const APPLICATION_VND_APACHE_ARROW_FILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APACHE_ARROW_FILE);
-    pub const APPLICATION_VND_APACHE_ARROW_STREAM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APACHE_ARROW_STREAM);
-    pub const APPLICATION_VND_APACHE_PARQUET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APACHE_PARQUET);
-    pub const APPLICATION_VND_APACHE_THRIFT_BINARY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APACHE_THRIFT_BINARY);
-    pub const APPLICATION_VND_APACHE_THRIFT_COMPACT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APACHE_THRIFT_COMPACT);
-    pub const APPLICATION_VND_APACHE_THRIFT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APACHE_THRIFT_JSON);
-    pub const APPLICATION_VND_APEXLANG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APEXLANG);
-    pub const APPLICATION_VND_API_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_API_JSON);
-    pub const APPLICATION_VND_APLEXTOR_WARRP_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APLEXTOR_WARRP_JSON);
-    pub const APPLICATION_VND_APOTHEKENDE_RESERVATION_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APOTHEKENDE_RESERVATION_JSON);
-    pub const APPLICATION_VND_APPLE_INSTALLER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APPLE_INSTALLER_XML);
-    pub const APPLICATION_VND_APPLE_KEYNOTE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APPLE_KEYNOTE);
-    pub const APPLICATION_VND_APPLE_MPEGURL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APPLE_MPEGURL);
-    pub const APPLICATION_VND_APPLE_NUMBERS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APPLE_NUMBERS);
-    pub const APPLICATION_VND_APPLE_PAGES: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_APPLE_PAGES);
-    pub const APPLICATION_VND_ARASTRA_SWI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ARASTRA_SWI);
-    pub const APPLICATION_VND_ARISTANETWORKS_SWI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ARISTANETWORKS_SWI);
-    pub const APPLICATION_VND_ARTISAN_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ARTISAN_JSON);
-    pub const APPLICATION_VND_ARTSQUARE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ARTSQUARE);
-    pub const APPLICATION_VND_ASTRAEA_SOFTWARE_IOTA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ASTRAEA_SOFTWARE_IOTA);
-    pub const APPLICATION_VND_AUDIOGRAPH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AUDIOGRAPH);
-    pub const APPLICATION_VND_AUTOPACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AUTOPACKAGE);
-    pub const APPLICATION_VND_AVALON_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AVALON_JSON);
-    pub const APPLICATION_VND_AVISTAR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_AVISTAR_XML);
-    pub const APPLICATION_VND_BALSAMIQ_BMML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BALSAMIQ_BMML_XML);
-    pub const APPLICATION_VND_BALSAMIQ_BMPR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BALSAMIQ_BMPR);
-    pub const APPLICATION_VND_BANANA_ACCOUNTING: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BANANA_ACCOUNTING);
-    pub const APPLICATION_VND_BBF_USP_ERROR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BBF_USP_ERROR);
-    pub const APPLICATION_VND_BBF_USP_MSG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BBF_USP_MSG);
-    pub const APPLICATION_VND_BBF_USP_MSG_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BBF_USP_MSG_JSON);
-    pub const APPLICATION_VND_BEKITZUR_STECH_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BEKITZUR_STECH_JSON);
-    pub const APPLICATION_VND_BELIGHTSOFT_LHZD_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BELIGHTSOFT_LHZD_ZIP);
-    pub const APPLICATION_VND_BELIGHTSOFT_LHZL_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BELIGHTSOFT_LHZL_ZIP);
-    pub const APPLICATION_VND_BINT_MED_CONTENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BINT_MED_CONTENT);
-    pub const APPLICATION_VND_BIOPAX_RDF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BIOPAX_RDF_XML);
-    pub const APPLICATION_VND_BLINK_IDB_VALUE_WRAPPER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BLINK_IDB_VALUE_WRAPPER);
-    pub const APPLICATION_VND_BLUEICE_MULTIPASS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BLUEICE_MULTIPASS);
-    pub const APPLICATION_VND_BLUETOOTH_EP_OOB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BLUETOOTH_EP_OOB);
-    pub const APPLICATION_VND_BLUETOOTH_LE_OOB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BLUETOOTH_LE_OOB);
-    pub const APPLICATION_VND_BMI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BMI);
-    pub const APPLICATION_VND_BPF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BPF);
-    pub const APPLICATION_VND_BPF3: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BPF3);
-    pub const APPLICATION_VND_BUSINESSOBJECTS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BUSINESSOBJECTS);
-    pub const APPLICATION_VND_BYU_UAPI_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BYU_UAPI_JSON);
-    pub const APPLICATION_VND_BZIP3: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_BZIP3);
-    pub const APPLICATION_VND_CAB_JSCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CAB_JSCRIPT);
-    pub const APPLICATION_VND_CANON_CPDL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CANON_CPDL);
-    pub const APPLICATION_VND_CANON_LIPS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CANON_LIPS);
-    pub const APPLICATION_VND_CAPASYSTEMS_PG_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CAPASYSTEMS_PG_JSON);
-    pub const APPLICATION_VND_CENDIO_THINLINC_CLIENTCONF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CENDIO_THINLINC_CLIENTCONF);
-    pub const APPLICATION_VND_CENTURY_SYSTEMS_TCP_STREAM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CENTURY_SYSTEMS_TCP_STREAM);
-    pub const APPLICATION_VND_CHEMDRAW_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CHEMDRAW_XML);
-    pub const APPLICATION_VND_CHESS_PGN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CHESS_PGN);
-    pub const APPLICATION_VND_CHIPNUTS_KARAOKE_MMD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CHIPNUTS_KARAOKE_MMD);
-    pub const APPLICATION_VND_CIEDI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CIEDI);
-    pub const APPLICATION_VND_CINDERELLA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CINDERELLA);
-    pub const APPLICATION_VND_CIRPACK_ISDN_EXT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CIRPACK_ISDN_EXT);
-    pub const APPLICATION_VND_CITATIONSTYLES_STYLE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CITATIONSTYLES_STYLE_XML);
-    pub const APPLICATION_VND_CLAYMORE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CLAYMORE);
-    pub const APPLICATION_VND_CLOANTO_RP9: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CLOANTO_RP9);
-    pub const APPLICATION_VND_CLONK_C4GROUP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CLONK_C4GROUP);
-    pub const APPLICATION_VND_CLUETRUST_CARTOMOBILE_CONFIG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CLUETRUST_CARTOMOBILE_CONFIG);
-    pub const APPLICATION_VND_CLUETRUST_CARTOMOBILE_CONFIG_PKG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CLUETRUST_CARTOMOBILE_CONFIG_PKG);
-    pub const APPLICATION_VND_CNCF_HELM_CHART_CONTENT_V1_TAR_GZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CNCF_HELM_CHART_CONTENT_V1_TAR_GZIP);
-    pub const APPLICATION_VND_CNCF_HELM_CHART_PROVENANCE_V1_PROV: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CNCF_HELM_CHART_PROVENANCE_V1_PROV);
-    pub const APPLICATION_VND_CNCF_HELM_CONFIG_V1_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CNCF_HELM_CONFIG_V1_JSON);
-    pub const APPLICATION_VND_COFFEESCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COFFEESCRIPT);
-    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_DOCUMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COLLABIO_XODOCUMENTS_DOCUMENT);
-    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_DOCUMENT_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COLLABIO_XODOCUMENTS_DOCUMENT_TEMPLATE);
-    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_PRESENTATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COLLABIO_XODOCUMENTS_PRESENTATION);
-    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_PRESENTATION_TEMPLATE: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_COLLABIO_XODOCUMENTS_PRESENTATION_TEMPLATE,
-    );
-    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_SPREADSHEET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COLLABIO_XODOCUMENTS_SPREADSHEET);
-    pub const APPLICATION_VND_COLLABIO_XODOCUMENTS_SPREADSHEET_TEMPLATE: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_COLLABIO_XODOCUMENTS_SPREADSHEET_TEMPLATE,
-    );
-    pub const APPLICATION_VND_COLLECTION_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COLLECTION_JSON);
-    pub const APPLICATION_VND_COLLECTION_DOC_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COLLECTION_DOC_JSON);
-    pub const APPLICATION_VND_COLLECTION_NEXT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COLLECTION_NEXT_JSON);
-    pub const APPLICATION_VND_COMICBOOK_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COMICBOOK_ZIP);
-    pub const APPLICATION_VND_COMICBOOK_RAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COMICBOOK_RAR);
-    pub const APPLICATION_VND_COMMERCE_BATTELLE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COMMERCE_BATTELLE);
-    pub const APPLICATION_VND_COMMONSPACE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COMMONSPACE);
-    pub const APPLICATION_VND_CONTACT_CMSG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CONTACT_CMSG);
-    pub const APPLICATION_VND_COREOS_IGNITION_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COREOS_IGNITION_JSON);
-    pub const APPLICATION_VND_COSMOCALLER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_COSMOCALLER);
-    pub const APPLICATION_VND_CRICK_CLICKER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRICK_CLICKER);
-    pub const APPLICATION_VND_CRICK_CLICKER_KEYBOARD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRICK_CLICKER_KEYBOARD);
-    pub const APPLICATION_VND_CRICK_CLICKER_PALETTE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRICK_CLICKER_PALETTE);
-    pub const APPLICATION_VND_CRICK_CLICKER_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRICK_CLICKER_TEMPLATE);
-    pub const APPLICATION_VND_CRICK_CLICKER_WORDBANK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRICK_CLICKER_WORDBANK);
-    pub const APPLICATION_VND_CRITICALTOOLS_WBS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRITICALTOOLS_WBS_XML);
-    pub const APPLICATION_VND_CRYPTII_PIPE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRYPTII_PIPE_JSON);
-    pub const APPLICATION_VND_CRYPTO_SHADE_FILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRYPTO_SHADE_FILE);
-    pub const APPLICATION_VND_CRYPTOMATOR_ENCRYPTED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRYPTOMATOR_ENCRYPTED);
-    pub const APPLICATION_VND_CRYPTOMATOR_VAULT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CRYPTOMATOR_VAULT);
-    pub const APPLICATION_VND_CTC_POSML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CTC_POSML);
-    pub const APPLICATION_VND_CTCT_WS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CTCT_WS_XML);
-    pub const APPLICATION_VND_CUPS_PDF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CUPS_PDF);
-    pub const APPLICATION_VND_CUPS_POSTSCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CUPS_POSTSCRIPT);
-    pub const APPLICATION_VND_CUPS_PPD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CUPS_PPD);
-    pub const APPLICATION_VND_CUPS_RASTER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CUPS_RASTER);
-    pub const APPLICATION_VND_CUPS_RAW: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CUPS_RAW);
-    pub const APPLICATION_VND_CURL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CURL);
-    pub const APPLICATION_VND_CYAN_DEAN_ROOT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CYAN_DEAN_ROOT_XML);
-    pub const APPLICATION_VND_CYBANK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CYBANK);
-    pub const APPLICATION_VND_CYCLONEDX_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CYCLONEDX_JSON);
-    pub const APPLICATION_VND_CYCLONEDX_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_CYCLONEDX_XML);
-    pub const APPLICATION_VND_D2L_COURSEPACKAGE1P0_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_D2L_COURSEPACKAGE1P0_ZIP);
-    pub const APPLICATION_VND_D3M_DATASET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_D3M_DATASET);
-    pub const APPLICATION_VND_D3M_PROBLEM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_D3M_PROBLEM);
-    pub const APPLICATION_VND_DART: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DART);
-    pub const APPLICATION_VND_DATA_VISION_RDZ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DATA_VISION_RDZ);
-    pub const APPLICATION_VND_DATALOG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DATALOG);
-    pub const APPLICATION_VND_DATAPACKAGE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DATAPACKAGE_JSON);
-    pub const APPLICATION_VND_DATARESOURCE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DATARESOURCE_JSON);
-    pub const APPLICATION_VND_DBF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DBF);
-    pub const APPLICATION_VND_DEBIAN_BINARY_PACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DEBIAN_BINARY_PACKAGE);
-    pub const APPLICATION_VND_DECE_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DECE_DATA);
-    pub const APPLICATION_VND_DECE_TTML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DECE_TTML_XML);
-    pub const APPLICATION_VND_DECE_UNSPECIFIED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DECE_UNSPECIFIED);
-    pub const APPLICATION_VND_DECE_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DECE_ZIP);
-    pub const APPLICATION_VND_DENOVO_FCSELAYOUT_LINK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DENOVO_FCSELAYOUT_LINK);
-    pub const APPLICATION_VND_DESMUME_MOVIE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DESMUME_MOVIE);
-    pub const APPLICATION_VND_DIR_BI_PLATE_DL_NOSUFFIX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DIR_BI_PLATE_DL_NOSUFFIX);
-    pub const APPLICATION_VND_DM_DELEGATION_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DM_DELEGATION_XML);
-    pub const APPLICATION_VND_DNA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DNA);
-    pub const APPLICATION_VND_DOCUMENT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DOCUMENT_JSON);
-    pub const APPLICATION_VND_DOLBY_MOBILE_1: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DOLBY_MOBILE_1);
-    pub const APPLICATION_VND_DOLBY_MOBILE_2: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DOLBY_MOBILE_2);
-    pub const APPLICATION_VND_DOREMIR_SCORECLOUD_BINARY_DOCUMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DOREMIR_SCORECLOUD_BINARY_DOCUMENT);
-    pub const APPLICATION_VND_DPGRAPH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DPGRAPH);
-    pub const APPLICATION_VND_DREAMFACTORY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DREAMFACTORY);
-    pub const APPLICATION_VND_DRIVE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DRIVE_JSON);
-    pub const APPLICATION_VND_DTG_LOCAL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DTG_LOCAL);
-    pub const APPLICATION_VND_DTG_LOCAL_FLASH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DTG_LOCAL_FLASH);
-    pub const APPLICATION_VND_DTG_LOCAL_HTML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DTG_LOCAL_HTML);
-    pub const APPLICATION_VND_DVB_AIT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_AIT);
-    pub const APPLICATION_VND_DVB_DVBISL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_DVBISL_XML);
-    pub const APPLICATION_VND_DVB_DVBJ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_DVBJ);
-    pub const APPLICATION_VND_DVB_ESGCONTAINER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_ESGCONTAINER);
-    pub const APPLICATION_VND_DVB_IPDCDFTNOTIFACCESS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_IPDCDFTNOTIFACCESS);
-    pub const APPLICATION_VND_DVB_IPDCESGACCESS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_IPDCESGACCESS);
-    pub const APPLICATION_VND_DVB_IPDCESGACCESS2: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_IPDCESGACCESS2);
-    pub const APPLICATION_VND_DVB_IPDCESGPDD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_IPDCESGPDD);
-    pub const APPLICATION_VND_DVB_IPDCROAMING: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_IPDCROAMING);
-    pub const APPLICATION_VND_DVB_IPTV_ALFEC_BASE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_IPTV_ALFEC_BASE);
-    pub const APPLICATION_VND_DVB_IPTV_ALFEC_ENHANCEMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_IPTV_ALFEC_ENHANCEMENT);
-    pub const APPLICATION_VND_DVB_NOTIF_AGGREGATE_ROOT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_NOTIF_AGGREGATE_ROOT_XML);
-    pub const APPLICATION_VND_DVB_NOTIF_CONTAINER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_NOTIF_CONTAINER_XML);
-    pub const APPLICATION_VND_DVB_NOTIF_GENERIC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_NOTIF_GENERIC_XML);
-    pub const APPLICATION_VND_DVB_NOTIF_IA_MSGLIST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_NOTIF_IA_MSGLIST_XML);
-    pub const APPLICATION_VND_DVB_NOTIF_IA_REGISTRATION_REQUEST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_NOTIF_IA_REGISTRATION_REQUEST_XML);
-    pub const APPLICATION_VND_DVB_NOTIF_IA_REGISTRATION_RESPONSE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_NOTIF_IA_REGISTRATION_RESPONSE_XML);
-    pub const APPLICATION_VND_DVB_NOTIF_INIT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_NOTIF_INIT_XML);
-    pub const APPLICATION_VND_DVB_PFR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_PFR);
-    pub const APPLICATION_VND_DVB_SERVICE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DVB_SERVICE);
-    pub const APPLICATION_VND_DXR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DXR);
-    pub const APPLICATION_VND_DYNAGEO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DYNAGEO);
-    pub const APPLICATION_VND_DZR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_DZR);
-    pub const APPLICATION_VND_EASYKARAOKE_CDGDOWNLOAD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EASYKARAOKE_CDGDOWNLOAD);
-    pub const APPLICATION_VND_ECDIS_UPDATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECDIS_UPDATE);
-    pub const APPLICATION_VND_ECIP_RLP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECIP_RLP);
-    pub const APPLICATION_VND_ECLIPSE_DITTO_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECLIPSE_DITTO_JSON);
-    pub const APPLICATION_VND_ECOWIN_CHART: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECOWIN_CHART);
-    pub const APPLICATION_VND_ECOWIN_FILEREQUEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECOWIN_FILEREQUEST);
-    pub const APPLICATION_VND_ECOWIN_FILEUPDATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECOWIN_FILEUPDATE);
-    pub const APPLICATION_VND_ECOWIN_SERIES: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECOWIN_SERIES);
-    pub const APPLICATION_VND_ECOWIN_SERIESREQUEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECOWIN_SERIESREQUEST);
-    pub const APPLICATION_VND_ECOWIN_SERIESUPDATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ECOWIN_SERIESUPDATE);
-    pub const APPLICATION_VND_EFI_IMG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EFI_IMG);
-    pub const APPLICATION_VND_EFI_ISO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EFI_ISO);
-    pub const APPLICATION_VND_ELN_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ELN_ZIP);
-    pub const APPLICATION_VND_EMCLIENT_ACCESSREQUEST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EMCLIENT_ACCESSREQUEST_XML);
-    pub const APPLICATION_VND_ENLIVEN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ENLIVEN);
-    pub const APPLICATION_VND_ENPHASE_ENVOY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ENPHASE_ENVOY);
-    pub const APPLICATION_VND_EPRINTS_DATA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EPRINTS_DATA_XML);
-    pub const APPLICATION_VND_EPSON_ESF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EPSON_ESF);
-    pub const APPLICATION_VND_EPSON_MSF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EPSON_MSF);
-    pub const APPLICATION_VND_EPSON_QUICKANIME: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EPSON_QUICKANIME);
-    pub const APPLICATION_VND_EPSON_SALT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EPSON_SALT);
-    pub const APPLICATION_VND_EPSON_SSF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EPSON_SSF);
-    pub const APPLICATION_VND_ERICSSON_QUICKCALL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ERICSSON_QUICKCALL);
-    pub const APPLICATION_VND_EROFS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EROFS);
-    pub const APPLICATION_VND_ESPASS_ESPASS_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ESPASS_ESPASS_ZIP);
-    pub const APPLICATION_VND_ESZIGNO3_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ESZIGNO3_XML);
-    pub const APPLICATION_VND_ETSI_AOC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_AOC_XML);
-    pub const APPLICATION_VND_ETSI_ASIC_E_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_ASIC_E_ZIP);
-    pub const APPLICATION_VND_ETSI_ASIC_S_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_ASIC_S_ZIP);
-    pub const APPLICATION_VND_ETSI_CUG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_CUG_XML);
-    pub const APPLICATION_VND_ETSI_IPTVCOMMAND_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVCOMMAND_XML);
-    pub const APPLICATION_VND_ETSI_IPTVDISCOVERY_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVDISCOVERY_XML);
-    pub const APPLICATION_VND_ETSI_IPTVPROFILE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVPROFILE_XML);
-    pub const APPLICATION_VND_ETSI_IPTVSAD_BC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVSAD_BC_XML);
-    pub const APPLICATION_VND_ETSI_IPTVSAD_COD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVSAD_COD_XML);
-    pub const APPLICATION_VND_ETSI_IPTVSAD_NPVR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVSAD_NPVR_XML);
-    pub const APPLICATION_VND_ETSI_IPTVSERVICE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVSERVICE_XML);
-    pub const APPLICATION_VND_ETSI_IPTVSYNC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVSYNC_XML);
-    pub const APPLICATION_VND_ETSI_IPTVUEPROFILE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_IPTVUEPROFILE_XML);
-    pub const APPLICATION_VND_ETSI_MCID_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_MCID_XML);
-    pub const APPLICATION_VND_ETSI_MHEG5: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_MHEG5);
-    pub const APPLICATION_VND_ETSI_OVERLOAD_CONTROL_POLICY_DATASET_XML: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_ETSI_OVERLOAD_CONTROL_POLICY_DATASET_XML,
-    );
-    pub const APPLICATION_VND_ETSI_PSTN_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_PSTN_XML);
-    pub const APPLICATION_VND_ETSI_SCI_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_SCI_XML);
-    pub const APPLICATION_VND_ETSI_SIMSERVS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_SIMSERVS_XML);
-    pub const APPLICATION_VND_ETSI_TIMESTAMP_TOKEN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_TIMESTAMP_TOKEN);
-    pub const APPLICATION_VND_ETSI_TSL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_TSL_XML);
-    pub const APPLICATION_VND_ETSI_TSL_DER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ETSI_TSL_DER);
-    pub const APPLICATION_VND_EU_KASPARIAN_CAR_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EU_KASPARIAN_CAR_JSON);
-    pub const APPLICATION_VND_EUDORA_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EUDORA_DATA);
-    pub const APPLICATION_VND_EVOLV_ECIG_PROFILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EVOLV_ECIG_PROFILE);
-    pub const APPLICATION_VND_EVOLV_ECIG_SETTINGS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EVOLV_ECIG_SETTINGS);
-    pub const APPLICATION_VND_EVOLV_ECIG_THEME: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EVOLV_ECIG_THEME);
-    pub const APPLICATION_VND_EXSTREAM_EMPOWER_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EXSTREAM_EMPOWER_ZIP);
-    pub const APPLICATION_VND_EXSTREAM_PACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EXSTREAM_PACKAGE);
-    pub const APPLICATION_VND_EZPIX_ALBUM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EZPIX_ALBUM);
-    pub const APPLICATION_VND_EZPIX_PACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_EZPIX_PACKAGE);
-    pub const APPLICATION_VND_F_SECURE_MOBILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_F_SECURE_MOBILE);
-    pub const APPLICATION_VND_FAMILYSEARCH_GEDCOM_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FAMILYSEARCH_GEDCOM_ZIP);
-    pub const APPLICATION_VND_FASTCOPY_DISK_IMAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FASTCOPY_DISK_IMAGE);
-    pub const APPLICATION_VND_FDSN_MSEED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FDSN_MSEED);
-    pub const APPLICATION_VND_FDSN_SEED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FDSN_SEED);
-    pub const APPLICATION_VND_FFSNS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FFSNS);
-    pub const APPLICATION_VND_FICLAB_FLB_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FICLAB_FLB_ZIP);
-    pub const APPLICATION_VND_FILMIT_ZFC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FILMIT_ZFC);
-    pub const APPLICATION_VND_FINTS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FINTS);
-    pub const APPLICATION_VND_FIREMONKEYS_CLOUDCELL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FIREMONKEYS_CLOUDCELL);
-    pub const APPLICATION_VND_FLUXTIME_CLIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FLUXTIME_CLIP);
-    pub const APPLICATION_VND_FONT_FONTFORGE_SFD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FONT_FONTFORGE_SFD);
-    pub const APPLICATION_VND_FRAMEMAKER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FRAMEMAKER);
-    pub const APPLICATION_VND_FREELOG_COMIC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FREELOG_COMIC);
-    pub const APPLICATION_VND_FROGANS_FNC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FROGANS_FNC);
-    pub const APPLICATION_VND_FROGANS_LTF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FROGANS_LTF);
-    pub const APPLICATION_VND_FSC_WEBLAUNCH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FSC_WEBLAUNCH);
-    pub const APPLICATION_VND_FUJIFILM_FB_DOCUWORKS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIFILM_FB_DOCUWORKS);
-    pub const APPLICATION_VND_FUJIFILM_FB_DOCUWORKS_BINDER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIFILM_FB_DOCUWORKS_BINDER);
-    pub const APPLICATION_VND_FUJIFILM_FB_DOCUWORKS_CONTAINER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIFILM_FB_DOCUWORKS_CONTAINER);
-    pub const APPLICATION_VND_FUJIFILM_FB_JFI_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIFILM_FB_JFI_XML);
-    pub const APPLICATION_VND_FUJITSU_OASYS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJITSU_OASYS);
-    pub const APPLICATION_VND_FUJITSU_OASYS2: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJITSU_OASYS2);
-    pub const APPLICATION_VND_FUJITSU_OASYS3: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJITSU_OASYS3);
-    pub const APPLICATION_VND_FUJITSU_OASYSGP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJITSU_OASYSGP);
-    pub const APPLICATION_VND_FUJITSU_OASYSPRS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJITSU_OASYSPRS);
-    pub const APPLICATION_VND_FUJIXEROX_ART_EX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIXEROX_ART_EX);
-    pub const APPLICATION_VND_FUJIXEROX_ART4: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIXEROX_ART4);
-    pub const APPLICATION_VND_FUJIXEROX_HBPL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIXEROX_HBPL);
-    pub const APPLICATION_VND_FUJIXEROX_DDD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIXEROX_DDD);
-    pub const APPLICATION_VND_FUJIXEROX_DOCUWORKS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIXEROX_DOCUWORKS);
-    pub const APPLICATION_VND_FUJIXEROX_DOCUWORKS_BINDER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIXEROX_DOCUWORKS_BINDER);
-    pub const APPLICATION_VND_FUJIXEROX_DOCUWORKS_CONTAINER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUJIXEROX_DOCUWORKS_CONTAINER);
-    pub const APPLICATION_VND_FUT_MISNET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUT_MISNET);
-    pub const APPLICATION_VND_FUTOIN_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUTOIN_CBOR);
-    pub const APPLICATION_VND_FUTOIN_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUTOIN_JSON);
-    pub const APPLICATION_VND_FUZZYSHEET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_FUZZYSHEET);
-    pub const APPLICATION_VND_GENOMATIX_TUXEDO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENOMATIX_TUXEDO);
-    pub const APPLICATION_VND_GENOZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENOZIP);
-    pub const APPLICATION_VND_GENTICS_GRD_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENTICS_GRD_JSON);
-    pub const APPLICATION_VND_GENTOO_CATMETADATA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENTOO_CATMETADATA_XML);
-    pub const APPLICATION_VND_GENTOO_EBUILD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENTOO_EBUILD);
-    pub const APPLICATION_VND_GENTOO_ECLASS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENTOO_ECLASS);
-    pub const APPLICATION_VND_GENTOO_GPKG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENTOO_GPKG);
-    pub const APPLICATION_VND_GENTOO_MANIFEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENTOO_MANIFEST);
-    pub const APPLICATION_VND_GENTOO_PKGMETADATA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENTOO_PKGMETADATA_XML);
-    pub const APPLICATION_VND_GENTOO_XPAK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GENTOO_XPAK);
-    pub const APPLICATION_VND_GEO_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEO_JSON);
-    pub const APPLICATION_VND_GEOCUBE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEOCUBE_XML);
-    pub const APPLICATION_VND_GEOGEBRA_FILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEOGEBRA_FILE);
-    pub const APPLICATION_VND_GEOGEBRA_SLIDES: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEOGEBRA_SLIDES);
-    pub const APPLICATION_VND_GEOGEBRA_TOOL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEOGEBRA_TOOL);
-    pub const APPLICATION_VND_GEOMETRY_EXPLORER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEOMETRY_EXPLORER);
-    pub const APPLICATION_VND_GEONEXT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEONEXT);
-    pub const APPLICATION_VND_GEOPLAN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEOPLAN);
-    pub const APPLICATION_VND_GEOSPACE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GEOSPACE);
-    pub const APPLICATION_VND_GERBER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GERBER);
-    pub const APPLICATION_VND_GLOBALPLATFORM_CARD_CONTENT_MGT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GLOBALPLATFORM_CARD_CONTENT_MGT);
-    pub const APPLICATION_VND_GLOBALPLATFORM_CARD_CONTENT_MGT_RESPONSE: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_GLOBALPLATFORM_CARD_CONTENT_MGT_RESPONSE,
-    );
-    pub const APPLICATION_VND_GMX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GMX);
-    pub const APPLICATION_VND_GNU_TALER_EXCHANGE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GNU_TALER_EXCHANGE_JSON);
-    pub const APPLICATION_VND_GNU_TALER_MERCHANT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GNU_TALER_MERCHANT_JSON);
-    pub const APPLICATION_VND_GOOGLE_EARTH_KML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GOOGLE_EARTH_KML_XML);
-    pub const APPLICATION_VND_GOOGLE_EARTH_KMZ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GOOGLE_EARTH_KMZ);
-    pub const APPLICATION_VND_GOV_SK_E_FORM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GOV_SK_E_FORM_XML);
-    pub const APPLICATION_VND_GOV_SK_E_FORM_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GOV_SK_E_FORM_ZIP);
-    pub const APPLICATION_VND_GOV_SK_XMLDATACONTAINER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GOV_SK_XMLDATACONTAINER_XML);
-    pub const APPLICATION_VND_GPXSEE_MAP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GPXSEE_MAP_XML);
-    pub const APPLICATION_VND_GRAFEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GRAFEQ);
-    pub const APPLICATION_VND_GRIDMP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GRIDMP);
-    pub const APPLICATION_VND_GROOVE_ACCOUNT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GROOVE_ACCOUNT);
-    pub const APPLICATION_VND_GROOVE_HELP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GROOVE_HELP);
-    pub const APPLICATION_VND_GROOVE_IDENTITY_MESSAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GROOVE_IDENTITY_MESSAGE);
-    pub const APPLICATION_VND_GROOVE_INJECTOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GROOVE_INJECTOR);
-    pub const APPLICATION_VND_GROOVE_TOOL_MESSAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GROOVE_TOOL_MESSAGE);
-    pub const APPLICATION_VND_GROOVE_TOOL_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GROOVE_TOOL_TEMPLATE);
-    pub const APPLICATION_VND_GROOVE_VCARD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_GROOVE_VCARD);
-    pub const APPLICATION_VND_HAL_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HAL_JSON);
-    pub const APPLICATION_VND_HAL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HAL_XML);
-    pub const APPLICATION_VND_HBCI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HBCI);
-    pub const APPLICATION_VND_HC_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HC_JSON);
-    pub const APPLICATION_VND_HCL_BIREPORTS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HCL_BIREPORTS);
-    pub const APPLICATION_VND_HDT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HDT);
-    pub const APPLICATION_VND_HEROKU_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HEROKU_JSON);
-    pub const APPLICATION_VND_HHE_LESSON_PLAYER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HHE_LESSON_PLAYER);
-    pub const APPLICATION_VND_HP_HPGL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HP_HPGL);
-    pub const APPLICATION_VND_HP_PCL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HP_PCL);
-    pub const APPLICATION_VND_HP_PCLXL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HP_PCLXL);
-    pub const APPLICATION_VND_HP_HPID: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HP_HPID);
-    pub const APPLICATION_VND_HP_HPS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HP_HPS);
-    pub const APPLICATION_VND_HP_JLYT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HP_JLYT);
-    pub const APPLICATION_VND_HSL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HSL);
-    pub const APPLICATION_VND_HTTPHONE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HTTPHONE);
-    pub const APPLICATION_VND_HYDROSTATIX_SOF_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HYDROSTATIX_SOF_DATA);
-    pub const APPLICATION_VND_HYPER_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HYPER_JSON);
-    pub const APPLICATION_VND_HYPER_ITEM_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HYPER_ITEM_JSON);
-    pub const APPLICATION_VND_HYPERDRIVE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HYPERDRIVE_JSON);
-    pub const APPLICATION_VND_HZN_3D_CROSSWORD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_HZN_3D_CROSSWORD);
-    pub const APPLICATION_VND_IBM_MINIPAY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IBM_MINIPAY);
-    pub const APPLICATION_VND_IBM_AFPLINEDATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IBM_AFPLINEDATA);
-    pub const APPLICATION_VND_IBM_ELECTRONIC_MEDIA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IBM_ELECTRONIC_MEDIA);
-    pub const APPLICATION_VND_IBM_MODCAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IBM_MODCAP);
-    pub const APPLICATION_VND_IBM_RIGHTS_MANAGEMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IBM_RIGHTS_MANAGEMENT);
-    pub const APPLICATION_VND_IBM_SECURE_CONTAINER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IBM_SECURE_CONTAINER);
-    pub const APPLICATION_VND_ICCPROFILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ICCPROFILE);
-    pub const APPLICATION_VND_IEEE_1905: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IEEE_1905);
-    pub const APPLICATION_VND_IGLOADER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IGLOADER);
-    pub const APPLICATION_VND_IMAGEMETER_FOLDER_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMAGEMETER_FOLDER_ZIP);
-    pub const APPLICATION_VND_IMAGEMETER_IMAGE_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMAGEMETER_IMAGE_ZIP);
-    pub const APPLICATION_VND_IMMERVISION_IVP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMMERVISION_IVP);
-    pub const APPLICATION_VND_IMMERVISION_IVU: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMMERVISION_IVU);
-    pub const APPLICATION_VND_IMS_IMSCCV1P1: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_IMSCCV1P1);
-    pub const APPLICATION_VND_IMS_IMSCCV1P2: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_IMSCCV1P2);
-    pub const APPLICATION_VND_IMS_IMSCCV1P3: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_IMSCCV1P3);
-    pub const APPLICATION_VND_IMS_LIS_V2_RESULT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_LIS_V2_RESULT_JSON);
-    pub const APPLICATION_VND_IMS_LTI_V2_TOOLCONSUMERPROFILE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_LTI_V2_TOOLCONSUMERPROFILE_JSON);
-    pub const APPLICATION_VND_IMS_LTI_V2_TOOLPROXY_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_LTI_V2_TOOLPROXY_JSON);
-    pub const APPLICATION_VND_IMS_LTI_V2_TOOLPROXY_ID_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_LTI_V2_TOOLPROXY_ID_JSON);
-    pub const APPLICATION_VND_IMS_LTI_V2_TOOLSETTINGS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_LTI_V2_TOOLSETTINGS_JSON);
-    pub const APPLICATION_VND_IMS_LTI_V2_TOOLSETTINGS_SIMPLE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IMS_LTI_V2_TOOLSETTINGS_SIMPLE_JSON);
-    pub const APPLICATION_VND_INFORMEDCONTROL_RMS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INFORMEDCONTROL_RMS_XML);
-    pub const APPLICATION_VND_INFORMIX_VISIONARY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INFORMIX_VISIONARY);
-    pub const APPLICATION_VND_INFOTECH_PROJECT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INFOTECH_PROJECT);
-    pub const APPLICATION_VND_INFOTECH_PROJECT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INFOTECH_PROJECT_XML);
-    pub const APPLICATION_VND_INNOPATH_WAMP_NOTIFICATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INNOPATH_WAMP_NOTIFICATION);
-    pub const APPLICATION_VND_INSORS_IGM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INSORS_IGM);
-    pub const APPLICATION_VND_INTERCON_FORMNET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INTERCON_FORMNET);
-    pub const APPLICATION_VND_INTERGEO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INTERGEO);
-    pub const APPLICATION_VND_INTERTRUST_DIGIBOX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INTERTRUST_DIGIBOX);
-    pub const APPLICATION_VND_INTERTRUST_NNCP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INTERTRUST_NNCP);
-    pub const APPLICATION_VND_INTU_QBO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INTU_QBO);
-    pub const APPLICATION_VND_INTU_QFX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_INTU_QFX);
-    pub const APPLICATION_VND_IPFS_IPNS_RECORD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPFS_IPNS_RECORD);
-    pub const APPLICATION_VND_IPLD_CAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPLD_CAR);
-    pub const APPLICATION_VND_IPLD_DAG_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPLD_DAG_CBOR);
-    pub const APPLICATION_VND_IPLD_DAG_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPLD_DAG_JSON);
-    pub const APPLICATION_VND_IPLD_RAW: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPLD_RAW);
-    pub const APPLICATION_VND_IPTC_G2_CATALOGITEM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPTC_G2_CATALOGITEM_XML);
-    pub const APPLICATION_VND_IPTC_G2_CONCEPTITEM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPTC_G2_CONCEPTITEM_XML);
-    pub const APPLICATION_VND_IPTC_G2_KNOWLEDGEITEM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPTC_G2_KNOWLEDGEITEM_XML);
-    pub const APPLICATION_VND_IPTC_G2_NEWSITEM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPTC_G2_NEWSITEM_XML);
-    pub const APPLICATION_VND_IPTC_G2_NEWSMESSAGE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPTC_G2_NEWSMESSAGE_XML);
-    pub const APPLICATION_VND_IPTC_G2_PACKAGEITEM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPTC_G2_PACKAGEITEM_XML);
-    pub const APPLICATION_VND_IPTC_G2_PLANNINGITEM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPTC_G2_PLANNINGITEM_XML);
-    pub const APPLICATION_VND_IPUNPLUGGED_RCPROFILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IPUNPLUGGED_RCPROFILE);
-    pub const APPLICATION_VND_IREPOSITORY_PACKAGE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IREPOSITORY_PACKAGE_XML);
-    pub const APPLICATION_VND_IS_XPR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_IS_XPR);
-    pub const APPLICATION_VND_ISAC_FCS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ISAC_FCS);
-    pub const APPLICATION_VND_ISO11783_10_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ISO11783_10_ZIP);
-    pub const APPLICATION_VND_JAM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAM);
-    pub const APPLICATION_VND_JAPANNET_DIRECTORY_SERVICE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAPANNET_DIRECTORY_SERVICE);
-    pub const APPLICATION_VND_JAPANNET_JPNSTORE_WAKEUP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAPANNET_JPNSTORE_WAKEUP);
-    pub const APPLICATION_VND_JAPANNET_PAYMENT_WAKEUP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAPANNET_PAYMENT_WAKEUP);
-    pub const APPLICATION_VND_JAPANNET_REGISTRATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAPANNET_REGISTRATION);
-    pub const APPLICATION_VND_JAPANNET_REGISTRATION_WAKEUP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAPANNET_REGISTRATION_WAKEUP);
-    pub const APPLICATION_VND_JAPANNET_SETSTORE_WAKEUP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAPANNET_SETSTORE_WAKEUP);
-    pub const APPLICATION_VND_JAPANNET_VERIFICATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAPANNET_VERIFICATION);
-    pub const APPLICATION_VND_JAPANNET_VERIFICATION_WAKEUP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JAPANNET_VERIFICATION_WAKEUP);
-    pub const APPLICATION_VND_JCP_JAVAME_MIDLET_RMS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JCP_JAVAME_MIDLET_RMS);
-    pub const APPLICATION_VND_JISP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JISP);
-    pub const APPLICATION_VND_JOOST_JODA_ARCHIVE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JOOST_JODA_ARCHIVE);
-    pub const APPLICATION_VND_JSK_ISDN_NGN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_JSK_ISDN_NGN);
-    pub const APPLICATION_VND_KAHOOTZ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KAHOOTZ);
-    pub const APPLICATION_VND_KDE_KARBON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KDE_KARBON);
-    pub const APPLICATION_VND_KDE_KCHART: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KDE_KCHART);
-    pub const APPLICATION_VND_KDE_KFORMULA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KDE_KFORMULA);
-    pub const APPLICATION_VND_KDE_KIVIO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KDE_KIVIO);
-    pub const APPLICATION_VND_KDE_KONTOUR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KDE_KONTOUR);
-    pub const APPLICATION_VND_KDE_KPRESENTER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KDE_KPRESENTER);
-    pub const APPLICATION_VND_KDE_KSPREAD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KDE_KSPREAD);
-    pub const APPLICATION_VND_KDE_KWORD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KDE_KWORD);
-    pub const APPLICATION_VND_KENAMEAAPP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KENAMEAAPP);
-    pub const APPLICATION_VND_KIDSPIRATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KIDSPIRATION);
-    pub const APPLICATION_VND_KOAN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KOAN);
-    pub const APPLICATION_VND_KODAK_DESCRIPTOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_KODAK_DESCRIPTOR);
-    pub const APPLICATION_VND_LAS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LAS);
-    pub const APPLICATION_VND_LAS_LAS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LAS_LAS_JSON);
-    pub const APPLICATION_VND_LAS_LAS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LAS_LAS_XML);
-    pub const APPLICATION_VND_LASZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LASZIP);
-    pub const APPLICATION_VND_LDEV_PRODUCTLICENSING: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LDEV_PRODUCTLICENSING);
-    pub const APPLICATION_VND_LEAP_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LEAP_JSON);
-    pub const APPLICATION_VND_LIBERTY_REQUEST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LIBERTY_REQUEST_XML);
-    pub const APPLICATION_VND_LLAMAGRAPHICS_LIFE_BALANCE_DESKTOP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LLAMAGRAPHICS_LIFE_BALANCE_DESKTOP);
-    pub const APPLICATION_VND_LLAMAGRAPHICS_LIFE_BALANCE_EXCHANGE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LLAMAGRAPHICS_LIFE_BALANCE_EXCHANGE_XML);
-    pub const APPLICATION_VND_LOGIPIPE_CIRCUIT_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOGIPIPE_CIRCUIT_ZIP);
-    pub const APPLICATION_VND_LOOM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOOM);
-    pub const APPLICATION_VND_LOTUS_1_2_3: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOTUS_1_2_3);
-    pub const APPLICATION_VND_LOTUS_APPROACH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOTUS_APPROACH);
-    pub const APPLICATION_VND_LOTUS_FREELANCE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOTUS_FREELANCE);
-    pub const APPLICATION_VND_LOTUS_NOTES: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOTUS_NOTES);
-    pub const APPLICATION_VND_LOTUS_ORGANIZER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOTUS_ORGANIZER);
-    pub const APPLICATION_VND_LOTUS_SCREENCAM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOTUS_SCREENCAM);
-    pub const APPLICATION_VND_LOTUS_WORDPRO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_LOTUS_WORDPRO);
-    pub const APPLICATION_VND_MACPORTS_PORTPKG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MACPORTS_PORTPKG);
-    pub const APPLICATION_VND_MAPBOX_VECTOR_TILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MAPBOX_VECTOR_TILE);
-    pub const APPLICATION_VND_MARLIN_DRM_ACTIONTOKEN_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MARLIN_DRM_ACTIONTOKEN_XML);
-    pub const APPLICATION_VND_MARLIN_DRM_CONFTOKEN_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MARLIN_DRM_CONFTOKEN_XML);
-    pub const APPLICATION_VND_MARLIN_DRM_LICENSE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MARLIN_DRM_LICENSE_XML);
-    pub const APPLICATION_VND_MARLIN_DRM_MDCF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MARLIN_DRM_MDCF);
-    pub const APPLICATION_VND_MASON_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MASON_JSON);
-    pub const APPLICATION_VND_MAXAR_ARCHIVE_3TZ_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MAXAR_ARCHIVE_3TZ_ZIP);
-    pub const APPLICATION_VND_MAXMIND_MAXMIND_DB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MAXMIND_MAXMIND_DB);
-    pub const APPLICATION_VND_MCD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MCD);
-    pub const APPLICATION_VND_MDL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MDL);
-    pub const APPLICATION_VND_MDL_MBSDF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MDL_MBSDF);
-    pub const APPLICATION_VND_MEDCALCDATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MEDCALCDATA);
-    pub const APPLICATION_VND_MEDIASTATION_CDKEY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MEDIASTATION_CDKEY);
-    pub const APPLICATION_VND_MEDICALHOLODECK_RECORDXR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MEDICALHOLODECK_RECORDXR);
-    pub const APPLICATION_VND_MERIDIAN_SLINGSHOT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MERIDIAN_SLINGSHOT);
-    pub const APPLICATION_VND_MERMAID: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MERMAID);
-    pub const APPLICATION_VND_MFMP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MFMP);
-    pub const APPLICATION_VND_MICRO_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MICRO_JSON);
-    pub const APPLICATION_VND_MICROGRAFX_FLO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MICROGRAFX_FLO);
-    pub const APPLICATION_VND_MICROGRAFX_IGX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MICROGRAFX_IGX);
-    pub const APPLICATION_VND_MICROSOFT_PORTABLE_EXECUTABLE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MICROSOFT_PORTABLE_EXECUTABLE);
-    pub const APPLICATION_VND_MICROSOFT_WINDOWS_THUMBNAIL_CACHE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MICROSOFT_WINDOWS_THUMBNAIL_CACHE);
-    pub const APPLICATION_VND_MIELE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MIELE_JSON);
-    pub const APPLICATION_VND_MIF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MIF);
-    pub const APPLICATION_VND_MINISOFT_HP3000_SAVE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MINISOFT_HP3000_SAVE);
-    pub const APPLICATION_VND_MITSUBISHI_MISTY_GUARD_TRUSTWEB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MITSUBISHI_MISTY_GUARD_TRUSTWEB);
-    pub const APPLICATION_VND_MODL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MODL);
-    pub const APPLICATION_VND_MOPHUN_APPLICATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOPHUN_APPLICATION);
-    pub const APPLICATION_VND_MOPHUN_CERTIFICATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOPHUN_CERTIFICATE);
-    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOTOROLA_FLEXSUITE);
-    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_ADSI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOTOROLA_FLEXSUITE_ADSI);
-    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_FIS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOTOROLA_FLEXSUITE_FIS);
-    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_GOTAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOTOROLA_FLEXSUITE_GOTAP);
-    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_KMR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOTOROLA_FLEXSUITE_KMR);
-    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_TTC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOTOROLA_FLEXSUITE_TTC);
-    pub const APPLICATION_VND_MOTOROLA_FLEXSUITE_WEM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOTOROLA_FLEXSUITE_WEM);
-    pub const APPLICATION_VND_MOTOROLA_IPRM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOTOROLA_IPRM);
-    pub const APPLICATION_VND_MOZILLA_XUL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MOZILLA_XUL_XML);
-    pub const APPLICATION_VND_MS_3MFDOCUMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_3MFDOCUMENT);
-    pub const APPLICATION_VND_MS_PRINTDEVICECAPABILITIES_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_PRINTDEVICECAPABILITIES_XML);
-    pub const APPLICATION_VND_MS_PRINTSCHEMATICKET_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_PRINTSCHEMATICKET_XML);
-    pub const APPLICATION_VND_MS_ARTGALRY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_ARTGALRY);
-    pub const APPLICATION_VND_MS_ASF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_ASF);
-    pub const APPLICATION_VND_MS_CAB_COMPRESSED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_CAB_COMPRESSED);
-    pub const APPLICATION_VND_MS_EXCEL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_EXCEL);
-    pub const APPLICATION_VND_MS_EXCEL_ADDIN_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_EXCEL_ADDIN_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_EXCEL_SHEET_BINARY_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_EXCEL_SHEET_BINARY_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_EXCEL_SHEET_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_EXCEL_SHEET_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_EXCEL_TEMPLATE_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_EXCEL_TEMPLATE_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_FONTOBJECT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_FONTOBJECT);
-    pub const APPLICATION_VND_MS_HTMLHELP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_HTMLHELP);
-    pub const APPLICATION_VND_MS_IMS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_IMS);
-    pub const APPLICATION_VND_MS_LRM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_LRM);
-    pub const APPLICATION_VND_MS_OFFICE_ACTIVEX_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_OFFICE_ACTIVEX_XML);
-    pub const APPLICATION_VND_MS_OFFICETHEME: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_OFFICETHEME);
-    pub const APPLICATION_VND_MS_PLAYREADY_INITIATOR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_PLAYREADY_INITIATOR_XML);
-    pub const APPLICATION_VND_MS_POWERPOINT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_POWERPOINT);
-    pub const APPLICATION_VND_MS_POWERPOINT_ADDIN_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_POWERPOINT_ADDIN_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_POWERPOINT_PRESENTATION_MACROENABLED_12: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_MS_POWERPOINT_PRESENTATION_MACROENABLED_12,
-    );
-    pub const APPLICATION_VND_MS_POWERPOINT_SLIDE_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_POWERPOINT_SLIDE_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_POWERPOINT_SLIDESHOW_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_POWERPOINT_SLIDESHOW_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_POWERPOINT_TEMPLATE_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_POWERPOINT_TEMPLATE_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_PROJECT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_PROJECT);
-    pub const APPLICATION_VND_MS_TNEF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_TNEF);
-    pub const APPLICATION_VND_MS_WINDOWS_DEVICEPAIRING: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WINDOWS_DEVICEPAIRING);
-    pub const APPLICATION_VND_MS_WINDOWS_NWPRINTING_OOB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WINDOWS_NWPRINTING_OOB);
-    pub const APPLICATION_VND_MS_WINDOWS_PRINTERPAIRING: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WINDOWS_PRINTERPAIRING);
-    pub const APPLICATION_VND_MS_WINDOWS_WSD_OOB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WINDOWS_WSD_OOB);
-    pub const APPLICATION_VND_MS_WMDRM_LIC_CHLG_REQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WMDRM_LIC_CHLG_REQ);
-    pub const APPLICATION_VND_MS_WMDRM_LIC_RESP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WMDRM_LIC_RESP);
-    pub const APPLICATION_VND_MS_WMDRM_METER_CHLG_REQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WMDRM_METER_CHLG_REQ);
-    pub const APPLICATION_VND_MS_WMDRM_METER_RESP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WMDRM_METER_RESP);
-    pub const APPLICATION_VND_MS_WORD_DOCUMENT_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WORD_DOCUMENT_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_WORD_TEMPLATE_MACROENABLED_12: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WORD_TEMPLATE_MACROENABLED_12);
-    pub const APPLICATION_VND_MS_WORKS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WORKS);
-    pub const APPLICATION_VND_MS_WPL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_WPL);
-    pub const APPLICATION_VND_MS_XPSDOCUMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MS_XPSDOCUMENT);
-    pub const APPLICATION_VND_MSA_DISK_IMAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MSA_DISK_IMAGE);
-    pub const APPLICATION_VND_MSEQ: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MSEQ);
-    pub const APPLICATION_VND_MSIGN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MSIGN);
-    pub const APPLICATION_VND_MULTIAD_CREATOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MULTIAD_CREATOR);
-    pub const APPLICATION_VND_MULTIAD_CREATOR_CIF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MULTIAD_CREATOR_CIF);
-    pub const APPLICATION_VND_MUSIC_NIFF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MUSIC_NIFF);
-    pub const APPLICATION_VND_MUSICIAN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MUSICIAN);
-    pub const APPLICATION_VND_MUVEE_STYLE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MUVEE_STYLE);
-    pub const APPLICATION_VND_MYNFC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_MYNFC);
-    pub const APPLICATION_VND_NACAMAR_YBRID_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NACAMAR_YBRID_JSON);
-    pub const APPLICATION_VND_NATO_BINDINGDATAOBJECT_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NATO_BINDINGDATAOBJECT_CBOR);
-    pub const APPLICATION_VND_NATO_BINDINGDATAOBJECT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NATO_BINDINGDATAOBJECT_JSON);
-    pub const APPLICATION_VND_NATO_BINDINGDATAOBJECT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NATO_BINDINGDATAOBJECT_XML);
-    pub const APPLICATION_VND_NATO_OPENXMLFORMATS_PACKAGE_IEPD_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NATO_OPENXMLFORMATS_PACKAGE_IEPD_ZIP);
-    pub const APPLICATION_VND_NCD_CONTROL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NCD_CONTROL);
-    pub const APPLICATION_VND_NCD_REFERENCE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NCD_REFERENCE);
-    pub const APPLICATION_VND_NEARST_INV_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NEARST_INV_JSON);
-    pub const APPLICATION_VND_NEBUMIND_LINE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NEBUMIND_LINE);
-    pub const APPLICATION_VND_NERVANA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NERVANA);
-    pub const APPLICATION_VND_NETFPX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NETFPX);
-    pub const APPLICATION_VND_NEUROLANGUAGE_NLU: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NEUROLANGUAGE_NLU);
-    pub const APPLICATION_VND_NIMN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NIMN);
-    pub const APPLICATION_VND_NINTENDO_NITRO_ROM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NINTENDO_NITRO_ROM);
-    pub const APPLICATION_VND_NINTENDO_SNES_ROM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NINTENDO_SNES_ROM);
-    pub const APPLICATION_VND_NITF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NITF);
-    pub const APPLICATION_VND_NOBLENET_DIRECTORY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOBLENET_DIRECTORY);
-    pub const APPLICATION_VND_NOBLENET_SEALER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOBLENET_SEALER);
-    pub const APPLICATION_VND_NOBLENET_WEB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOBLENET_WEB);
-    pub const APPLICATION_VND_NOKIA_CATALOGS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_CATALOGS);
-    pub const APPLICATION_VND_NOKIA_CONML_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_CONML_WBXML);
-    pub const APPLICATION_VND_NOKIA_CONML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_CONML_XML);
-    pub const APPLICATION_VND_NOKIA_ISDS_RADIO_PRESETS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_ISDS_RADIO_PRESETS);
-    pub const APPLICATION_VND_NOKIA_IPTV_CONFIG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_IPTV_CONFIG_XML);
-    pub const APPLICATION_VND_NOKIA_LANDMARK_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_LANDMARK_WBXML);
-    pub const APPLICATION_VND_NOKIA_LANDMARK_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_LANDMARK_XML);
-    pub const APPLICATION_VND_NOKIA_LANDMARKCOLLECTION_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_LANDMARKCOLLECTION_XML);
-    pub const APPLICATION_VND_NOKIA_N_GAGE_AC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_N_GAGE_AC_XML);
-    pub const APPLICATION_VND_NOKIA_N_GAGE_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_N_GAGE_DATA);
-    pub const APPLICATION_VND_NOKIA_N_GAGE_SYMBIAN_INSTALL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_N_GAGE_SYMBIAN_INSTALL);
-    pub const APPLICATION_VND_NOKIA_NCD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_NCD);
-    pub const APPLICATION_VND_NOKIA_PCD_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_PCD_WBXML);
-    pub const APPLICATION_VND_NOKIA_PCD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_PCD_XML);
-    pub const APPLICATION_VND_NOKIA_RADIO_PRESET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_RADIO_PRESET);
-    pub const APPLICATION_VND_NOKIA_RADIO_PRESETS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOKIA_RADIO_PRESETS);
-    pub const APPLICATION_VND_NOVADIGM_EDM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOVADIGM_EDM);
-    pub const APPLICATION_VND_NOVADIGM_EDX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOVADIGM_EDX);
-    pub const APPLICATION_VND_NOVADIGM_EXT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NOVADIGM_EXT);
-    pub const APPLICATION_VND_NTT_LOCAL_CONTENT_SHARE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NTT_LOCAL_CONTENT_SHARE);
-    pub const APPLICATION_VND_NTT_LOCAL_FILE_TRANSFER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NTT_LOCAL_FILE_TRANSFER);
-    pub const APPLICATION_VND_NTT_LOCAL_OGW_REMOTE_ACCESS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NTT_LOCAL_OGW_REMOTE_ACCESS);
-    pub const APPLICATION_VND_NTT_LOCAL_SIP_TA_REMOTE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NTT_LOCAL_SIP_TA_REMOTE);
-    pub const APPLICATION_VND_NTT_LOCAL_SIP_TA_TCP_STREAM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_NTT_LOCAL_SIP_TA_TCP_STREAM);
-    pub const APPLICATION_VND_OAI_WORKFLOWS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OAI_WORKFLOWS);
-    pub const APPLICATION_VND_OAI_WORKFLOWS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OAI_WORKFLOWS_JSON);
-    pub const APPLICATION_VND_OAI_WORKFLOWS_YAML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OAI_WORKFLOWS_YAML);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_BASE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_BASE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_CHART: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_CHART);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_CHART_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_CHART_TEMPLATE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_DATABASE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_DATABASE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_FORMULA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_FORMULA);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_FORMULA_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_FORMULA_TEMPLATE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_GRAPHICS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_GRAPHICS);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_GRAPHICS_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_GRAPHICS_TEMPLATE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_IMAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_IMAGE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_IMAGE_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_IMAGE_TEMPLATE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION_TEMPLATE: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION_TEMPLATE,
-    );
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET_TEMPLATE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_MASTER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_MASTER);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_MASTER_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_MASTER_TEMPLATE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_TEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_TEMPLATE);
-    pub const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_WEB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT_WEB);
-    pub const APPLICATION_VND_OBN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OBN);
-    pub const APPLICATION_VND_OCF_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OCF_CBOR);
-    pub const APPLICATION_VND_OCI_IMAGE_MANIFEST_V1_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OCI_IMAGE_MANIFEST_V1_JSON);
-    pub const APPLICATION_VND_OFTN_L10N_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OFTN_L10N_JSON);
-    pub const APPLICATION_VND_OIPF_CONTENTACCESSDOWNLOAD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_CONTENTACCESSDOWNLOAD_XML);
-    pub const APPLICATION_VND_OIPF_CONTENTACCESSSTREAMING_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_CONTENTACCESSSTREAMING_XML);
-    pub const APPLICATION_VND_OIPF_CSPG_HEXBINARY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_CSPG_HEXBINARY);
-    pub const APPLICATION_VND_OIPF_DAE_SVG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_DAE_SVG_XML);
-    pub const APPLICATION_VND_OIPF_DAE_XHTML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_DAE_XHTML_XML);
-    pub const APPLICATION_VND_OIPF_MIPPVCONTROLMESSAGE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_MIPPVCONTROLMESSAGE_XML);
-    pub const APPLICATION_VND_OIPF_PAE_GEM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_PAE_GEM);
-    pub const APPLICATION_VND_OIPF_SPDISCOVERY_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_SPDISCOVERY_XML);
-    pub const APPLICATION_VND_OIPF_SPDLIST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_SPDLIST_XML);
-    pub const APPLICATION_VND_OIPF_UEPROFILE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_UEPROFILE_XML);
-    pub const APPLICATION_VND_OIPF_USERPROFILE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OIPF_USERPROFILE_XML);
-    pub const APPLICATION_VND_OLPC_SUGAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OLPC_SUGAR);
-    pub const APPLICATION_VND_OMA_SCWS_CONFIG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_SCWS_CONFIG);
-    pub const APPLICATION_VND_OMA_SCWS_HTTP_REQUEST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_SCWS_HTTP_REQUEST);
-    pub const APPLICATION_VND_OMA_SCWS_HTTP_RESPONSE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_SCWS_HTTP_RESPONSE);
-    pub const APPLICATION_VND_OMA_BCAST_ASSOCIATED_PROCEDURE_PARAMETER_XML: Encoding =
-        Encoding::new(
-            IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_ASSOCIATED_PROCEDURE_PARAMETER_XML,
-        );
-    pub const APPLICATION_VND_OMA_BCAST_DRM_TRIGGER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_DRM_TRIGGER_XML);
-    pub const APPLICATION_VND_OMA_BCAST_IMD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_IMD_XML);
-    pub const APPLICATION_VND_OMA_BCAST_LTKM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_LTKM);
-    pub const APPLICATION_VND_OMA_BCAST_NOTIFICATION_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_NOTIFICATION_XML);
-    pub const APPLICATION_VND_OMA_BCAST_PROVISIONINGTRIGGER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_PROVISIONINGTRIGGER);
-    pub const APPLICATION_VND_OMA_BCAST_SGBOOT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_SGBOOT);
-    pub const APPLICATION_VND_OMA_BCAST_SGDD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_SGDD_XML);
-    pub const APPLICATION_VND_OMA_BCAST_SGDU: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_SGDU);
-    pub const APPLICATION_VND_OMA_BCAST_SIMPLE_SYMBOL_CONTAINER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_SIMPLE_SYMBOL_CONTAINER);
-    pub const APPLICATION_VND_OMA_BCAST_SMARTCARD_TRIGGER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_SMARTCARD_TRIGGER_XML);
-    pub const APPLICATION_VND_OMA_BCAST_SPROV_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_SPROV_XML);
-    pub const APPLICATION_VND_OMA_BCAST_STKM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_BCAST_STKM);
-    pub const APPLICATION_VND_OMA_CAB_ADDRESS_BOOK_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_CAB_ADDRESS_BOOK_XML);
-    pub const APPLICATION_VND_OMA_CAB_FEATURE_HANDLER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_CAB_FEATURE_HANDLER_XML);
-    pub const APPLICATION_VND_OMA_CAB_PCC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_CAB_PCC_XML);
-    pub const APPLICATION_VND_OMA_CAB_SUBS_INVITE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_CAB_SUBS_INVITE_XML);
-    pub const APPLICATION_VND_OMA_CAB_USER_PREFS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_CAB_USER_PREFS_XML);
-    pub const APPLICATION_VND_OMA_DCD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_DCD);
-    pub const APPLICATION_VND_OMA_DCDC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_DCDC);
-    pub const APPLICATION_VND_OMA_DD2_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_DD2_XML);
-    pub const APPLICATION_VND_OMA_DRM_RISD_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_DRM_RISD_XML);
-    pub const APPLICATION_VND_OMA_GROUP_USAGE_LIST_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_GROUP_USAGE_LIST_XML);
-    pub const APPLICATION_VND_OMA_LWM2M_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_LWM2M_CBOR);
-    pub const APPLICATION_VND_OMA_LWM2M_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_LWM2M_JSON);
-    pub const APPLICATION_VND_OMA_LWM2M_TLV: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_LWM2M_TLV);
-    pub const APPLICATION_VND_OMA_PAL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_PAL_XML);
-    pub const APPLICATION_VND_OMA_POC_DETAILED_PROGRESS_REPORT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_POC_DETAILED_PROGRESS_REPORT_XML);
-    pub const APPLICATION_VND_OMA_POC_FINAL_REPORT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_POC_FINAL_REPORT_XML);
-    pub const APPLICATION_VND_OMA_POC_GROUPS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_POC_GROUPS_XML);
-    pub const APPLICATION_VND_OMA_POC_INVOCATION_DESCRIPTOR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_POC_INVOCATION_DESCRIPTOR_XML);
-    pub const APPLICATION_VND_OMA_POC_OPTIMIZED_PROGRESS_REPORT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_POC_OPTIMIZED_PROGRESS_REPORT_XML);
-    pub const APPLICATION_VND_OMA_PUSH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_PUSH);
-    pub const APPLICATION_VND_OMA_SCIDM_MESSAGES_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_SCIDM_MESSAGES_XML);
-    pub const APPLICATION_VND_OMA_XCAP_DIRECTORY_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMA_XCAP_DIRECTORY_XML);
-    pub const APPLICATION_VND_OMADS_EMAIL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMADS_EMAIL_XML);
-    pub const APPLICATION_VND_OMADS_FILE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMADS_FILE_XML);
-    pub const APPLICATION_VND_OMADS_FOLDER_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMADS_FOLDER_XML);
-    pub const APPLICATION_VND_OMALOC_SUPL_INIT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OMALOC_SUPL_INIT);
-    pub const APPLICATION_VND_ONEPAGER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ONEPAGER);
-    pub const APPLICATION_VND_ONEPAGERTAMP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ONEPAGERTAMP);
-    pub const APPLICATION_VND_ONEPAGERTAMX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ONEPAGERTAMX);
-    pub const APPLICATION_VND_ONEPAGERTAT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ONEPAGERTAT);
-    pub const APPLICATION_VND_ONEPAGERTATP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ONEPAGERTATP);
-    pub const APPLICATION_VND_ONEPAGERTATX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ONEPAGERTATX);
-    pub const APPLICATION_VND_ONVIF_METADATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ONVIF_METADATA);
-    pub const APPLICATION_VND_OPENBLOX_GAME_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENBLOX_GAME_XML);
-    pub const APPLICATION_VND_OPENBLOX_GAME_BINARY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENBLOX_GAME_BINARY);
-    pub const APPLICATION_VND_OPENEYE_OEB: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENEYE_OEB);
-    pub const APPLICATION_VND_OPENSTREETMAP_DATA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENSTREETMAP_DATA_XML);
-    pub const APPLICATION_VND_OPENTIMESTAMPS_OTS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENTIMESTAMPS_OTS);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_CUSTOM_PROPERTIES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_CUSTOM_PROPERTIES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_CUSTOMXMLPROPERTIES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_CUSTOMXMLPROPERTIES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWING_XML: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWING_XML,
-    );
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_CHART_XML: Encoding =
-        Encoding::new(
-            IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_CHART_XML,
-        );
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_CHARTSHAPES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_CHARTSHAPES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMCOLORS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMCOLORS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMDATA_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMDATA_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMLAYOUT_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMLAYOUT_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMSTYLE_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_DRAWINGML_DIAGRAMSTYLE_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_EXTENDED_PROPERTIES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_EXTENDED_PROPERTIES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_COMMENTAUTHORS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_COMMENTAUTHORS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_COMMENTS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_COMMENTS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_HANDOUTMASTER_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_HANDOUTMASTER_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_NOTESMASTER_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_NOTESMASTER_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_NOTESSLIDE_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_NOTESSLIDE_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESPROPS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESPROPS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION_MAIN_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION_MAIN_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDE: Encoding =
-        Encoding::new(
-            IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDE,
-        );
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDE_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDE_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDELAYOUT_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDELAYOUT_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDEMASTER_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDEMASTER_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDEUPDATEINFO_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDEUPDATEINFO_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDESHOW: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDESHOW);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDESHOW_MAIN_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_SLIDESHOW_MAIN_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TABLESTYLES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TABLESTYLES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TAGS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TAGS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TEMPLATE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TEMPLATE);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TEMPLATE_MAIN_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_TEMPLATE_MAIN_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_VIEWPROPS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_VIEWPROPS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CALCCHAIN_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CALCCHAIN_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CHARTSHEET_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CHARTSHEET_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_COMMENTS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_COMMENTS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CONNECTIONS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_CONNECTIONS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_DIALOGSHEET_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_DIALOGSHEET_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_EXTERNALLINK_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_EXTERNALLINK_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTCACHEDEFINITION_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTCACHEDEFINITION_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTCACHERECORDS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTCACHERECORDS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTTABLE_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_PIVOTTABLE_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_QUERYTABLE_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_QUERYTABLE_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_REVISIONHEADERS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_REVISIONHEADERS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_REVISIONLOG_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_REVISIONLOG_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHAREDSTRINGS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHAREDSTRINGS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET: Encoding =
-        Encoding::new(
-            IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET,
-        );
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET_MAIN_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET_MAIN_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEETMETADATA_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEETMETADATA_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_STYLES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_STYLES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TABLE_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TABLE_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TABLESINGLECELLS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TABLESINGLECELLS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TEMPLATE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TEMPLATE);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TEMPLATE_MAIN_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_TEMPLATE_MAIN_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_USERNAMES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_USERNAMES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_VOLATILEDEPENDENCIES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_VOLATILEDEPENDENCIES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_WORKSHEET_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_WORKSHEET_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_THEME_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_THEME_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_THEMEOVERRIDE_XML: Encoding =
-        Encoding::new(
-            IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_THEMEOVERRIDE_XML,
-        );
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_VMLDRAWING: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_VMLDRAWING,
-    );
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_COMMENTS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_COMMENTS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT_GLOSSARY_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT_GLOSSARY_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT_MAIN_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_DOCUMENT_MAIN_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_ENDNOTES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_ENDNOTES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FONTTABLE_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FONTTABLE_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FOOTER_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FOOTER_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FOOTNOTES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_FOOTNOTES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_NUMBERING_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_NUMBERING_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_SETTINGS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_SETTINGS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_STYLES_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_STYLES_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_TEMPLATE: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_TEMPLATE);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_TEMPLATE_MAIN_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_TEMPLATE_MAIN_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_WEBSETTINGS_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_WORDPROCESSINGML_WEBSETTINGS_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_PACKAGE_CORE_PROPERTIES_XML: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_PACKAGE_CORE_PROPERTIES_XML,
-    );
-    pub const APPLICATION_VND_OPENXMLFORMATS_PACKAGE_DIGITAL_SIGNATURE_XMLSIGNATURE_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_PACKAGE_DIGITAL_SIGNATURE_XMLSIGNATURE_XML);
-    pub const APPLICATION_VND_OPENXMLFORMATS_PACKAGE_RELATIONSHIPS_XML: Encoding = Encoding::new(
-        IanaEncodingMapping::APPLICATION_VND_OPENXMLFORMATS_PACKAGE_RELATIONSHIPS_XML,
-    );
-    pub const APPLICATION_VND_ORACLE_RESOURCE_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ORACLE_RESOURCE_JSON);
-    pub const APPLICATION_VND_ORANGE_INDATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ORANGE_INDATA);
-    pub const APPLICATION_VND_OSA_NETDEPLOY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OSA_NETDEPLOY);
-    pub const APPLICATION_VND_OSGEO_MAPGUIDE_PACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OSGEO_MAPGUIDE_PACKAGE);
-    pub const APPLICATION_VND_OSGI_BUNDLE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OSGI_BUNDLE);
-    pub const APPLICATION_VND_OSGI_DP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OSGI_DP);
-    pub const APPLICATION_VND_OSGI_SUBSYSTEM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OSGI_SUBSYSTEM);
-    pub const APPLICATION_VND_OTPS_CT_KIP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OTPS_CT_KIP_XML);
-    pub const APPLICATION_VND_OXLI_COUNTGRAPH: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_OXLI_COUNTGRAPH);
-    pub const APPLICATION_VND_PAGERDUTY_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PAGERDUTY_JSON);
-    pub const APPLICATION_VND_PALM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PALM);
-    pub const APPLICATION_VND_PANOPLY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PANOPLY);
-    pub const APPLICATION_VND_PAOS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PAOS_XML);
-    pub const APPLICATION_VND_PATENTDIVE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PATENTDIVE);
-    pub const APPLICATION_VND_PATIENTECOMMSDOC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PATIENTECOMMSDOC);
-    pub const APPLICATION_VND_PAWAAFILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PAWAAFILE);
-    pub const APPLICATION_VND_PCOS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PCOS);
-    pub const APPLICATION_VND_PG_FORMAT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PG_FORMAT);
-    pub const APPLICATION_VND_PG_OSASLI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PG_OSASLI);
-    pub const APPLICATION_VND_PIACCESS_APPLICATION_LICENCE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PIACCESS_APPLICATION_LICENCE);
-    pub const APPLICATION_VND_PICSEL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PICSEL);
-    pub const APPLICATION_VND_PMI_WIDGET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PMI_WIDGET);
-    pub const APPLICATION_VND_POC_GROUP_ADVERTISEMENT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_POC_GROUP_ADVERTISEMENT_XML);
-    pub const APPLICATION_VND_POCKETLEARN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_POCKETLEARN);
-    pub const APPLICATION_VND_POWERBUILDER6: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_POWERBUILDER6);
-    pub const APPLICATION_VND_POWERBUILDER6_S: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_POWERBUILDER6_S);
-    pub const APPLICATION_VND_POWERBUILDER7: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_POWERBUILDER7);
-    pub const APPLICATION_VND_POWERBUILDER7_S: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_POWERBUILDER7_S);
-    pub const APPLICATION_VND_POWERBUILDER75: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_POWERBUILDER75);
-    pub const APPLICATION_VND_POWERBUILDER75_S: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_POWERBUILDER75_S);
-    pub const APPLICATION_VND_PREMINET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PREMINET);
-    pub const APPLICATION_VND_PREVIEWSYSTEMS_BOX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PREVIEWSYSTEMS_BOX);
-    pub const APPLICATION_VND_PROTEUS_MAGAZINE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PROTEUS_MAGAZINE);
-    pub const APPLICATION_VND_PSFS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PSFS);
-    pub const APPLICATION_VND_PT_MUNDUSMUNDI: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PT_MUNDUSMUNDI);
-    pub const APPLICATION_VND_PUBLISHARE_DELTA_TREE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PUBLISHARE_DELTA_TREE);
-    pub const APPLICATION_VND_PVI_PTID1: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PVI_PTID1);
-    pub const APPLICATION_VND_PWG_MULTIPLEXED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PWG_MULTIPLEXED);
-    pub const APPLICATION_VND_PWG_XHTML_PRINT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_PWG_XHTML_PRINT_XML);
-    pub const APPLICATION_VND_QUALCOMM_BREW_APP_RES: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_QUALCOMM_BREW_APP_RES);
-    pub const APPLICATION_VND_QUARANTAINENET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_QUARANTAINENET);
-    pub const APPLICATION_VND_QUOBJECT_QUOXDOCUMENT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_QUOBJECT_QUOXDOCUMENT);
-    pub const APPLICATION_VND_RADISYS_MOML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MOML_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_AUDIT_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_CONF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_AUDIT_CONF_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_CONN_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_AUDIT_CONN_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_DIALOG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_AUDIT_DIALOG_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_AUDIT_STREAM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_AUDIT_STREAM_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_CONF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_CONF_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_DIALOG_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_BASE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_DIALOG_BASE_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_FAX_DETECT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_DIALOG_FAX_DETECT_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_FAX_SENDRECV_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_DIALOG_FAX_SENDRECV_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_GROUP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_DIALOG_GROUP_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_SPEECH_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_DIALOG_SPEECH_XML);
-    pub const APPLICATION_VND_RADISYS_MSML_DIALOG_TRANSFORM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RADISYS_MSML_DIALOG_TRANSFORM_XML);
-    pub const APPLICATION_VND_RAINSTOR_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RAINSTOR_DATA);
-    pub const APPLICATION_VND_RAPID: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RAPID);
-    pub const APPLICATION_VND_RAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RAR);
-    pub const APPLICATION_VND_REALVNC_BED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_REALVNC_BED);
-    pub const APPLICATION_VND_RECORDARE_MUSICXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RECORDARE_MUSICXML);
-    pub const APPLICATION_VND_RECORDARE_MUSICXML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RECORDARE_MUSICXML_XML);
-    pub const APPLICATION_VND_RELPIPE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RELPIPE);
-    pub const APPLICATION_VND_RESILIENT_LOGIC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RESILIENT_LOGIC);
-    pub const APPLICATION_VND_RESTFUL_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RESTFUL_JSON);
-    pub const APPLICATION_VND_RIG_CRYPTONOTE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RIG_CRYPTONOTE);
-    pub const APPLICATION_VND_ROUTE66_LINK66_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ROUTE66_LINK66_XML);
-    pub const APPLICATION_VND_RS_274X: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RS_274X);
-    pub const APPLICATION_VND_RUCKUS_DOWNLOAD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_RUCKUS_DOWNLOAD);
-    pub const APPLICATION_VND_S3SMS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_S3SMS);
-    pub const APPLICATION_VND_SAILINGTRACKER_TRACK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SAILINGTRACKER_TRACK);
-    pub const APPLICATION_VND_SAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SAR);
-    pub const APPLICATION_VND_SBM_CID: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SBM_CID);
-    pub const APPLICATION_VND_SBM_MID2: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SBM_MID2);
-    pub const APPLICATION_VND_SCRIBUS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SCRIBUS);
-    pub const APPLICATION_VND_SEALED_3DF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_3DF);
-    pub const APPLICATION_VND_SEALED_CSF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_CSF);
-    pub const APPLICATION_VND_SEALED_DOC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_DOC);
-    pub const APPLICATION_VND_SEALED_EML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_EML);
-    pub const APPLICATION_VND_SEALED_MHT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_MHT);
-    pub const APPLICATION_VND_SEALED_NET: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_NET);
-    pub const APPLICATION_VND_SEALED_PPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_PPT);
-    pub const APPLICATION_VND_SEALED_TIFF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_TIFF);
-    pub const APPLICATION_VND_SEALED_XLS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALED_XLS);
-    pub const APPLICATION_VND_SEALEDMEDIA_SOFTSEAL_HTML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALEDMEDIA_SOFTSEAL_HTML);
-    pub const APPLICATION_VND_SEALEDMEDIA_SOFTSEAL_PDF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEALEDMEDIA_SOFTSEAL_PDF);
-    pub const APPLICATION_VND_SEEMAIL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEEMAIL);
-    pub const APPLICATION_VND_SEIS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEIS_JSON);
-    pub const APPLICATION_VND_SEMA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEMA);
-    pub const APPLICATION_VND_SEMD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEMD);
-    pub const APPLICATION_VND_SEMF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SEMF);
-    pub const APPLICATION_VND_SHADE_SAVE_FILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHADE_SAVE_FILE);
-    pub const APPLICATION_VND_SHANA_INFORMED_FORMDATA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHANA_INFORMED_FORMDATA);
-    pub const APPLICATION_VND_SHANA_INFORMED_FORMTEMPLATE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHANA_INFORMED_FORMTEMPLATE);
-    pub const APPLICATION_VND_SHANA_INFORMED_INTERCHANGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHANA_INFORMED_INTERCHANGE);
-    pub const APPLICATION_VND_SHANA_INFORMED_PACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHANA_INFORMED_PACKAGE);
-    pub const APPLICATION_VND_SHOOTPROOF_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHOOTPROOF_JSON);
-    pub const APPLICATION_VND_SHOPKICK_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHOPKICK_JSON);
-    pub const APPLICATION_VND_SHP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHP);
-    pub const APPLICATION_VND_SHX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SHX);
-    pub const APPLICATION_VND_SIGROK_SESSION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SIGROK_SESSION);
-    pub const APPLICATION_VND_SIREN_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SIREN_JSON);
-    pub const APPLICATION_VND_SMAF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SMAF);
-    pub const APPLICATION_VND_SMART_NOTEBOOK: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SMART_NOTEBOOK);
-    pub const APPLICATION_VND_SMART_TEACHER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SMART_TEACHER);
-    pub const APPLICATION_VND_SMINTIO_PORTALS_ARCHIVE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SMINTIO_PORTALS_ARCHIVE);
-    pub const APPLICATION_VND_SNESDEV_PAGE_TABLE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SNESDEV_PAGE_TABLE);
-    pub const APPLICATION_VND_SOFTWARE602_FILLER_FORM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SOFTWARE602_FILLER_FORM_XML);
-    pub const APPLICATION_VND_SOFTWARE602_FILLER_FORM_XML_ZIP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SOFTWARE602_FILLER_FORM_XML_ZIP);
-    pub const APPLICATION_VND_SOLENT_SDKM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SOLENT_SDKM_XML);
-    pub const APPLICATION_VND_SPOTFIRE_DXP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SPOTFIRE_DXP);
-    pub const APPLICATION_VND_SPOTFIRE_SFS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SPOTFIRE_SFS);
-    pub const APPLICATION_VND_SQLITE3: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SQLITE3);
-    pub const APPLICATION_VND_SSS_COD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SSS_COD);
-    pub const APPLICATION_VND_SSS_DTF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SSS_DTF);
-    pub const APPLICATION_VND_SSS_NTF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SSS_NTF);
-    pub const APPLICATION_VND_STEPMANIA_PACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_STEPMANIA_PACKAGE);
-    pub const APPLICATION_VND_STEPMANIA_STEPCHART: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_STEPMANIA_STEPCHART);
-    pub const APPLICATION_VND_STREET_STREAM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_STREET_STREAM);
-    pub const APPLICATION_VND_SUN_WADL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SUN_WADL_XML);
-    pub const APPLICATION_VND_SUS_CALENDAR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SUS_CALENDAR);
-    pub const APPLICATION_VND_SVD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SVD);
-    pub const APPLICATION_VND_SWIFTVIEW_ICS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SWIFTVIEW_ICS);
-    pub const APPLICATION_VND_SYBYL_MOL2: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYBYL_MOL2);
-    pub const APPLICATION_VND_SYCLE_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYCLE_XML);
-    pub const APPLICATION_VND_SYFT_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYFT_JSON);
-    pub const APPLICATION_VND_SYNCML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_XML);
-    pub const APPLICATION_VND_SYNCML_DM_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_DM_WBXML);
-    pub const APPLICATION_VND_SYNCML_DM_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_DM_XML);
-    pub const APPLICATION_VND_SYNCML_DM_NOTIFICATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_DM_NOTIFICATION);
-    pub const APPLICATION_VND_SYNCML_DMDDF_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_DMDDF_WBXML);
-    pub const APPLICATION_VND_SYNCML_DMDDF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_DMDDF_XML);
-    pub const APPLICATION_VND_SYNCML_DMTNDS_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_DMTNDS_WBXML);
-    pub const APPLICATION_VND_SYNCML_DMTNDS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_DMTNDS_XML);
-    pub const APPLICATION_VND_SYNCML_DS_NOTIFICATION: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_SYNCML_DS_NOTIFICATION);
-    pub const APPLICATION_VND_TABLESCHEMA_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TABLESCHEMA_JSON);
-    pub const APPLICATION_VND_TAO_INTENT_MODULE_ARCHIVE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TAO_INTENT_MODULE_ARCHIVE);
-    pub const APPLICATION_VND_TCPDUMP_PCAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TCPDUMP_PCAP);
-    pub const APPLICATION_VND_THINK_CELL_PPTTC_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_THINK_CELL_PPTTC_JSON);
-    pub const APPLICATION_VND_TMD_MEDIAFLEX_API_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TMD_MEDIAFLEX_API_XML);
-    pub const APPLICATION_VND_TML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TML);
-    pub const APPLICATION_VND_TMOBILE_LIVETV: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TMOBILE_LIVETV);
-    pub const APPLICATION_VND_TRI_ONESOURCE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TRI_ONESOURCE);
-    pub const APPLICATION_VND_TRID_TPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TRID_TPT);
-    pub const APPLICATION_VND_TRISCAPE_MXS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TRISCAPE_MXS);
-    pub const APPLICATION_VND_TRUEAPP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TRUEAPP);
-    pub const APPLICATION_VND_TRUEDOC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_TRUEDOC);
-    pub const APPLICATION_VND_UBISOFT_WEBPLAYER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UBISOFT_WEBPLAYER);
-    pub const APPLICATION_VND_UFDL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UFDL);
-    pub const APPLICATION_VND_UIQ_THEME: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UIQ_THEME);
-    pub const APPLICATION_VND_UMAJIN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UMAJIN);
-    pub const APPLICATION_VND_UNITY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UNITY);
-    pub const APPLICATION_VND_UOML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UOML_XML);
-    pub const APPLICATION_VND_UPLANET_ALERT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_ALERT);
-    pub const APPLICATION_VND_UPLANET_ALERT_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_ALERT_WBXML);
-    pub const APPLICATION_VND_UPLANET_BEARER_CHOICE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_BEARER_CHOICE);
-    pub const APPLICATION_VND_UPLANET_BEARER_CHOICE_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_BEARER_CHOICE_WBXML);
-    pub const APPLICATION_VND_UPLANET_CACHEOP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_CACHEOP);
-    pub const APPLICATION_VND_UPLANET_CACHEOP_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_CACHEOP_WBXML);
-    pub const APPLICATION_VND_UPLANET_CHANNEL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_CHANNEL);
-    pub const APPLICATION_VND_UPLANET_CHANNEL_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_CHANNEL_WBXML);
-    pub const APPLICATION_VND_UPLANET_LIST: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_LIST);
-    pub const APPLICATION_VND_UPLANET_LIST_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_LIST_WBXML);
-    pub const APPLICATION_VND_UPLANET_LISTCMD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_LISTCMD);
-    pub const APPLICATION_VND_UPLANET_LISTCMD_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_LISTCMD_WBXML);
-    pub const APPLICATION_VND_UPLANET_SIGNAL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_UPLANET_SIGNAL);
-    pub const APPLICATION_VND_URI_MAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_URI_MAP);
-    pub const APPLICATION_VND_VALVE_SOURCE_MATERIAL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VALVE_SOURCE_MATERIAL);
-    pub const APPLICATION_VND_VCX: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VCX);
-    pub const APPLICATION_VND_VD_STUDY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VD_STUDY);
-    pub const APPLICATION_VND_VECTORWORKS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VECTORWORKS);
-    pub const APPLICATION_VND_VEL_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VEL_JSON);
-    pub const APPLICATION_VND_VERIMATRIX_VCAS: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VERIMATRIX_VCAS);
-    pub const APPLICATION_VND_VERITONE_AION_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VERITONE_AION_JSON);
-    pub const APPLICATION_VND_VERYANT_THIN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VERYANT_THIN);
-    pub const APPLICATION_VND_VES_ENCRYPTED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VES_ENCRYPTED);
-    pub const APPLICATION_VND_VIDSOFT_VIDCONFERENCE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VIDSOFT_VIDCONFERENCE);
-    pub const APPLICATION_VND_VISIO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VISIO);
-    pub const APPLICATION_VND_VISIONARY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VISIONARY);
-    pub const APPLICATION_VND_VIVIDENCE_SCRIPTFILE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VIVIDENCE_SCRIPTFILE);
-    pub const APPLICATION_VND_VSF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_VSF);
-    pub const APPLICATION_VND_WAP_SIC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WAP_SIC);
-    pub const APPLICATION_VND_WAP_SLC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WAP_SLC);
-    pub const APPLICATION_VND_WAP_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WAP_WBXML);
-    pub const APPLICATION_VND_WAP_WMLC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WAP_WMLC);
-    pub const APPLICATION_VND_WAP_WMLSCRIPTC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WAP_WMLSCRIPTC);
-    pub const APPLICATION_VND_WASMFLOW_WAFL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WASMFLOW_WAFL);
-    pub const APPLICATION_VND_WEBTURBO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WEBTURBO);
-    pub const APPLICATION_VND_WFA_DPP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WFA_DPP);
-    pub const APPLICATION_VND_WFA_P2P: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WFA_P2P);
-    pub const APPLICATION_VND_WFA_WSC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WFA_WSC);
-    pub const APPLICATION_VND_WINDOWS_DEVICEPAIRING: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WINDOWS_DEVICEPAIRING);
-    pub const APPLICATION_VND_WMC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WMC);
-    pub const APPLICATION_VND_WMF_BOOTSTRAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WMF_BOOTSTRAP);
-    pub const APPLICATION_VND_WOLFRAM_MATHEMATICA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WOLFRAM_MATHEMATICA);
-    pub const APPLICATION_VND_WOLFRAM_MATHEMATICA_PACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WOLFRAM_MATHEMATICA_PACKAGE);
-    pub const APPLICATION_VND_WOLFRAM_PLAYER: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WOLFRAM_PLAYER);
-    pub const APPLICATION_VND_WORDLIFT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WORDLIFT);
-    pub const APPLICATION_VND_WORDPERFECT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WORDPERFECT);
-    pub const APPLICATION_VND_WQD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WQD);
-    pub const APPLICATION_VND_WRQ_HP3000_LABELLED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WRQ_HP3000_LABELLED);
-    pub const APPLICATION_VND_WT_STF: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WT_STF);
-    pub const APPLICATION_VND_WV_CSP_WBXML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WV_CSP_WBXML);
-    pub const APPLICATION_VND_WV_CSP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WV_CSP_XML);
-    pub const APPLICATION_VND_WV_SSP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_WV_SSP_XML);
-    pub const APPLICATION_VND_XACML_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XACML_JSON);
-    pub const APPLICATION_VND_XARA: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XARA);
-    pub const APPLICATION_VND_XECRETS_ENCRYPTED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XECRETS_ENCRYPTED);
-    pub const APPLICATION_VND_XFDL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XFDL);
-    pub const APPLICATION_VND_XFDL_WEBFORM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XFDL_WEBFORM);
-    pub const APPLICATION_VND_XMI_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XMI_XML);
-    pub const APPLICATION_VND_XMPIE_CPKG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XMPIE_CPKG);
-    pub const APPLICATION_VND_XMPIE_DPKG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XMPIE_DPKG);
-    pub const APPLICATION_VND_XMPIE_PLAN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XMPIE_PLAN);
-    pub const APPLICATION_VND_XMPIE_PPKG: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XMPIE_PPKG);
-    pub const APPLICATION_VND_XMPIE_XLIM: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_XMPIE_XLIM);
-    pub const APPLICATION_VND_YAMAHA_HV_DIC: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_HV_DIC);
-    pub const APPLICATION_VND_YAMAHA_HV_SCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_HV_SCRIPT);
-    pub const APPLICATION_VND_YAMAHA_HV_VOICE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_HV_VOICE);
-    pub const APPLICATION_VND_YAMAHA_OPENSCOREFORMAT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_OPENSCOREFORMAT);
-    pub const APPLICATION_VND_YAMAHA_OPENSCOREFORMAT_OSFPVG_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_OPENSCOREFORMAT_OSFPVG_XML);
-    pub const APPLICATION_VND_YAMAHA_REMOTE_SETUP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_REMOTE_SETUP);
-    pub const APPLICATION_VND_YAMAHA_SMAF_AUDIO: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_SMAF_AUDIO);
-    pub const APPLICATION_VND_YAMAHA_SMAF_PHRASE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_SMAF_PHRASE);
-    pub const APPLICATION_VND_YAMAHA_THROUGH_NGN: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_THROUGH_NGN);
-    pub const APPLICATION_VND_YAMAHA_TUNNEL_UDPENCAP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAMAHA_TUNNEL_UDPENCAP);
-    pub const APPLICATION_VND_YAOWEME: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YAOWEME);
-    pub const APPLICATION_VND_YELLOWRIVER_CUSTOM_MENU: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YELLOWRIVER_CUSTOM_MENU);
-    pub const APPLICATION_VND_YOUTUBE_YT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_YOUTUBE_YT);
-    pub const APPLICATION_VND_ZUL: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ZUL);
-    pub const APPLICATION_VND_ZZAZZ_DECK_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VND_ZZAZZ_DECK_XML);
-    pub const APPLICATION_VOICEXML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VOICEXML_XML);
-    pub const APPLICATION_VOUCHER_CMS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VOUCHER_CMS_JSON);
-    pub const APPLICATION_VQ_RTCPXR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_VQ_RTCPXR);
-    pub const APPLICATION_WASM: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_WASM);
-    pub const APPLICATION_WATCHERINFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_WATCHERINFO_XML);
-    pub const APPLICATION_WEBPUSH_OPTIONS_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_WEBPUSH_OPTIONS_JSON);
-    pub const APPLICATION_WHOISPP_QUERY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_WHOISPP_QUERY);
-    pub const APPLICATION_WHOISPP_RESPONSE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_WHOISPP_RESPONSE);
-    pub const APPLICATION_WIDGET: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_WIDGET);
-    pub const APPLICATION_WITA: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_WITA);
-    pub const APPLICATION_WORDPERFECT5_1: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_WORDPERFECT5_1);
-    pub const APPLICATION_WSDL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_WSDL_XML);
-    pub const APPLICATION_WSPOLICY_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_WSPOLICY_XML);
-    pub const APPLICATION_X_PKI_MESSAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_X_PKI_MESSAGE);
-    pub const APPLICATION_X_WWW_FORM_URLENCODED: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_X_WWW_FORM_URLENCODED);
-    pub const APPLICATION_X_X509_CA_CERT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_X_X509_CA_CERT);
-    pub const APPLICATION_X_X509_CA_RA_CERT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_X_X509_CA_RA_CERT);
-    pub const APPLICATION_X_X509_NEXT_CA_CERT: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_X_X509_NEXT_CA_CERT);
-    pub const APPLICATION_X400_BP: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_X400_BP);
-    pub const APPLICATION_XACML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XACML_XML);
-    pub const APPLICATION_XCAP_ATT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XCAP_ATT_XML);
-    pub const APPLICATION_XCAP_CAPS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XCAP_CAPS_XML);
-    pub const APPLICATION_XCAP_DIFF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XCAP_DIFF_XML);
-    pub const APPLICATION_XCAP_EL_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XCAP_EL_XML);
-    pub const APPLICATION_XCAP_ERROR_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XCAP_ERROR_XML);
-    pub const APPLICATION_XCAP_NS_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XCAP_NS_XML);
-    pub const APPLICATION_XCON_CONFERENCE_INFO_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XCON_CONFERENCE_INFO_XML);
-    pub const APPLICATION_XCON_CONFERENCE_INFO_DIFF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XCON_CONFERENCE_INFO_DIFF_XML);
-    pub const APPLICATION_XENC_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XENC_XML);
-    pub const APPLICATION_XFDF: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_XFDF);
-    pub const APPLICATION_XHTML_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XHTML_XML);
-    pub const APPLICATION_XLIFF_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XLIFF_XML);
-    pub const APPLICATION_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_XML);
-    pub const APPLICATION_XML_DTD: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XML_DTD);
-    pub const APPLICATION_XML_EXTERNAL_PARSED_ENTITY: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XML_EXTERNAL_PARSED_ENTITY);
-    pub const APPLICATION_XML_PATCH_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XML_PATCH_XML);
-    pub const APPLICATION_XMPP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XMPP_XML);
-    pub const APPLICATION_XOP_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XOP_XML);
-    pub const APPLICATION_XSLT_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_XSLT_XML);
-    pub const APPLICATION_XV_XML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_XV_XML);
-    pub const APPLICATION_YAML: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_YAML);
-    pub const APPLICATION_YANG: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_YANG);
-    pub const APPLICATION_YANG_DATA_CBOR: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_YANG_DATA_CBOR);
-    pub const APPLICATION_YANG_DATA_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_YANG_DATA_JSON);
-    pub const APPLICATION_YANG_DATA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_YANG_DATA_XML);
-    pub const APPLICATION_YANG_PATCH_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_YANG_PATCH_JSON);
-    pub const APPLICATION_YANG_PATCH_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_YANG_PATCH_XML);
-    pub const APPLICATION_YANG_SID_JSON: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_YANG_SID_JSON);
-    pub const APPLICATION_YIN_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::APPLICATION_YIN_XML);
-    pub const APPLICATION_ZIP: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ZIP);
-    pub const APPLICATION_ZLIB: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ZLIB);
-    pub const APPLICATION_ZSTD: Encoding = Encoding::new(IanaEncodingMapping::APPLICATION_ZSTD);
-    pub const AUDIO_1D_INTERLEAVED_PARITYFEC: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_1D_INTERLEAVED_PARITYFEC);
-    pub const AUDIO_32KADPCM: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_32KADPCM);
-    pub const AUDIO_3GPP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_3GPP);
-    pub const AUDIO_3GPP2: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_3GPP2);
-    pub const AUDIO_AMR: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_AMR);
-    pub const AUDIO_AMR_WB: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_AMR_WB);
-    pub const AUDIO_ATRAC_ADVANCED_LOSSLESS: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_ATRAC_ADVANCED_LOSSLESS);
-    pub const AUDIO_ATRAC_X: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_ATRAC_X);
-    pub const AUDIO_ATRAC3: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_ATRAC3);
-    pub const AUDIO_BV16: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_BV16);
-    pub const AUDIO_BV32: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_BV32);
-    pub const AUDIO_CN: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_CN);
-    pub const AUDIO_DAT12: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_DAT12);
-    pub const AUDIO_DV: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_DV);
-    pub const AUDIO_DVI4: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_DVI4);
-    pub const AUDIO_EVRC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRC);
-    pub const AUDIO_EVRC_QCP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRC_QCP);
-    pub const AUDIO_EVRC0: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRC0);
-    pub const AUDIO_EVRC1: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRC1);
-    pub const AUDIO_EVRCB: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCB);
-    pub const AUDIO_EVRCB0: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCB0);
-    pub const AUDIO_EVRCB1: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCB1);
-    pub const AUDIO_EVRCNW: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCNW);
-    pub const AUDIO_EVRCNW0: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCNW0);
-    pub const AUDIO_EVRCNW1: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCNW1);
-    pub const AUDIO_EVRCWB: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCWB);
-    pub const AUDIO_EVRCWB0: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCWB0);
-    pub const AUDIO_EVRCWB1: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVRCWB1);
-    pub const AUDIO_EVS: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EVS);
-    pub const AUDIO_G711_0: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G711_0);
-    pub const AUDIO_G719: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G719);
-    pub const AUDIO_G722: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G722);
-    pub const AUDIO_G7221: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G7221);
-    pub const AUDIO_G723: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G723);
-    pub const AUDIO_G726_16: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G726_16);
-    pub const AUDIO_G726_24: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G726_24);
-    pub const AUDIO_G726_32: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G726_32);
-    pub const AUDIO_G726_40: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G726_40);
-    pub const AUDIO_G728: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G728);
-    pub const AUDIO_G729: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G729);
-    pub const AUDIO_G7291: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G7291);
-    pub const AUDIO_G729D: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G729D);
-    pub const AUDIO_G729E: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_G729E);
-    pub const AUDIO_GSM: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_GSM);
-    pub const AUDIO_GSM_EFR: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_GSM_EFR);
-    pub const AUDIO_GSM_HR_08: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_GSM_HR_08);
-    pub const AUDIO_L16: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_L16);
-    pub const AUDIO_L20: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_L20);
-    pub const AUDIO_L24: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_L24);
-    pub const AUDIO_L8: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_L8);
-    pub const AUDIO_LPC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_LPC);
-    pub const AUDIO_MELP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MELP);
-    pub const AUDIO_MELP1200: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MELP1200);
-    pub const AUDIO_MELP2400: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MELP2400);
-    pub const AUDIO_MELP600: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MELP600);
-    pub const AUDIO_MP4A_LATM: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MP4A_LATM);
-    pub const AUDIO_MPA: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MPA);
-    pub const AUDIO_PCMA: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_PCMA);
-    pub const AUDIO_PCMA_WB: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_PCMA_WB);
-    pub const AUDIO_PCMU: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_PCMU);
-    pub const AUDIO_PCMU_WB: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_PCMU_WB);
-    pub const AUDIO_QCELP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_QCELP);
-    pub const AUDIO_RED: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_RED);
-    pub const AUDIO_SMV: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_SMV);
-    pub const AUDIO_SMV_QCP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_SMV_QCP);
-    pub const AUDIO_SMV0: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_SMV0);
-    pub const AUDIO_TETRA_ACELP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_TETRA_ACELP);
-    pub const AUDIO_TETRA_ACELP_BB: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_TETRA_ACELP_BB);
-    pub const AUDIO_TSVCIS: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_TSVCIS);
-    pub const AUDIO_UEMCLIP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_UEMCLIP);
-    pub const AUDIO_VDVI: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VDVI);
-    pub const AUDIO_VMR_WB: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VMR_WB);
-    pub const AUDIO_AAC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_AAC);
-    pub const AUDIO_AC3: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_AC3);
-    pub const AUDIO_AMR_WB_P: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_AMR_WB_P);
-    pub const AUDIO_APTX: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_APTX);
-    pub const AUDIO_ASC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_ASC);
-    pub const AUDIO_BASIC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_BASIC);
-    pub const AUDIO_CLEARMODE: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_CLEARMODE);
-    pub const AUDIO_DLS: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_DLS);
-    pub const AUDIO_DSR_ES201108: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_DSR_ES201108);
-    pub const AUDIO_DSR_ES202050: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_DSR_ES202050);
-    pub const AUDIO_DSR_ES202211: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_DSR_ES202211);
-    pub const AUDIO_DSR_ES202212: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_DSR_ES202212);
-    pub const AUDIO_EAC3: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EAC3);
-    pub const AUDIO_ENCAPRTP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_ENCAPRTP);
-    pub const AUDIO_EXAMPLE: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_EXAMPLE);
-    pub const AUDIO_FLEXFEC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_FLEXFEC);
-    pub const AUDIO_FWDRED: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_FWDRED);
-    pub const AUDIO_ILBC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_ILBC);
-    pub const AUDIO_IP_MR_V2_5: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_IP_MR_V2_5);
-    pub const AUDIO_MATROSKA: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MATROSKA);
-    pub const AUDIO_MHAS: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MHAS);
-    pub const AUDIO_MOBILE_XMF: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MOBILE_XMF);
-    pub const AUDIO_MP4: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MP4);
-    pub const AUDIO_MPA_ROBUST: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MPA_ROBUST);
-    pub const AUDIO_MPEG: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_MPEG);
-    pub const AUDIO_MPEG4_GENERIC: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_MPEG4_GENERIC);
-    pub const AUDIO_OGG: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_OGG);
-    pub const AUDIO_OPUS: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_OPUS);
-    pub const AUDIO_PARITYFEC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_PARITYFEC);
-    pub const AUDIO_PRS_SID: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_PRS_SID);
-    pub const AUDIO_RAPTORFEC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_RAPTORFEC);
-    pub const AUDIO_RTP_ENC_AESCM128: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_RTP_ENC_AESCM128);
-    pub const AUDIO_RTP_MIDI: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_RTP_MIDI);
-    pub const AUDIO_RTPLOOPBACK: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_RTPLOOPBACK);
-    pub const AUDIO_RTX: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_RTX);
-    pub const AUDIO_SCIP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_SCIP);
-    pub const AUDIO_SOFA: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_SOFA);
-    pub const AUDIO_SP_MIDI: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_SP_MIDI);
-    pub const AUDIO_SPEEX: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_SPEEX);
-    pub const AUDIO_T140C: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_T140C);
-    pub const AUDIO_T38: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_T38);
-    pub const AUDIO_TELEPHONE_EVENT: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_TELEPHONE_EVENT);
-    pub const AUDIO_TONE: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_TONE);
-    pub const AUDIO_ULPFEC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_ULPFEC);
-    pub const AUDIO_USAC: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_USAC);
-    pub const AUDIO_VND_3GPP_IUFP: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_3GPP_IUFP);
-    pub const AUDIO_VND_4SB: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_4SB);
-    pub const AUDIO_VND_CELP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_CELP);
-    pub const AUDIO_VND_AUDIOKOZ: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_AUDIOKOZ);
-    pub const AUDIO_VND_CISCO_NSE: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_CISCO_NSE);
-    pub const AUDIO_VND_CMLES_RADIO_EVENTS: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_CMLES_RADIO_EVENTS);
-    pub const AUDIO_VND_CNS_ANP1: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_CNS_ANP1);
-    pub const AUDIO_VND_CNS_INF1: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_CNS_INF1);
-    pub const AUDIO_VND_DECE_AUDIO: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DECE_AUDIO);
-    pub const AUDIO_VND_DIGITAL_WINDS: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DIGITAL_WINDS);
-    pub const AUDIO_VND_DLNA_ADTS: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DLNA_ADTS);
-    pub const AUDIO_VND_DOLBY_HEAAC_1: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DOLBY_HEAAC_1);
-    pub const AUDIO_VND_DOLBY_HEAAC_2: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DOLBY_HEAAC_2);
-    pub const AUDIO_VND_DOLBY_MLP: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DOLBY_MLP);
-    pub const AUDIO_VND_DOLBY_MPS: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DOLBY_MPS);
-    pub const AUDIO_VND_DOLBY_PL2: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DOLBY_PL2);
-    pub const AUDIO_VND_DOLBY_PL2X: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DOLBY_PL2X);
-    pub const AUDIO_VND_DOLBY_PL2Z: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DOLBY_PL2Z);
-    pub const AUDIO_VND_DOLBY_PULSE_1: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_DOLBY_PULSE_1);
-    pub const AUDIO_VND_DRA: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_DRA);
-    pub const AUDIO_VND_DTS: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_DTS);
-    pub const AUDIO_VND_DTS_HD: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_DTS_HD);
-    pub const AUDIO_VND_DTS_UHD: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_DTS_UHD);
-    pub const AUDIO_VND_DVB_FILE: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_DVB_FILE);
-    pub const AUDIO_VND_EVERAD_PLJ: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_EVERAD_PLJ);
-    pub const AUDIO_VND_HNS_AUDIO: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_HNS_AUDIO);
-    pub const AUDIO_VND_LUCENT_VOICE: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_LUCENT_VOICE);
-    pub const AUDIO_VND_MS_PLAYREADY_MEDIA_PYA: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_MS_PLAYREADY_MEDIA_PYA);
-    pub const AUDIO_VND_NOKIA_MOBILE_XMF: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_NOKIA_MOBILE_XMF);
-    pub const AUDIO_VND_NORTEL_VBK: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_NORTEL_VBK);
-    pub const AUDIO_VND_NUERA_ECELP4800: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_NUERA_ECELP4800);
-    pub const AUDIO_VND_NUERA_ECELP7470: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_NUERA_ECELP7470);
-    pub const AUDIO_VND_NUERA_ECELP9600: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_NUERA_ECELP9600);
-    pub const AUDIO_VND_OCTEL_SBC: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_OCTEL_SBC);
-    pub const AUDIO_VND_PRESONUS_MULTITRACK: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_PRESONUS_MULTITRACK);
-    pub const AUDIO_VND_QCELP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_QCELP);
-    pub const AUDIO_VND_RHETOREX_32KADPCM: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_RHETOREX_32KADPCM);
-    pub const AUDIO_VND_RIP: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_RIP);
-    pub const AUDIO_VND_SEALEDMEDIA_SOFTSEAL_MPEG: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VND_SEALEDMEDIA_SOFTSEAL_MPEG);
-    pub const AUDIO_VND_VMX_CVSD: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VND_VMX_CVSD);
-    pub const AUDIO_VORBIS: Encoding = Encoding::new(IanaEncodingMapping::AUDIO_VORBIS);
-    pub const AUDIO_VORBIS_CONFIG: Encoding =
-        Encoding::new(IanaEncodingMapping::AUDIO_VORBIS_CONFIG);
-    pub const FONT_COLLECTION: Encoding = Encoding::new(IanaEncodingMapping::FONT_COLLECTION);
-    pub const FONT_OTF: Encoding = Encoding::new(IanaEncodingMapping::FONT_OTF);
-    pub const FONT_SFNT: Encoding = Encoding::new(IanaEncodingMapping::FONT_SFNT);
-    pub const FONT_TTF: Encoding = Encoding::new(IanaEncodingMapping::FONT_TTF);
-    pub const FONT_WOFF: Encoding = Encoding::new(IanaEncodingMapping::FONT_WOFF);
-    pub const FONT_WOFF2: Encoding = Encoding::new(IanaEncodingMapping::FONT_WOFF2);
-    pub const IMAGE_ACES: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_ACES);
-    pub const IMAGE_APNG: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_APNG);
-    pub const IMAGE_AVCI: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_AVCI);
-    pub const IMAGE_AVCS: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_AVCS);
-    pub const IMAGE_AVIF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_AVIF);
-    pub const IMAGE_BMP: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_BMP);
-    pub const IMAGE_CGM: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_CGM);
-    pub const IMAGE_DICOM_RLE: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_DICOM_RLE);
-    pub const IMAGE_DPX: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_DPX);
-    pub const IMAGE_EMF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_EMF);
-    pub const IMAGE_EXAMPLE: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_EXAMPLE);
-    pub const IMAGE_FITS: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_FITS);
-    pub const IMAGE_G3FAX: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_G3FAX);
-    pub const IMAGE_GIF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_GIF);
-    pub const IMAGE_HEIC: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_HEIC);
-    pub const IMAGE_HEIC_SEQUENCE: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_HEIC_SEQUENCE);
-    pub const IMAGE_HEIF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_HEIF);
-    pub const IMAGE_HEIF_SEQUENCE: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_HEIF_SEQUENCE);
-    pub const IMAGE_HEJ2K: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_HEJ2K);
-    pub const IMAGE_HSJ2: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_HSJ2);
-    pub const IMAGE_IEF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_IEF);
-    pub const IMAGE_J2C: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_J2C);
-    pub const IMAGE_JLS: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JLS);
-    pub const IMAGE_JP2: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JP2);
-    pub const IMAGE_JPEG: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JPEG);
-    pub const IMAGE_JPH: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JPH);
-    pub const IMAGE_JPHC: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JPHC);
-    pub const IMAGE_JPM: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JPM);
-    pub const IMAGE_JPX: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JPX);
-    pub const IMAGE_JXR: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JXR);
-    pub const IMAGE_JXRA: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JXRA);
-    pub const IMAGE_JXRS: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JXRS);
-    pub const IMAGE_JXS: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JXS);
-    pub const IMAGE_JXSC: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JXSC);
-    pub const IMAGE_JXSI: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JXSI);
-    pub const IMAGE_JXSS: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_JXSS);
-    pub const IMAGE_KTX: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_KTX);
-    pub const IMAGE_KTX2: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_KTX2);
-    pub const IMAGE_NAPLPS: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_NAPLPS);
-    pub const IMAGE_PNG: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_PNG);
-    pub const IMAGE_PRS_BTIF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_PRS_BTIF);
-    pub const IMAGE_PRS_PTI: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_PRS_PTI);
-    pub const IMAGE_PWG_RASTER: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_PWG_RASTER);
-    pub const IMAGE_SVG_XML: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_SVG_XML);
-    pub const IMAGE_T38: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_T38);
-    pub const IMAGE_TIFF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_TIFF);
-    pub const IMAGE_TIFF_FX: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_TIFF_FX);
-    pub const IMAGE_VND_ADOBE_PHOTOSHOP: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_ADOBE_PHOTOSHOP);
-    pub const IMAGE_VND_AIRZIP_ACCELERATOR_AZV: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_AIRZIP_ACCELERATOR_AZV);
-    pub const IMAGE_VND_CNS_INF2: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_CNS_INF2);
-    pub const IMAGE_VND_DECE_GRAPHIC: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_DECE_GRAPHIC);
-    pub const IMAGE_VND_DJVU: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_DJVU);
-    pub const IMAGE_VND_DVB_SUBTITLE: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_DVB_SUBTITLE);
-    pub const IMAGE_VND_DWG: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_DWG);
-    pub const IMAGE_VND_DXF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_DXF);
-    pub const IMAGE_VND_FASTBIDSHEET: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_FASTBIDSHEET);
-    pub const IMAGE_VND_FPX: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_FPX);
-    pub const IMAGE_VND_FST: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_FST);
-    pub const IMAGE_VND_FUJIXEROX_EDMICS_MMR: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_FUJIXEROX_EDMICS_MMR);
-    pub const IMAGE_VND_FUJIXEROX_EDMICS_RLC: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_FUJIXEROX_EDMICS_RLC);
-    pub const IMAGE_VND_GLOBALGRAPHICS_PGB: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_GLOBALGRAPHICS_PGB);
-    pub const IMAGE_VND_MICROSOFT_ICON: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_MICROSOFT_ICON);
-    pub const IMAGE_VND_MIX: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_MIX);
-    pub const IMAGE_VND_MOZILLA_APNG: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_MOZILLA_APNG);
-    pub const IMAGE_VND_MS_MODI: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_MS_MODI);
-    pub const IMAGE_VND_NET_FPX: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_NET_FPX);
-    pub const IMAGE_VND_PCO_B16: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_PCO_B16);
-    pub const IMAGE_VND_RADIANCE: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_RADIANCE);
-    pub const IMAGE_VND_SEALED_PNG: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_SEALED_PNG);
-    pub const IMAGE_VND_SEALEDMEDIA_SOFTSEAL_GIF: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_SEALEDMEDIA_SOFTSEAL_GIF);
-    pub const IMAGE_VND_SEALEDMEDIA_SOFTSEAL_JPG: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_SEALEDMEDIA_SOFTSEAL_JPG);
-    pub const IMAGE_VND_SVF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_SVF);
-    pub const IMAGE_VND_TENCENT_TAP: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_TENCENT_TAP);
-    pub const IMAGE_VND_VALVE_SOURCE_TEXTURE: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_VALVE_SOURCE_TEXTURE);
-    pub const IMAGE_VND_WAP_WBMP: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_WAP_WBMP);
-    pub const IMAGE_VND_XIFF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_VND_XIFF);
-    pub const IMAGE_VND_ZBRUSH_PCX: Encoding =
-        Encoding::new(IanaEncodingMapping::IMAGE_VND_ZBRUSH_PCX);
-    pub const IMAGE_WEBP: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_WEBP);
-    pub const IMAGE_WMF: Encoding = Encoding::new(IanaEncodingMapping::IMAGE_WMF);
-    pub const MESSAGE_CPIM: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_CPIM);
-    pub const MESSAGE_BHTTP: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_BHTTP);
-    pub const MESSAGE_DELIVERY_STATUS: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_DELIVERY_STATUS);
-    pub const MESSAGE_DISPOSITION_NOTIFICATION: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_DISPOSITION_NOTIFICATION);
-    pub const MESSAGE_EXAMPLE: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_EXAMPLE);
-    pub const MESSAGE_EXTERNAL_BODY: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_EXTERNAL_BODY);
-    pub const MESSAGE_FEEDBACK_REPORT: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_FEEDBACK_REPORT);
-    pub const MESSAGE_GLOBAL: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_GLOBAL);
-    pub const MESSAGE_GLOBAL_DELIVERY_STATUS: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_GLOBAL_DELIVERY_STATUS);
-    pub const MESSAGE_GLOBAL_DISPOSITION_NOTIFICATION: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_GLOBAL_DISPOSITION_NOTIFICATION);
-    pub const MESSAGE_GLOBAL_HEADERS: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_GLOBAL_HEADERS);
-    pub const MESSAGE_HTTP: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_HTTP);
-    pub const MESSAGE_IMDN_XML: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_IMDN_XML);
-    pub const MESSAGE_MLS: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_MLS);
-    pub const MESSAGE_NEWS: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_NEWS);
-    pub const MESSAGE_OHTTP_REQ: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_OHTTP_REQ);
-    pub const MESSAGE_OHTTP_RES: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_OHTTP_RES);
-    pub const MESSAGE_PARTIAL: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_PARTIAL);
-    pub const MESSAGE_RFC822: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_RFC822);
-    pub const MESSAGE_S_HTTP: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_S_HTTP);
-    pub const MESSAGE_SIP: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_SIP);
-    pub const MESSAGE_SIPFRAG: Encoding = Encoding::new(IanaEncodingMapping::MESSAGE_SIPFRAG);
-    pub const MESSAGE_TRACKING_STATUS: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_TRACKING_STATUS);
-    pub const MESSAGE_VND_SI_SIMP: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_VND_SI_SIMP);
-    pub const MESSAGE_VND_WFA_WSC: Encoding =
-        Encoding::new(IanaEncodingMapping::MESSAGE_VND_WFA_WSC);
-    pub const MODEL_3MF: Encoding = Encoding::new(IanaEncodingMapping::MODEL_3MF);
-    pub const MODEL_JT: Encoding = Encoding::new(IanaEncodingMapping::MODEL_JT);
-    pub const MODEL_E57: Encoding = Encoding::new(IanaEncodingMapping::MODEL_E57);
-    pub const MODEL_EXAMPLE: Encoding = Encoding::new(IanaEncodingMapping::MODEL_EXAMPLE);
-    pub const MODEL_GLTF_JSON: Encoding = Encoding::new(IanaEncodingMapping::MODEL_GLTF_JSON);
-    pub const MODEL_GLTF_BINARY: Encoding = Encoding::new(IanaEncodingMapping::MODEL_GLTF_BINARY);
-    pub const MODEL_IGES: Encoding = Encoding::new(IanaEncodingMapping::MODEL_IGES);
-    pub const MODEL_MESH: Encoding = Encoding::new(IanaEncodingMapping::MODEL_MESH);
-    pub const MODEL_MTL: Encoding = Encoding::new(IanaEncodingMapping::MODEL_MTL);
-    pub const MODEL_OBJ: Encoding = Encoding::new(IanaEncodingMapping::MODEL_OBJ);
-    pub const MODEL_PRC: Encoding = Encoding::new(IanaEncodingMapping::MODEL_PRC);
-    pub const MODEL_STEP: Encoding = Encoding::new(IanaEncodingMapping::MODEL_STEP);
-    pub const MODEL_STEP_XML: Encoding = Encoding::new(IanaEncodingMapping::MODEL_STEP_XML);
-    pub const MODEL_STEP_ZIP: Encoding = Encoding::new(IanaEncodingMapping::MODEL_STEP_ZIP);
-    pub const MODEL_STEP_XML_ZIP: Encoding = Encoding::new(IanaEncodingMapping::MODEL_STEP_XML_ZIP);
-    pub const MODEL_STL: Encoding = Encoding::new(IanaEncodingMapping::MODEL_STL);
-    pub const MODEL_U3D: Encoding = Encoding::new(IanaEncodingMapping::MODEL_U3D);
-    pub const MODEL_VND_BARY: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_BARY);
-    pub const MODEL_VND_CLD: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_CLD);
-    pub const MODEL_VND_COLLADA_XML: Encoding =
-        Encoding::new(IanaEncodingMapping::MODEL_VND_COLLADA_XML);
-    pub const MODEL_VND_DWF: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_DWF);
-    pub const MODEL_VND_FLATLAND_3DML: Encoding =
-        Encoding::new(IanaEncodingMapping::MODEL_VND_FLATLAND_3DML);
-    pub const MODEL_VND_GDL: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_GDL);
-    pub const MODEL_VND_GS_GDL: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_GS_GDL);
-    pub const MODEL_VND_GTW: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_GTW);
-    pub const MODEL_VND_MOML_XML: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_MOML_XML);
-    pub const MODEL_VND_MTS: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_MTS);
-    pub const MODEL_VND_OPENGEX: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_OPENGEX);
-    pub const MODEL_VND_PARASOLID_TRANSMIT_BINARY: Encoding =
-        Encoding::new(IanaEncodingMapping::MODEL_VND_PARASOLID_TRANSMIT_BINARY);
-    pub const MODEL_VND_PARASOLID_TRANSMIT_TEXT: Encoding =
-        Encoding::new(IanaEncodingMapping::MODEL_VND_PARASOLID_TRANSMIT_TEXT);
-    pub const MODEL_VND_PYTHA_PYOX: Encoding =
-        Encoding::new(IanaEncodingMapping::MODEL_VND_PYTHA_PYOX);
-    pub const MODEL_VND_ROSETTE_ANNOTATED_DATA_MODEL: Encoding =
-        Encoding::new(IanaEncodingMapping::MODEL_VND_ROSETTE_ANNOTATED_DATA_MODEL);
-    pub const MODEL_VND_SAP_VDS: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_SAP_VDS);
-    pub const MODEL_VND_USDA: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_USDA);
-    pub const MODEL_VND_USDZ_ZIP: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_USDZ_ZIP);
-    pub const MODEL_VND_VALVE_SOURCE_COMPILED_MAP: Encoding =
-        Encoding::new(IanaEncodingMapping::MODEL_VND_VALVE_SOURCE_COMPILED_MAP);
-    pub const MODEL_VND_VTU: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VND_VTU);
-    pub const MODEL_VRML: Encoding = Encoding::new(IanaEncodingMapping::MODEL_VRML);
-    pub const MODEL_X3D_FASTINFOSET: Encoding =
-        Encoding::new(IanaEncodingMapping::MODEL_X3D_FASTINFOSET);
-    pub const MODEL_X3D_XML: Encoding = Encoding::new(IanaEncodingMapping::MODEL_X3D_XML);
-    pub const MODEL_X3D_VRML: Encoding = Encoding::new(IanaEncodingMapping::MODEL_X3D_VRML);
-    pub const MULTIPART_ALTERNATIVE: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_ALTERNATIVE);
-    pub const MULTIPART_APPLEDOUBLE: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_APPLEDOUBLE);
-    pub const MULTIPART_BYTERANGES: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_BYTERANGES);
-    pub const MULTIPART_DIGEST: Encoding = Encoding::new(IanaEncodingMapping::MULTIPART_DIGEST);
-    pub const MULTIPART_ENCRYPTED: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_ENCRYPTED);
-    pub const MULTIPART_EXAMPLE: Encoding = Encoding::new(IanaEncodingMapping::MULTIPART_EXAMPLE);
-    pub const MULTIPART_FORM_DATA: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_FORM_DATA);
-    pub const MULTIPART_HEADER_SET: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_HEADER_SET);
-    pub const MULTIPART_MIXED: Encoding = Encoding::new(IanaEncodingMapping::MULTIPART_MIXED);
-    pub const MULTIPART_MULTILINGUAL: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_MULTILINGUAL);
-    pub const MULTIPART_PARALLEL: Encoding = Encoding::new(IanaEncodingMapping::MULTIPART_PARALLEL);
-    pub const MULTIPART_RELATED: Encoding = Encoding::new(IanaEncodingMapping::MULTIPART_RELATED);
-    pub const MULTIPART_REPORT: Encoding = Encoding::new(IanaEncodingMapping::MULTIPART_REPORT);
-    pub const MULTIPART_SIGNED: Encoding = Encoding::new(IanaEncodingMapping::MULTIPART_SIGNED);
-    pub const MULTIPART_VND_BINT_MED_PLUS: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_VND_BINT_MED_PLUS);
-    pub const MULTIPART_VOICE_MESSAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_VOICE_MESSAGE);
-    pub const MULTIPART_X_MIXED_REPLACE: Encoding =
-        Encoding::new(IanaEncodingMapping::MULTIPART_X_MIXED_REPLACE);
-    pub const TEXT_1D_INTERLEAVED_PARITYFEC: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_1D_INTERLEAVED_PARITYFEC);
-    pub const TEXT_RED: Encoding = Encoding::new(IanaEncodingMapping::TEXT_RED);
-    pub const TEXT_SGML: Encoding = Encoding::new(IanaEncodingMapping::TEXT_SGML);
-    pub const TEXT_CACHE_MANIFEST: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_CACHE_MANIFEST);
-    pub const TEXT_CALENDAR: Encoding = Encoding::new(IanaEncodingMapping::TEXT_CALENDAR);
-    pub const TEXT_CQL: Encoding = Encoding::new(IanaEncodingMapping::TEXT_CQL);
-    pub const TEXT_CQL_EXPRESSION: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_CQL_EXPRESSION);
-    pub const TEXT_CQL_IDENTIFIER: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_CQL_IDENTIFIER);
-    pub const TEXT_CSS: Encoding = Encoding::new(IanaEncodingMapping::TEXT_CSS);
-    pub const TEXT_CSV: Encoding = Encoding::new(IanaEncodingMapping::TEXT_CSV);
-    pub const TEXT_CSV_SCHEMA: Encoding = Encoding::new(IanaEncodingMapping::TEXT_CSV_SCHEMA);
-    pub const TEXT_DIRECTORY: Encoding = Encoding::new(IanaEncodingMapping::TEXT_DIRECTORY);
-    pub const TEXT_DNS: Encoding = Encoding::new(IanaEncodingMapping::TEXT_DNS);
-    pub const TEXT_ECMASCRIPT: Encoding = Encoding::new(IanaEncodingMapping::TEXT_ECMASCRIPT);
-    pub const TEXT_ENCAPRTP: Encoding = Encoding::new(IanaEncodingMapping::TEXT_ENCAPRTP);
-    pub const TEXT_ENRICHED: Encoding = Encoding::new(IanaEncodingMapping::TEXT_ENRICHED);
-    pub const TEXT_EXAMPLE: Encoding = Encoding::new(IanaEncodingMapping::TEXT_EXAMPLE);
-    pub const TEXT_FHIRPATH: Encoding = Encoding::new(IanaEncodingMapping::TEXT_FHIRPATH);
-    pub const TEXT_FLEXFEC: Encoding = Encoding::new(IanaEncodingMapping::TEXT_FLEXFEC);
-    pub const TEXT_FWDRED: Encoding = Encoding::new(IanaEncodingMapping::TEXT_FWDRED);
-    pub const TEXT_GFF3: Encoding = Encoding::new(IanaEncodingMapping::TEXT_GFF3);
-    pub const TEXT_GRAMMAR_REF_LIST: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_GRAMMAR_REF_LIST);
-    pub const TEXT_HL7V2: Encoding = Encoding::new(IanaEncodingMapping::TEXT_HL7V2);
-    pub const TEXT_HTML: Encoding = Encoding::new(IanaEncodingMapping::TEXT_HTML);
-    pub const TEXT_JAVASCRIPT: Encoding = Encoding::new(IanaEncodingMapping::TEXT_JAVASCRIPT);
-    pub const TEXT_JCR_CND: Encoding = Encoding::new(IanaEncodingMapping::TEXT_JCR_CND);
-    pub const TEXT_MARKDOWN: Encoding = Encoding::new(IanaEncodingMapping::TEXT_MARKDOWN);
-    pub const TEXT_MIZAR: Encoding = Encoding::new(IanaEncodingMapping::TEXT_MIZAR);
-    pub const TEXT_N3: Encoding = Encoding::new(IanaEncodingMapping::TEXT_N3);
-    pub const TEXT_PARAMETERS: Encoding = Encoding::new(IanaEncodingMapping::TEXT_PARAMETERS);
-    pub const TEXT_PARITYFEC: Encoding = Encoding::new(IanaEncodingMapping::TEXT_PARITYFEC);
-    pub const TEXT_PLAIN: Encoding = Encoding::new(IanaEncodingMapping::TEXT_PLAIN);
-    pub const TEXT_PROVENANCE_NOTATION: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_PROVENANCE_NOTATION);
-    pub const TEXT_PRS_FALLENSTEIN_RST: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_PRS_FALLENSTEIN_RST);
-    pub const TEXT_PRS_LINES_TAG: Encoding = Encoding::new(IanaEncodingMapping::TEXT_PRS_LINES_TAG);
-    pub const TEXT_PRS_PROP_LOGIC: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_PRS_PROP_LOGIC);
-    pub const TEXT_PRS_TEXI: Encoding = Encoding::new(IanaEncodingMapping::TEXT_PRS_TEXI);
-    pub const TEXT_RAPTORFEC: Encoding = Encoding::new(IanaEncodingMapping::TEXT_RAPTORFEC);
-    pub const TEXT_RFC822_HEADERS: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_RFC822_HEADERS);
-    pub const TEXT_RICHTEXT: Encoding = Encoding::new(IanaEncodingMapping::TEXT_RICHTEXT);
-    pub const TEXT_RTF: Encoding = Encoding::new(IanaEncodingMapping::TEXT_RTF);
-    pub const TEXT_RTP_ENC_AESCM128: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_RTP_ENC_AESCM128);
-    pub const TEXT_RTPLOOPBACK: Encoding = Encoding::new(IanaEncodingMapping::TEXT_RTPLOOPBACK);
-    pub const TEXT_RTX: Encoding = Encoding::new(IanaEncodingMapping::TEXT_RTX);
-    pub const TEXT_SHACLC: Encoding = Encoding::new(IanaEncodingMapping::TEXT_SHACLC);
-    pub const TEXT_SHEX: Encoding = Encoding::new(IanaEncodingMapping::TEXT_SHEX);
-    pub const TEXT_SPDX: Encoding = Encoding::new(IanaEncodingMapping::TEXT_SPDX);
-    pub const TEXT_STRINGS: Encoding = Encoding::new(IanaEncodingMapping::TEXT_STRINGS);
-    pub const TEXT_T140: Encoding = Encoding::new(IanaEncodingMapping::TEXT_T140);
-    pub const TEXT_TAB_SEPARATED_VALUES: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_TAB_SEPARATED_VALUES);
-    pub const TEXT_TROFF: Encoding = Encoding::new(IanaEncodingMapping::TEXT_TROFF);
-    pub const TEXT_TURTLE: Encoding = Encoding::new(IanaEncodingMapping::TEXT_TURTLE);
-    pub const TEXT_ULPFEC: Encoding = Encoding::new(IanaEncodingMapping::TEXT_ULPFEC);
-    pub const TEXT_URI_LIST: Encoding = Encoding::new(IanaEncodingMapping::TEXT_URI_LIST);
-    pub const TEXT_VCARD: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VCARD);
-    pub const TEXT_VND_DMCLIENTSCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_DMCLIENTSCRIPT);
-    pub const TEXT_VND_IPTC_NITF: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_IPTC_NITF);
-    pub const TEXT_VND_IPTC_NEWSML: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_IPTC_NEWSML);
-    pub const TEXT_VND_A: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_A);
-    pub const TEXT_VND_ABC: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_ABC);
-    pub const TEXT_VND_ASCII_ART: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_ASCII_ART);
-    pub const TEXT_VND_CURL: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_CURL);
-    pub const TEXT_VND_DEBIAN_COPYRIGHT: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_DEBIAN_COPYRIGHT);
-    pub const TEXT_VND_DVB_SUBTITLE: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_DVB_SUBTITLE);
-    pub const TEXT_VND_ESMERTEC_THEME_DESCRIPTOR: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_ESMERTEC_THEME_DESCRIPTOR);
-    pub const TEXT_VND_EXCHANGEABLE: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_EXCHANGEABLE);
-    pub const TEXT_VND_FAMILYSEARCH_GEDCOM: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_FAMILYSEARCH_GEDCOM);
-    pub const TEXT_VND_FICLAB_FLT: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_FICLAB_FLT);
-    pub const TEXT_VND_FLY: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_FLY);
-    pub const TEXT_VND_FMI_FLEXSTOR: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_FMI_FLEXSTOR);
-    pub const TEXT_VND_GML: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_GML);
-    pub const TEXT_VND_GRAPHVIZ: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_GRAPHVIZ);
-    pub const TEXT_VND_HANS: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_HANS);
-    pub const TEXT_VND_HGL: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_HGL);
-    pub const TEXT_VND_IN3D_3DML: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_IN3D_3DML);
-    pub const TEXT_VND_IN3D_SPOT: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_IN3D_SPOT);
-    pub const TEXT_VND_LATEX_Z: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_LATEX_Z);
-    pub const TEXT_VND_MOTOROLA_REFLEX: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_MOTOROLA_REFLEX);
-    pub const TEXT_VND_MS_MEDIAPACKAGE: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_MS_MEDIAPACKAGE);
-    pub const TEXT_VND_NET2PHONE_COMMCENTER_COMMAND: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_NET2PHONE_COMMCENTER_COMMAND);
-    pub const TEXT_VND_RADISYS_MSML_BASIC_LAYOUT: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_RADISYS_MSML_BASIC_LAYOUT);
-    pub const TEXT_VND_SENX_WARPSCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_SENX_WARPSCRIPT);
-    pub const TEXT_VND_SI_URICATALOGUE: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_SI_URICATALOGUE);
-    pub const TEXT_VND_SOSI: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_SOSI);
-    pub const TEXT_VND_SUN_J2ME_APP_DESCRIPTOR: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_SUN_J2ME_APP_DESCRIPTOR);
-    pub const TEXT_VND_TROLLTECH_LINGUIST: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_TROLLTECH_LINGUIST);
-    pub const TEXT_VND_WAP_SI: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_WAP_SI);
-    pub const TEXT_VND_WAP_SL: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_WAP_SL);
-    pub const TEXT_VND_WAP_WML: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VND_WAP_WML);
-    pub const TEXT_VND_WAP_WMLSCRIPT: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_VND_WAP_WMLSCRIPT);
-    pub const TEXT_VTT: Encoding = Encoding::new(IanaEncodingMapping::TEXT_VTT);
-    pub const TEXT_WGSL: Encoding = Encoding::new(IanaEncodingMapping::TEXT_WGSL);
-    pub const TEXT_XML: Encoding = Encoding::new(IanaEncodingMapping::TEXT_XML);
-    pub const TEXT_XML_EXTERNAL_PARSED_ENTITY: Encoding =
-        Encoding::new(IanaEncodingMapping::TEXT_XML_EXTERNAL_PARSED_ENTITY);
-    pub const VIDEO_1D_INTERLEAVED_PARITYFEC: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_1D_INTERLEAVED_PARITYFEC);
-    pub const VIDEO_3GPP: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_3GPP);
-    pub const VIDEO_3GPP_TT: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_3GPP_TT);
-    pub const VIDEO_3GPP2: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_3GPP2);
-    pub const VIDEO_AV1: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_AV1);
-    pub const VIDEO_BMPEG: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_BMPEG);
-    pub const VIDEO_BT656: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_BT656);
-    pub const VIDEO_CELB: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_CELB);
-    pub const VIDEO_DV: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_DV);
-    pub const VIDEO_FFV1: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_FFV1);
-    pub const VIDEO_H261: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H261);
-    pub const VIDEO_H263: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H263);
-    pub const VIDEO_H263_1998: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H263_1998);
-    pub const VIDEO_H263_2000: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H263_2000);
-    pub const VIDEO_H264: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H264);
-    pub const VIDEO_H264_RCDO: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H264_RCDO);
-    pub const VIDEO_H264_SVC: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H264_SVC);
-    pub const VIDEO_H265: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H265);
-    pub const VIDEO_H266: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_H266);
-    pub const VIDEO_JPEG: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_JPEG);
-    pub const VIDEO_MP1S: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MP1S);
-    pub const VIDEO_MP2P: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MP2P);
-    pub const VIDEO_MP2T: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MP2T);
-    pub const VIDEO_MP4V_ES: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MP4V_ES);
-    pub const VIDEO_MPV: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MPV);
-    pub const VIDEO_SMPTE292M: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_SMPTE292M);
-    pub const VIDEO_VP8: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VP8);
-    pub const VIDEO_VP9: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VP9);
-    pub const VIDEO_ENCAPRTP: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_ENCAPRTP);
-    pub const VIDEO_EVC: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_EVC);
-    pub const VIDEO_EXAMPLE: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_EXAMPLE);
-    pub const VIDEO_FLEXFEC: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_FLEXFEC);
-    pub const VIDEO_ISO_SEGMENT: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_ISO_SEGMENT);
-    pub const VIDEO_JPEG2000: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_JPEG2000);
-    pub const VIDEO_JXSV: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_JXSV);
-    pub const VIDEO_MATROSKA: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MATROSKA);
-    pub const VIDEO_MATROSKA_3D: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MATROSKA_3D);
-    pub const VIDEO_MJ2: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MJ2);
-    pub const VIDEO_MP4: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MP4);
-    pub const VIDEO_MPEG: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_MPEG);
-    pub const VIDEO_MPEG4_GENERIC: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_MPEG4_GENERIC);
-    pub const VIDEO_NV: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_NV);
-    pub const VIDEO_OGG: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_OGG);
-    pub const VIDEO_PARITYFEC: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_PARITYFEC);
-    pub const VIDEO_POINTER: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_POINTER);
-    pub const VIDEO_QUICKTIME: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_QUICKTIME);
-    pub const VIDEO_RAPTORFEC: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_RAPTORFEC);
-    pub const VIDEO_RAW: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_RAW);
-    pub const VIDEO_RTP_ENC_AESCM128: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_RTP_ENC_AESCM128);
-    pub const VIDEO_RTPLOOPBACK: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_RTPLOOPBACK);
-    pub const VIDEO_RTX: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_RTX);
-    pub const VIDEO_SCIP: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_SCIP);
-    pub const VIDEO_SMPTE291: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_SMPTE291);
-    pub const VIDEO_ULPFEC: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_ULPFEC);
-    pub const VIDEO_VC1: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VC1);
-    pub const VIDEO_VC2: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VC2);
-    pub const VIDEO_VND_CCTV: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_CCTV);
-    pub const VIDEO_VND_DECE_HD: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_DECE_HD);
-    pub const VIDEO_VND_DECE_MOBILE: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_DECE_MOBILE);
-    pub const VIDEO_VND_DECE_MP4: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_DECE_MP4);
-    pub const VIDEO_VND_DECE_PD: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_DECE_PD);
-    pub const VIDEO_VND_DECE_SD: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_DECE_SD);
-    pub const VIDEO_VND_DECE_VIDEO: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_DECE_VIDEO);
-    pub const VIDEO_VND_DIRECTV_MPEG: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_DIRECTV_MPEG);
-    pub const VIDEO_VND_DIRECTV_MPEG_TTS: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_DIRECTV_MPEG_TTS);
-    pub const VIDEO_VND_DLNA_MPEG_TTS: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_DLNA_MPEG_TTS);
-    pub const VIDEO_VND_DVB_FILE: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_DVB_FILE);
-    pub const VIDEO_VND_FVT: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_FVT);
-    pub const VIDEO_VND_HNS_VIDEO: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_HNS_VIDEO);
-    pub const VIDEO_VND_IPTVFORUM_1DPARITYFEC_1010: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_IPTVFORUM_1DPARITYFEC_1010);
-    pub const VIDEO_VND_IPTVFORUM_1DPARITYFEC_2005: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_IPTVFORUM_1DPARITYFEC_2005);
-    pub const VIDEO_VND_IPTVFORUM_2DPARITYFEC_1010: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_IPTVFORUM_2DPARITYFEC_1010);
-    pub const VIDEO_VND_IPTVFORUM_2DPARITYFEC_2005: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_IPTVFORUM_2DPARITYFEC_2005);
-    pub const VIDEO_VND_IPTVFORUM_TTSAVC: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_IPTVFORUM_TTSAVC);
-    pub const VIDEO_VND_IPTVFORUM_TTSMPEG2: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_IPTVFORUM_TTSMPEG2);
-    pub const VIDEO_VND_MOTOROLA_VIDEO: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_MOTOROLA_VIDEO);
-    pub const VIDEO_VND_MOTOROLA_VIDEOP: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_MOTOROLA_VIDEOP);
-    pub const VIDEO_VND_MPEGURL: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_MPEGURL);
-    pub const VIDEO_VND_MS_PLAYREADY_MEDIA_PYV: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_MS_PLAYREADY_MEDIA_PYV);
-    pub const VIDEO_VND_NOKIA_INTERLEAVED_MULTIMEDIA: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_NOKIA_INTERLEAVED_MULTIMEDIA);
-    pub const VIDEO_VND_NOKIA_MP4VR: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_NOKIA_MP4VR);
-    pub const VIDEO_VND_NOKIA_VIDEOVOIP: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_NOKIA_VIDEOVOIP);
-    pub const VIDEO_VND_OBJECTVIDEO: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_OBJECTVIDEO);
-    pub const VIDEO_VND_RADGAMETTOOLS_BINK: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_RADGAMETTOOLS_BINK);
-    pub const VIDEO_VND_RADGAMETTOOLS_SMACKER: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_RADGAMETTOOLS_SMACKER);
-    pub const VIDEO_VND_SEALED_MPEG1: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_SEALED_MPEG1);
-    pub const VIDEO_VND_SEALED_MPEG4: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_SEALED_MPEG4);
-    pub const VIDEO_VND_SEALED_SWF: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_SEALED_SWF);
-    pub const VIDEO_VND_SEALEDMEDIA_SOFTSEAL_MOV: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_SEALEDMEDIA_SOFTSEAL_MOV);
-    pub const VIDEO_VND_UVVU_MP4: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_UVVU_MP4);
-    pub const VIDEO_VND_VIVO: Encoding = Encoding::new(IanaEncodingMapping::VIDEO_VND_VIVO);
-    pub const VIDEO_VND_YOUTUBE_YT: Encoding =
-        Encoding::new(IanaEncodingMapping::VIDEO_VND_YOUTUBE_YT);
-}
+crate::derive_default_encoding_for!(IanaEncoding);

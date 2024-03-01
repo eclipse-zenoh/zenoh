@@ -14,7 +14,7 @@
 
 //! Value primitives.
 use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
-use zenoh_result::ZResult;
+use zenoh_result::{ZError, ZResult};
 
 use crate::buffers::ZBuf;
 use crate::encoding::{Decoder, DefaultEncoding, Encoder};
@@ -78,7 +78,7 @@ impl Value {
     /// ```
     pub fn encode<T>(t: T) -> Self
     where
-        DefaultEncoding: Encoder<T>,
+        DefaultEncoding: Encoder<T, Output = Value>,
     {
         DefaultEncoding.encode(t)
     }
@@ -119,7 +119,7 @@ impl Value {
     /// ```
     pub fn encode_with<T, M>(t: T, m: M) -> Self
     where
-        M: Encoder<T>,
+        M: Encoder<T, Output = Value>,
     {
         m.encode(t)
     }
@@ -128,18 +128,18 @@ impl Value {
     /// See [encode](Value::encode) for an example.
     pub fn decode<T>(&self) -> ZResult<T>
     where
-        DefaultEncoding: Decoder<T>,
+        DefaultEncoding: Decoder<T, Error = ZError>,
     {
-        DefaultEncoding.decode(self)
+        Ok(DefaultEncoding.decode(self)?)
     }
 
     /// Decode an object of type `T` from a [`Value`] using a provided [`Encoder`].
     /// See [encode_with](Value::encode_with) for an example.
     pub fn decode_with<T, M>(&self, m: M) -> ZResult<T>
     where
-        M: Decoder<T>,
+        M: Decoder<T, Error = ZError>,
     {
-        m.decode(self)
+        Ok(m.decode(self)?)
     }
 }
 
@@ -147,7 +147,7 @@ impl Value {
 /// This trait implementation is provided as convenience for users using the [`DefaultEncoding`].
 impl<T> From<T> for Value
 where
-    DefaultEncoding: Encoder<T>,
+    DefaultEncoding: Encoder<T, Output = Value>,
 {
     fn from(t: T) -> Self {
         Value::encode(t)
