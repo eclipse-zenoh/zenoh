@@ -97,39 +97,32 @@ pub struct DownsamplingItemConf {
     pub flow: DownsamplingFlow,
 }
 
-//adding for authz structs
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PolicyList {
-    pub policy_definition: String,
-    pub ruleset: Vec<AttributeRules>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AttributeRules {
-    pub attribute: String,
-    pub rules: Vec<AttributeRule>,
-}
-
-#[derive(Clone, Serialize, Debug, Deserialize)]
-pub struct AttributeRule {
-    pub subject: Subject,
-    pub ke: String,
-    pub action: Action,
-    pub permission: Permission,
-}
+//adding datatypes needed for ACL Config
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum Permission {
     Allow,
     Deny,
 }
+#[derive(Serialize, Debug, Deserialize, Clone)]
+
+pub struct ConfigRule {
+    pub interface: Vec<String>,
+    pub key_expr: Vec<String>,
+    pub action: Vec<Action>,
+    pub permission: Permission,
+}
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub struct PolicyRule {
+    pub subject: Subject, //Subject
+    pub key_expr: String,
+    pub action: Action,         //Action
+    pub permission: Permission, //Permission
+}
 
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(untagged)]
 pub enum Subject {
-    UserId(ZenohId),
-    NetworkInterface(String), //clarify
-    MetadataType(String),     //clarify
+    Interface(String),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
@@ -455,8 +448,8 @@ validated_struct::validator! {
             },
             pub acl: AclConfig {
                 pub enabled: Option<bool>,
-                pub default_deny: Option<bool>,
-                pub policy_list: Option<PolicyList>
+                pub blacklist: Option<bool>,
+                pub rules: Option<Vec<ConfigRule>>
             }
         },
         /// Configuration of the admin space.

@@ -66,7 +66,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 let e = self.e.clone();
                 if let Some(sm) = &e.subject_map {
                     for i in link.interfaces {
-                        let x = &Subject::NetworkInterface(i.to_string());
+                        let x = &Subject::Interface(i);
                         if sm.contains_key(x) {
                             interface_list.push(*sm.get(x).unwrap());
                         }
@@ -105,7 +105,10 @@ impl InterceptorTrait for IngressAclEnforcer {
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        let kexpr = ctx.full_expr().unwrap(); //add the cache here
+        let kexpr = match ctx.full_expr() {
+            Some(val) => val,
+            None => return None,
+        }; //add the cache here
         let interface_list = &self.interface_list;
 
         if let NetworkBody::Push(Push {
@@ -124,10 +127,7 @@ impl InterceptorTrait for IngressAclEnforcer {
             // let action = Action::Put;
             let mut decision = false;
             for subject in interface_list {
-                match self
-                    .pe
-                    .policy_decision_point(*subject, Action::Put, kexpr.to_string())
-                {
+                match self.pe.policy_decision_point(*subject, Action::Put, kexpr) {
                     Ok(val) => {
                         if val {
                             decision = val;
@@ -151,7 +151,10 @@ impl InterceptorTrait for EgressAclEnforcer {
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        let kexpr = ctx.full_expr().unwrap(); //add the cache here
+        let kexpr = match ctx.full_expr() {
+            Some(val) => val,
+            None => return None,
+        }; //add the cache here
         let interface_list = &self.interface_list;
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
@@ -161,10 +164,7 @@ impl InterceptorTrait for EgressAclEnforcer {
             // let action = ;
             let mut decision = false;
             for subject in interface_list {
-                match self
-                    .pe
-                    .policy_decision_point(*subject, Action::Sub, kexpr.to_string())
-                {
+                match self.pe.policy_decision_point(*subject, Action::Sub, kexpr) {
                     Ok(val) => {
                         if val {
                             decision = val;

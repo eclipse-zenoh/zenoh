@@ -108,9 +108,9 @@
   // /// Configure internal transport parameters
   transport: {
     acl: {
-      enabled: false,
-      default_deny: false,
-      policy_list: null,
+      "enabled": false,
+      "blacklist": false,
+      "rules": null,
     },
   }
   // transport: {

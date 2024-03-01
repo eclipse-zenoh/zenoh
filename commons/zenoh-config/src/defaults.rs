@@ -216,8 +216,8 @@ impl Default for AclConfig {
     fn default() -> Self {
         Self {
             enabled: Some(false),
-            default_deny: Some(false),
-            policy_list: None,
+            blacklist: Some(false),
+            rules: None,
         }
     }
 }
