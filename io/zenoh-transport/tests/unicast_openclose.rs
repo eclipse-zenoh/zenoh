@@ -767,11 +767,7 @@ async fn openclose_tcp_only_connect_with_interface_restriction() {
         .unwrap();
 
     // should not connect to local interface and external address
-    openclose_transport(
-        &listen_endpoint,
-        &connect_endpoint,
-        false,
-    ).await;
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -790,11 +786,7 @@ async fn openclose_tcp_only_listen_with_interface_restriction() {
     let connect_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13002).parse().unwrap();
 
     // should not connect to local interface and external address
-    openclose_transport(
-        &listen_endpoint,
-        &connect_endpoint,
-        false,
-    ).await;
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
 
 #[cfg(feature = "transport_udp")]
@@ -813,11 +805,7 @@ async fn openclose_udp_only_connect_with_interface_restriction() {
         .unwrap();
 
     // should not connect to local interface and external address
-    openclose_transport(
-        &listen_endpoint,
-        &connect_endpoint,
-        false,
-    ).await;
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
 
 #[cfg(feature = "transport_udp")]
@@ -835,9 +823,5 @@ async fn openclose_udp_onlyi_listen_with_interface_restriction() {
     let connect_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13004).parse().unwrap();
 
     // should not connect to local interface and external address
-    openclose_transport(
-        &listen_endpoint,
-        &connect_endpoint,
-        false,
-    ).await;
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
