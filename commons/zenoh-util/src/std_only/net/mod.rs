@@ -423,22 +423,24 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
         .collect()
 }
 
+#[cfg(target_os = "linux")]
 pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: Option<&str>) -> ZResult<()> {
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    bail!("Binding the socket {socket:?} to the interface {iface:?} is not supported on macOS and Windows");
-
-    #[cfg(target_os = "linux")]
     socket.bind_device(iface.map(|x| x.as_bytes()))?;
-
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) -> ZResult<()> {
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    bail!("Binding the socket {socket:?} to the interface {iface:?} is not supported on macOS and Windows");
-
-    #[cfg(target_os = "linux")]
     socket.bind_device(iface.map(|x| x.as_bytes()))?;
-
     Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: Option<&str>) -> ZResult<()> {
+    bail!("Binding the socket {socket:?} to the interface {iface:?} is not supported on macOS and Windows");
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) -> ZResult<()> {
+    bail!("Binding the socket {socket:?} to the interface {iface:?} is not supported on macOS and Windows");
 }
