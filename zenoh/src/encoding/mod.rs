@@ -37,8 +37,6 @@ pub trait EncodingMapping {
     fn to_str(&self, e: &Encoding) -> Cow<'_, str>;
 }
 
-pub trait ZEncoding {}
-
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Encoder<T> {
     type Output;

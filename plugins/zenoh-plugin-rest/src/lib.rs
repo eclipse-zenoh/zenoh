@@ -47,25 +47,8 @@ lazy_static::lazy_static! {
 const RAW_KEY: &str = "_raw";
 
 fn value_to_json(value: Value) -> String {
-    // @TODO: transcode to JSON when implemented in Value
-    match &value.encoding {
-        p if p.starts_with(&DefaultEncoding::TEXT_PLAIN) => {
-            // convert to Json string for special characters escaping
-            serde_json::json!(value.to_string()).to_string()
-        }
-        p if p.starts_with(&DefaultEncoding::APPLICATION_JSON)
-            || p.starts_with(&DefaultEncoding::TEXT_JSON)
-            || p.starts_with(&DefaultEncoding::ZENOH_UINT)
-            || p.starts_with(&DefaultEncoding::ZENOH_INT)
-            || p.starts_with(&DefaultEncoding::ZENOH_FLOAT)
-            || p.starts_with(&DefaultEncoding::ZENOH_BOOL) =>
-        {
-            value.to_string()
-        }
-        _ => {
-            format!(r#""{}""#, b64_std_engine.encode(value.payload.contiguous()))
-        }
-    }
+    String::try_from(value.payload.clone())
+        .unwrap_or_else(|_| format!(r#""{}""#, b64_std_engine.encode(value.payload.contiguous())))
 }
 
 fn sample_to_json(sample: Sample) -> String {

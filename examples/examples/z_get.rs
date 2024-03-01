@@ -15,6 +15,7 @@ use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh::value::StringOrBase64;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -42,9 +43,9 @@ async fn main() {
             Ok(sample) => println!(
                 ">> Received ('{}': '{}')",
                 sample.key_expr.as_str(),
-                sample.value,
+                StringOrBase64::from(sample.value.clone()),
             ),
-            Err(err) => println!(">> Received (ERROR: '{}')", err.decode::<String>().unwrap()),
+            Err(err) => println!(">> Received (ERROR: '{}')", StringOrBase64::from(err)),
         }
     }
 }

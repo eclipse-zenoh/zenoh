@@ -20,6 +20,7 @@ use std::str;
 use std::str::FromStr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
+use zenoh::value::StringOrBase64;
 use zenoh::Session;
 
 pub struct AlignQueryable {
@@ -221,7 +222,7 @@ impl AlignQueryable {
                     log::trace!(
                         "[ALIGN QUERYABLE] Received ('{}': '{}')",
                         sample.key_expr.as_str(),
-                        sample.value
+                        StringOrBase64::from(sample.value.clone())
                     );
                     if let Some(timestamp) = sample.timestamp {
                         match timestamp.cmp(&logentry.timestamp) {

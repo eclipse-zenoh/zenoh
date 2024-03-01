@@ -62,7 +62,7 @@ impl fmt::Debug for SubscriberState {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.value) })
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -95,7 +95,7 @@ pub(crate) struct SubscriberInner<'a> {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.value); })
 ///     .pull_mode()
 ///     .res()
 ///     .await
@@ -118,7 +118,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.value); })
     ///     .pull_mode()
     ///     .res()
     ///     .await
@@ -327,7 +327,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.value); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -402,7 +402,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {}", sample.key_expr, sample.value);
+    ///     println!("Received: {} {:?}", sample.key_expr, sample.value);
     /// }
     /// # })
     /// ```
@@ -631,7 +631,7 @@ where
 ///     .await
 ///     .unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
-///     println!("Received: {} {}", sample.key_expr, sample.value);
+///     println!("Received: {} {:?}", sample.key_expr, sample.value);
 /// }
 /// # })
 /// ```

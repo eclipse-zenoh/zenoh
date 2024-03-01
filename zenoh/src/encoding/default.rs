@@ -23,8 +23,6 @@ use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
 
-use super::ZEncoding;
-
 pub mod prefix {
     use phf::phf_ordered_map;
     use zenoh_protocol::core::EncodingPrefix;
@@ -290,9 +288,6 @@ impl EncodingMapping for DefaultEncoding {
         }
     }
 }
-
-// - Zenoh primitive types encoders/decoders
-impl ZEncoding for DefaultEncoding {}
 
 // Octect stream
 impl Encoder<ZBuf> for DefaultEncoding {

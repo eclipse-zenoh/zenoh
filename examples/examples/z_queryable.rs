@@ -19,6 +19,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh::value::StringOrBase64;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -49,7 +50,7 @@ async fn main() {
                 let query = query.unwrap();
                 match query.value() {
                     None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-                    Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), value),
+                    Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), StringOrBase64::from(value.clone())),
                 }
                 let reply = if send_errors.swap(false, Relaxed) {
                     println!(

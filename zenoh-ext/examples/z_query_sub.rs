@@ -17,9 +17,7 @@ use clap::Command;
 use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
-use zenoh::query::ReplyKeyExpr;
+use zenoh::{config::Config, prelude::r#async::*, query::ReplyKeyExpr, value::StringOrBase64};
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -63,7 +61,7 @@ async fn main() {
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), sample.value);
+                    sample.kind, sample.key_expr.as_str(), StringOrBase64::from(sample.value));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

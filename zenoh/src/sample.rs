@@ -15,7 +15,6 @@
 //! Sample primitives
 use crate::buffers::ZBuf;
 use crate::prelude::{Encoding, KeyExpr, Value, ZenohId};
-use crate::query::Reply;
 use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_macros::unstable]
 use serde::Serialize;
@@ -526,19 +525,19 @@ impl std::ops::DerefMut for Sample {
     }
 }
 
-impl std::fmt::Display for Sample {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
-            SampleKind::Delete => write!(f, "{}({})", self.kind, self.key_expr),
-            _ => write!(f, "{}({}: {})", self.kind, self.key_expr, self.value),
-        }
-    }
-}
+// impl std::fmt::Display for Sample {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self.kind {
+//             SampleKind::Delete => write!(f, "{}({})", self.kind, self.key_expr),
+//             _ => write!(f, "{}({}: {})", self.kind, self.key_expr, self.value),
+//         }
+//     }
+// }
 
-impl TryFrom<Reply> for Sample {
-    type Error = Value;
+// impl TryFrom<Reply> for Sample {
+//     type Error = Value;
 
-    fn try_from(value: Reply) -> Result<Self, Self::Error> {
-        value.sample
-    }
-}
+//     fn try_from(value: Reply) -> Result<Self, Self::Error> {
+//         value.sample
+//     }
+// }

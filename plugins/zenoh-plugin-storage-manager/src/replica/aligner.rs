@@ -21,6 +21,7 @@ use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
+use zenoh::value::StringOrBase64;
 use zenoh::Session;
 
 pub struct Aligner {
@@ -204,7 +205,7 @@ impl Aligner {
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
             // expecting sample.value to be a vec of intervals with their checksum
             for each in reply_content {
-                match serde_json::from_str(&each.value.to_string()) {
+                match serde_json::from_str(&StringOrBase64::from(each.value)) {
                     Ok((i, c)) => {
                         other_intervals.insert(i, c);
                     }
@@ -250,7 +251,7 @@ impl Aligner {
                 let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
-                    match serde_json::from_str(&each.value.to_string()) {
+                    match serde_json::from_str(&StringOrBase64::from(each.value)) {
                         Ok((i, c)) => {
                             other_subintervals.insert(i, c);
                         }
@@ -291,7 +292,7 @@ impl Aligner {
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
-                match serde_json::from_str(&each.value.to_string()) {
+                match serde_json::from_str(&StringOrBase64::from(each.value)) {
                     Ok((i, c)) => {
                         other_content.insert(i, c);
                     }
@@ -332,13 +333,13 @@ impl Aligner {
                             log::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",
                                 sample.key_expr.as_str(),
-                                sample.value
+                                StringOrBase64::from(sample.value.clone())
                             );
                             return_val.push(sample);
                         }
                         Err(err) => {
                             log::error!(
-                                "[ALIGNER] Received error for query on selector {} :{}",
+                                "[ALIGNER] Received error for query on selector {} :{:?}",
                                 selector,
                                 err
                             );

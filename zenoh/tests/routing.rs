@@ -99,7 +99,7 @@ impl Task {
 
                             Err(err) => {
                                 log::warn!(
-                                    "Sample got from {} failed to unwrap! Error: {}.",
+                                    "Sample got from {} failed to unwrap! Error: {:?}.",
                                     ke,
                                     err
                                 );

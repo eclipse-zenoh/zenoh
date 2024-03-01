@@ -28,6 +28,7 @@ use std::time::{Duration, SystemTime};
 use urlencoding::encode;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
+use zenoh::value::StringOrBase64;
 use zenoh::Session;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
@@ -226,9 +227,9 @@ impl Replica {
                 from,
                 sample.kind,
                 sample.key_expr.as_str(),
-                sample.value
+                StringOrBase64::from(sample.value.clone())
             );
-            let digest: Digest = match serde_json::from_str(&format!("{}", sample.value)) {
+            let digest: Digest = match serde_json::from_str(&StringOrBase64::from(sample.value)) {
                 Ok(digest) => digest,
                 Err(e) => {
                     log::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);

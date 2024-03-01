@@ -13,7 +13,7 @@
 //
 use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
-use std::{convert::TryInto, time::Duration};
+use std::time::Duration;
 use zenoh::query::ReplyKeyExpr;
 use zenoh::sample::Locality;
 use zenoh::Result as ZResult;
@@ -24,6 +24,7 @@ use zenoh::{
     subscriber::{PushMode, Reliability, Subscriber, SubscriberBuilder},
 };
 
+use crate::ExtractSample;
 use crate::{querying_subscriber::QueryingSubscriberBuilder, FetchingSubscriberBuilder};
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
@@ -87,8 +88,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
         fetch: Fetch,
     ) -> FetchingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler, Fetch, TryIntoSample>
     where
-        TryIntoSample: TryInto<Sample>,
-        <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>;
+        TryIntoSample: ExtractSample;
 
     /// Create a [`FetchingSubscriber`](super::FetchingSubscriber) that will perform a query (`session.get()`) as it's
     /// initial fetch.
@@ -169,8 +169,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
         fetch: Fetch,
     ) -> FetchingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler, Fetch, TryIntoSample>
     where
-        TryIntoSample: TryInto<Sample>,
-        <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+        TryIntoSample: ExtractSample,
     {
         FetchingSubscriberBuilder {
             session: self.session,
@@ -283,8 +282,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
         fetch: Fetch,
     ) -> FetchingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler, Fetch, TryIntoSample>
     where
-        TryIntoSample: TryInto<Sample>,
-        <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+        TryIntoSample: ExtractSample,
     {
         FetchingSubscriberBuilder {
             session: self.session,

@@ -45,7 +45,7 @@ async fn main() {
     let subs = async {
         while let Ok(sample) = subscriber.recv_async().await {
             println!(
-                ">> [Subscriber] Received {} ('{}': '{}')",
+                ">> [Subscriber] Received {} ('{}': '{:?}')",
                 sample.kind,
                 sample.key_expr.as_str(),
                 sample.value,

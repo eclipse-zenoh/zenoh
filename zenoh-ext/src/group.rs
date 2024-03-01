@@ -342,7 +342,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                             }
                                         }
                                         Err(e) => {
-                                            log::warn!("Error received: {}", e);
+                                            log::warn!("Error received: {:?}", e);
                                         }
                                     }
                                 }

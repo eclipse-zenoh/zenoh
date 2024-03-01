@@ -13,12 +13,13 @@
 //
 
 //! Value primitives.
-use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
-use zenoh_result::{ZError, ZResult};
+use std::ops::Deref;
 
 use crate::buffers::ZBuf;
 use crate::encoding::{Decoder, DefaultEncoding, Encoder};
-use crate::prelude::{Encoding, SplitBuffer};
+use crate::prelude::Encoding;
+use zenoh_buffers::buffer::SplitBuffer;
+use zenoh_result::{ZError, ZResult};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the `payload`
 /// should be interpreted.
@@ -87,7 +88,7 @@ impl Value {
     ///
     /// ```rust
     /// use zenoh::prelude::sync::*;
-    /// use zenoh_result::{zerror, ZResult};
+    /// use zenoh_result::{self, zerror, ZError, ZResult};
     /// use zenoh::encoding::{Encoder, Decoder};
     ///
     /// struct MyEncoder;
@@ -97,17 +98,21 @@ impl Value {
     /// }
     ///
     /// impl Encoder<String> for MyEncoder {
-    ///     fn encode(self, s: String) -> Value {
+    ///     type Output = Value;
+    ///
+    ///     fn encode(self, s: String) -> Self::Output {
     ///         Value::new(s.into_bytes().into()).with_encoding(MyEncoder::STRING)
     ///     }
     /// }
     ///
     /// impl Decoder<String> for MyEncoder {
-    ///     fn decode(self, v: &Value) -> ZResult<String> {
+    ///     type Error = ZError;
+    ///
+    ///     fn decode(self, v: &Value) -> Result<String, Self::Error> {
     ///         if v.encoding == MyEncoder::STRING {
-    ///             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e).into())
+    ///             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
     ///         } else {
-    ///             Err(zerror!("Invalid encoding").into())
+    ///             Err(zerror!("Invalid encoding"))
     ///         }
     ///     }
     /// }
@@ -164,17 +169,35 @@ impl std::fmt::Debug for Value {
     }
 }
 
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let payload = self.payload.contiguous();
-        match std::str::from_utf8(&payload) {
-            Ok(s) => write!(f, "{}", s),
-            Err(_) => {
-                let s = b64_std_engine.encode(&payload);
-                write!(f, "{}", s)
-            }
+// For convenience to always convert a Value the examples
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StringOrBase64 {
+    String(String),
+    Base64(String),
+}
+
+impl Deref for StringOrBase64 {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::String(s) | Self::Base64(s) => s,
         }
     }
 }
 
-impl std::error::Error for Value {}
+impl std::fmt::Display for StringOrBase64 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self)
+    }
+}
+
+impl From<Value> for StringOrBase64 {
+    fn from(v: Value) -> Self {
+        use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
+        match String::try_from(v.payload.clone()) {
+            Ok(s) => StringOrBase64::String(s),
+            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.payload.contiguous())),
+        }
+    }
+}

@@ -181,7 +181,7 @@ impl StorageService {
                         // log error if the sample is not timestamped
                         // This is to reduce down the line inconsistencies of having duplicate samples stored
                         if sample.get_timestamp().is_none() {
-                            log::error!("Sample {} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
+                            log::error!("Sample {:?} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
                         }
                         else {
                             self.process_sample(sample).await;
@@ -263,7 +263,7 @@ impl StorageService {
     // The storage should only simply save the key, sample pair while put and retrieve the same during get
     // the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
-        log::trace!("[STORAGE] Processing sample: {}", sample);
+        log::trace!("[STORAGE] Processing sample: {:?}", sample);
         // Call incoming data interceptor (if any)
         let sample = if let Some(ref interceptor) = self.in_interceptor {
             interceptor(sample)
@@ -296,7 +296,7 @@ impl StorageService {
                         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
                 log::trace!(
-                    "Sample `{}` identified as neded processing for key {}",
+                    "Sample `{:?}` identified as neded processing for key {}",
                     sample,
                     k
                 );
@@ -668,7 +668,7 @@ impl StorageService {
                         self.process_sample(sample).await;
                     }
                     Err(e) => log::warn!(
-                        "Storage '{}' received an error to align query: {}",
+                        "Storage '{}' received an error to align query: {:?}",
                         self.name,
                         e
                     ),
