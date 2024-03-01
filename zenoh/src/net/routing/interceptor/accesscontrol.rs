@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use zenoh_config::{AclConfig, Action, Subject};
+use zenoh_config::{AclConfig, Action, Permission, Subject};
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{PushBody, RequestBody, ResponseBody},
@@ -20,37 +20,35 @@ pub(crate) struct AclEnforcer {
 struct EgressAclEnforcer {
     pe: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,
+    default_decision: bool,
 }
 struct IngressAclEnforcer {
     pe: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,
+    default_decision: bool,
 }
 
 pub(crate) fn acl_interceptor_factories(acl_config: AclConfig) -> ZResult<Vec<InterceptorFactory>> {
     let mut res: Vec<InterceptorFactory> = vec![];
-    let mut acl_enabled = false;
-    match acl_config.enabled {
-        Some(val) => acl_enabled = val,
-        None => {
-            log::warn!("acl config is not setup");
-            //return Ok(res);
-        }
-    }
-    if acl_enabled {
+
+    if acl_config.enabled {
         let mut policy_enforcer = PolicyEnforcer::new();
         match policy_enforcer.init(acl_config) {
             Ok(_) => {
-                log::debug!("access control is enabled and initialized");
+                log::debug!("Access control is enabled and initialized");
                 res.push(Box::new(AclEnforcer {
                     e: Arc::new(policy_enforcer),
                 }))
             }
             Err(e) => log::error!(
-                "access control enabled but not initialized with error {}!",
+                "Access control enabled but not initialized with error {}!",
                 e
             ),
         }
+    } else {
+        log::warn!("Access Control is disabled in config!");
     }
+
     Ok(res)
 }
 
@@ -64,26 +62,34 @@ impl InterceptorFactoryTrait for AclEnforcer {
             log::debug!("acl interceptor links details {:?}", links);
             for link in links {
                 let e = self.e.clone();
-                if let Some(sm) = &e.subject_map {
-                    for i in link.interfaces {
-                        let x = &Subject::Interface(i);
-                        if sm.contains_key(x) {
-                            interface_list.push(*sm.get(x).unwrap());
+                if let Some(subject_map) = &e.subject_map {
+                    for face in link.interfaces {
+                        let subject = &Subject::Interface(face);
+                        match subject_map.get(subject) {
+                            Some(val) => interface_list.push(*val),
+                            None => continue,
                         }
                     }
                 }
             }
         }
-        log::debug!("log info");
         let pe = self.e.clone();
         (
             Some(Box::new(IngressAclEnforcer {
                 pe: pe.clone(),
                 interface_list: interface_list.clone(),
+                default_decision: match pe.default_permission {
+                    Permission::Allow => true,
+                    Permission::Deny => false,
+                },
             })),
             Some(Box::new(EgressAclEnforcer {
                 pe: pe.clone(),
                 interface_list,
+                default_decision: match pe.default_permission {
+                    Permission::Allow => true,
+                    Permission::Deny => false,
+                },
             })),
         )
     }
@@ -105,12 +111,7 @@ impl InterceptorTrait for IngressAclEnforcer {
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        let kexpr = match ctx.full_expr() {
-            Some(val) => val,
-            None => return None,
-        }; //add the cache here
-        let interface_list = &self.interface_list;
-
+        let key_expr = ctx.full_expr()?; //TODO add caching
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
@@ -124,37 +125,45 @@ impl InterceptorTrait for IngressAclEnforcer {
             ..
         }) = &ctx.msg.body
         {
-            let mut decision = false;
-            for subject in interface_list {
-                match self.pe.policy_decision_point(*subject, Action::Put, kexpr) {
-                    Ok(val) => {
-                        if val {
-                            decision = val;
-                            break;
-                        }
+            let mut decision = self.default_decision;
+
+            for subject in &self.interface_list {
+                match self.pe.policy_decision_point(
+                    *subject,
+                    Action::Put,
+                    key_expr,
+                    self.default_decision,
+                ) {
+                    Ok(true) => {
+                        decision = true;
+                        break;
                     }
+                    Ok(false) => continue,
                     Err(_) => return None,
                 }
             }
+
             if !decision {
                 return None;
             }
-        }
-
-        if let NetworkBody::Request(Request {
+        } else if let NetworkBody::Request(Request {
             payload: RequestBody::Query(_),
             ..
         }) = &ctx.msg.body
         {
-            let mut decision = false;
-            for subject in interface_list {
-                match self.pe.policy_decision_point(*subject, Action::Get, kexpr) {
-                    Ok(val) => {
-                        if val {
-                            decision = val;
-                            break;
-                        }
+            let mut decision = self.default_decision;
+            for subject in &self.interface_list {
+                match self.pe.policy_decision_point(
+                    *subject,
+                    Action::Get,
+                    key_expr,
+                    self.default_decision,
+                ) {
+                    Ok(true) => {
+                        decision = true;
+                        break;
                     }
+                    Ok(false) => continue,
                     Err(_) => return None,
                 }
             }
@@ -162,7 +171,6 @@ impl InterceptorTrait for IngressAclEnforcer {
                 return None;
             }
         }
-
         Some(ctx)
     }
 }
@@ -172,26 +180,25 @@ impl InterceptorTrait for EgressAclEnforcer {
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        let kexpr = match ctx.full_expr() {
-            Some(val) => val,
-            None => return None,
-        }; //add the cache here
-        let interface_list = &self.interface_list;
+        let key_expr = ctx.full_expr()?; //TODO add caching
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
         }) = &ctx.msg.body
         {
-            // let action = ;
-            let mut decision = false;
-            for subject in interface_list {
-                match self.pe.policy_decision_point(*subject, Action::Sub, kexpr) {
-                    Ok(val) => {
-                        if val {
-                            decision = val;
-                            break;
-                        }
+            let mut decision = self.default_decision;
+            for subject in &self.interface_list {
+                match self.pe.policy_decision_point(
+                    *subject,
+                    Action::Sub,
+                    key_expr,
+                    self.default_decision,
+                ) {
+                    Ok(true) => {
+                        decision = true;
+                        break;
                     }
+                    Ok(false) => continue,
                     Err(_) => return None,
                 }
             }

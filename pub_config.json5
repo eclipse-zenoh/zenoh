@@ -107,11 +107,11 @@
   // //  },
   // /// Configure internal transport parameters
   transport: {
-    acl: {
-      "enabled": false,
-      "blacklist": false,
-      "rules": null,
-    },
+    // acl: {
+    //   "enabled": false,
+    //   "blacklist": false,
+    //   "rules": null,
+    // },
   }
   // transport: {
   //   unicast: {

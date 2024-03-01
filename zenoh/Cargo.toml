@@ -63,6 +63,7 @@ default = [
 ]
 
 [dependencies]
+ahash = { workspace = true }
 async-global-executor = { workspace = true }
 async-std = { workspace = true, features = ["attributes"] }
 async-trait = { workspace = true }
@@ -105,8 +106,6 @@ zenoh-sync = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-keyexpr = { workspace = true }
-
-rustc-hash = "1.1.0"
 [build-dependencies]
 rustc_version = { workspace = true }
 

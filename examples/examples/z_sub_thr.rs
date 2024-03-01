@@ -81,7 +81,7 @@ fn main() {
 
     let session = zenoh::open(config).res().unwrap();
 
-    let key_expr = "test/**";
+    let key_expr = "test/thr";
 
     let mut stats = Stats::new(n);
     let _sub = session

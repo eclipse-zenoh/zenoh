@@ -30,11 +30,11 @@
     ],
   },
   transport: {
-    acl: {
-      "enabled": false,
-      "blacklist": false,
-      "rules": null,
-    },
+    // acl: {
+    //   "enabled": false,
+    //   "blacklist": false,
+    //   "rules": null,
+    // },
   }
   // /// Configure the scouting mechanisms and their behaviours
   // scouting: {

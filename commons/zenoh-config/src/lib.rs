@@ -98,11 +98,7 @@ pub struct DownsamplingItemConf {
 }
 
 //adding datatypes needed for ACL Config
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-pub enum Permission {
-    Allow,
-    Deny,
-}
+
 #[derive(Serialize, Debug, Deserialize, Clone)]
 
 pub struct ConfigRule {
@@ -123,6 +119,7 @@ pub struct PolicyRule {
 #[serde(untagged)]
 pub enum Subject {
     Interface(String),
+    //Username(String)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
@@ -130,10 +127,17 @@ pub enum Action {
     Put,
     Sub,
     Get,
-    Reply,
+    Queryable,
 }
-pub const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum
-pub const NUMBER_OF_PERMISSIONS: usize = 2; //size of permission enum
+pub const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum (change according to Action size)
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+pub enum Permission {
+    Allow,
+    Deny,
+}
+pub const NUMBER_OF_PERMISSIONS: usize = 2; //size of permission enum (permanently fixed to 2)
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -449,8 +453,8 @@ validated_struct::validator! {
                 },
             },
             pub acl: AclConfig {
-                pub enabled: Option<bool>,
-                pub blacklist: Option<bool>,
+                pub enabled: bool,
+                pub default_permission: Permission,
                 pub rules: Option<Vec<ConfigRule>>
             }
         },
