@@ -13,11 +13,10 @@
 //
 use crate::{
     encoding::{Decoder, Encoder, EncodingMapping},
-    value::Value,
     Sample,
 };
 use std::{borrow::Cow, sync::Arc};
-use zenoh_buffers::{buffer::SplitBuffer, ZBuf, ZSlice};
+use zenoh_buffers::{buffer::SplitBuffer, reader::HasReader, writer::HasWriter, ZBuf, ZSlice};
 use zenoh_protocol::core::{Encoding, EncodingPrefix};
 use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
@@ -291,34 +290,23 @@ impl EncodingMapping for DefaultEncoding {
 
 // Octect stream
 impl Encoder<ZBuf> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: ZBuf) -> Self::Output {
-        Value {
-            payload: t,
-            encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,
-        }
+        t
     }
 }
 
 impl Decoder<ZBuf> for DefaultEncoding {
     type Error = ZError;
 
-    fn decode(self, v: &Value) -> Result<ZBuf, Self::Error> {
-        if v.encoding == DefaultEncoding::APPLICATION_OCTET_STREAM {
-            Ok(v.payload.clone())
-        } else {
-            bail!(
-                "Decode error: invalid encoding. Received '{}', expected '{}'.",
-                DefaultEncoding.to_str(&v.encoding),
-                DefaultEncoding.to_str(&DefaultEncoding::APPLICATION_OCTET_STREAM)
-            )
-        }
+    fn decode(self, v: &ZBuf) -> Result<ZBuf, Self::Error> {
+        Ok(v.clone())
     }
 }
 
 impl Encoder<Vec<u8>> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: Vec<u8>) -> Self::Output {
         Self.encode(ZBuf::from(t))
@@ -326,7 +314,7 @@ impl Encoder<Vec<u8>> for DefaultEncoding {
 }
 
 impl Encoder<&[u8]> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: &[u8]) -> Self::Output {
         Self.encode(t.to_vec())
@@ -336,14 +324,14 @@ impl Encoder<&[u8]> for DefaultEncoding {
 impl Decoder<Vec<u8>> for DefaultEncoding {
     type Error = ZError;
 
-    fn decode(self, v: &Value) -> Result<Vec<u8>, Self::Error> {
+    fn decode(self, v: &ZBuf) -> Result<Vec<u8>, Self::Error> {
         let v: ZBuf = Self.decode(v)?;
         Ok(v.contiguous().to_vec())
     }
 }
 
 impl<'a> Encoder<Cow<'a, [u8]>> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: Cow<'a, [u8]>) -> Self::Output {
         Self.encode(ZBuf::from(t.to_vec()))
@@ -353,7 +341,7 @@ impl<'a> Encoder<Cow<'a, [u8]>> for DefaultEncoding {
 impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoding {
     type Error = ZError;
 
-    fn decode(self, v: &Value) -> Result<Cow<'a, [u8]>, Self::Error> {
+    fn decode(self, v: &ZBuf) -> Result<Cow<'a, [u8]>, Self::Error> {
         let v: Vec<u8> = Self.decode(v)?;
         Ok(Cow::Owned(v))
     }
@@ -361,18 +349,15 @@ impl<'a> Decoder<Cow<'a, [u8]>> for DefaultEncoding {
 
 // Text plain
 impl Encoder<String> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, s: String) -> Self::Output {
-        Value {
-            payload: ZBuf::from(s.into_bytes()),
-            encoding: DefaultEncoding::TEXT_PLAIN,
-        }
+        ZBuf::from(s)
     }
 }
 
 impl Encoder<&str> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, s: &str) -> Self::Output {
         Self.encode(s.to_string())
@@ -382,21 +367,13 @@ impl Encoder<&str> for DefaultEncoding {
 impl Decoder<String> for DefaultEncoding {
     type Error = ZError;
 
-    fn decode(self, v: &Value) -> Result<String, Self::Error> {
-        if v.encoding == DefaultEncoding::TEXT_PLAIN {
-            String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
-        } else {
-            bail!(
-                "Decode error: invalid encoding. Received '{}', expected '{}'.",
-                DefaultEncoding.to_str(&v.encoding),
-                DefaultEncoding.to_str(&DefaultEncoding::TEXT_PLAIN)
-            )
-        }
+    fn decode(self, v: &ZBuf) -> Result<String, Self::Error> {
+        String::try_from(v.clone()).map_err(|e| zerror!("Decode error: {}", e))
     }
 }
 
 impl<'a> Encoder<Cow<'a, str>> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, s: Cow<'a, str>) -> Self::Output {
         Self.encode(s.to_string())
@@ -406,7 +383,7 @@ impl<'a> Encoder<Cow<'a, str>> for DefaultEncoding {
 impl<'a> Decoder<Cow<'a, str>> for DefaultEncoding {
     type Error = ZError;
 
-    fn decode(self, v: &Value) -> Result<Cow<'a, str>, Self::Error> {
+    fn decode(self, v: &ZBuf) -> Result<Cow<'a, str>, Self::Error> {
         let v: String = Self.decode(v)?;
         Ok(Cow::Owned(v))
     }
@@ -416,24 +393,20 @@ impl<'a> Decoder<Cow<'a, str>> for DefaultEncoding {
 macro_rules! impl_int {
     ($t:ty, $encoding:expr) => {
         impl Encoder<$t> for DefaultEncoding {
-            type Output = Value;
+            type Output = ZBuf;
 
             fn encode(self, t: $t) -> Self::Output {
                 let bs = t.to_le_bytes();
                 let end = 1 + bs.iter().rposition(|b| *b != 0).unwrap_or(bs.len() - 1);
-                let v = Value {
-                    // Safety:
-                    // - 0 is a valid start index because bs is guaranteed to always have a length greater or equal than 1
-                    // - end is a valid end index because is bounded between 0 and bs.len()
-                    payload: ZBuf::from(unsafe { ZSlice::new_unchecked(Arc::new(bs), 0, end) }),
-                    encoding: $encoding,
-                };
-                v
+                // SAFETY:
+                // - 0 is a valid start index because bs is guaranteed to always have a length greater or equal than 1
+                // - end is a valid end index because is bounded between 0 and bs.len()
+                ZBuf::from(unsafe { ZSlice::new_unchecked(Arc::new(bs), 0, end) })
             }
         }
 
         impl Encoder<&$t> for DefaultEncoding {
-            type Output = Value;
+            type Output = ZBuf;
 
             fn encode(self, t: &$t) -> Self::Output {
                 Self.encode(*t)
@@ -441,7 +414,7 @@ macro_rules! impl_int {
         }
 
         impl Encoder<&mut $t> for DefaultEncoding {
-            type Output = Value;
+            type Output = ZBuf;
 
             fn encode(self, t: &mut $t) -> Self::Output {
                 Self.encode(*t)
@@ -451,28 +424,20 @@ macro_rules! impl_int {
         impl Decoder<$t> for DefaultEncoding {
             type Error = ZError;
 
-            fn decode(self, v: &Value) -> Result<$t, Self::Error> {
-                if v.encoding == $encoding {
-                    let p = v.payload.contiguous();
-                    let mut bs = (0 as $t).to_le_bytes();
-                    if p.len() > bs.len() {
-                        bail!(
-                            "Decode error: {} invalid length ({} > {})",
-                            std::any::type_name::<$t>(),
-                            p.len(),
-                            bs.len()
-                        );
-                    }
-                    bs[..p.len()].copy_from_slice(&p);
-                    let t = <$t>::from_le_bytes(bs);
-                    Ok(t)
-                } else {
+            fn decode(self, v: &ZBuf) -> Result<$t, Self::Error> {
+                let p = v.contiguous();
+                let mut bs = (0 as $t).to_le_bytes();
+                if p.len() > bs.len() {
                     bail!(
-                        "Decode error: invalid encoding. Received '{}', expected '{}'.",
-                        DefaultEncoding.to_str(&v.encoding),
-                        DefaultEncoding.to_str(&$encoding)
+                        "Decode error: {} invalid length ({} > {})",
+                        std::any::type_name::<$t>(),
+                        p.len(),
+                        bs.len()
                     );
                 }
+                bs[..p.len()].copy_from_slice(&p);
+                let t = <$t>::from_le_bytes(bs);
+                Ok(t)
             }
         }
     };
@@ -498,38 +463,27 @@ impl_int!(f64, DefaultEncoding::ZENOH_FLOAT);
 
 // Zenoh bool
 impl Encoder<bool> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: bool) -> Self::Output {
         // SAFETY: casting a bool into an integer is well-defined behaviour.
         //      0 is false, 1 is true: https://doc.rust-lang.org/std/primitive.bool.html
-        Value {
-            payload: ZBuf::from((t as u8).to_le_bytes()),
-            encoding: DefaultEncoding::APPLICATION_JSON,
-        }
+        ZBuf::from((t as u8).to_le_bytes())
     }
 }
 
 impl Decoder<bool> for DefaultEncoding {
     type Error = ZError;
 
-    fn decode(self, v: &Value) -> Result<bool, Self::Error> {
-        if v.encoding == DefaultEncoding::ZENOH_BOOL {
-            let p = v.payload.contiguous();
-            if p.len() != 1 {
-                bail!("Decode error:: bool invalid length ({} != {})", p.len(), 1);
-            }
-            match p[0] {
-                0 => Ok(false),
-                1 => Ok(true),
-                invalid => bail!("Decode error: bool invalid value ({})", invalid),
-            }
-        } else {
-            bail!(
-                "Decode error: invalid encoding. Received '{}', expected '{}'.",
-                DefaultEncoding.to_str(&v.encoding),
-                DefaultEncoding.to_str(&DefaultEncoding::ZENOH_BOOL)
-            );
+    fn decode(self, v: &ZBuf) -> Result<bool, Self::Error> {
+        let p = v.contiguous();
+        if p.len() != 1 {
+            bail!("Decode error:: bool invalid length ({} != {})", p.len(), 1);
+        }
+        match p[0] {
+            0 => Ok(false),
+            1 => Ok(true),
+            invalid => bail!("Decode error: bool invalid value ({})", invalid),
         }
     }
 }
@@ -537,18 +491,17 @@ impl Decoder<bool> for DefaultEncoding {
 // - Zenoh advanced types encoders/decoders
 // JSON
 impl Encoder<&serde_json::Value> for DefaultEncoding {
-    type Output = Value;
+    type Output = Result<ZBuf, serde_json::Error>;
 
     fn encode(self, t: &serde_json::Value) -> Self::Output {
-        Value {
-            payload: ZBuf::from(t.to_string().into_bytes()),
-            encoding: DefaultEncoding::APPLICATION_JSON,
-        }
+        let mut zbuf = ZBuf::empty();
+        serde_json::to_writer(zbuf.writer(), t)?;
+        Ok(zbuf)
     }
 }
 
 impl Encoder<serde_json::Value> for DefaultEncoding {
-    type Output = Value;
+    type Output = Result<ZBuf, serde_json::Error>;
 
     fn encode(self, t: serde_json::Value) -> Self::Output {
         Self.encode(&t)
@@ -558,52 +511,34 @@ impl Encoder<serde_json::Value> for DefaultEncoding {
 impl Decoder<serde_json::Value> for DefaultEncoding {
     type Error = ZError;
 
-    fn decode(self, v: &Value) -> Result<serde_json::Value, Self::Error> {
-        if v.encoding == DefaultEncoding::APPLICATION_JSON
-            || v.encoding == DefaultEncoding::TEXT_JSON
-        {
-            let r: serde_json::Value = serde::Deserialize::deserialize(
-                &mut serde_json::Deserializer::from_slice(&v.payload.contiguous()),
-            )
-            .map_err(|e| zerror!("Decode error: {}", e))?;
-            Ok(r)
-        } else {
-            bail!(
-                "Decode error: invalid encoding. Received '{}', expected '{}' or '{}'.",
-                DefaultEncoding.to_str(&v.encoding),
-                DefaultEncoding.to_str(&DefaultEncoding::APPLICATION_JSON),
-                DefaultEncoding.to_str(&DefaultEncoding::TEXT_JSON)
-            );
-        }
+    fn decode(self, v: &ZBuf) -> Result<serde_json::Value, Self::Error> {
+        serde_json::from_reader(v.reader()).map_err(|e| zerror!("Decode error: {}", e))
     }
 }
 
 // - Zenoh Rust-specific types encoders/decoders
 // Sample
 impl Encoder<Sample> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: Sample) -> Self::Output {
-        t.value
+        t.value.payload
     }
 }
 
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl Encoder<Arc<SharedMemoryBuf>> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: Arc<SharedMemoryBuf>) -> Self::Output {
-        Value {
-            payload: t.into(),
-            encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,
-        }
+        t.into()
     }
 }
 
 #[cfg(feature = "shared-memory")]
 impl Encoder<Box<SharedMemoryBuf>> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: Box<SharedMemoryBuf>) -> Self::Output {
         let smb: Arc<SharedMemoryBuf> = t.into();
@@ -613,13 +548,10 @@ impl Encoder<Box<SharedMemoryBuf>> for DefaultEncoding {
 
 #[cfg(feature = "shared-memory")]
 impl Encoder<SharedMemoryBuf> for DefaultEncoding {
-    type Output = Value;
+    type Output = ZBuf;
 
     fn encode(self, t: SharedMemoryBuf) -> Self::Output {
-        Value {
-            payload: t.into(),
-            encoding: DefaultEncoding::APPLICATION_OCTET_STREAM,
-        }
+        t.into()
     }
 }
 

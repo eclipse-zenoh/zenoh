@@ -79,9 +79,12 @@ impl Value {
     /// ```
     pub fn encode<T>(t: T) -> Self
     where
-        DefaultEncoding: Encoder<T, Output = Value>,
+        DefaultEncoding: Encoder<T, Output = ZBuf>,
     {
-        DefaultEncoding.encode(t)
+        Value {
+            payload: DefaultEncoding.encode(t),
+            encoding: Encoding::empty(),
+        }
     }
 
     /// Encode an object of type `T` as a [`Value`] using a provided [`Encoder`].
@@ -124,9 +127,12 @@ impl Value {
     /// ```
     pub fn encode_with<T, M>(t: T, m: M) -> Self
     where
-        M: Encoder<T, Output = Value>,
+        M: Encoder<T, Output = ZBuf>,
     {
-        m.encode(t)
+        Value {
+            payload: m.encode(t),
+            encoding: Encoding::empty(),
+        }
     }
 
     /// Decode an object of type `T` from a [`Value`] using the [`DefaultEncoding`].
@@ -135,7 +141,7 @@ impl Value {
     where
         DefaultEncoding: Decoder<T, Error = ZError>,
     {
-        Ok(DefaultEncoding.decode(self)?)
+        Ok(DefaultEncoding.decode(&self.payload)?)
     }
 
     /// Decode an object of type `T` from a [`Value`] using a provided [`Encoder`].
@@ -144,7 +150,7 @@ impl Value {
     where
         M: Decoder<T, Error = ZError>,
     {
-        Ok(m.decode(self)?)
+        Ok(m.decode(&self.payload)?)
     }
 }
 
@@ -152,7 +158,7 @@ impl Value {
 /// This trait implementation is provided as convenience for users using the [`DefaultEncoding`].
 impl<T> From<T> for Value
 where
-    DefaultEncoding: Encoder<T, Output = Value>,
+    DefaultEncoding: Encoder<T, Output = ZBuf>,
 {
     fn from(t: T) -> Self {
         Value::encode(t)

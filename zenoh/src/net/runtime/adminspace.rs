@@ -22,7 +22,7 @@ use crate::prelude::{
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
-use crate::DefaultEncoding;
+use crate::{DefaultEncoding, Encoder};
 use async_std::task;
 use log::{error, trace};
 use serde_json::json;
@@ -689,8 +689,13 @@ fn plugins_data(context: &AdminContext, query: Query) {
             log::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::from(status)))).res() {
-                log::error!("Error sending AdminSpace reply: {:?}", e);
+            match DefaultEncoding.encode(status) {
+                Ok(zbuf) => {
+                    if let Err(e) = query.reply(Ok(Sample::new(key, zbuf))).res_sync() {
+                        log::error!("Error sending AdminSpace reply: {:?}", e);
+                    }
+                }
+                Err(e) => log::debug!("Admin query error: {}", e),
             }
         }
     }
@@ -732,13 +737,13 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            if let Err(e) = query.reply(Ok(Sample::new(
-                                key_expr,
-                                Value::from(response.value).with_encoding(DefaultEncoding::TEXT_PLAIN),
-                            )))
-                            .res()
-                            {
-                                log::error!("Error sending AdminSpace reply: {:?}", e);
+                            match DefaultEncoding.encode(response.value) {
+                                Ok(zbuf) => {
+                                    if let Err(e) = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync() {
+                                        log::error!("Error sending AdminSpace reply: {:?}", e);
+                                    }
+                                },
+                                Err(e) => log::debug!("Admin query error: {}", e),
                             }
                         } else {
                             log::error!("Error: plugin {} replied with an invalid key", plugin_key);

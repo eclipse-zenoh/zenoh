@@ -47,13 +47,13 @@ macro_rules! derive_default_encoding_for {
 
         macro_rules! default_decoder {
             ($t:ty) => {
-                impl zenoh::encoding::Decoder<$t> for $e {
-                    type Error = <zenoh::encoding::DefaultEncoding as zenoh::encoding::Decoder<$t>>::Error;
+                // impl zenoh::encoding::Decoder<$t> for $e {
+                //     type Error = <zenoh::encoding::DefaultEncoding as zenoh::encoding::Decoder<$t>>::Error;
 
-                    fn decode(self, v: &zenoh::value::Value) -> Result<$t, Self::Error> {
-                        zenoh::encoding::DefaultEncoding.decode(v)
-                    }
-                }
+                //     fn decode(self, v: &zenoh::value::Value) -> Result<$t, Self::Error> {
+                //         zenoh::encoding::DefaultEncoding.decode(v)
+                //     }
+                // }
             };
         }
 
@@ -79,13 +79,13 @@ macro_rules! derive_default_encoding_for {
 
         macro_rules! default_decoder_cow {
             ($t:ty) => {
-                impl<'a> zenoh::encoding::Decoder<Cow<'a, $t>> for $e {
-                    type Error = <zenoh::encoding::DefaultEncoding as zenoh::encoding::Decoder<Cow<'a, $t>>>::Error;
+                // impl<'a> zenoh::encoding::Decoder<Cow<'a, $t>> for $e {
+                //     type Error = <zenoh::encoding::DefaultEncoding as zenoh::encoding::Decoder<Cow<'a, $t>>>::Error;
 
-                    fn decode(self, v: &zenoh::value::Value) -> Result<Cow<'a, $t>, Self::Error> {
-                        zenoh::encoding::DefaultEncoding.decode(v)
-                    }
-                }
+                //     fn decode(self, v: &zenoh::value::Value) -> Result<Cow<'a, $t>, Self::Error> {
+                //         zenoh::encoding::DefaultEncoding.decode(v)
+                //     }
+                // }
             };
         }
 

@@ -169,23 +169,6 @@ pub mod time {
     }
 }
 
-/// A map of key/value (String,String) properties.
-pub mod properties {
-    use super::prelude::Value;
-    pub use zenoh_collections::Properties;
-
-    /// Convert a set of [`Properties`] into a [`Value`].  
-    /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`  
-    /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
-    pub fn properties_to_json_value(props: &Properties) -> Value {
-        let json_map = props
-            .iter()
-            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-            .collect::<serde_json::map::Map<String, serde_json::Value>>();
-        serde_json::Value::Object(json_map).into()
-    }
-}
-
 /// Scouting primitives.
 pub mod scouting;
 
