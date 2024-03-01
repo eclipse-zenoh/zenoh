@@ -182,21 +182,24 @@ validated_struct::validator! {
     // tags{rust.config, api.config}
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
+        // tags{rust.config.id, api.config.id}
         id: ZenohId,
         /// The metadata of the instance. Arbitrary json data available from the admin space
+        // tags{rust.config.metadata, api.config.metadata}
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
+        // tags{rust.config.mode, api.config.mode}
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
-        // tags{rust.config.connect, api.config.connect}
         pub connect: #[derive(Default)]
         ConnectConfig {
+            // tags{rust.config.connect.endpoints, api.config.connect.endpoints}
             pub endpoints: Vec<EndPoint>,
         },
         /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
-        // tags{rust.config.listen, api.config.listen}
         pub listen: #[derive(Default)]
         ListenConfig {
+            // tags{rust.config.listen.endpoints, api.config.listen.endpoints}
             pub endpoints: Vec<EndPoint>,
         },
         pub scouting: #[derive(Default)]
@@ -229,10 +232,10 @@ validated_struct::validator! {
                 listen: Option<ModeDependentValue<bool>>,
             },
             /// The gossip scouting configuration.
-            // tags{rust.config.scouting.gossip, api.config.scouting.gossip}
             pub gossip: #[derive(Default)]
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
+                // tags{rust.config.scouting.gossip.enabled, api.config.scouting.gossip.enabled}
                 enabled: Option<bool>,
                 /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
                 /// When false, gossip scouting informations are only propagated to the next hop.
@@ -241,6 +244,7 @@ validated_struct::validator! {
                 /// direct connectivity with each other.
                 multihop: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
+                // tags{rust.config.scouting.gossip.autoconnect, api.config.scouting.gossip.autoconnect}
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
             },
@@ -251,139 +255,158 @@ validated_struct::validator! {
         pub timestamping: #[derive(Default)]
         TimestampingConf {
             /// Whether data messages should be timestamped if not already.
+            // tags{rust.config.timestamping.enabled, api.config.timestamping.enabled}
             enabled: Option<ModeDependentValue<bool>>,
             /// Whether data messages with timestamps in the future should be dropped or not.
             /// If set to false (default), messages with timestamps in the future are retimestamped.
             /// Timestamps are ignored if timestamping is disabled.
+            // tags{rust.config.timestamping.drop_future_timestamp, api.config.timestamping.drop_future_timestamp}
             drop_future_timestamp: Option<bool>,
         },
 
         /// The default timeout to apply to queries in milliseconds.
+        // tags{rust.config.queries_default_timeout, api.config.queries_default_timeout}
         queries_default_timeout: Option<u64>,
 
         /// The routing strategy to use and it's configuration.
-        // tags{rust.config.routing, api.config.routing}
         pub routing: #[derive(Default)]
         RoutingConf {
             /// The routing strategy to use in routers and it's configuration.
-            // tags{rust.config.routing.router, api.config.routing.router}
             pub router: #[derive(Default)]
             RouterRoutingConf {
                 /// When set to true a router will forward data between two peers
                 /// directly connected to it if it detects that those peers are not
                 /// connected to each other.
                 /// The failover brokering only works if gossip discovery is enabled.
+                // tags{rust.config.routing.router.peers_failover_brokering, api.config.routing.router.peers_failover_brokering}
                 peers_failover_brokering: Option<bool>,
             },
             /// The routing strategy to use in peers and it's configuration.
-            // tags{rust.config.routing.peer, api.config.routing.peer}
             pub peer: #[derive(Default)]
             PeerRoutingConf {
                 /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
+                // tags{rust.config.routing.peer.mode, api.config.routing.peer.mode}
                 mode: Option<String>,
             },
         },
 
         /// The declarations aggregation strategy.
-        // tags{rust.config.aggregation, api.config.aggregation}
         pub aggregation: #[derive(Default)]
         AggregationConf {
             /// A list of key-expressions for which all included subscribers will be aggregated into.
+            // tags{rust.config.aggregation.subscribers, api.config.aggregation.subscribers}
             subscribers: Vec<OwnedKeyExpr>,
             /// A list of key-expressions for which all included publishers will be aggregated into.
+            // tags{rust.config.aggregation.publishers, api.config.aggregation.publishers}
             publishers: Vec<OwnedKeyExpr>,
         },
-        // tags{rust.config.transport, api.config.transport}
         pub transport: #[derive(Default)]
         TransportConf {
-            // tags{rust.config.transport.unicast, api.config.transport.unicast}
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
+                // tags{rust.config.transport.unicast.open_timeout, api.config.transport.unicast.open_timeout}
                 accept_timeout: u64,
                 /// Number of links that may stay pending during accept phase (default: 100).
+                // tags{rust.config.transport.unicast.accept_pending, api.config.transport.unicast.accept_pending}
                 accept_pending: usize,
                 /// Maximum number of unicast sessions (default: 1000)
+                // tags{rust.config.transport.unicast.max_sessions, api.config.transport.unicast.max_sessions}
                 max_sessions: usize,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
+                // tags{rust.config.transport.unicast.max_links, api.config.transport.unicast.max_links}
                 max_links: usize,
                 /// Enables the LowLatency transport (default `false`).
                 /// This option does not make LowLatency transport mandatory, the actual implementation of transport
                 /// used will depend on Establish procedure and other party's settings
+                // tags{rust.config.transport.unicast.lowlatency, api.config.transport.unicast.lowlatency}
                 lowlatency: bool,
                 // tags{rust.config.transport.unicast.qos, api.config.transport.unicast.qos}
                 pub qos: QoSUnicastConf {
                     /// Whether QoS is enabled or not.
                     /// If set to `false`, the QoS will be disabled. (default `true`).
+                    // tags{rust.config.transport.unicast.qos.enabled, api.config.transport.unicast.qos.enabled}
                     enabled: bool
                 },
                 // tags{rust.config.transport.unicast.compression, api.config.transport.unicast.compression}
                 pub compression: CompressionUnicastConf {
                     /// You must compile zenoh with "transport_compression" feature to be able to enable compression.
                     /// When enabled is true, batches will be sent compressed. (default `false`).
+                    // tags{rust.config.transport.unicast.compression.enabled, api.config.transport.unicast.compression.enabled}
                     enabled: bool,
                 },
             },
-            // tags{rust.config.transport.multicast, api.config.transport.multicast}
             pub multicast: TransportMulticastConf {
                 /// Link join interval duration in milliseconds (default: 2500)
+                // tags{rust.config.transport.multicast.join_interval, api.config.transport.multicast.join_interval}
                 join_interval: Option<u64>,
                 /// Maximum number of multicast sessions (default: 1000)
+                // tags{rust.config.transport.multicast.max_sessions, api.config.transport.multicast.max_sessions}
                 max_sessions: Option<usize>,
-                // tags{rust.config.transport.multicast.qos, api.config.transport.multicast.qos}
                 pub qos: QoSMulticastConf {
                     /// Whether QoS is enabled or not.
                     /// If set to `false`, the QoS will be disabled. (default `false`).
+                    // tags{rust.config.transport.multicast.qos.enabled, api.config.transport.multicast.qos.enabled}
                     enabled: bool
                 },
-                // tags{rust.config.transport.multicast.compression, api.config.transport.multicast.compression}
                 pub compression: CompressionMulticastConf {
                     /// You must compile zenoh with "transport_compression" feature to be able to enable compression.
                     /// When enabled is true, batches will be sent compressed. (default `false`).
+                    // tags{rust.config.transport.multicast.compression.enabled, api.config.transport.multicast.compression.enabled}
                     enabled: bool,
                 },
             },
-            // tags{rust.config.transport.link, api.config.transport.link}
             pub link: #[derive(Default)]
             TransportLinkConf {
                 // An optional whitelist of protocols to be used for accepting and opening sessions.
                 // If not configured, all the supported protocols are automatically whitelisted.
                 // tags{rust.config.transport.link.protocols, api.config.transport.link.protocols}
                 pub protocols: Option<Vec<String>>,
-                // tags{rust.config.transport.link.tx, api.config.transport.link.tx}
                 pub tx: LinkTxConf {
                     /// The resolution in bits to be used for the message sequence numbers.
                     /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
                     /// Accepted values: 8bit, 16bit, 32bit, 64bit.
+                    // tags{rust.config.transport.link.tx.sequence_number_resolution, api.config.transport.link.tx.sequence_number_resolution}
                     sequence_number_resolution: Bits where (sequence_number_resolution_validator),
                     /// Link lease duration in milliseconds (default: 10000)
+                    // tags{rust.config.transport.link.tx.lease, api.config.transport.link.tx.lease}
                     lease: u64,
                     /// Number fo keep-alive messages in a link lease duration (default: 4)
+                    // tags{rust.config.transport.link.tx.keep_alive, api.config.transport.link.tx.keep_alive}
                     keep_alive: usize,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
+                    // tags{rust.config.transport.link.tx.mtu, api.config.transport.link.tx.mtu}
                     batch_size: BatchSize,
-                    // tags{rust.config.transport.link.tx.queue, api.config.transport.link.tx.queue}
                     pub queue: QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
                         /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
                         /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
                         /// If qos is false, then only the DATA priority will be allocated.
-                        // tags{rust.config.transport.link.tx.queue.size, api.config.transport.link.tx.queue.size}
                         pub size: QueueSizeConf {
+                            // tags{rust.config.transport.link.tx.queue.size.control, api.config.transport.link.tx.queue.size.control}
                             control: usize,
+                            // tags{rust.config.transport.link.tx.queue.size.real_time, api.config.transport.link.tx.queue.size.real_time}
                             real_time: usize,
+                            // tags{rust.config.transport.link.tx.queue.size.interactive_high, api.config.transport.link.tx.queue.size.interactive_high}
                             interactive_high: usize,
+                            // tags{rust.config.transport.link.tx.queue.size.interactive_low, api.config.transport.link.tx.queue.size.interactive_low}
                             interactive_low: usize,
+                            // tags{rust.config.transport.link.tx.queue.size.data_high, api.config.transport.link.tx.queue.size.data_high}
                             data_high: usize,
+                            // tags{rust.config.transport.link.tx.queue.size.data, api.config.transport.link.tx.queue.size.data}
                             data: usize,
+                            // tags{rust.config.transport.link.tx.queue.size.data_low, api.config.transport.link.tx.queue.size.data_low}
                             data_low: usize,
+                            // tags{rust.config.transport.link.tx.queue.size.background, api.config.transport.link.tx.queue.size.background}
                             background: usize,
                         } where (queue_size_validator),
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
+                        // tags{rust.config.transport.link.tx.queue.backoff, api.config.transport.link.tx.queue.backoff}
                         backoff: u64,
                     },
                     // Number of threads used for TX
+                    // tags{rust.config.transport.link.tx.threads, api.config.transport.link.tx.threads}
                     threads: usize,
                 },
                 // tags{rust.config.transport.link.rx, api.config.transport.link.rx}
@@ -393,48 +416,60 @@ validated_struct::validator! {
                     /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
                     /// more in-flight data. This is particularly relevant when dealing with large messages.
                     /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
+                    // tags{rust.config.transport.link.rx.buffer_size, api.config.transport.link.rx.buffer_size}
                     buffer_size: usize,
                     /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
                     /// Fragmented messages that are larger than the configured size will be dropped.
+                    // tags{rust.config.transport.link.rx.defragmentation_buffer_size, api.config.transport.link.rx.defragmentation_buffer_size}
                     max_message_size: usize,
                 },
-                // tags{rust.config.transport.link.tls, api.config.transport.link.tls}
                 pub tls: #[derive(Default)]
                 TLSConf {
+                    // tags{rust.config.transport.link.tls.root_ca_certificate, api.config.transport.link.tls.root_ca_certificate}
                     root_ca_certificate: Option<String>,
+                    // tags{rust.config.transport.link.tls.server_private_key, api.config.transport.link.tls.server_private_key}
                     server_private_key: Option<String>,
+                    // tags{rust.config.transport.link.tls.server_certificate, api.config.transport.link.tls.server_certificate}
                     server_certificate: Option<String>,
+                    // tags{rust.config.transport.link.tls.client_auth, api.config.transport.link.tls.client_auth}
                     client_auth: Option<bool>,
+                    // tags{rust.config.transport.link.tls.client_private_key, api.config.transport.link.tls.client_private_key}
                     client_private_key: Option<String>,
+                    // tags{rust.config.transport.link.tls.client_certificate, api.config.transport.link.tls.client_certificate}
                     client_certificate: Option<String>,
+                    // tags{rust.config.transport.link.tls.server_name_verification, api.config.transport.link.tls.server_name_verification}
                     server_name_verification: Option<bool>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
+                    // tags{rust.config.transport.link.tls.root_ca_certificate_base64, api.config.transport.link.tls.root_ca_certificate_base64}
                     root_ca_certificate_base64: Option<SecretValue>,
                     #[serde(skip_serializing)]
+                    // tags{rust.config.transport.link.tls.server_private_key_base64, api.config.transport.link.tls.server_private_key_base64}
                     server_private_key_base64:  Option<SecretValue>,
                     #[serde(skip_serializing)]
+                    // tags{rust.config.transport.link.tls.server_certificate_base64, api.config.transport.link.tls.server_certificate_base64}
                     server_certificate_base64: Option<SecretValue>,
                     #[serde(skip_serializing)]
+                    // tags{rust.config.transport.link.tls.client_private_key_base64, api.config.transport.link.tls.client_private_key_base64}
                     client_private_key_base64 :  Option<SecretValue>,
                     #[serde(skip_serializing)]
+                    // tags{rust.config.transport.link.tls.client_certificate_base64, api.config.transport.link.tls.client_certificate_base64}
                     client_certificate_base64 :  Option<SecretValue>,
                 },
-                // tags{rust.config.transport.link.unixpipe, api.config.transport.link.unixpipe}
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {
+                    // tags{rust.config.transport.link.unixpipe.path, api.config.transport.link.unixpipe.path}
                     file_access_mask: Option<u32>
                 },
             },
-            // tags{rust.config.transport.shared_memory, api.config.transport.shared_memory}
             pub shared_memory:
             SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
                 /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
                 /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
+                // tags{rust.config.transport.shared_memory.enabled, api.config.transport.shared_memory.enabled}
                 enabled: bool,
             },
-            // tags{rust.config.transport.auth, api.config.transport.auth}
             pub auth: #[derive(Default)]
             AuthConf {
                 /// The configuration of authentification.
@@ -449,20 +484,24 @@ validated_struct::validator! {
                     // tags{rust.config.transport.auth.usrpwd.dictionary_file, api.config.transport.auth.usrpwd.dictionary_file}
                     dictionary_file: Option<String>,
                 } where (user_conf_validator),
-                // tags{rust.config.transport.auth.pubkey, api.config.transport.auth.pubkey}
                 pub pubkey: #[derive(Default)]
                 PubKeyConf {
+                    // tags{rust.config.transport.auth.pubkey.public_key_pem, api.config.transport.auth.pubkey.public_key_pem}
                     public_key_pem: Option<String>,
+                    // tags{rust.config.transport.auth.pubkey.private_key_pem, api.config.transport.auth.pubkey.private_key_pem}
                     private_key_pem: Option<String>,
+                    // tags{rust.config.transport.auth.pubkey.public_key_file, api.config.transport.auth.pubkey.public_key_file}
                     public_key_file: Option<String>,
+                    // tags{rust.config.transport.auth.pubkey.private_key_file, api.config.transport.auth.pubkey.private_key_file}
                     private_key_file: Option<String>,
+                    // tags{rust.config.transport.auth.pubkey.key_size, api.config.transport.auth.pubkey.key_size}
                     key_size: Option<usize>,
+                    // tags{rust.config.transport.auth.pubkey.algorithm, api.config.transport.auth.pubkey.algorithm}
                     known_keys_file: Option<String>,
                 },
             },
         },
         /// Configuration of the admin space.
-        // tags{rust.config.adminspace, api.config.adminspace}
         pub adminspace: #[derive(Default)]
         /// <div class="stab unstable">
         ///   <span class="emoji">🔬</span>
@@ -471,7 +510,6 @@ validated_struct::validator! {
         /// </div>
         AdminSpaceConf {
             /// Permissions on the admin space
-            // tags{rust.config.adminspace.permissions, api.config.adminspace.permissions}
             pub permissions:
             PermissionsConf {
                 /// Whether the admin space replies to queries (true by default).
@@ -487,15 +525,18 @@ validated_struct::validator! {
         },
 
         /// Configuration of the downsampling.
+        // tags{rust.config.downsampling, api.config.downsampling}
         downsampling: Vec<DownsamplingItemConf>,
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
+        // tags{rust.config.plugins_search_dirs, api.config.plugins_search_dirs}
         plugins_search_dirs: Vec<String>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
         #[validated(recursive_accessors)]
         /// The configuration for plugins.
         ///
         /// Please refer to [`PluginsConfig`]'s documentation for further details.
+        // tags{rust.config.plugins, api.config.plugins}
         plugins: PluginsConfig,
     }
 }
