@@ -263,6 +263,13 @@ pub mod ext {
             }
         }
 
+        pub fn set_is_express(&mut self, is_express: bool) {
+            match is_express {
+                true => self.inner = imsg::set_flag(self.inner, Self::E_FLAG),
+                false => self.inner = imsg::unset_flag(self.inner, Self::E_FLAG),
+            }
+        }
+
         pub const fn is_express(&self) -> bool {
             imsg::has_flag(self.inner, Self::E_FLAG)
         }

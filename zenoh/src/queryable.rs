@@ -203,6 +203,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     value: Value { payload, encoding },
                     kind,
                     timestamp,
+                    qos,
                     #[cfg(feature = "unstable")]
                     source_info,
                     #[cfg(feature = "unstable")]
@@ -213,6 +214,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     kind,
                     encoding: Some(encoding),
                     timestamp,
+                    qos,
                     source_id: None,
                     source_sn: None,
                 };

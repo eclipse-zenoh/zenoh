@@ -4779,13 +4779,17 @@ dependencies = [
  "async-std",
  "async-trait",
  "flume",
+ "log",
  "lz4_flex",
  "serde",
  "typenum",
  "zenoh-buffers",
  "zenoh-codec",
+ "zenoh-core",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-sync",
+ "zenoh-util",
 ]
 
 [[package]]
