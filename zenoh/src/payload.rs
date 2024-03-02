@@ -488,11 +488,11 @@ impl Payload {
     /// Encode an object of type `T` as a [`Value`] using the [`DefaultSerializer`].
     ///
     /// ```rust
-    /// use zenoh::value::Value;
+    /// use zenoh::payload::Payload;
     ///
     /// let start = String::from("abc");
     /// let payload = Payload::serialize(start.clone());
-    /// let end: String = payload.decode().unwrap();
+    /// let end: String = payload.deserialize().unwrap();
     /// assert_eq!(start, end);
     /// ```
     pub fn serialize<T>(t: T) -> Self
@@ -505,39 +505,30 @@ impl Payload {
     /// Encode an object of type `T` as a [`Value`] using a provided [`Serialize`].
     ///
     /// ```rust
-    /// use zenoh::prelude::sync::*;
+    /// use zenoh::prelude::{SplitBuffer, Payload, Serialize, Deserialize};
     /// use zenoh_result::{self, zerror, ZError, ZResult};
-    /// use zenoh::encoding::{Serialize, Deserialize};
     ///
     /// struct MySerialize;
     ///
-    /// impl MySerialize {
-    ///     pub const STRING: Encoding = Encoding::new(2);   
-    /// }
-    ///
     /// impl Serialize<String> for MySerialize {
-    ///     type Output = Value;
+    ///     type Output = Payload;
     ///
     ///     fn serialize(self, s: String) -> Self::Output {
-    ///         Value::new(s.into_bytes().into()).with_encoding(MySerialize::STRING)
+    ///         Payload::new(s.into_bytes())
     ///     }
     /// }
     ///
     /// impl Deserialize<String> for MySerialize {
     ///     type Error = ZError;
     ///
-    ///     fn deserialize(self, v: &Value) -> Result<String, Self::Error> {
-    ///         if v.encoding == MySerialize::STRING {
-    ///             String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
-    ///         } else {
-    ///             Err(zerror!("Invalid encoding"))
-    ///         }
+    ///     fn deserialize(self, v: &Payload) -> Result<String, Self::Error> {
+    ///         String::from_utf8(v.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
     ///     }
     /// }
     ///
     /// let start = String::from("abc");
     /// let payload = Payload::serialize_with(start.clone(), MySerialize);
-    /// let end: String = value.decode_with(MySerialize).unwrap();
+    /// let end: String = payload.deserialize_with(MySerialize).unwrap();
     /// assert_eq!(start, end);
     /// ```
     pub fn serialize_with<T, M>(t: T, m: M) -> Self

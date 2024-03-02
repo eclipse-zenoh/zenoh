@@ -426,7 +426,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -500,7 +500,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {}", sample.key_expr, sample.value);
+    ///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
     /// }
     /// # })
     /// ```
@@ -595,7 +595,7 @@ where
 /// while let Ok(token) = tokens.recv_async().await {
 ///     match token.sample {
 ///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr.as_str()),
-///         Err(err) => println!("Received (ERROR: '{}')", err),
+///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload),
 ///     }
 /// }
 /// # })

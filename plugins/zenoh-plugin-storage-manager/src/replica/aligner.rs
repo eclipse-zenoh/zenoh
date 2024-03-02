@@ -211,7 +211,7 @@ impl Aligner {
             let properties = format!("timestamp={}&{}=cold", other.timestamp, ERA);
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
-            // expecting sample.value to be a vec of intervals with their checksum
+            // expecting sample.payload to be a vec of intervals with their checksum
             for each in reply_content {
                 match serde_json::from_str(&StringOrBase64::from(each.payload)) {
                     Ok((i, c)) => {
@@ -255,7 +255,7 @@ impl Aligner {
                     INTERVALS,
                     diff_string.join(",")
                 );
-                // expecting sample.value to be a vec of subintervals with their checksum
+                // expecting sample.payload to be a vec of subintervals with their checksum
                 let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
@@ -296,7 +296,7 @@ impl Aligner {
                 SUBINTERVALS,
                 diff_string.join(",")
             );
-            // expecting sample.value to be a vec of log entries with their checksum
+            // expecting sample.payload to be a vec of log entries with their checksum
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {

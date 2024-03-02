@@ -31,22 +31,21 @@ pub(crate) mod common {
         writer::HasWriter,
     };
     pub use zenoh_core::Resolve;
+    pub use zenoh_protocol::core::{Encoding, EncodingPrefix, EndPoint, Locator, ZenohId};
 
     pub(crate) type Id = usize;
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoCallbackReceiverPair;
-    pub use crate::selector::{Parameter, Parameters, Selector};
     pub use crate::session::{Session, SessionDeclarations};
 
-    pub use crate::query::{QueryConsolidation, QueryTarget};
+    pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+    pub use crate::selector::{Parameter, Parameters, Selector};
 
     /// The encoding of a zenoh `Value`.
     pub use crate::payload::{DefaultSerializer, Deserialize, Payload, Serialize};
-    pub use crate::value::Value;
-    pub use zenoh_protocol::core::{Encoding, EncodingPrefix};
+    pub use crate::value::{DefaultEncoding, Value};
 
-    pub use crate::query::ConsolidationMode;
     #[zenoh_macros::unstable]
     pub use crate::sample::Locality;
     #[cfg(not(feature = "unstable"))]
@@ -57,13 +56,6 @@ pub(crate) mod common {
     #[zenoh_macros::unstable]
     pub use crate::publication::PublisherDeclarations;
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
-
-    /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
-    pub use zenoh_protocol::core::EndPoint;
-    /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
-    pub use zenoh_protocol::core::Locator;
-    /// The global unique id of a zenoh peer.
-    pub use zenoh_protocol::core::ZenohId;
 }
 
 /// Prelude to import when using Zenoh's sync API.

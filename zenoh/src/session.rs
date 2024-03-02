@@ -680,7 +680,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session
     ///     .put("key/expression", "value")
-    ///     .encoding(DefaultEncoding::TEXT_PLAIN)
+    ///     .with_encoding(DefaultEncoding::TEXT_PLAIN)
     ///     .res()
     ///     .await
     ///     .unwrap();
