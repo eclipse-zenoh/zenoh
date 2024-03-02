@@ -579,7 +579,7 @@ mod tests {
             ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: PushBody::Put(Put {
                 timestamp: None,
-                encoding: Encoding::DEFAULT,
+                encoding: Encoding::UNSPECIFIED,
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,

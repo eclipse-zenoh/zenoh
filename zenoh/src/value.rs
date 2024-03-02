@@ -38,7 +38,7 @@ impl Value {
     {
         Value {
             payload: payload.into(),
-            encoding: Encoding::DEFAULT,
+            encoding: Encoding::empty(),
         }
     }
 
@@ -46,15 +46,8 @@ impl Value {
     pub const fn empty() -> Self {
         Value {
             payload: Payload::empty(),
-            encoding: Encoding::DEFAULT,
+            encoding: Encoding::empty(),
         }
-    }
-
-    /// Sets the payload of this [`Value`]`.
-    #[inline(always)]
-    pub fn payload(mut self, payload: Payload) -> Self {
-        self.payload = payload;
-        self
     }
 
     /// Sets the encoding of this [`Value`]`.
