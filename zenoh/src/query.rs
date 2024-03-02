@@ -22,38 +22,13 @@ use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::zenoh::query::Consolidation;
 use zenoh_result::ZResult;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub enum ConsolidationMode {
-    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
-    None,
-    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
-    /// has already been sent with the same key.
-    ///
-    /// This optimizes latency while potentially reducing bandwidth.
-    ///
-    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
-    /// been observed with the same key.
-    Monotonic,
-    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
-    Latest,
-}
-
-impl From<ConsolidationMode> for Consolidation {
-    fn from(val: ConsolidationMode) -> Self {
-        match val {
-            ConsolidationMode::None => Consolidation::None,
-            ConsolidationMode::Monotonic => Consolidation::Monotonic,
-            ConsolidationMode::Latest => Consolidation::Latest,
-        }
-    }
-}
+pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
 
 /// The operation: either manual or automatic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,30 +40,26 @@ pub enum Mode<T> {
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
-    pub(crate) mode: Mode<ConsolidationMode>,
+    pub(crate) mode: ConsolidationMode,
 }
 
 impl QueryConsolidation {
     pub const DEFAULT: Self = Self::AUTO;
     /// Automatic query consolidation strategy selection.
-    pub const AUTO: Self = Self { mode: Mode::Auto };
+    pub const AUTO: Self = Self {
+        mode: ConsolidationMode::Auto,
+    };
 
     pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {
-        Self {
-            mode: Mode::Manual(mode),
-        }
+        Self { mode }
     }
 
     /// Returns the requested [`ConsolidationMode`].
-    pub fn mode(&self) -> Mode<ConsolidationMode> {
+    pub fn mode(&self) -> ConsolidationMode {
         self.mode
     }
 }
-impl From<Mode<ConsolidationMode>> for QueryConsolidation {
-    fn from(mode: Mode<ConsolidationMode>) -> Self {
-        Self { mode }
-    }
-}
+
 impl From<ConsolidationMode> for QueryConsolidation {
     fn from(mode: ConsolidationMode) -> Self {
         Self::from_mode(mode)

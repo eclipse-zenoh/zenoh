@@ -1731,14 +1731,14 @@ impl Session {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
-            Mode::Auto => {
+            ConsolidationMode::Auto => {
                 if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
                     ConsolidationMode::None
                 } else {
                     ConsolidationMode::Latest
                 }
             }
-            Mode::Manual(mode) => mode,
+            mode => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let nb_final = match destination {
@@ -1811,7 +1811,7 @@ impl Session {
                 ext_budget: None,
                 ext_timeout: Some(timeout),
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
-                    consolidation: consolidation.into(),
+                    consolidation,
                     parameters: selector.parameters().to_string(),
                     ext_sinfo: None,
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
@@ -1832,7 +1832,7 @@ impl Session {
                 selector.parameters(),
                 qid,
                 target,
-                consolidation.into(),
+                consolidation,
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -2444,7 +2444,7 @@ impl Primitives for Session {
                                         }
                                     }
                                 }
-                                ConsolidationMode::Latest => {
+                                Consolidation::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
                                         new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {

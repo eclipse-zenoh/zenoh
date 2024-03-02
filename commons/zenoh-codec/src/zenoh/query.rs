@@ -39,7 +39,6 @@ where
             Consolidation::None => 1,
             Consolidation::Monotonic => 2,
             Consolidation::Latest => 3,
-            Consolidation::Unique => 4,
         };
         self.write(&mut *writer, v)
     }
@@ -58,7 +57,6 @@ where
             1 => Consolidation::None,
             2 => Consolidation::Monotonic,
             3 => Consolidation::Latest,
-            4 => Consolidation::Unique,
             _ => Consolidation::Auto, // Fallback on Auto if Consolidation is unknown
         };
         Ok(c)
