@@ -68,7 +68,7 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
 ///     .put("key/expression", "value")
-///     .encoding(DefaultEncoding::TEXT_PLAIN)
+///     .with_encoding(DefaultEncoding::TEXT_PLAIN)
 ///     .congestion_control(CongestionControl::Block)
 ///     .res()
 ///     .await
@@ -79,22 +79,14 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 #[derive(Debug, Clone)]
 pub struct PutBuilder<'a, 'b> {
     pub(crate) publisher: PublisherBuilder<'a, 'b>,
-    pub(crate) value: Value,
+    pub(crate) payload: Payload,
     pub(crate) kind: SampleKind,
+    pub(crate) encoding: Encoding,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
 
 impl PutBuilder<'_, '_> {
-    /// Change the encoding of the written data.
-    #[inline]
-    pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
-    where
-        IntoEncoding: Into<Encoding>,
-    {
-        self.value.encoding = encoding.into();
-        self
-    }
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
@@ -118,12 +110,18 @@ impl PutBuilder<'_, '_> {
         self
     }
 
-    pub fn kind(mut self, kind: SampleKind) -> Self {
-        self.kind = kind;
+    /// Set the encoding of the written data.
+    #[inline]
+    pub fn with_encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
+    where
+        IntoEncoding: Into<Encoding>,
+    {
+        self.encoding = encoding.into();
         self
     }
 
     #[zenoh_macros::unstable]
+    /// Attach user-provided data to the written data.
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self
@@ -155,8 +153,9 @@ impl SyncResolve for PutBuilder<'_, '_> {
 
         resolve_put(
             &publisher,
-            self.value,
+            self.payload,
             self.kind,
+            self.encoding,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
@@ -311,8 +310,9 @@ impl<'a> Publisher<'a> {
     fn _write(&self, kind: SampleKind, payload: Payload) -> Publication {
         Publication {
             publisher: self,
-            value: Value::new(payload),
+            payload,
             kind,
+            encoding: Encoding::empty(),
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -597,13 +597,19 @@ impl Drop for Publisher<'_> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
-    value: Value,
+    payload: Payload,
     kind: SampleKind,
+    encoding: Encoding,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
 
 impl<'a> Publication<'a> {
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
+    }
+
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
@@ -619,8 +625,9 @@ impl SyncResolve for Publication<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         resolve_put(
             self.publisher,
-            self.value,
+            self.payload,
             self.kind,
+            self.encoding,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
@@ -647,8 +654,9 @@ impl<'a> Sink<Sample> for Publisher<'a> {
     fn start_send(self: Pin<&mut Self>, item: Sample) -> Result<(), Self::Error> {
         Publication {
             publisher: &self,
-            value: Value::new(item.payload).with_encoding(item.encoding),
+            payload: item.payload,
             kind: item.kind,
+            encoding: item.encoding,
             #[cfg(feature = "unstable")]
             attachment: item.attachment,
         }
@@ -795,8 +803,9 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
 
 fn resolve_put(
     publisher: &Publisher<'_>,
-    value: Value,
+    payload: Payload,
     kind: SampleKind,
+    encoding: Encoding,
     #[cfg(feature = "unstable")] attachment: Option<Attachment>,
 ) -> ZResult<()> {
     log::trace!("write({:?}, [...])", &publisher.key_expr);
@@ -806,8 +815,6 @@ fn resolve_put(
         .unwrap()
         .clone();
     let timestamp = publisher.session.runtime.new_timestamp();
-
-    let Value { payload, encoding } = value;
 
     if publisher.destination != Locality::SessionLocal {
         primitives.send_push(Push {

@@ -447,15 +447,18 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             };
 
             // @TODO: Define the right congestion control value
-            match req
-                .state()
-                .0
-                .put(&key_expr, bytes)
-                .encoding(encoding)
-                .kind(method_to_kind(req.method()))
-                .res()
-                .await
-            {
+            let session = &req.state().0;
+            let res = match method_to_kind(req.method()) {
+                SampleKind::Put => {
+                    session
+                        .put(&key_expr, bytes)
+                        .with_encoding(encoding)
+                        .res()
+                        .await
+                }
+                SampleKind::Delete => session.delete(&key_expr).res().await,
+            };
+            match res {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
                 Err(e) => Ok(response(
                     StatusCode::InternalServerError,

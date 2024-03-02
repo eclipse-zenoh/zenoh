@@ -699,8 +699,9 @@ impl Session {
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
-            value: Value::new(payload),
+            payload: payload.into(),
             kind: SampleKind::Put,
+            encoding: Encoding::empty(),
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -732,8 +733,9 @@ impl Session {
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
-            value: Value::empty(),
+            payload: Payload::empty(),
             kind: SampleKind::Delete,
+            encoding: Encoding::empty(),
             #[cfg(feature = "unstable")]
             attachment: None,
         }
