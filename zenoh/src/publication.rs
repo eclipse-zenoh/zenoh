@@ -24,6 +24,7 @@ use crate::Undeclarable;
 use crate::{
     handlers::{Callback, DefaultHandler, IntoCallbackReceiverPair},
     sample::Attachment,
+    Id,
 };
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
@@ -36,9 +37,6 @@ use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::zenoh::Put;
 use zenoh_result::ZResult;
-
-#[cfg(feature = "unstable")]
-pub(crate) type Id = usize;
 
 /// The kind of congestion control.
 pub use zenoh_protocol::core::CongestionControl;
