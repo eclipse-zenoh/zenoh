@@ -4644,6 +4644,7 @@ dependencies = [
  "regex",
  "rustc_version 0.4.0",
  "serde",
+ "serde_cbor",
  "serde_json",
  "socket2 0.5.4",
  "stop-token",

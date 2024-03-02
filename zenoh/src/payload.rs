@@ -299,6 +299,33 @@ impl Deserialize<serde_json::Value> for DefaultSerializer {
     }
 }
 
+// CBOR
+impl Serialize<&serde_cbor::Value> for DefaultSerializer {
+    type Output = Result<Payload, serde_cbor::Error>;
+
+    fn serialize(self, t: &serde_cbor::Value) -> Self::Output {
+        let mut payload = Payload::empty();
+        serde_cbor::to_writer(payload.writer(), t)?;
+        Ok(payload)
+    }
+}
+
+impl Serialize<serde_cbor::Value> for DefaultSerializer {
+    type Output = Result<Payload, serde_cbor::Error>;
+
+    fn serialize(self, t: serde_cbor::Value) -> Self::Output {
+        Self.serialize(&t)
+    }
+}
+
+impl Deserialize<serde_cbor::Value> for DefaultSerializer {
+    type Error = ZError;
+
+    fn deserialize(self, v: &Payload) -> Result<serde_cbor::Value, Self::Error> {
+        serde_cbor::from_reader(v.reader()).map_err(|e| zerror!("{}", e))
+    }
+}
+
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl Serialize<Arc<SharedMemoryBuf>> for DefaultSerializer {

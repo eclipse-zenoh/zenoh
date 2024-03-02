@@ -84,6 +84,7 @@ phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 regex = { workspace = true }
 serde = { workspace = true, features = ["default"] }
+serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 socket2 = { workspace = true }
 stop-token = { workspace = true }
