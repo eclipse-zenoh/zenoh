@@ -56,6 +56,18 @@ impl DerefMut for Payload {
     }
 }
 
+impl From<Payload> for ZBuf {
+    fn from(value: Payload) -> Self {
+        value.0
+    }
+}
+
+impl From<&Payload> for ZBuf {
+    fn from(value: &Payload) -> Self {
+        value.0.clone()
+    }
+}
+
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
     type Output;
@@ -299,6 +311,14 @@ impl Deserialize<serde_json::Value> for DefaultSerializer {
     }
 }
 
+impl TryFrom<serde_json::Value> for Payload {
+    type Error = serde_json::Error;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        DefaultSerializer.serialize(value)
+    }
+}
+
 // Yaml
 impl Serialize<&serde_yaml::Value> for DefaultSerializer {
     type Output = Result<Payload, serde_yaml::Error>;
@@ -326,6 +346,14 @@ impl Deserialize<serde_yaml::Value> for DefaultSerializer {
     }
 }
 
+impl TryFrom<serde_yaml::Value> for Payload {
+    type Error = serde_yaml::Error;
+
+    fn try_from(value: serde_yaml::Value) -> Result<Self, Self::Error> {
+        DefaultSerializer.serialize(value)
+    }
+}
+
 // CBOR
 impl Serialize<&serde_cbor::Value> for DefaultSerializer {
     type Output = Result<Payload, serde_cbor::Error>;
@@ -350,6 +378,14 @@ impl Deserialize<serde_cbor::Value> for DefaultSerializer {
 
     fn deserialize(self, v: &Payload) -> Result<serde_cbor::Value, Self::Error> {
         serde_cbor::from_reader(v.reader()).map_err(|e| zerror!("{}", e))
+    }
+}
+
+impl TryFrom<serde_cbor::Value> for Payload {
+    type Error = serde_cbor::Error;
+
+    fn try_from(value: serde_cbor::Value) -> Result<Self, Self::Error> {
+        DefaultSerializer.serialize(value)
     }
 }
 
@@ -385,6 +421,14 @@ impl Deserialize<serde_pickle::Value> for DefaultSerializer {
     }
 }
 
+impl TryFrom<serde_pickle::Value> for Payload {
+    type Error = serde_pickle::Error;
+
+    fn try_from(value: serde_pickle::Value) -> Result<Self, Self::Error> {
+        DefaultSerializer.serialize(value)
+    }
+}
+
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl Serialize<Arc<SharedMemoryBuf>> for DefaultSerializer {
@@ -414,86 +458,12 @@ impl Serialize<SharedMemoryBuf> for DefaultSerializer {
     }
 }
 
-mod tests {
-    #[test]
-    fn serializer() {
-        use super::Payload;
-        use rand::Rng;
-        use zenoh_buffers::ZBuf;
-
-        const NUM: usize = 1_000;
-
-        macro_rules! serialize_deserialize {
-            ($t:ty, $in:expr) => {
-                let i = $in;
-                let t = i.clone();
-                let v = Payload::serialize(t);
-                let o: $t = v.deserialize().unwrap();
-                assert_eq!(i, o)
-            };
-        }
-
-        let mut rng = rand::thread_rng();
-
-        serialize_deserialize!(u8, u8::MIN);
-        serialize_deserialize!(u16, u16::MIN);
-        serialize_deserialize!(u32, u32::MIN);
-        serialize_deserialize!(u64, u64::MIN);
-        serialize_deserialize!(usize, usize::MIN);
-
-        serialize_deserialize!(u8, u8::MAX);
-        serialize_deserialize!(u16, u16::MAX);
-        serialize_deserialize!(u32, u32::MAX);
-        serialize_deserialize!(u64, u64::MAX);
-        serialize_deserialize!(usize, usize::MAX);
-
-        for _ in 0..NUM {
-            serialize_deserialize!(u8, rng.gen::<u8>());
-            serialize_deserialize!(u16, rng.gen::<u16>());
-            serialize_deserialize!(u32, rng.gen::<u32>());
-            serialize_deserialize!(u64, rng.gen::<u64>());
-            serialize_deserialize!(usize, rng.gen::<usize>());
-        }
-
-        serialize_deserialize!(i8, i8::MIN);
-        serialize_deserialize!(i16, i16::MIN);
-        serialize_deserialize!(i32, i32::MIN);
-        serialize_deserialize!(i64, i64::MIN);
-        serialize_deserialize!(isize, isize::MIN);
-
-        serialize_deserialize!(i8, i8::MAX);
-        serialize_deserialize!(i16, i16::MAX);
-        serialize_deserialize!(i32, i32::MAX);
-        serialize_deserialize!(i64, i64::MAX);
-        serialize_deserialize!(isize, isize::MAX);
-
-        for _ in 0..NUM {
-            serialize_deserialize!(i8, rng.gen::<i8>());
-            serialize_deserialize!(i16, rng.gen::<i16>());
-            serialize_deserialize!(i32, rng.gen::<i32>());
-            serialize_deserialize!(i64, rng.gen::<i64>());
-            serialize_deserialize!(isize, rng.gen::<isize>());
-        }
-
-        serialize_deserialize!(f32, f32::MIN);
-        serialize_deserialize!(f64, f64::MIN);
-
-        serialize_deserialize!(f32, f32::MAX);
-        serialize_deserialize!(f64, f64::MAX);
-
-        for _ in 0..NUM {
-            serialize_deserialize!(f32, rng.gen::<f32>());
-            serialize_deserialize!(f64, rng.gen::<f64>());
-        }
-
-        serialize_deserialize!(String, "");
-        serialize_deserialize!(String, String::from("abcdefghijklmnopqrstuvwxyz"));
-
-        serialize_deserialize!(Vec<u8>, vec![0u8; 0]);
-        serialize_deserialize!(Vec<u8>, vec![0u8; 64]);
-
-        serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 0]));
-        serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 64]));
+impl<T> From<T> for Payload
+where
+    DefaultSerializer: Serialize<T, Output = Payload>,
+{
+    fn from(t: T) -> Self {
+        DefaultSerializer.serialize(t)
     }
 }
 
@@ -599,27 +569,6 @@ impl Payload {
     }
 }
 
-impl From<Payload> for ZBuf {
-    fn from(value: Payload) -> Self {
-        value.0
-    }
-}
-
-impl From<&Payload> for ZBuf {
-    fn from(value: &Payload) -> Self {
-        value.0.clone()
-    }
-}
-
-impl<T> From<T> for Payload
-where
-    DefaultSerializer: Serialize<T, Output = Payload>,
-{
-    fn from(t: T) -> Self {
-        DefaultSerializer.serialize(t)
-    }
-}
-
 // For convenience to always convert a Value the examples
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringOrBase64 {
@@ -650,5 +599,88 @@ impl From<Payload> for StringOrBase64 {
             Ok(s) => StringOrBase64::String(s),
             Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.contiguous())),
         }
+    }
+}
+
+mod tests {
+    #[test]
+    fn serializer() {
+        use super::Payload;
+        use rand::Rng;
+        use zenoh_buffers::ZBuf;
+
+        const NUM: usize = 1_000;
+
+        macro_rules! serialize_deserialize {
+            ($t:ty, $in:expr) => {
+                let i = $in;
+                let t = i.clone();
+                let v = Payload::serialize(t);
+                let o: $t = v.deserialize().unwrap();
+                assert_eq!(i, o)
+            };
+        }
+
+        let mut rng = rand::thread_rng();
+
+        serialize_deserialize!(u8, u8::MIN);
+        serialize_deserialize!(u16, u16::MIN);
+        serialize_deserialize!(u32, u32::MIN);
+        serialize_deserialize!(u64, u64::MIN);
+        serialize_deserialize!(usize, usize::MIN);
+
+        serialize_deserialize!(u8, u8::MAX);
+        serialize_deserialize!(u16, u16::MAX);
+        serialize_deserialize!(u32, u32::MAX);
+        serialize_deserialize!(u64, u64::MAX);
+        serialize_deserialize!(usize, usize::MAX);
+
+        for _ in 0..NUM {
+            serialize_deserialize!(u8, rng.gen::<u8>());
+            serialize_deserialize!(u16, rng.gen::<u16>());
+            serialize_deserialize!(u32, rng.gen::<u32>());
+            serialize_deserialize!(u64, rng.gen::<u64>());
+            serialize_deserialize!(usize, rng.gen::<usize>());
+        }
+
+        serialize_deserialize!(i8, i8::MIN);
+        serialize_deserialize!(i16, i16::MIN);
+        serialize_deserialize!(i32, i32::MIN);
+        serialize_deserialize!(i64, i64::MIN);
+        serialize_deserialize!(isize, isize::MIN);
+
+        serialize_deserialize!(i8, i8::MAX);
+        serialize_deserialize!(i16, i16::MAX);
+        serialize_deserialize!(i32, i32::MAX);
+        serialize_deserialize!(i64, i64::MAX);
+        serialize_deserialize!(isize, isize::MAX);
+
+        for _ in 0..NUM {
+            serialize_deserialize!(i8, rng.gen::<i8>());
+            serialize_deserialize!(i16, rng.gen::<i16>());
+            serialize_deserialize!(i32, rng.gen::<i32>());
+            serialize_deserialize!(i64, rng.gen::<i64>());
+            serialize_deserialize!(isize, rng.gen::<isize>());
+        }
+
+        serialize_deserialize!(f32, f32::MIN);
+        serialize_deserialize!(f64, f64::MIN);
+
+        serialize_deserialize!(f32, f32::MAX);
+        serialize_deserialize!(f64, f64::MAX);
+
+        for _ in 0..NUM {
+            serialize_deserialize!(f32, rng.gen::<f32>());
+            serialize_deserialize!(f64, rng.gen::<f64>());
+        }
+
+        serialize_deserialize!(String, "");
+        serialize_deserialize!(String, String::from("abcdefghijklmnopqrstuvwxyz"));
+
+        serialize_deserialize!(Vec<u8>, vec![0u8; 0]);
+        serialize_deserialize!(Vec<u8>, vec![0u8; 64]);
+
+        serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 0]));
+        serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 64]));
     }
 }

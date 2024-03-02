@@ -13,12 +13,11 @@
 //
 use crate::{
     keyexpr,
-    payload::DefaultSerializer,
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
     sample::DataInfo,
     value::DefaultEncoding,
-    Sample, Serialize, Session, ZResult,
+    Payload, Sample, Session, ZResult,
 };
 use async_std::task;
 use std::{
@@ -70,7 +69,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
             let key_expr = *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
-                    match DefaultSerializer.serialize(value) {
+                    match Payload::try_from(value) {
                         Ok(zbuf) => {
                             let _ = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync();
                         }
@@ -87,7 +86,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid / *KE_LINK / lid;
                     if query.key_expr().intersects(&key_expr) {
                         if let Ok(value) = serde_json::value::to_value(link) {
-                            match DefaultSerializer.serialize(value) {
+                            match Payload::try_from(value) {
                                 Ok(zbuf) => {
                                     let _ = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync();
                                 }

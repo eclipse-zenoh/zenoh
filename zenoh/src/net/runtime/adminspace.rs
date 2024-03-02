@@ -14,7 +14,7 @@ use super::routing::dispatcher::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::{DefaultSerializer, Payload, Serialize};
+use crate::payload::Payload;
 use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
@@ -560,7 +560,7 @@ fn router_data(context: &AdminContext, query: Query) {
     }
 
     log::trace!("AdminSpace router_data: {:?}", json);
-    let payload = match DefaultSerializer.serialize(json) {
+    let payload = match Payload::try_from(json) {
         Ok(p) => p,
         Err(e) => {
             log::error!("Error serializing AdminSpace reply: {:?}", e);
@@ -686,7 +686,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
             log::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            match DefaultSerializer.serialize(status) {
+            match Payload::try_from(status) {
                 Ok(zbuf) => {
                     if let Err(e) = query.reply(Ok(Sample::new(key, zbuf))).res_sync() {
                         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -732,7 +732,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match DefaultSerializer.serialize(response.value) {
+                            match Payload::try_from(response.value) {
                                 Ok(zbuf) => {
                                     if let Err(e) = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync() {
                                         log::error!("Error sending AdminSpace reply: {:?}", e);
