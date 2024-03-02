@@ -14,6 +14,9 @@
 
 //! Callback handler trait.
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
+use std::sync::{Arc, Mutex, Weak};
+use zenoh_collections::RingBuffer;
+use zenoh_result::ZResult;
 
 /// An alias for `Arc<T>`.
 pub type Dyn<T> = std::sync::Arc<T>;
@@ -30,6 +33,7 @@ pub trait IntoCallbackReceiverPair<'a, T> {
     type Receiver;
     fn into_cb_receiver_pair(self) -> (Callback<'a, T>, Self::Receiver);
 }
+
 impl<'a, T, F> IntoCallbackReceiverPair<'a, T> for F
 where
     F: Fn(T) + Send + Sync + 'a,
@@ -39,6 +43,7 @@ where
         (Dyn::from(self), ())
     }
 }
+
 impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
     for (flume::Sender<T>, flume::Receiver<T>)
 {
@@ -56,6 +61,7 @@ impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
         )
     }
 }
+
 pub struct DefaultHandler;
 impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T> for DefaultHandler {
     type Receiver = flume::Receiver<T>;
@@ -122,5 +128,55 @@ where
     type Receiver = ();
     fn into_cb_receiver_pair(self) -> (Callback<'a, Event>, Self::Receiver) {
         (Dyn::from(move |evt| (self.callback)(evt)), ())
+    }
+}
+
+/// A handler that implements a cache storing the last N elements.
+/// The cache can be pulled via the [`PullHandler`] and its [`pull()`](PullHandler::pull) operation.
+/// This hangler is usually used in combination with a subscriber.
+/// E.g.: `session.declare_subscriber().with(PullCache::new(10))`.
+pub struct PullCache<T> {
+    cache: Arc<Mutex<RingBuffer<T>>>,
+}
+
+impl<T> PullCache<T> {
+    pub fn new(capacity: usize) -> Self {
+        PullCache {
+            cache: Arc::new(Mutex::new(RingBuffer::new(capacity))),
+        }
+    }
+}
+
+pub struct PullHandler<T> {
+    cache: Weak<Mutex<RingBuffer<T>>>,
+}
+
+impl<T> PullHandler<T> {
+    pub fn pull(&self) -> ZResult<Option<T>> {
+        let Some(cache) = self.cache.upgrade() else {
+            bail!("The cache has been deleted.");
+        };
+        let mut guard = cache.lock().map_err(|e| zerror!("{}", e))?;
+        Ok(guard.pull())
+    }
+}
+
+impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T> for PullCache<T> {
+    type Receiver = PullHandler<T>;
+
+    fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
+        let receiver = PullHandler {
+            cache: Arc::downgrade(&self.cache),
+        };
+        (
+            Dyn::new(move |t| match self.cache.lock() {
+                Ok(mut g) => {
+                    // Eventually drop the oldest element.
+                    g.push_force(t);
+                }
+                Err(e) => log::error!("{}", e),
+            }),
+            receiver,
+        )
     }
 }

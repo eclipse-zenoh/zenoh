@@ -41,6 +41,14 @@ impl<T> RingBuffer<T> {
     }
 
     #[inline]
+    pub fn push_force(&mut self, elem: T) -> Option<T> {
+        self.push(elem).and_then(|elem| {
+            self.buffer.push_back(elem);
+            self.buffer.pop_front()
+        })
+    }
+
+    #[inline]
     pub fn pull(&mut self) -> Option<T> {
         let x = self.buffer.pop_front();
         if x.is_some() {
