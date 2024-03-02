@@ -635,10 +635,7 @@ impl AsyncResolve for Publication<'_> {
     }
 }
 
-impl<'a, IntoPayload> Sink<IntoPayload> for Publisher<'a>
-where
-    IntoPayload: Into<Payload>,
-{
+impl<'a> Sink<Sample> for Publisher<'a> {
     type Error = Error;
 
     #[inline]
@@ -647,8 +644,15 @@ where
     }
 
     #[inline]
-    fn start_send(self: Pin<&mut Self>, item: IntoPayload) -> Result<(), Self::Error> {
-        self.put(item.into()).res_sync()
+    fn start_send(self: Pin<&mut Self>, item: Sample) -> Result<(), Self::Error> {
+        Publication {
+            publisher: &self,
+            value: Value::new(item.payload).with_encoding(item.encoding),
+            kind: item.kind,
+            #[cfg(feature = "unstable")]
+            attachment: item.attachment,
+        }
+        .res_sync()
     }
 
     #[inline]
@@ -1345,7 +1349,7 @@ mod tests {
             let sample = sub.recv().unwrap();
 
             assert_eq!(sample.kind, kind);
-            assert_eq!(sample.value.payload.deserialize::<String>().unwrap(), VALUE);
+            assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
         }
 
         sample_kind_integrity_in_publication_with(SampleKind::Put);
@@ -1371,7 +1375,7 @@ mod tests {
 
             assert_eq!(sample.kind, kind);
             if let SampleKind::Put = kind {
-                assert_eq!(sample.value.payload.deserialize::<String>().unwrap(), VALUE);
+                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
             }
         }
 

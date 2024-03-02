@@ -21,9 +21,9 @@ use std::thread::sleep;
 
 // use std::collections::HashMap;
 use async_std::task;
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
-use zenoh::value::StringOrBase64;
 use zenoh::{prelude::Config, time::Timestamp};
 use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
@@ -118,7 +118,7 @@ async fn test_wild_card_in_order() {
     let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 1);
     assert_eq!(data[0].key_expr.as_str(), "wild/test/a");
-    assert_eq!(StringOrBase64::from(data[0].value.clone()).as_str(), "2");
+    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "2");
 
     put_data(
         &session,
@@ -136,8 +136,8 @@ async fn test_wild_card_in_order() {
     assert_eq!(data.len(), 2);
     assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr.as_str()));
     assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr.as_str()));
-    assert!(["2", "3"].contains(&StringOrBase64::from(data[0].value.clone()).as_str()));
-    assert!(["2", "3"].contains(&StringOrBase64::from(data[1].value.clone()).as_str()));
+    assert!(["2", "3"].contains(&StringOrBase64::from(data[0].payload.clone()).as_str()));
+    assert!(["2", "3"].contains(&StringOrBase64::from(data[1].payload.clone()).as_str()));
 
     put_data(
         &session,
@@ -155,8 +155,8 @@ async fn test_wild_card_in_order() {
     assert_eq!(data.len(), 2);
     assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr.as_str()));
     assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr.as_str()));
-    assert_eq!(StringOrBase64::from(data[0].value.clone()).as_str(), "4");
-    assert_eq!(StringOrBase64::from(data[1].value.clone()).as_str(), "4");
+    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "4");
+    assert_eq!(StringOrBase64::from(data[1].payload.clone()).as_str(), "4");
 
     delete_data(
         &session,

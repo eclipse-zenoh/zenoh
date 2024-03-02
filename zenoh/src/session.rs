@@ -1672,7 +1672,7 @@ impl Session {
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
             #[allow(unused_mut)]
-            let mut sample = Sample::with_info(key_expr, payload.clone(), info.clone());
+            let mut sample = Sample::new(key_expr, payload.clone()).with_info(info.clone());
             #[cfg(feature = "unstable")]
             {
                 sample.attachment = attachment.clone();
@@ -1681,7 +1681,7 @@ impl Session {
         }
         if let Some((cb, key_expr)) = last {
             #[allow(unused_mut)]
-            let mut sample = Sample::with_info(key_expr, payload, info);
+            let mut sample = Sample::new(key_expr, payload).with_info(info);
             #[cfg(feature = "unstable")]
             {
                 sample.attachment = attachment;
@@ -2390,7 +2390,7 @@ impl Primitives for Session {
 
                         #[allow(unused_mut)]
                         let mut sample =
-                            Sample::with_info(key_expr.into_owned(), payload, Some(info));
+                            Sample::new(key_expr.into_owned(), payload).with_info(Some(info));
                         #[cfg(feature = "unstable")]
                         {
                             sample.attachment = attachment;

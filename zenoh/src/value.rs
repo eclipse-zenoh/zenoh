@@ -14,15 +14,14 @@
 
 //! Value primitives.
 use crate::{payload::Payload, prelude::Encoding};
-use std::{borrow::Cow, fmt::Debug, ops::Deref};
-use zenoh_buffers::buffer::SplitBuffer;
+use std::borrow::Cow;
 use zenoh_protocol::core::EncodingPrefix;
 use zenoh_result::ZResult;
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the `payload`
 /// should be interpreted.
 #[non_exhaustive]
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Value {
     /// The payload of this [`Value`].
     pub payload: Payload,
@@ -74,49 +73,6 @@ where
         Value {
             payload: t.into(),
             encoding: Encoding::empty(),
-        }
-    }
-}
-
-impl std::fmt::Debug for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Value{{ payload: {:?}, encoding: {:?} }}",
-            self.payload, self.encoding
-        )
-    }
-}
-
-// For convenience to always convert a Value the examples
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StringOrBase64 {
-    String(String),
-    Base64(String),
-}
-
-impl Deref for StringOrBase64 {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::String(s) | Self::Base64(s) => s,
-        }
-    }
-}
-
-impl std::fmt::Display for StringOrBase64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self)
-    }
-}
-
-impl From<Value> for StringOrBase64 {
-    fn from(v: Value) -> Self {
-        use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
-        match v.payload.deserialize::<String>() {
-            Ok(s) => StringOrBase64::String(s),
-            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.payload.contiguous())),
         }
     }
 }

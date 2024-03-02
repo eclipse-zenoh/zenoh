@@ -190,8 +190,9 @@ impl SyncResolve for ReplyBuilder<'_> {
                 }
                 let Sample {
                     key_expr,
-                    value: Value { payload, encoding },
+                    payload,
                     kind,
+                    encoding,
                     timestamp,
                     #[cfg(feature = "unstable")]
                     source_info,

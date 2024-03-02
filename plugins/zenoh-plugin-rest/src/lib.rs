@@ -46,19 +46,18 @@ lazy_static::lazy_static! {
 }
 const RAW_KEY: &str = "_raw";
 
-fn value_to_json(value: Value) -> String {
-    value
-        .payload
+fn payload_to_json(payload: Payload) -> String {
+    payload
         .deserialize::<String>()
-        .unwrap_or_else(|_| format!(r#""{}""#, b64_std_engine.encode(value.payload.contiguous())))
+        .unwrap_or_else(|_| format!(r#""{}""#, b64_std_engine.encode(payload.contiguous())))
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let encoding = DefaultEncoding.to_str(&sample.value.encoding).into_owned();
+    let encoding = DefaultEncoding.to_str(&sample.encoding).into_owned();
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
         sample.key_expr.as_str(),
-        value_to_json(sample.value),
+        payload_to_json(sample.payload),
         encoding,
         if let Some(ts) = sample.timestamp {
             ts.to_string()
@@ -75,7 +74,7 @@ fn result_to_json(sample: Result<Sample, Value>) -> String {
             let encoding = DefaultEncoding.to_str(&err.encoding).into_owned();
             format!(
                 r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
-                value_to_json(err),
+                payload_to_json(err.payload),
                 encoding,
             )
         }
@@ -139,7 +138,7 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
         Ok(reply) => match reply.sample {
             Ok(sample) => response(
                 StatusCode::Ok,
-                DefaultEncoding.to_str(&sample.value.encoding).as_ref(),
+                DefaultEncoding.to_str(&sample.encoding).as_ref(),
                 String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
             ),
             Err(value) => response(

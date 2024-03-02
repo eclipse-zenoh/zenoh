@@ -317,12 +317,10 @@ impl StorageService {
                         sample_to_store
                     }
                     None => {
-                        let Value {
-                            payload, encoding, ..
-                        } = sample.value.clone();
-                        let mut sample_to_store = Sample::new(KeyExpr::from(k.clone()), payload)
-                            .with_encoding(encoding)
-                            .with_timestamp(sample.timestamp.unwrap());
+                        let mut sample_to_store =
+                            Sample::new(KeyExpr::from(k.clone()), sample.payload.clone())
+                                .with_encoding(sample.encoding.clone())
+                                .with_timestamp(sample.timestamp.unwrap());
                         sample_to_store.kind = sample.kind;
                         sample_to_store
                     }
@@ -340,7 +338,8 @@ impl StorageService {
                     storage
                         .put(
                             stripped_key,
-                            sample_to_store.value.clone(),
+                            Value::new(sample_to_store.payload.clone())
+                                .with_encoding(sample_to_store.encoding.clone()),
                             sample_to_store.timestamp.unwrap(),
                         )
                         .await
@@ -404,7 +403,7 @@ impl StorageService {
             Update {
                 kind: sample.kind,
                 data: StoredData {
-                    value: sample.value,
+                    value: Value::new(sample.payload).with_encoding(sample.encoding),
                     timestamp: sample.timestamp.unwrap(),
                 },
             },

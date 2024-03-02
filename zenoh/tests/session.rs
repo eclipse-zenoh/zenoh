@@ -95,7 +95,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         let sub = ztimeout!(peer01
             .declare_subscriber(key_expr)
             .callback(move |sample| {
-                assert_eq!(sample.value.payload.len(), size);
+                assert_eq!(sample.payload.len(), size);
                 c_msgs.fetch_add(1, Ordering::Relaxed);
             })
             .res_async())
@@ -194,7 +194,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let s = s.sample.unwrap();
                 assert_eq!(s.kind, SampleKind::Put);
-                assert_eq!(s.value.payload.len(), size);
+                assert_eq!(s.payload.len(), size);
                 cnt += 1;
             }
         }
@@ -212,7 +212,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let s = s.sample.unwrap();
                 assert_eq!(s.kind, SampleKind::Delete);
-                assert_eq!(s.value.payload.len(), 0);
+                assert_eq!(s.payload.len(), 0);
                 cnt += 1;
             }
         }

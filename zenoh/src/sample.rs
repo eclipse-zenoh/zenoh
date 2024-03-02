@@ -13,10 +13,10 @@
 //
 
 //! Sample primitives
-use crate::buffers::ZBuf;
 use crate::payload::Payload;
-use crate::prelude::{Encoding, KeyExpr, Value, ZenohId};
+use crate::prelude::{Encoding, KeyExpr, ZenohId};
 use crate::time::{new_reception_timestamp, Timestamp};
+use crate::Value;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{
@@ -353,10 +353,12 @@ pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 pub struct Sample {
     /// The key expression on which this Sample was published.
     pub key_expr: KeyExpr<'static>,
-    /// The value of this Sample.
-    pub value: Value,
+    /// The payload of this Sample.
+    pub payload: Payload,
     /// The kind of this Sample.
     pub kind: SampleKind,
+    /// The encoding of this sample
+    pub encoding: Encoding,
     /// The [`Timestamp`] of this Sample.
     pub timestamp: Option<Timestamp>,
 
@@ -391,7 +393,8 @@ impl Sample {
     {
         Sample {
             key_expr: key_expr.into(),
-            value: Value::new(payload),
+            payload: payload.into(),
+            encoding: Encoding::empty(),
             kind: SampleKind::default(),
             timestamp: None,
             #[cfg(feature = "unstable")]
@@ -413,7 +416,8 @@ impl Sample {
     {
         Ok(Sample {
             key_expr: key_expr.try_into().map_err(Into::into)?,
-            value: Value::new(payload),
+            payload: payload.into(),
+            encoding: Encoding::empty(),
             kind: SampleKind::default(),
             timestamp: None,
             #[cfg(feature = "unstable")]
@@ -425,38 +429,22 @@ impl Sample {
 
     /// Creates a new Sample with optional data info.
     #[inline]
-    pub(crate) fn with_info(
-        key_expr: KeyExpr<'static>,
-        payload: ZBuf,
-        mut data_info: Option<DataInfo>,
-    ) -> Self {
-        let mut value: Value = payload.into();
+    pub(crate) fn with_info(mut self, mut data_info: Option<DataInfo>) -> Self {
         if let Some(mut data_info) = data_info.take() {
+            self.kind = data_info.kind;
             if let Some(encoding) = data_info.encoding.take() {
-                value.encoding = encoding;
+                self.encoding = encoding;
             }
-            Sample {
-                key_expr,
-                value,
-                kind: data_info.kind,
-                timestamp: data_info.timestamp,
-                #[cfg(feature = "unstable")]
-                source_info: data_info.into(),
-                #[cfg(feature = "unstable")]
-                attachment: None,
-            }
-        } else {
-            Sample {
-                key_expr,
-                value,
-                kind: SampleKind::default(),
-                timestamp: None,
-                #[cfg(feature = "unstable")]
-                source_info: SourceInfo::empty(),
-                #[cfg(feature = "unstable")]
-                attachment: None,
+            self.timestamp = data_info.timestamp;
+            #[cfg(feature = "unstable")]
+            {
+                self.source_info = SourceInfo {
+                    source_id: data_info.source_id,
+                    source_sn: data_info.source_sn,
+                };
             }
         }
+        self
     }
 
     /// Sets the encoding of this Sample.
@@ -519,33 +507,8 @@ impl Sample {
     }
 }
 
-impl std::ops::Deref for Sample {
-    type Target = Value;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
+impl From<Sample> for Value {
+    fn from(sample: Sample) -> Self {
+        Value::new(sample.payload).with_encoding(sample.encoding)
     }
 }
-
-impl std::ops::DerefMut for Sample {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
-    }
-}
-
-// impl std::fmt::Display for Sample {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self.kind {
-//             SampleKind::Delete => write!(f, "{}({})", self.kind, self.key_expr),
-//             _ => write!(f, "{}({}: {})", self.kind, self.key_expr, self.value),
-//         }
-//     }
-// }
-
-// impl TryFrom<Reply> for Sample {
-//     type Error = Value;
-
-//     fn try_from(value: Reply) -> Result<Self, Self::Error> {
-//         value.sample
-//     }
-// }

@@ -14,8 +14,8 @@
 use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
-use zenoh::value::StringOrBase64;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -39,7 +39,10 @@ async fn main() {
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
             Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr.as_str(),),
-            Err(err) => println!(">> Received (ERROR: '{}')", StringOrBase64::from(err)),
+            Err(err) => println!(
+                ">> Received (ERROR: '{}')",
+                StringOrBase64::from(err.payload)
+            ),
         }
     }
 }

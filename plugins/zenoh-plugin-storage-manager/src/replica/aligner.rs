@@ -19,9 +19,9 @@ use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
-use zenoh::value::StringOrBase64;
 use zenoh::Session;
 
 pub struct Aligner {
@@ -142,7 +142,10 @@ impl Aligner {
         for sample in replies {
             result.insert(
                 sample.key_expr.into(),
-                (sample.timestamp.unwrap(), sample.value),
+                (
+                    sample.timestamp.unwrap(),
+                    Value::new(sample.payload).with_encoding(sample.encoding),
+                ),
             );
         }
         (result, no_err)
@@ -210,7 +213,7 @@ impl Aligner {
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
             // expecting sample.value to be a vec of intervals with their checksum
             for each in reply_content {
-                match serde_json::from_str(&StringOrBase64::from(each.value)) {
+                match serde_json::from_str(&StringOrBase64::from(each.payload)) {
                     Ok((i, c)) => {
                         other_intervals.insert(i, c);
                     }
@@ -256,7 +259,7 @@ impl Aligner {
                 let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
-                    match serde_json::from_str(&StringOrBase64::from(each.value)) {
+                    match serde_json::from_str(&StringOrBase64::from(each.payload)) {
                         Ok((i, c)) => {
                             other_subintervals.insert(i, c);
                         }
@@ -297,7 +300,7 @@ impl Aligner {
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
-                match serde_json::from_str(&StringOrBase64::from(each.value)) {
+                match serde_json::from_str(&StringOrBase64::from(each.payload)) {
                     Ok((i, c)) => {
                         other_content.insert(i, c);
                     }
@@ -338,7 +341,7 @@ impl Aligner {
                             log::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",
                                 sample.key_expr.as_str(),
-                                StringOrBase64::from(sample.value.clone())
+                                StringOrBase64::from(sample.payload.clone())
                             );
                             return_val.push(sample);
                         }

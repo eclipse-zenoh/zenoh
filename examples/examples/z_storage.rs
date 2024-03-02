@@ -20,8 +20,8 @@ use futures::select;
 use std::collections::HashMap;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
-use zenoh::value::StringOrBase64;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -55,7 +55,7 @@ async fn main() {
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), StringOrBase64::from(sample.value.clone()));
+                    sample.kind, sample.key_expr.as_str(), StringOrBase64::from(sample.payload.clone()));
                 if sample.kind == SampleKind::Delete {
                     stored.remove(&sample.key_expr.to_string());
                 } else {

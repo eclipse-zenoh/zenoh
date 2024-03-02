@@ -17,6 +17,7 @@ use clap::Parser;
 use futures::prelude::*;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
@@ -45,10 +46,10 @@ async fn main() {
     let subs = async {
         while let Ok(sample) = subscriber.recv_async().await {
             println!(
-                ">> [Subscriber] Received {} ('{}': '{:?}')",
+                ">> [Subscriber] Received {} ('{}': '{}')",
                 sample.kind,
                 sample.key_expr.as_str(),
-                sample.value,
+                StringOrBase64::from(sample.payload),
             );
         }
     };

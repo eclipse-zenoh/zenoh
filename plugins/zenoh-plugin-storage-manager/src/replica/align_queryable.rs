@@ -18,9 +18,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
-use zenoh::value::StringOrBase64;
 use zenoh::Session;
 
 pub struct AlignQueryable {
@@ -171,7 +171,10 @@ impl AlignQueryable {
                         let entry = entry.unwrap();
                         result.push(AlignData::Data(
                             OwnedKeyExpr::from(entry.key_expr),
-                            (entry.value, each.timestamp),
+                            (
+                                Value::new(entry.payload).with_encoding(entry.encoding),
+                                each.timestamp,
+                            ),
                         ));
                     }
                 }
@@ -227,7 +230,7 @@ impl AlignQueryable {
                     log::trace!(
                         "[ALIGN QUERYABLE] Received ('{}': '{}')",
                         sample.key_expr.as_str(),
-                        StringOrBase64::from(sample.value.clone())
+                        StringOrBase64::from(sample.payload.clone())
                     );
                     if let Some(timestamp) = sample.timestamp {
                         match timestamp.cmp(&logentry.timestamp) {

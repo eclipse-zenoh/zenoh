@@ -20,9 +20,9 @@ use std::str::FromStr;
 use std::thread::sleep;
 
 use async_std::task;
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
-use zenoh::value::StringOrBase64;
 use zenoh::{prelude::Config, time::Timestamp};
 use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
@@ -101,7 +101,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/a").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].value.clone()).as_str(), "1");
+    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "1");
 
     put_data(
         &session,
@@ -117,7 +117,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].value.clone()).as_str(), "2");
+    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "2");
 
     delete_data(
         &session,
@@ -136,7 +136,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].value.clone()).as_str(), "2");
+    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "2");
     assert_eq!(data[0].key_expr.as_str(), "operation/test/b");
 
     drop(storage);
