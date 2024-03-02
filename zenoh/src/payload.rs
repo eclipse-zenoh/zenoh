@@ -326,6 +326,38 @@ impl Deserialize<serde_cbor::Value> for DefaultSerializer {
     }
 }
 
+// Pickle
+impl Serialize<&serde_pickle::Value> for DefaultSerializer {
+    type Output = Result<Payload, serde_pickle::Error>;
+
+    fn serialize(self, t: &serde_pickle::Value) -> Self::Output {
+        let mut payload = Payload::empty();
+        serde_pickle::value_to_writer(
+            &mut payload.writer(),
+            t,
+            serde_pickle::SerOptions::default(),
+        )?;
+        Ok(payload)
+    }
+}
+
+impl Serialize<serde_pickle::Value> for DefaultSerializer {
+    type Output = Result<Payload, serde_pickle::Error>;
+
+    fn serialize(self, t: serde_pickle::Value) -> Self::Output {
+        Self.serialize(&t)
+    }
+}
+
+impl Deserialize<serde_pickle::Value> for DefaultSerializer {
+    type Error = ZError;
+
+    fn deserialize(self, v: &Payload) -> Result<serde_pickle::Value, Self::Error> {
+        serde_pickle::value_from_reader(v.reader(), serde_pickle::DeOptions::default())
+            .map_err(|e| zerror!("{}", e))
+    }
+}
+
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl Serialize<Arc<SharedMemoryBuf>> for DefaultSerializer {

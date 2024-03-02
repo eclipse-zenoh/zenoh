@@ -138,7 +138,8 @@ serde = { version = "1.0.154", default-features = false, features = [
   "derive",
 ] } # Default features are disabled due to usage in no_std crates
 serde_cbor = "0.11.2"
-serde_json = "1.0.94"
+serde_json = "1.0.114"
+serde-pickle = "1.1.1"
 serde_yaml = "0.9.19"
 sha3 = "0.10.6"
 shared_memory = "0.12.4"

@@ -86,6 +86,7 @@ regex = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+serde-pickle = { workspace = true }
 socket2 = { workspace = true }
 stop-token = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
