@@ -299,6 +299,33 @@ impl Deserialize<serde_json::Value> for DefaultSerializer {
     }
 }
 
+// Yaml
+impl Serialize<&serde_yaml::Value> for DefaultSerializer {
+    type Output = Result<Payload, serde_yaml::Error>;
+
+    fn serialize(self, t: &serde_yaml::Value) -> Self::Output {
+        let mut payload = Payload::empty();
+        serde_yaml::to_writer(payload.writer(), t)?;
+        Ok(payload)
+    }
+}
+
+impl Serialize<serde_yaml::Value> for DefaultSerializer {
+    type Output = Result<Payload, serde_yaml::Error>;
+
+    fn serialize(self, t: serde_yaml::Value) -> Self::Output {
+        Self.serialize(&t)
+    }
+}
+
+impl Deserialize<serde_yaml::Value> for DefaultSerializer {
+    type Error = ZError;
+
+    fn deserialize(self, v: &Payload) -> Result<serde_yaml::Value, Self::Error> {
+        serde_yaml::from_reader(v.reader()).map_err(|e| zerror!("{}", e))
+    }
+}
+
 // CBOR
 impl Serialize<&serde_cbor::Value> for DefaultSerializer {
     type Output = Result<Payload, serde_cbor::Error>;

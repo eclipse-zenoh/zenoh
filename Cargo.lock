@@ -4666,6 +4666,7 @@ dependencies = [
  "serde-pickle",
  "serde_cbor",
  "serde_json",
+ "serde_yaml",
  "socket2 0.5.4",
  "stop-token",
  "uhlc",
