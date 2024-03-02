@@ -13,21 +13,22 @@
 //
 
 //! Publishing primitives.
-#[zenoh_macros::unstable]
-use crate::handlers::Callback;
-#[zenoh_macros::unstable]
-use crate::handlers::DefaultHandler;
+use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::payload::Payload;
-use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
-use crate::sample::DataInfo;
-use crate::Encoding;
+use crate::sample::{DataInfo, Sample, SampleKind};
+use crate::Locality;
 use crate::SessionRef;
 use crate::Undeclarable;
+#[cfg(feature = "unstable")]
+use crate::{
+    handlers::{Callback, DefaultHandler, IntoCallbackReceiverPair},
+    sample::Attachment,
+};
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::core::Encoding;
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
@@ -35,6 +36,9 @@ use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::zenoh::Put;
 use zenoh_result::ZResult;
+
+#[cfg(feature = "unstable")]
+pub(crate) type Id = usize;
 
 /// The kind of congestion control.
 pub use zenoh_protocol::core::CongestionControl;

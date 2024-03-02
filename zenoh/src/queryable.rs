@@ -17,14 +17,12 @@
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::query::ReplyKeyExpr;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
-
+#[cfg(feature = "unstable")]
+use crate::{query::ReplyKeyExpr, sample::Attachment};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;

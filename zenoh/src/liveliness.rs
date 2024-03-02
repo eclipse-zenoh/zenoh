@@ -15,8 +15,7 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
-
-use crate::query::Reply;
+use crate::{query::Reply, Id};
 
 #[zenoh_macros::unstable]
 use {
@@ -508,7 +507,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
+        Handler: crate::handlers::IntoCallbackReceiverPair<'static, Sample>,
     {
         let LivelinessSubscriberBuilder {
             session,

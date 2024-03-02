@@ -33,8 +33,6 @@ pub(crate) mod common {
     pub use zenoh_core::Resolve;
     pub use zenoh_protocol::core::{Encoding, EncodingPrefix, EndPoint, Locator, ZenohId};
 
-    pub(crate) type Id = usize;
-
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoCallbackReceiverPair;
     pub use crate::session::{Session, SessionDeclarations};

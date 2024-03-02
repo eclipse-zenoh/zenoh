@@ -79,9 +79,11 @@ extern crate zenoh_core;
 #[macro_use]
 extern crate zenoh_result;
 
+pub(crate) type Id = usize;
+
 use git_version::git_version;
 use handlers::DefaultHandler;
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
