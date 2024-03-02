@@ -75,7 +75,7 @@ impl Task {
                 let value: Value = vec![0u8; *payload_size].into();
                 while remaining_checkpoints.load(Ordering::Relaxed) > 0 {
                     ztimeout!(session
-                        .put(ke, value.clone())
+                        .put(ke, value.payload.clone())
                         .congestion_control(CongestionControl::Block)
                         .res_async())?;
                 }

@@ -18,6 +18,7 @@ use crate::handlers::Callback;
 #[zenoh_macros::unstable]
 use crate::handlers::DefaultHandler;
 use crate::net::primitives::Primitives;
+use crate::payload::Payload;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
@@ -307,10 +308,10 @@ impl<'a> Publisher<'a> {
         std::sync::Arc::new(self)
     }
 
-    fn _write(&self, kind: SampleKind, value: Value) -> Publication {
+    fn _write(&self, kind: SampleKind, payload: Payload) -> Publication {
         Publication {
             publisher: self,
-            value,
+            value: Value::new(payload),
             kind,
             #[cfg(feature = "unstable")]
             attachment: None,
@@ -329,9 +330,9 @@ impl<'a> Publisher<'a> {
     /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
     /// # })
     /// ```
-    pub fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Publication
+    pub fn write<IntoPayload>(&self, kind: SampleKind, value: IntoPayload) -> Publication
     where
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
         self._write(kind, value.into())
     }
@@ -349,11 +350,11 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     #[inline]
-    pub fn put<IntoValue>(&self, value: IntoValue) -> Publication
+    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> Publication
     where
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
-        self._write(SampleKind::Put, value.into())
+        self._write(SampleKind::Put, payload.into())
     }
 
     /// Delete data.
@@ -369,7 +370,7 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     pub fn delete(&self) -> Publication {
-        self._write(SampleKind::Delete, Value::empty())
+        self._write(SampleKind::Delete, Payload::empty())
     }
 
     /// Return the [`MatchingStatus`] of the publisher.
@@ -634,9 +635,9 @@ impl AsyncResolve for Publication<'_> {
     }
 }
 
-impl<'a, IntoValue> Sink<IntoValue> for Publisher<'a>
+impl<'a, IntoPayload> Sink<IntoPayload> for Publisher<'a>
 where
-    IntoValue: Into<Value>,
+    IntoPayload: Into<Payload>,
 {
     type Error = Error;
 
@@ -646,7 +647,7 @@ where
     }
 
     #[inline]
-    fn start_send(self: Pin<&mut Self>, item: IntoValue) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, item: IntoPayload) -> Result<(), Self::Error> {
         self.put(item.into()).res_sync()
     }
 
@@ -802,6 +803,8 @@ fn resolve_put(
         .clone();
     let timestamp = publisher.session.runtime.new_timestamp();
 
+    let Value { payload, encoding } = value;
+
     if publisher.destination != Locality::SessionLocal {
         primitives.send_push(Push {
             wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
@@ -824,13 +827,13 @@ fn resolve_put(
                     }
                     PushBody::Put(Put {
                         timestamp,
-                        encoding: value.encoding.clone(),
+                        encoding: encoding.clone(),
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
                         ext_attachment,
                         ext_unknown: vec![],
-                        payload: value.payload.clone(),
+                        payload: payload.clone().into(),
                     })
                 }
                 SampleKind::Delete => {
@@ -855,7 +858,7 @@ fn resolve_put(
     if publisher.destination != Locality::Remote {
         let data_info = DataInfo {
             kind,
-            encoding: Some(value.encoding.clone()),
+            encoding: Some(encoding.clone()),
             timestamp,
             ..Default::default()
         };
@@ -864,7 +867,7 @@ fn resolve_put(
             true,
             &publisher.key_expr.to_wire(&publisher.session),
             Some(data_info),
-            value.payload,
+            payload.into(),
             #[cfg(feature = "unstable")]
             attachment,
         );
@@ -1342,7 +1345,7 @@ mod tests {
             let sample = sub.recv().unwrap();
 
             assert_eq!(sample.kind, kind);
-            assert_eq!(sample.value.decode::<String>().unwrap(), VALUE);
+            assert_eq!(sample.value.payload.deserialize::<String>().unwrap(), VALUE);
         }
 
         sample_kind_integrity_in_publication_with(SampleKind::Put);
@@ -1368,7 +1371,7 @@ mod tests {
 
             assert_eq!(sample.kind, kind);
             if let SampleKind::Put = kind {
-                assert_eq!(sample.value.decode::<String>().unwrap(), VALUE);
+                assert_eq!(sample.value.payload.deserialize::<String>().unwrap(), VALUE);
             }
         }
 

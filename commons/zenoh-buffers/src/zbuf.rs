@@ -19,7 +19,7 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use alloc::{string::FromUtf8Error, sync::Arc, vec::Vec};
+use alloc::{sync::Arc, vec::Vec};
 use core::{cmp, iter, mem, num::NonZeroUsize, ops::RangeBounds, ptr};
 use zenoh_collections::SingleOrVec;
 
@@ -208,20 +208,6 @@ where
         let zslice: ZSlice = t.into();
         zbuf.push_zslice(zslice);
         zbuf
-    }
-}
-
-impl From<String> for ZBuf {
-    fn from(t: String) -> Self {
-        Self::from(t.into_bytes())
-    }
-}
-
-impl TryFrom<ZBuf> for String {
-    type Error = FromUtf8Error;
-
-    fn try_from(value: ZBuf) -> Result<Self, Self::Error> {
-        String::from_utf8(value.contiguous().to_vec())
     }
 }
 

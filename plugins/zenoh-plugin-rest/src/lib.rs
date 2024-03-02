@@ -27,12 +27,12 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::encoding::{DefaultEncoding, EncodingMapping};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
+use zenoh::value::{DefaultEncoding, EncodingMapping};
 use zenoh::Session;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
@@ -47,7 +47,9 @@ lazy_static::lazy_static! {
 const RAW_KEY: &str = "_raw";
 
 fn value_to_json(value: Value) -> String {
-    String::try_from(value.payload.clone())
+    value
+        .payload
+        .deserialize::<String>()
         .unwrap_or_else(|_| format!(r#""{}""#, b64_std_engine.encode(value.payload.contiguous())))
 }
 

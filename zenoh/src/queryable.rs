@@ -252,7 +252,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                                 ext_shm: None,
                                 ext_attachment: ext_attachment!(),
                                 ext_unknown: vec![],
-                                payload,
+                                payload: payload.into(),
                             }),
                             SampleKind::Delete => ReplyBody::Del(Del {
                                 timestamp,
@@ -287,7 +287,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         ext_body: Some(ValueType {
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,
-                            payload: payload.payload,
+                            payload: payload.payload.into(),
                             encoding: payload.encoding,
                         }),
                         code: 0, // TODO

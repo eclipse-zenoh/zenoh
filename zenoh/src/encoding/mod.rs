@@ -13,9 +13,9 @@
 //
 pub mod default;
 
+use crate::payload::Payload;
 pub use default::*;
 use std::borrow::Cow;
-use zenoh_buffers::ZBuf;
 pub use zenoh_protocol::core::{Encoding, EncodingPrefix};
 use zenoh_result::ZResult;
 
@@ -49,5 +49,5 @@ pub trait Decoder<T> {
     type Error;
 
     /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
-    fn decode(self, t: &ZBuf) -> Result<T, Self::Error>;
+    fn decode(self, t: &Payload) -> Result<T, Self::Error>;
 }

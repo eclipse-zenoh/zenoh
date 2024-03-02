@@ -42,7 +42,7 @@ pub(crate) mod common {
     pub use crate::query::{QueryConsolidation, QueryTarget};
 
     /// The encoding of a zenoh `Value`.
-    pub use crate::encoding::{Decoder, DefaultEncoding, Encoder, EncodingMapping};
+    pub use crate::payload::{DefaultSerializer, Deserialize, Payload, Serialize};
     pub use crate::value::Value;
     pub use zenoh_protocol::core::{Encoding, EncodingPrefix};
 

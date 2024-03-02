@@ -105,7 +105,12 @@ impl Aligner {
             log::trace!("[ALIGNER] Received queried samples: {missing_data:?}");
 
             for (key, (ts, value)) in missing_data {
-                let sample = Sample::new(key, value).with_timestamp(ts);
+                let Value {
+                    payload, encoding, ..
+                } = value;
+                let sample = Sample::new(key, payload)
+                    .with_encoding(encoding)
+                    .with_timestamp(ts);
                 log::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
                     log::error!("[ALIGNER] Error adding sample to storage: {}", e)

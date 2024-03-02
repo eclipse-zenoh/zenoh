@@ -14,15 +14,12 @@ use super::routing::dispatcher::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
+use crate::payload::{DefaultSerializer, Payload, Serialize};
 use crate::plugins::sealed::{self as plugins};
-use crate::prelude::{
-    sync::{Sample, SyncResolve},
-    Encoding,
-};
+use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
-use crate::value::Value;
-use crate::{DefaultEncoding, Encoder};
+use crate::value::{DefaultEncoding, Value};
 use async_std::task;
 use log::{error, trace};
 use serde_json::json;
@@ -563,12 +560,18 @@ fn router_data(context: &AdminContext, query: Query) {
     }
 
     log::trace!("AdminSpace router_data: {:?}", json);
+    let payload = match DefaultSerializer.serialize(json) {
+        Ok(p) => p,
+        Err(e) => {
+            log::error!("Error serializing AdminSpace reply: {:?}", e);
+            return;
+        }
+    };
     if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            Value::from(json.to_string().as_bytes().to_vec()).with_encoding(Encoding::new(42)),
-        )))
-        .res()
+        .reply(Ok(
+            Sample::new(reply_key, payload).with_encoding(DefaultEncoding::APPLICATION_JSON)
+        ))
+        .res_sync()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -597,13 +600,7 @@ zenoh_build{{version="{}"}} 1
             .openmetrics_text(),
     );
 
-    if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            Value::encode(metrics.as_bytes().to_vec()),
-        )))
-        .res()
-    {
+    if let Err(e) = query.reply(Ok(Sample::new(reply_key, metrics))).res() {
         log::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
@@ -618,7 +615,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::encode(tables.hat_code.info(&tables, WhatAmI::Router)),
+            tables.hat_code.info(&tables, WhatAmI::Router),
         )))
         .res()
     {
@@ -636,7 +633,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::encode(tables.hat_code.info(&tables, WhatAmI::Peer)),
+            tables.hat_code.info(&tables, WhatAmI::Peer),
         )))
         .res()
     {
@@ -654,7 +651,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+            if let Err(e) = query.reply(Ok(Sample::new(key, Payload::empty()))).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -671,7 +668,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+            if let Err(e) = query.reply(Ok(Sample::new(key, Payload::empty()))).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -689,7 +686,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
             log::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            match DefaultEncoding.encode(status) {
+            match DefaultSerializer.serialize(status) {
                 Ok(zbuf) => {
                     if let Err(e) = query.reply(Ok(Sample::new(key, zbuf))).res_sync() {
                         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -712,9 +709,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
-                        if let Err(e) = query
-                            .reply(Ok(Sample::new(key_expr, Value::encode(plugin.path()))))
-                            .res()
+                        if let Err(e) = query.reply(Ok(Sample::new(key_expr, plugin.path()))).res()
                         {
                             log::error!("Error sending AdminSpace reply: {:?}", e);
                         }
@@ -737,7 +732,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match DefaultEncoding.encode(response.value) {
+                            match DefaultSerializer.serialize(response.value) {
                                 Ok(zbuf) => {
                                     if let Err(e) = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync() {
                                         log::error!("Error sending AdminSpace reply: {:?}", e);

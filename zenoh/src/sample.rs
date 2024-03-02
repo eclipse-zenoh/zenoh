@@ -14,6 +14,7 @@
 
 //! Sample primitives
 use crate::buffers::ZBuf;
+use crate::payload::Payload;
 use crate::prelude::{Encoding, KeyExpr, Value, ZenohId};
 use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_macros::unstable]
@@ -383,14 +384,14 @@ pub struct Sample {
 impl Sample {
     /// Creates a new Sample.
     #[inline]
-    pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
+    pub fn new<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
         Sample {
             key_expr: key_expr.into(),
-            value: value.into(),
+            value: Value::new(payload),
             kind: SampleKind::default(),
             timestamp: None,
             #[cfg(feature = "unstable")]
@@ -401,18 +402,18 @@ impl Sample {
     }
     /// Creates a new Sample.
     #[inline]
-    pub fn try_from<TryIntoKeyExpr, IntoValue>(
+    pub fn try_from<TryIntoKeyExpr, IntoPayload>(
         key_expr: TryIntoKeyExpr,
-        value: IntoValue,
+        payload: IntoPayload,
     ) -> Result<Self, zenoh_result::Error>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
         Ok(Sample {
             key_expr: key_expr.try_into().map_err(Into::into)?,
-            value: value.into(),
+            value: Value::new(payload),
             kind: SampleKind::default(),
             timestamp: None,
             #[cfg(feature = "unstable")]
@@ -456,6 +457,13 @@ impl Sample {
                 attachment: None,
             }
         }
+    }
+
+    /// Sets the encoding of this Sample.
+    #[inline]
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
     }
 
     /// Gets the timestamp of this Sample.

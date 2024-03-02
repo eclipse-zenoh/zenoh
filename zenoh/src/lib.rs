@@ -124,7 +124,6 @@ pub const FEATURES: &str = concat_enabled_features!(
 mod admin;
 #[macro_use]
 mod session;
-pub mod encoding;
 pub use session::*;
 
 pub mod key_expr;
@@ -137,6 +136,7 @@ pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
+pub mod payload;
 pub mod plugins;
 pub mod prelude;
 pub mod publication;

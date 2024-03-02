@@ -38,7 +38,7 @@ fn main() {
         .res()
         .unwrap();
 
-    let data: Value = (0usize..size)
+    let data: Payload = (0usize..size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();

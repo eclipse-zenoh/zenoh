@@ -12,12 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    encoding::DefaultEncoding,
     keyexpr,
+    payload::DefaultSerializer,
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
     sample::DataInfo,
-    Encoder, Sample, Session, ZResult,
+    value::DefaultEncoding,
+    Sample, Serialize, Session, ZResult,
 };
 use async_std::task;
 use std::{
@@ -69,7 +70,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
             let key_expr = *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
-                    match DefaultEncoding.encode(value) {
+                    match DefaultSerializer.serialize(value) {
                         Ok(zbuf) => {
                             let _ = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync();
                         }
@@ -86,7 +87,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid / *KE_LINK / lid;
                     if query.key_expr().intersects(&key_expr) {
                         if let Ok(value) = serde_json::value::to_value(link) {
-                            match DefaultEncoding.encode(value) {
+                            match DefaultSerializer.serialize(value) {
                                 Ok(zbuf) => {
                                     let _ = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync();
                                 }

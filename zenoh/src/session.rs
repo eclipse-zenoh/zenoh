@@ -14,7 +14,6 @@
 use crate::admin;
 use crate::config::Config;
 use crate::config::Notifier;
-use crate::encoding::DefaultEncoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
@@ -23,6 +22,7 @@ use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
+use crate::payload::Payload;
 use crate::prelude::Locality;
 use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
@@ -55,6 +55,7 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
+use zenoh_protocol::core::Encoding;
 use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::zenoh::reply::ReplyBody;
@@ -686,19 +687,19 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoValue>(
+    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoPayload>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-        value: IntoValue,
+        payload: IntoPayload,
     ) -> PutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
-            value: value.into(),
+            value: Value::new(payload),
             kind: SampleKind::Put,
             #[cfg(feature = "unstable")]
             attachment: None,
@@ -1787,8 +1788,8 @@ impl Session {
         );
 
         let primitives = state.primitives.as_ref().unwrap().clone();
-
         drop(state);
+
         if destination != Locality::SessionLocal {
             #[allow(unused_mut)]
             let mut ext_attachment = None;
@@ -1815,7 +1816,7 @@ impl Session {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
                         encoding: v.encoding.clone(),
-                        payload: v.payload.clone(),
+                        payload: v.payload.clone().into(),
                     }),
                     ext_attachment,
                     ext_unknown: vec![],
@@ -1834,7 +1835,7 @@ impl Session {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
                     encoding: v.encoding.clone(),
-                    payload: v.payload.clone(),
+                    payload: v.payload.clone().into(),
                 }),
                 #[cfg(feature = "unstable")]
                 attachment,
@@ -1904,7 +1905,7 @@ impl Session {
                 key_expr,
                 parameters,
                 value: body.map(|b| Value {
-                    payload: b.payload,
+                    payload: b.payload.into(),
                     encoding: b.encoding,
                 }),
                 qid,
@@ -2260,12 +2261,12 @@ impl Primitives for Session {
                         std::mem::drop(state);
                         let value = match e.ext_body {
                             Some(body) => Value {
-                                payload: body.payload,
+                                payload: body.payload.into(),
                                 encoding: body.encoding,
                             },
                             None => Value {
-                                payload: ZBuf::empty(),
-                                encoding: DefaultEncoding::EMPTY,
+                                payload: Payload::empty(),
+                                encoding: Encoding::empty(),
                             },
                         };
                         let replier_id = match e.ext_sinfo {

@@ -75,7 +75,7 @@ async fn main() {
 
     println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{key}");
     loop {
-        publisher.put(Value::from(value)).res().await.unwrap();
+        publisher.put(value).res().await.unwrap();
         async_std::task::sleep(Duration::from_secs(1)).await;
     }
 }

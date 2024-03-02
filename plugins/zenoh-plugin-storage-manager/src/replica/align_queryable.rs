@@ -116,7 +116,12 @@ impl AlignQueryable {
                             query.reply(Ok(sample)).res().await.unwrap();
                         }
                         AlignData::Data(k, (v, ts)) => {
-                            let sample = Sample::new(k, v).with_timestamp(ts);
+                            let Value {
+                                payload, encoding, ..
+                            } = v;
+                            let sample = Sample::new(k, payload)
+                                .with_encoding(encoding)
+                                .with_timestamp(ts);
                             query.reply(Ok(sample)).res().await.unwrap();
                         }
                     }

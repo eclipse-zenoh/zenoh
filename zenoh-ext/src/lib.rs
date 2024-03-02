@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub mod encoding;
 pub mod group;
 mod publication_cache;
 mod querying_subscriber;
@@ -59,16 +58,6 @@ impl From<LivelinessSpace> for KeySpace {
 pub trait ExtractSample {
     fn extract(self) -> ZResult<Sample>;
 }
-
-// impl<TryIntoSample> ExtractSample for TryIntoSample
-// where
-//     TryIntoSample: TryInto<Sample>,
-//     <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
-// {
-//     fn extract(self) -> ZResult<Sample> {
-//         self.try_into().map_err(|e| e.into())
-//     }
-// }
 
 impl ExtractSample for Reply {
     fn extract(self) -> ZResult<Sample> {

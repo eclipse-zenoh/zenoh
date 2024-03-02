@@ -22,10 +22,10 @@ use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::ZBuf;
-use zenoh::encoding::{DefaultEncoding, EncodingMapping};
 use zenoh::prelude::r#async::*;
 use zenoh::query::ConsolidationMode;
 use zenoh::time::{Timestamp, NTP64};
+use zenoh::value::{DefaultEncoding, EncodingMapping};
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
@@ -307,16 +307,22 @@ impl StorageService {
                     .await
                 {
                     Some(overriding_update) => {
-                        let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), overriding_update.data.value)
-                                .with_timestamp(overriding_update.data.timestamp);
+                        let Value {
+                            payload, encoding, ..
+                        } = overriding_update.data.value;
+                        let mut sample_to_store = Sample::new(KeyExpr::from(k.clone()), payload)
+                            .with_encoding(encoding)
+                            .with_timestamp(overriding_update.data.timestamp);
                         sample_to_store.kind = overriding_update.kind;
                         sample_to_store
                     }
                     None => {
-                        let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), sample.value.clone())
-                                .with_timestamp(sample.timestamp.unwrap());
+                        let Value {
+                            payload, encoding, ..
+                        } = sample.value.clone();
+                        let mut sample_to_store = Sample::new(KeyExpr::from(k.clone()), payload)
+                            .with_encoding(encoding)
+                            .with_timestamp(sample.timestamp.unwrap());
                         sample_to_store.kind = sample.kind;
                         sample_to_store
                     }
@@ -516,7 +522,11 @@ impl StorageService {
                 match storage.get(stripped_key, q.parameters()).await {
                     Ok(stored_data) => {
                         for entry in stored_data {
-                            let sample = Sample::new(key.clone(), entry.value)
+                            let Value {
+                                payload, encoding, ..
+                            } = entry.value;
+                            let sample = Sample::new(key.clone(), payload)
+                                .with_encoding(encoding)
                                 .with_timestamp(entry.timestamp);
                             // apply outgoing interceptor on results
                             let sample = if let Some(ref interceptor) = self.out_interceptor {
@@ -550,7 +560,11 @@ impl StorageService {
             match storage.get(stripped_key, q.parameters()).await {
                 Ok(stored_data) => {
                     for entry in stored_data {
-                        let sample = Sample::new(q.key_expr().clone(), entry.value)
+                        let Value {
+                            payload, encoding, ..
+                        } = entry.value;
+                        let sample = Sample::new(q.key_expr().clone(), payload)
+                            .with_encoding(encoding)
                             .with_timestamp(entry.timestamp);
                         // apply outgoing interceptor on results
                         let sample = if let Some(ref interceptor) = self.out_interceptor {
