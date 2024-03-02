@@ -167,7 +167,6 @@ impl SplitBuffer for ZBuf {
 }
 
 impl PartialEq for ZBuf {
-    // tags{rust.zbuf.partial_eq.eq, api.buffer.compare}
     fn eq(&self, other: &Self) -> bool {
         let mut self_slices = self.slices();
         let mut other_slices = other.slices();
