@@ -135,7 +135,6 @@ impl PolicyEnforcer {
     ) -> ZResult<bool> {
         match &self.policy_list {
             Some(policy_map) => {
-                //let single_policy = policy_map.0.get(&subject).unwrap();
                 match policy_map.0.get(&subject) {
                     Some(single_policy) => {
                         let perm_vec = &single_policy.0[action as usize];
