@@ -10,7 +10,7 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 use crate::net::routing::RoutingContext;
 
 use super::{
-    authz::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
+    authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
     InterceptorFactoryTrait, InterceptorTrait,
 };
 pub(crate) struct AclEnforcer {
@@ -35,7 +35,7 @@ pub(crate) fn acl_interceptor_factories(acl_config: AclConfig) -> ZResult<Vec<In
         let mut policy_enforcer = PolicyEnforcer::new();
         match policy_enforcer.init(acl_config) {
             Ok(_) => {
-                log::debug!("Access control is enabled and initialized");
+                log::info!("Access control is enabled and initialized");
                 res.push(Box::new(AclEnforcer {
                     e: Arc::new(policy_enforcer),
                 }))
@@ -59,7 +59,6 @@ impl InterceptorFactoryTrait for AclEnforcer {
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         let mut interface_list: Vec<i32> = Vec::new();
         if let Ok(links) = transport.get_links() {
-            log::debug!("acl interceptor links details {:?}", links);
             for link in links {
                 let e = self.e.clone();
                 if let Some(subject_map) = &e.subject_map {
@@ -139,13 +138,18 @@ impl InterceptorTrait for IngressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(_) => return None,
+                    Err(e) => {
+                        log::error!("Authorization incomplete due to error {}", e);
+                        return None;
+                    }
                 }
             }
 
             if !decision {
+                log::warn!("Unauthorized to Put");
                 return None;
             }
+            log::info!("Authorized access to Put");
         } else if let NetworkBody::Request(Request {
             payload: RequestBody::Query(_),
             ..
@@ -164,12 +168,18 @@ impl InterceptorTrait for IngressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(_) => return None,
+                    Err(e) => {
+                        log::error!("Authorization incomplete due to error {}", e);
+                        return None;
+                    }
                 }
             }
             if !decision {
+                log::warn!("Unauthorized to Query/Get");
                 return None;
             }
+
+            log::info!("Authorized access to Query");
         }
         Some(ctx)
     }
@@ -199,12 +209,18 @@ impl InterceptorTrait for EgressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(_) => return None,
+                    Err(e) => {
+                        log::error!("Authorization incomplete due to error {}", e);
+                        return None;
+                    }
                 }
             }
             if !decision {
+                log::warn!("Unauthorized to Sub");
                 return None;
             }
+
+            log::info!("Authorized access to Sub");
         }
         Some(ctx)
     }

@@ -18,10 +18,10 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 //!
-mod accesscontrol;
-use accesscontrol::acl_interceptor_factories;
+mod access_control;
+use access_control::acl_interceptor_factories;
 
-mod authz;
+mod authorization;
 use super::RoutingContext;
 
 use zenoh_config::Config;

@@ -9,7 +9,7 @@ use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
 
 pub struct PolicyForSubject(Vec<Vec<KeTreeRule>>); //vec of actions over vec of permission for tree of ke for this
-pub struct PolicyList(pub HashMap<i32, PolicyForSubject, RandomState>); //index of subject_map instead of subject
+pub struct PolicyMap(pub HashMap<i32, PolicyForSubject, RandomState>); //index of subject (i32) instead of subject (String)
 
 type KeTreeRule = KeBoxTree<bool>;
 
@@ -17,7 +17,7 @@ pub struct PolicyEnforcer {
     pub(crate) acl_enabled: bool,
     pub(crate) default_permission: Permission,
     pub(crate) subject_map: Option<HashMap<Subject, i32, RandomState>>,
-    pub(crate) policy_list: Option<PolicyList>,
+    pub(crate) policy_map: Option<PolicyMap>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,7 +33,7 @@ impl PolicyEnforcer {
             acl_enabled: true,
             default_permission: Permission::Deny,
             subject_map: None,
-            policy_list: None,
+            policy_map: None,
         }
     }
 
@@ -44,13 +44,13 @@ impl PolicyEnforcer {
             if let Some(rules) = acl_config.rules {
                 if rules.is_empty() {
                     log::warn!("ACL ruleset in config file is empty!!!");
-                    self.policy_list = None;
+                    self.policy_map = None;
                     self.subject_map = None;
                 }
                 let policy_information = self.policy_information_point(rules)?;
 
                 let subject_map = policy_information.subject_map;
-                let mut main_policy: PolicyList = PolicyList(HashMap::default());
+                let mut main_policy: PolicyMap = PolicyMap(HashMap::default());
                 //first initialize the vector of vectors (required to maintain the indices)
                 for index in subject_map.values() {
                     let mut rule: PolicyForSubject = PolicyForSubject(Vec::new());
@@ -76,7 +76,7 @@ impl PolicyEnforcer {
                     };
                 }
                 //add to the policy_enforcer
-                self.policy_list = Some(main_policy);
+                self.policy_map = Some(main_policy);
                 self.subject_map = Some(subject_map);
             } else {
                 log::warn!("No ACL rules have been specified!!!");
@@ -88,13 +88,7 @@ impl PolicyEnforcer {
         &self,
         config_rule_set: Vec<ConfigRule>,
     ) -> ZResult<PolicyInformation> {
-        /*
-           get the list of policies from the config PolicyList
-           convert them into the subject format for the vec of rules
-           send the vec as part of policy information
-           also take the subject values to create the subject_map and pass that as part of poliy infomration
-        */
-        //we need to convert the sets of rules into individual rules for each subject, key-expr, action, permission
+        //convert the sets of rules from coifig format into individual rules for each subject, key-expr, action, permission
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
             for subject in &config_rule.interface {
@@ -111,7 +105,7 @@ impl PolicyEnforcer {
             }
         }
         let mut subject_map = HashMap::default();
-        let mut counter = 1; //starting at 1 since 0 is initialized value in policy_check and should not match anything
+        let mut counter = 1; //starting at 1 since 0 is the init value and should not match anything
         for rule in policy_rules.iter() {
             subject_map.insert(rule.subject.clone(), counter);
             counter += 1;
@@ -133,7 +127,7 @@ impl PolicyEnforcer {
         key_expr: &str,
         default_decision: bool,
     ) -> ZResult<bool> {
-        match &self.policy_list {
+        match &self.policy_map {
             Some(policy_map) => {
                 match policy_map.0.get(&subject) {
                     Some(single_policy) => {
@@ -160,7 +154,7 @@ impl PolicyEnforcer {
                 }
             }
             None => {
-                //when list is empty
+                //when list is present (not null) but empty
                 if self.default_permission == Permission::Allow {
                     Ok(true)
                 } else {
