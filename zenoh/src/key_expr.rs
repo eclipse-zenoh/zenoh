@@ -456,7 +456,7 @@ impl std::fmt::Display for KeyExpr<'_> {
     }
 }
 impl PartialEq for KeyExpr<'_> {
-    // tags{rust.key_expr.partial_eq.eq. api.keyexpr.eq}
+    // tags{rust.key_expr.partial_eq.eq, api.keyexpr.equals}
     fn eq(&self, other: &Self) -> bool {
         self.as_keyexpr() == other.as_keyexpr()
     }
