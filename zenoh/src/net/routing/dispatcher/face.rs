@@ -14,7 +14,9 @@
 use super::super::router::*;
 use super::tables::TablesLock;
 use super::{resource::*, tables};
-use crate::net::primitives::Primitives;
+use crate::net::primitives::{McastMux, Mux, Primitives};
+use crate::net::routing::interceptor::{InterceptorTrait, InterceptorsChain};
+use crate::KeyExpr;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
@@ -24,6 +26,7 @@ use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
     network::{Mapping, Push, Request, RequestId, Response, ResponseFinal},
 };
+use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
@@ -40,10 +43,12 @@ pub struct FaceState {
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, Arc<Query>>,
     pub(crate) mcast_group: Option<TransportMulticast>,
+    pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
 }
 
 impl FaceState {
+    #[allow(clippy::too_many_arguments)] // @TODO fix warning
     pub(crate) fn new(
         id: usize,
         zid: ZenohId,
@@ -51,6 +56,7 @@ impl FaceState {
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
+        in_interceptors: Option<Arc<InterceptorsChain>>,
         hat: Box<dyn Any + Send + Sync>,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
@@ -65,6 +71,7 @@ impl FaceState {
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
+            in_interceptors,
             hat,
         })
     }
@@ -99,6 +106,41 @@ impl FaceState {
             id += 1;
         }
         id
+    }
+
+    pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
+        if let Ok(expr) = KeyExpr::try_from(res.expr()) {
+            if let Some(interceptor) = self.in_interceptors.as_ref() {
+                let cache = interceptor.compute_keyexpr_cache(&expr);
+                get_mut_unchecked(
+                    get_mut_unchecked(res)
+                        .session_ctxs
+                        .get_mut(&self.id)
+                        .unwrap(),
+                )
+                .in_interceptor_cache = cache;
+            }
+            if let Some(mux) = self.primitives.as_any().downcast_ref::<Mux>() {
+                let cache = mux.interceptor.compute_keyexpr_cache(&expr);
+                get_mut_unchecked(
+                    get_mut_unchecked(res)
+                        .session_ctxs
+                        .get_mut(&self.id)
+                        .unwrap(),
+                )
+                .e_interceptor_cache = cache;
+            }
+            if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
+                let cache = mux.interceptor.compute_keyexpr_cache(&expr);
+                get_mut_unchecked(
+                    get_mut_unchecked(res)
+                        .session_ctxs
+                        .get_mut(&self.id)
+                        .unwrap(),
+                )
+                .e_interceptor_cache = cache;
+            }
+        }
     }
 }
 
