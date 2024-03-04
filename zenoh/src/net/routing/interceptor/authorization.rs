@@ -37,6 +37,9 @@ impl PolicyEnforcer {
         }
     }
 
+    /*
+       initializes the policy_enforcer
+    */
     pub fn init(&mut self, acl_config: AclConfig) -> ZResult<()> {
         self.acl_enabled = acl_config.enabled;
         self.default_permission = acl_config.default_permission;
@@ -84,11 +87,14 @@ impl PolicyEnforcer {
         }
         Ok(())
     }
+
+    /*
+       converts the sets of rules from config format into individual rules for each subject, key-expr, action, permission
+    */
     pub fn policy_information_point(
         &self,
         config_rule_set: Vec<ConfigRule>,
     ) -> ZResult<PolicyInformation> {
-        //convert the sets of rules from coifig format into individual rules for each subject, key-expr, action, permission
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
             for subject in &config_rule.interface {
@@ -131,10 +137,10 @@ impl PolicyEnforcer {
             Some(policy_map) => {
                 match policy_map.0.get(&subject) {
                     Some(single_policy) => {
-                        let perm_vec = &single_policy.0[action as usize];
+                        let permission_vec = &single_policy.0[action as usize];
 
                         //explicit Deny rules are ALWAYS given preference
-                        let deny_result = perm_vec[Permission::Deny as usize]
+                        let deny_result = permission_vec[Permission::Deny as usize]
                             .nodes_including(keyexpr::new(&key_expr)?)
                             .count();
                         if deny_result != 0 {
@@ -144,7 +150,7 @@ impl PolicyEnforcer {
                         if self.default_permission == Permission::Allow {
                             Ok(true)
                         } else {
-                            let allow_result = perm_vec[Permission::Allow as usize]
+                            let allow_result = permission_vec[Permission::Allow as usize]
                                 .nodes_including(keyexpr::new(&key_expr)?)
                                 .count();
                             Ok(allow_result != 0)

@@ -14,16 +14,16 @@ use super::{
     InterceptorFactoryTrait, InterceptorTrait,
 };
 pub(crate) struct AclEnforcer {
-    pub(crate) e: Arc<PolicyEnforcer>,
+    pub(crate) enforcer: Arc<PolicyEnforcer>,
 }
 
 struct EgressAclEnforcer {
-    pe: Arc<PolicyEnforcer>,
+    policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,
     default_decision: bool,
 }
 struct IngressAclEnforcer {
-    pe: Arc<PolicyEnforcer>,
+    policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,
     default_decision: bool,
 }
@@ -37,12 +37,12 @@ pub(crate) fn acl_interceptor_factories(acl_config: AclConfig) -> ZResult<Vec<In
             Ok(_) => {
                 log::info!("Access control is enabled and initialized");
                 res.push(Box::new(AclEnforcer {
-                    e: Arc::new(policy_enforcer),
+                    enforcer: Arc::new(policy_enforcer),
                 }))
             }
-            Err(e) => log::error!(
+            Err(enforcer) => log::error!(
                 "Access control enabled but not initialized with error {}!",
-                e
+                enforcer
             ),
         }
     } else {
@@ -60,8 +60,8 @@ impl InterceptorFactoryTrait for AclEnforcer {
         let mut interface_list: Vec<i32> = Vec::new();
         if let Ok(links) = transport.get_links() {
             for link in links {
-                let e = self.e.clone();
-                if let Some(subject_map) = &e.subject_map {
+                let enforcer = self.enforcer.clone();
+                if let Some(subject_map) = &enforcer.subject_map {
                     for face in link.interfaces {
                         let subject = &Subject::Interface(face);
                         match subject_map.get(subject) {
@@ -72,20 +72,20 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 }
             }
         }
-        let pe = self.e.clone();
+        let policy_enforcer = self.enforcer.clone();
         (
             Some(Box::new(IngressAclEnforcer {
-                pe: pe.clone(),
+                policy_enforcer: policy_enforcer.clone(),
                 interface_list: interface_list.clone(),
-                default_decision: match pe.default_permission {
+                default_decision: match policy_enforcer.default_permission {
                     Permission::Allow => true,
                     Permission::Deny => false,
                 },
             })),
             Some(Box::new(EgressAclEnforcer {
-                pe: pe.clone(),
+                policy_enforcer: policy_enforcer.clone(),
                 interface_list,
-                default_decision: match pe.default_permission {
+                default_decision: match policy_enforcer.default_permission {
                     Permission::Allow => true,
                     Permission::Deny => false,
                 },
@@ -127,7 +127,7 @@ impl InterceptorTrait for IngressAclEnforcer {
             let mut decision = self.default_decision;
 
             for subject in &self.interface_list {
-                match self.pe.policy_decision_point(
+                match self.policy_enforcer.policy_decision_point(
                     *subject,
                     Action::Put,
                     key_expr,
@@ -138,8 +138,8 @@ impl InterceptorTrait for IngressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(e) => {
-                        log::error!("Authorization incomplete due to error {}", e);
+                    Err(enforcer) => {
+                        log::error!("Authorization incomplete due to error {}", enforcer);
                         return None;
                     }
                 }
@@ -157,7 +157,7 @@ impl InterceptorTrait for IngressAclEnforcer {
         {
             let mut decision = self.default_decision;
             for subject in &self.interface_list {
-                match self.pe.policy_decision_point(
+                match self.policy_enforcer.policy_decision_point(
                     *subject,
                     Action::Get,
                     key_expr,
@@ -168,8 +168,8 @@ impl InterceptorTrait for IngressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(e) => {
-                        log::error!("Authorization incomplete due to error {}", e);
+                    Err(enforcer) => {
+                        log::error!("Authorization incomplete due to error {}", enforcer);
                         return None;
                     }
                 }
@@ -198,7 +198,7 @@ impl InterceptorTrait for EgressAclEnforcer {
         {
             let mut decision = self.default_decision;
             for subject in &self.interface_list {
-                match self.pe.policy_decision_point(
+                match self.policy_enforcer.policy_decision_point(
                     *subject,
                     Action::Sub,
                     key_expr,
@@ -209,8 +209,8 @@ impl InterceptorTrait for EgressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(e) => {
-                        log::error!("Authorization incomplete due to error {}", e);
+                    Err(enforcer) => {
+                        log::error!("Authorization incomplete due to error {}", enforcer);
                         return None;
                     }
                 }
