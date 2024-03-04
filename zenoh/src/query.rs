@@ -212,7 +212,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.get_builder.callback_mut, api.get.callback_mut}
+    // tags{rust.get_builder.callback_mut, api.get.callback}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -243,7 +243,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.get_builder.with, api.get.pipe}
+    // tags{rust.get_builder.with, api.get.channel}
     pub fn with<Handler>(self, handler: Handler) -> GetBuilder<'a, 'b, Handler>
     where
         Handler: IntoCallbackReceiverPair<'static, Reply>,

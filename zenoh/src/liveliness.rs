@@ -517,7 +517,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    // tags{rust.liveliness_subscriber_builder.with, api.liveliness_subscriber.pipe}
+    // tags{rust.liveliness_subscriber_builder.with, api.liveliness_subscriber.channel}
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
@@ -714,7 +714,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.liveliness_get_builder.with, api.liveliness_get.pipe}
+    // tags{rust.liveliness_get_builder.with, api.liveliness_get.channel}
     pub fn with<Handler>(self, handler: Handler) -> LivelinessGetBuilder<'a, 'b, Handler>
     where
         Handler: IntoCallbackReceiverPair<'static, Reply>,

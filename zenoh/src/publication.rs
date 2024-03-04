@@ -90,6 +90,7 @@ impl PutBuilder<'_, '_> {
     /// Change the encoding of the written data.
     #[inline]
     // tags{rust.put_builder.encoding, api.put.encoding.set}
+    // tags{rust.delete_builder.encoding, api.delete.encoding.set}
     pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
     where
         IntoEncoding: Into<Encoding>,
@@ -100,6 +101,7 @@ impl PutBuilder<'_, '_> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     // tags{rust.put_builder.congestion_control, api.put.congestion_control.set}
+    // tags{rust.delete_builder.congestion_control, api.delete.congestion_control.set}
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.publisher = self.publisher.congestion_control(congestion_control);
         self
@@ -108,6 +110,7 @@ impl PutBuilder<'_, '_> {
     /// Change the priority of the written data.
     #[inline]
     // tags{rust.put_builder.priority, api.put.priority.set}
+    // tags{rust.delete_builder.priority, api.delete.priority.set}
     pub fn priority(mut self, priority: Priority) -> Self {
         self.publisher = self.publisher.priority(priority);
         self
@@ -118,12 +121,14 @@ impl PutBuilder<'_, '_> {
     #[zenoh_macros::unstable]
     #[inline]
     // tags{rust.put_builder.allowed_destination, api.put.allowed_destination.set}
+    // tags{rust.delete_builder.allowed_destination, api.put.allowed_destination.set}
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.publisher = self.publisher.allowed_destination(destination);
         self
     }
 
     // tags{rust.put_builder.kind, api.put.kind.set}
+    // tags{rust.delete_builder.kind, api.put.kind.set}
     pub fn kind(mut self, kind: SampleKind) -> Self {
         self.kind = kind;
         self
@@ -131,6 +136,7 @@ impl PutBuilder<'_, '_> {
 
     #[zenoh_macros::unstable]
     // tags{rust.put_builder.with_attachment, api.put.attachment.set}
+    // tags{rust.delete_builder.with_attachment, api.delete.attachment.set}
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self

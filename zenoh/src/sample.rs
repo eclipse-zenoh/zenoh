@@ -251,7 +251,7 @@ mod attachment {
             }
             self
         }
-        // tags{rust.attachment.extend, api.attachment.extend}
+        // tags{rust.attachment.extend}
         pub fn extend(&mut self, with: impl Into<Self>) -> &mut Self {
             let with = with.into();
             self._extend(with)

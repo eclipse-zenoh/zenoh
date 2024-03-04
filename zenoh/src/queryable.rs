@@ -524,7 +524,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.queryable_builder.with, api.queryable.pipe}
+    // tags{rust.queryable_builder.with, api.queryable.channel}
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,

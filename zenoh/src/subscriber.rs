@@ -432,7 +432,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.subscriber_builder.with, api.subscriber.pipe}
+    // tags{rust.subscriber_builder.with, api.subscriber.channel}
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Mode, Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,

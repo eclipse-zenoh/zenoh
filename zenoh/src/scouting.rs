@@ -137,7 +137,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.scout_builder.with, api.scout.pipe}
+    // tags{rust.scout_builder.with, api.scout.channel}
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello>,
