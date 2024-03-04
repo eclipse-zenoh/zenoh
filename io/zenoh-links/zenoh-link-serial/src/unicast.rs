@@ -22,7 +22,8 @@ use std::sync::{
 };
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
@@ -220,22 +221,20 @@ impl fmt::Debug for LinkUnicastSerial {
 struct ListenerUnicastSerial {
     endpoint: EndPoint,
     token: CancellationToken,
-    tracker: TaskTracker,
+    handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerUnicastSerial {
-    fn new(endpoint: EndPoint, token: CancellationToken, tracker: TaskTracker) -> Self {
+    fn new(endpoint: EndPoint, token: CancellationToken, handle: JoinHandle<ZResult<()>>) -> Self {
         Self {
             endpoint,
             token,
-            tracker,
+            handle,
         }
     }
 
     async fn stop(&self) {
         self.token.cancel();
-        self.tracker.close();
-        self.tracker.wait().await;
     }
 }
 
@@ -320,7 +319,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
 
-        let tracker = TaskTracker::new();
         let task = async move {
             // Wait for the accept loop to terminate
             let res =
@@ -328,10 +326,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             zasyncwrite!(c_listeners).remove(&c_path);
             res
         };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Acceptor);
+        let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
         let locator = endpoint.to_locator();
-        let listener = ListenerUnicastSerial::new(endpoint, token, tracker);
+        let listener = ListenerUnicastSerial::new(endpoint, token, handle);
         // Update the list of active listeners on the manager
         listeners.insert(path, listener);
 
@@ -353,7 +351,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 
         // Send the stop signal
         listener.stop().await;
-        Ok(())
+        listener.handle.await?
     }
 
     async fn get_listeners(&self) -> Vec<EndPoint> {

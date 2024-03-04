@@ -24,10 +24,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use tokio::task::JoinHandle;
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
@@ -255,26 +256,24 @@ impl fmt::Debug for LinkUnicastWs {
 struct ListenerUnicastWs {
     endpoint: EndPoint,
     token: CancellationToken,
-    tracker: TaskTracker,
+    handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerUnicastWs {
     fn new(
         endpoint: EndPoint,
         token: CancellationToken,
-        tracker: TaskTracker,
+        handle: JoinHandle<ZResult<()>>,
     ) -> ListenerUnicastWs {
         ListenerUnicastWs {
             endpoint,
             token,
-            tracker,
+            handle,
         }
     }
 
     async fn stop(&self) {
         self.token.cancel();
-        self.tracker.close();
-        self.tracker.wait().await;
     }
 }
 
@@ -363,17 +362,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
 
-        let tracker = TaskTracker::new();
         let task = async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_token, c_manager).await;
             zasyncwrite!(c_listeners).remove(&c_addr);
             res
         };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Acceptor);
+        let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
         let locator = endpoint.to_locator();
-        let listener = ListenerUnicastWs::new(endpoint, token, tracker);
+        let listener = ListenerUnicastWs::new(endpoint, token, handle);
         // Update the list of active listeners on the manager
         zasyncwrite!(self.listeners).insert(local_addr, listener);
 
@@ -395,7 +393,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
 
         // Send the stop signal
         listener.stop().await;
-        Ok(())
+        listener.handle.await?
     }
 
     async fn get_listeners(&self) -> Vec<EndPoint> {

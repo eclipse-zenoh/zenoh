@@ -24,7 +24,8 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::RwLock as AsyncRwLock;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
@@ -170,7 +171,7 @@ impl fmt::Debug for LinkUnicastUnixSocketStream {
 struct ListenerUnixSocketStream {
     endpoint: EndPoint,
     token: CancellationToken,
-    tracker: TaskTracker,
+    handle: JoinHandle<ZResult<()>>,
     lock_fd: RawFd,
 }
 
@@ -178,21 +179,19 @@ impl ListenerUnixSocketStream {
     fn new(
         endpoint: EndPoint,
         token: CancellationToken,
-        tracker: TaskTracker,
+        handle: JoinHandle<ZResult<()>>,
         lock_fd: RawFd,
     ) -> ListenerUnixSocketStream {
         ListenerUnixSocketStream {
             endpoint,
             token,
-            tracker,
+            handle,
             lock_fd,
         }
     }
 
     async fn stop(&self) {
         self.token.cancel();
-        self.tracker.close();
-        self.tracker.wait().await;
     }
 }
 
@@ -386,17 +385,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let c_listeners = self.listeners.clone();
         let c_path = local_path_str.to_owned();
 
-        let tracker = TaskTracker::new();
         let task = async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_token, c_manager).await;
             zasyncwrite!(c_listeners).remove(&c_path);
             res
         };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Acceptor);
+        let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
         let locator = endpoint.to_locator();
-        let listener = ListenerUnixSocketStream::new(endpoint, token, tracker, lock_fd);
+        let listener = ListenerUnixSocketStream::new(endpoint, token, handle, lock_fd);
         listeners.insert(local_path_str.to_owned(), listener);
 
         Ok(locator)
@@ -417,6 +415,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
         // Send the stop signal
         listener.stop().await;
+        listener.handle.await??;
 
         //Release the lock
         let _ = nix::fcntl::flock(listener.lock_fd, nix::fcntl::FlockArg::UnlockNonblock);
