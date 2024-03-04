@@ -35,6 +35,7 @@ pub use zenoh_protocol::core::ConsolidationMode;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 // tags{}
 pub enum Mode<T> {
+    // tags{api.options.consolidation_mode.auto}
     Auto,
     Manual(T),
 }

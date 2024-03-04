@@ -1,0 +1,5 @@
+This file contains api tag missing in the project with the explanations for each case.
+See https://github.com/ZettaScaleLabs/zenoh-tests/tree/tagging/api_matrix for details.
+
+tags{api.logger.init(N/A)}
+This is necessary only for bindings, in Rust itself it's `envlogger::init()`

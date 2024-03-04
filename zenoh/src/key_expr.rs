@@ -406,6 +406,7 @@ impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
     }
 }
 impl<'a> From<KeyExpr<'a>> for String {
+    // tags{rust.key_expr.into_string, api.keyexpr.to_string}
     fn from(ke: KeyExpr) -> Self {
         match ke.0 {
             KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {

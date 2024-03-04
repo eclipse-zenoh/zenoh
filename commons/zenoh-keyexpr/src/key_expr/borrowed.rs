@@ -281,7 +281,7 @@ impl keyexpr {
         result
     }
 
-    // tags{rust.keyexpr.as_str, api.keyexpr.as_str}
+    // tags{rust.keyexpr.as_str, api.keyexpr.to_buffer}
     pub const fn as_str(&self) -> &str {
         &self.0
     }
