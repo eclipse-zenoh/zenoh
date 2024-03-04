@@ -51,8 +51,8 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
             {{
               flow: "{}",
               rules: [
-                {{ key_expr: "test/downsamples_by_keyexp/r100", rate: 10, }},
-                {{ key_expr: "test/downsamples_by_keyexp/r50", rate: 20, }}
+                {{ key_expr: "test/downsamples_by_keyexp/r100", freq: 10, }},
+                {{ key_expr: "test/downsamples_by_keyexp/r50", freq: 20, }}
               ],
             }},
           ] "#,
@@ -150,14 +150,14 @@ fn downsampling_by_interface_impl(egress: bool) {
               interfaces: ["lo", "lo0"],
               flow: "{0}",
               rules: [
-                {{ key_expr: "test/downsamples_by_interface/r100", rate: 10, }},
+                {{ key_expr: "test/downsamples_by_interface/r100", freq: 10, }},
               ],
             }},
             {{
               interfaces: ["some_unknown_interface"],
               flow: "{0}",
               rules: [
-                {{ key_expr: "test/downsamples_by_interface/all", rate: 10, }},
+                {{ key_expr: "test/downsamples_by_interface/all", freq: 10, }},
               ],
             }},
           ] "#,
@@ -253,8 +253,8 @@ fn downsampling_config_error_wrong_strategy() {
                 {
                   flow: "down",
                   rules: [
-                    { keyexpr: "test/downsamples_by_keyexp/r100", rate: 10, },
-                    { keyexpr: "test/downsamples_by_keyexp/r50", rate: 20, }
+                    { keyexpr: "test/downsamples_by_keyexp/r100", freq: 10, },
+                    { keyexpr: "test/downsamples_by_keyexp/r50", freq: 20, }
                   ],
                 },
               ]

@@ -171,9 +171,9 @@ impl DownsamplingInterceptor {
         for (id, rule) in rules.into_iter().enumerate() {
             let mut threshold = std::time::Duration::MAX;
             let mut latest_message_timestamp = std::time::Instant::now();
-            if rule.rate != 0.0 {
+            if rule.freq != 0.0 {
                 threshold =
-                    std::time::Duration::from_nanos((1. / rule.rate * NANOS_PER_SEC) as u64);
+                    std::time::Duration::from_nanos((1. / rule.freq * NANOS_PER_SEC) as u64);
                 latest_message_timestamp -= threshold;
             }
             ke_id.insert(&rule.key_expr, id);
