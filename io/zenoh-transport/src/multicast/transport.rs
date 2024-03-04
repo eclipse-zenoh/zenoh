@@ -183,7 +183,7 @@ impl TransportMulticastInner {
             cb.closed();
         }
 
-        // TODO: unify the termination with the above
+        // TODO(yuyuan): use CancellationToken to unify the termination with the above
         self.token.cancel();
 
         Ok(())
@@ -366,7 +366,7 @@ impl TransportMulticastInner {
             );
 
         // Create lease event
-        // TODO: refine the clone behaviors
+        // TODO(yuyuan): refine the clone behaviors
         let is_active = Arc::new(AtomicBool::new(false));
         let c_is_active = is_active.clone();
         let token = self.token.child_token();
@@ -389,10 +389,10 @@ impl TransportMulticastInner {
             let _ = c_self.del_peer(&c_locator, close::reason::EXPIRED);
         };
 
-        // TODO: Put it into TaskTracker properly
+        // TODO(yuyuan): Put it into TaskTracker or store as JoinHandle
         zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
-        // TODO: Integrate the above async task into TransportMulticastPeer
+        // TODO(yuyuan): Integrate the above async task into TransportMulticastPeer
         // Store the new peer
         let peer = TransportMulticastPeer {
             version: join.version,
@@ -423,7 +423,7 @@ impl TransportMulticastInner {
                 reason
             );
 
-            // TODO: Unify the termination
+            // TODO(yuyuan): Unify the termination
             peer.token.cancel();
             peer.handler.closing();
             drop(guard);

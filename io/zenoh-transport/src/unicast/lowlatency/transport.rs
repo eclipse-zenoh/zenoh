@@ -223,7 +223,6 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    // TODO: Check the correctness: is this called at most once?
     async fn add_link(
         &self,
         link: LinkUnicastWithOpenAck,

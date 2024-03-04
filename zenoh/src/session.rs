@@ -1755,7 +1755,6 @@ impl Session {
             _ => 1,
         };
 
-        // TODO: check which ZRuntime should be used
         zenoh_runtime::ZRuntime::Net.spawn({
             let state = self.state.clone();
             let zid = self.runtime.zid();

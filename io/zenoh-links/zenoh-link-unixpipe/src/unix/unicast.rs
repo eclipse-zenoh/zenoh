@@ -300,8 +300,9 @@ impl UnicastPipeListener {
 
         let token = CancellationToken::new();
         let c_token = token.clone();
+
+        // WARN: The spawn_blocking is mandatory verified by the ping/pong test
         // create listening task
-        // TODO: Check the necessity of this spawn_blocking
         tokio::task::spawn_blocking(move || {
             ZRuntime::Acceptor.block_on(async move {
                 loop {

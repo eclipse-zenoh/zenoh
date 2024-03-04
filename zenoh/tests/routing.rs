@@ -85,7 +85,7 @@ impl Task {
                     tokio::select! {
                         _  = token.cancelled() => break,
 
-                        // TODO: this won't yield after a timeout raised from recipe
+                        // WARN: this won't yield after a timeout since the put is a blocking call
                         res = tokio::time::timeout(std::time::Duration::from_secs(1), session
                             .put(ke, value.clone())
                             .congestion_control(CongestionControl::Block)
@@ -599,7 +599,6 @@ async fn three_node_combination() -> Result<()> {
         )
         .collect();
 
-    // TODO: It should be able to run concurrently
     for chunks in recipe_list.chunks(4).map(|x| x.to_vec()) {
         let mut join_set = tokio::task::JoinSet::new();
         for (pubsub, getqueryable) in chunks {

@@ -532,10 +532,8 @@ fn router_data(context: &AdminContext, query: Query) {
         }
         json
     };
-    // TODO: Avoid this block_on
-    // TODO: Check this block_in_place
     let transports: Vec<serde_json::Value> = zenoh_runtime::ZRuntime::Net
-        .block_on(transport_mgr.get_transports_unicast())
+        .block_in_place(transport_mgr.get_transports_unicast())
         .iter()
         .map(transport_to_json)
         .collect();

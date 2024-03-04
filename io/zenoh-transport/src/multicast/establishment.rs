@@ -91,11 +91,10 @@ pub(crate) async fn open_link(
     w_guard.insert(locator.clone(), ti.clone());
     drop(w_guard);
 
-    // TODO: resolve the structure entanglement below
+    // TODO(yuyuan): resolve the structure entanglement below
     // Notify the transport event handler
     let transport: TransportMulticast = (&ti).into();
 
-    // TODO: also check the dyn trait implementation in callback
     let callback = match manager.config.handler.new_multicast(transport.clone()) {
         Ok(c) => c,
         Err(e) => {

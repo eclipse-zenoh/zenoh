@@ -75,7 +75,6 @@ impl TransportLinkUnicastUniversal {
         (result, consumer)
     }
 
-    // TODO: Not yet guaranteed is called at most once
     pub(super) fn start_tx(
         &mut self,
         transport: TransportUnicastUniversal,
@@ -96,12 +95,12 @@ impl TransportLinkUnicastUniversal {
             )
             .await;
 
-            // TODO: improve this callback
             if let Err(e) = res {
                 log::debug!("{}", e);
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
-                // TODO: check which ZRuntime should be used
+                // TODO(yuyuan): do more study to check which ZRuntime should be used or refine the
+                // termination
                 zenoh_runtime::ZRuntime::TX
                     .spawn(async move { transport.del_link(tx.inner.link()).await });
             }
@@ -109,7 +108,6 @@ impl TransportLinkUnicastUniversal {
         self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
     }
 
-    // TODO: Not yet guaranteed is called at most once
     pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
         let mut rx = self.link.rx();
         let token = self.token.clone();
@@ -124,13 +122,13 @@ impl TransportLinkUnicastUniversal {
             )
             .await;
 
-            // TODO: improve this callback
+            // TODO(yuyuan): improve this callback
             if let Err(e) = res {
                 log::debug!("{}", e);
 
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
-                // TODO: check which ZRuntime should be used
+                // WARN: Must be spawned on RX
                 zenoh_runtime::ZRuntime::RX
                     .spawn(async move { transport.del_link((&rx.link).into()).await });
 
@@ -138,7 +136,7 @@ impl TransportLinkUnicastUniversal {
                 // zenoh_runtime::ZRuntime::Net
                 //     .spawn(async move { transport.del_link((&rx.link).into()).await });
 
-                // // WARN: Don't worry. This fix doesn't work
+                // // WARN: This cloud block
                 // transport.del_link((&rx.link).into()).await;
             }
         };
@@ -168,7 +166,6 @@ async fn tx_task(
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
-    // TODO: check this necessity
     let mut interval =
         tokio::time::interval_at(tokio::time::Instant::now() + keep_alive, keep_alive);
     loop {

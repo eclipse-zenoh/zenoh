@@ -257,7 +257,7 @@ pub(super) struct TransportLinkMulticastConfigUniversal {
     pub(super) batch_size: BatchSize,
 }
 
-// TODO: Introduce TaskTracker and retire handle_tx, handle_rx, and signal_rx.
+// TODO(yuyuan): Introduce TaskTracker or JoinSet and retire handle_tx, handle_rx, and signal_rx.
 #[derive(Clone)]
 pub(super) struct TransportLinkMulticastUniversal {
     // The underlying link
@@ -329,6 +329,7 @@ impl TransportLinkMulticastUniversal {
             // Spawn the TX task
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
+
             let handle = zenoh_runtime::ZRuntime::TX.spawn(async move {
                 let res = tx_task(
                     consumer,
@@ -343,7 +344,6 @@ impl TransportLinkMulticastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    // TODO: check which ZRuntime should be used
                     zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
                 }
             });
@@ -380,7 +380,6 @@ impl TransportLinkMulticastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    // TODO: check which ZRuntime should be used
                     zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
                 }
             });

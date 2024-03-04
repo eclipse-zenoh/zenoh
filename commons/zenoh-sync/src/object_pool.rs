@@ -108,7 +108,6 @@ impl<T> From<T> for RecyclingObject<T> {
     }
 }
 
-// TODO: Check this necessity
 impl<T> Drop for RecyclingObject<T> {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.upgrade() {

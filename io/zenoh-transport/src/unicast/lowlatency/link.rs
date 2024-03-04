@@ -23,19 +23,20 @@ use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
+use zenoh_link::LinkUnicast;
 use zenoh_protocol::transport::TransportMessageLowLatency;
 use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency};
 use zenoh_result::{zerror, ZResult};
 use zenoh_runtime::ZRuntime;
 
 pub(crate) async fn send_with_link(
-    link: &TransportLinkUnicast,
+    link: &LinkUnicast,
     msg: TransportMessageLowLatency,
     #[cfg(feature = "stats")] stats: &Arc<TransportStats>,
 ) -> ZResult<()> {
     let len;
     let codec = Zenoh080::new();
-    if link.link.is_streamed() {
+    if link.is_streamed() {
         let mut buffer = vec![0, 0, 0, 0];
         let mut writer = buffer.writer();
         codec
@@ -47,7 +48,7 @@ pub(crate) async fn send_with_link(
 
         buffer[0..4].copy_from_slice(&le);
 
-        link.link.write_all(&buffer).await?;
+        link.write_all(&buffer).await?;
     } else {
         let mut buffer = vec![];
         let mut writer = buffer.writer();
@@ -59,7 +60,7 @@ pub(crate) async fn send_with_link(
         {
             len = buffer.len() as u32;
         }
-        link.link.write_all(&buffer).await?;
+        link.write_all(&buffer).await?;
     }
     log::trace!("Sent: {:?}", msg);
 
@@ -99,7 +100,7 @@ impl TransportUnicastLowlatency {
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
         let guard = zasyncwrite!(self.link);
-        let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
+        let link = &guard.as_ref().ok_or_else(|| zerror!("No link"))?.link;
         send_with_link(
             link,
             msg,
@@ -139,18 +140,15 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) fn internal_start_rx(&self, lease: Duration) {
-        // TODO: Tidy the complex dependencies
         let rx_buffer_size = self.manager.config.link_rx_buffer_size;
         let token = self.token.child_token();
 
-        // TODO: This can be improved to minimal
         let c_transport = self.clone();
         let task = async move {
             let guard = zasyncread!(c_transport.link);
             let link_rx = guard.as_ref().unwrap().rx();
             drop(guard);
 
-            // TODO: link_rx.link and link.link
             let is_streamed = link_rx.link.is_streamed();
 
             // The pool of buffers
@@ -221,7 +219,6 @@ async fn keepalive_task(
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
-    // TODO: check this necessity
     let mut interval =
         tokio::time::interval_at(tokio::time::Instant::now() + keep_alive, keep_alive);
 
@@ -233,7 +230,7 @@ async fn keepalive_task(
                 };
 
                 let guard = zasyncwrite!(link);
-                let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
+                let link = &guard.as_ref().ok_or_else(|| zerror!("No link"))?.link;
                 let _ = send_with_link(
                     link,
                     keepailve,
