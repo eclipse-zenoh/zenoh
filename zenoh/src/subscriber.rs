@@ -459,6 +459,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     /// Change the subscription reliability.
     #[inline]
     // tags{rust.subscriber_builder.reliability, api.subscriber.reliability.set}
+    // tags{api.pull_subscriber.reliability.set}
     pub fn reliability(mut self, reliability: Reliability) -> Self {
         self.reliability = reliability;
         self
@@ -466,7 +467,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Change the subscription reliability to `Reliable`.
     #[inline]
-    // tags{rust.subscriber_builder.reliable, api.subscriber.reliability.set.reliable}
+    // tags{rust.subscriber_builder.reliable}
     pub fn reliable(mut self) -> Self {
         self.reliability = Reliability::Reliable;
         self
@@ -474,7 +475,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Change the subscription reliability to `BestEffort`.
     #[inline]
-    // tags{rust.subscriber_builder.best_effort, api.subscriber.reliability.set.best_effort}
+    // tags{rust.subscriber_builder.best_effort}
     pub fn best_effort(mut self) -> Self {
         self.reliability = Reliability::BestEffort;
         self
@@ -485,6 +486,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     #[zenoh_macros::unstable]
     #[inline]
     // tags{rust.subscriber_builder.allowed_origin, api.subscriber.allowed_origin.set}
+    // tags{api.pull_subscriber.allowed_origin.set}
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
         self
@@ -492,7 +494,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Change the subscription mode to Pull.
     #[inline]
-    // tags{rust.subscriber_builder.pull_mode, api.subscriber.pull_mode.set}
+    // tags{rust.subscriber_builder.pull_mode}
     pub fn pull_mode(self) -> SubscriberBuilder<'a, 'b, PullMode, Handler> {
         let SubscriberBuilder {
             session,
@@ -514,7 +516,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Change the subscription mode to Push.
     #[inline]
-    // tags{rust.subscriber_builder.push_mode, api.subscriber.push_mode.set}
+    // tags{rust.subscriber_builder.push_mode}
     pub fn push_mode(self) -> SubscriberBuilder<'a, 'b, PushMode, Handler> {
         let SubscriberBuilder {
             session,

@@ -424,7 +424,7 @@ pub enum SubMode {
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-// tags{rust.consolidation_mode, api.options.consolidation_mode}
+// tags{rust.consolidation_mode, api.options.consolidation_mode.manual}
 pub enum ConsolidationMode {
     /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,

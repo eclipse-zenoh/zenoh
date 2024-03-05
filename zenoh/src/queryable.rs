@@ -114,6 +114,7 @@ impl Query {
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
     // tags{rust.query.reply, api.query.reply}
+    // tags{api.query.reply.encoding.set} // through the `Sample` struct
     pub fn reply(&self, result: Result<Sample, Value>) -> ReplyBuilder<'_> {
         ReplyBuilder {
             query: self,
@@ -173,7 +174,7 @@ pub struct ReplyBuilder<'a> {
 impl<'a> ReplyBuilder<'a> {
     #[allow(clippy::result_large_err)]
     #[zenoh_macros::unstable]
-    // tags{rust.reply_builder.with_attachment, api.reply.attachment.set}
+    // tags{rust.reply_builder.with_attachment, api.query.reply.attachment.set}
     pub fn with_attachment(mut self, attachment: Attachment) -> Result<Self, (Self, Attachment)> {
         match &mut self.result {
             Ok(sample) => {

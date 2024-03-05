@@ -37,19 +37,19 @@ pub use zenoh_protocol::core::ConsolidationMode;
 pub enum Mode<T> {
     // tags{api.options.consolidation_mode.auto}
     Auto,
+    // tags{}
     Manual(T),
 }
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-// tags{rust.query_consolidation, api.query_consolidation}
+// tags{rust.query_consolidation, api.options.query_consolidation}
 pub struct QueryConsolidation {
     pub(crate) mode: Mode<ConsolidationMode>,
 }
 
 impl QueryConsolidation {
     /// Automatic query consolidation strategy selection.
-    // tags{rust.query_consolidation.auto, api.query_consolidation.auto}
     pub const AUTO: Self = Self { mode: Mode::Auto };
 
     pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {
@@ -87,7 +87,10 @@ impl Default for QueryConsolidation {
 // tags{rust.reply, api.reply}
 pub struct Reply {
     /// The result of this Reply.
-    // tags{rust.reply.sample, api.reply.sample}
+    // tags{rust.reply.sample}
+    // tags{api.reply.get_sample}
+    // tags{api.reply.get_error}
+    // tags{api.reply.is_ok}
     pub sample: Result<Sample, Value>,
     /// The id of the zenoh instance that answered this Reply.
     // tags{rust.reply.replier_id, api.reply.replier_id}
@@ -367,12 +370,12 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
 pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
 #[zenoh_macros::unstable]
-// tags{rust.reply_key_expr_any_sel_param, api.reply_key_expr_any_sel_param}
+// tags{}
 pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-// tags{rust.reply_key_expr, api.reply_key_expr}
+// tags{rust.reply_key_expr, api.options.reply_key_expr}
 pub enum ReplyKeyExpr {
     Any,
     MatchingQuery,
@@ -380,6 +383,7 @@ pub enum ReplyKeyExpr {
 
 #[zenoh_macros::unstable]
 impl Default for ReplyKeyExpr {
+    // tags{rust.reply_key_expr.default, api.options.reply_key_expr.default}
     fn default() -> Self {
         ReplyKeyExpr::MatchingQuery
     }

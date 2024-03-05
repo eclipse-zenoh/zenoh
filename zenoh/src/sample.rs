@@ -29,6 +29,7 @@ pub type SourceSn = u64;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
+// tags{api.options.locality.default}
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
 // tags{rust.locality, api.options.locality}
 pub enum Locality {
