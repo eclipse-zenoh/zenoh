@@ -30,9 +30,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 async-std = { workspace = true, features = ["default"] }
-clap = { workspace = true }
 const_format = { workspace = true }
-env_logger = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 log = { workspace = true }

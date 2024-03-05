@@ -26,12 +26,10 @@ description = "Internal crate for zenoh."
 [features]
 default = ["std"]
 std = [
-    "hex/std",
     "rand?/std",
     "rand?/std_rng",
     "serde/std",
     "uhlc/std",
-    "uuid/std",
     "zenoh-keyexpr/std",
     "zenoh-result/std",
 ]
@@ -42,11 +40,9 @@ complete_n = []
 
 [dependencies]
 const_format = { workspace = true }
-hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true, default-features = false }
-uuid = { workspace = true }                                                     # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
 zenoh-buffers = { workspace = true, default-features = false }
 zenoh-keyexpr = { workspace = true }
 zenoh-result = { workspace = true }
