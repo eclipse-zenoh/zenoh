@@ -154,8 +154,16 @@ impl Digest {
             HashMap::new(),
         );
         for entry in raw_log {
-            let sub = Digest::get_subinterval(config.delta, entry.timestamp, config.sub_intervals);
-            let interval = Digest::get_interval(sub, config.sub_intervals);
+            let Some(sub) = Digest::get_subinterval(
+                config.delta,
+                entry.timestamp,
+                config.sub_intervals,
+            ) else {
+                continue;
+            };
+            let Some(interval) = Digest::get_interval(sub, config.sub_intervals) else {
+                continue;
+            };
             let era = Digest::get_era(&config, latest_interval, interval);
 
             if sub == curr_sub {
@@ -193,7 +201,8 @@ impl Digest {
                     int_content = BTreeMap::new();
                     if era != curr_era {
                         if !era_content.is_empty() {
-                            let era_hash: Vec<u64> = era_content.values().copied().collect();
+                            let era_hash: Vec<u64> =
+                                era_content.values().copied().collect();
                             let checksum = Digest::get_content_hash(&era_hash);
                             let e = Interval {
                                 checksum,
@@ -271,12 +280,20 @@ impl Digest {
         deleted_content: HashSet<LogEntry>,
     ) -> Digest {
         // push content in correct places
-        let (mut current, mut subintervals_to_update, mut intervals_to_update, mut eras_to_update) =
-            Digest::update_new_content(&mut current, new_content, latest_interval);
+        let (
+            mut current,
+            mut subintervals_to_update,
+            mut intervals_to_update,
+            mut eras_to_update,
+        ) = Digest::update_new_content(&mut current, new_content, latest_interval);
 
         // remove deleted content from proper places
         let (mut current, further_subintervals, further_intervals, further_eras) =
-            Digest::remove_deleted_content(&mut current, deleted_content, latest_interval);
+            Digest::remove_deleted_content(
+                &mut current,
+                deleted_content,
+                latest_interval,
+            );
 
         // move intervals into eras if changed -- iterate through hot and move them to warm/cold if needed, iterate through warm and move them to cold if needed
         let (current, realigned_eras) =
@@ -388,8 +405,9 @@ impl Digest {
     fn get_interval_checksum(content: &[u64], info: &HashMap<u64, SubInterval>) -> u64 {
         let mut hashable_content = Vec::new();
         for i in content {
-            let i_cont = info.get(i).unwrap().checksum;
-            hashable_content.push(i_cont);
+            if let Some(i_cont) = info.get(i).map(|i| i.checksum) {
+                hashable_content.push(i_cont);
+            }
         }
         Digest::get_content_hash(&hashable_content)
     }
@@ -398,8 +416,9 @@ impl Digest {
     fn get_era_checksum(content: &[u64], info: &HashMap<u64, Interval>) -> u64 {
         let mut hashable_content = Vec::new();
         for i in content {
-            let i_cont = info.get(i).unwrap().checksum;
-            hashable_content.push(i_cont);
+            if let Some(i_cont) = info.get(i).map(|i| i.checksum) {
+                hashable_content.push(i_cont);
+            }
         }
         Digest::get_content_hash(&hashable_content)
     }
@@ -430,13 +449,19 @@ impl Digest {
         let mut subintervals_to_update = HashSet::new();
 
         for log_entry in content {
-            let subinterval = Digest::get_subinterval(
+            let Some(subinterval) = Digest::get_subinterval(
                 current.config.delta,
                 log_entry.timestamp,
                 current.config.sub_intervals,
-            );
+            ) else {
+                continue;
+            };
             subintervals_to_update.insert(subinterval);
-            let interval = Digest::get_interval(subinterval, current.config.sub_intervals);
+            let Some(interval) =
+                Digest::get_interval(subinterval, current.config.sub_intervals)
+            else {
+                continue;
+            };
             intervals_to_update.insert(interval);
             let era = Digest::get_era(&current.config, latest_interval, interval);
             eras_to_update.insert(era.clone());
@@ -492,46 +517,37 @@ impl Digest {
         let mut subintervals_to_update = HashSet::new();
 
         for entry in deleted_content {
-            let subinterval = Digest::get_subinterval(
+            let Some(subinterval) = Digest::get_subinterval(
                 current.config.delta,
                 entry.timestamp,
                 current.config.sub_intervals,
-            );
+            ) else {
+                continue;
+            };
             subintervals_to_update.insert(subinterval);
-            let interval = Digest::get_interval(subinterval, current.config.sub_intervals);
+            let Some(interval) =
+                Digest::get_interval(subinterval, current.config.sub_intervals)
+            else {
+                continue;
+            };
             intervals_to_update.insert(interval);
             let era = Digest::get_era(&current.config, latest_interval, interval);
             eras_to_update.insert(era.clone());
 
-            if current.subintervals.contains_key(&subinterval) {
-                current
-                    .subintervals
-                    .get_mut(&subinterval)
-                    .unwrap()
-                    .content
-                    .retain(|x| {
-                        x.timestamp.get_time() != entry.timestamp.get_time()
-                            && x.timestamp.get_id() != entry.timestamp.get_id()
-                            && x.key != entry.key
-                    });
+            if let Some(sub) = current.subintervals.get_mut(&subinterval) {
+                sub.content.retain(|x| {
+                    x.timestamp.get_time() != entry.timestamp.get_time()
+                        && x.timestamp.get_id() != entry.timestamp.get_id()
+                        && x.key != entry.key
+                });
                 subintervals_to_update.insert(subinterval);
             }
-            if current.intervals.contains_key(&interval) {
-                current
-                    .intervals
-                    .get_mut(&interval)
-                    .unwrap()
-                    .content
-                    .retain(|&x| x != subinterval);
+            if let Some(int) = current.intervals.get_mut(&interval) {
+                int.content.retain(|&x| x != subinterval);
                 intervals_to_update.insert(interval);
             }
-            if current.eras.contains_key(&era) {
-                current
-                    .eras
-                    .get_mut(&era)
-                    .unwrap()
-                    .content
-                    .retain(|&x| x != interval);
+            if let Some(e) = current.eras.get_mut(&era) {
+                e.content.retain(|&x| x != interval);
                 eras_to_update.insert(era.clone());
             }
         }
@@ -553,7 +569,8 @@ impl Digest {
         for (curr_era, interval_list) in current.eras.clone() {
             if curr_era == EraType::Hot || curr_era == EraType::Warm {
                 for interval in &interval_list.content {
-                    let new_era = Digest::get_era(&current.config, latest_interval, *interval);
+                    let new_era =
+                        Digest::get_era(&current.config, latest_interval, *interval);
                     if new_era != curr_era {
                         to_modify.insert((*interval, curr_era.clone(), new_era.clone()));
                         eras_to_update.insert(curr_era.clone());
@@ -584,23 +601,28 @@ impl Digest {
     }
 
     // compute the subinterval for a given timestamp
-    fn get_subinterval(delta: Duration, ts: Timestamp, subintervals: usize) -> u64 {
-        let ts = u64::try_from(
-            ts.get_time()
-                .to_system_time()
-                .duration_since(super::EPOCH_START)
-                .unwrap()
-                .as_millis(),
-        )
-        .unwrap();
-        let delta = u64::try_from(delta.as_millis()).unwrap();
-        ts / (delta / u64::try_from(subintervals).unwrap())
+    fn get_subinterval(
+        delta: Duration,
+        ts: Timestamp,
+        subintervals: usize,
+    ) -> Option<u64> {
+        let ts = ts
+            .get_time()
+            .to_system_time()
+            .duration_since(super::EPOCH_START)
+            .ok()
+            .map(|d| d.as_millis())
+            .and_then(|m| u64::try_from(m).ok());
+        let delta = u64::try_from(delta.as_millis()).ok();
+
+        ts.zip(delta)
+            .zip(u64::try_from(subintervals).ok())
+            .map(|((ts, delta), sub)| ts / (delta / sub))
     }
 
     // compute the interval for a given subinterval
-    fn get_interval(subinterval: u64, subintervals: usize) -> u64 {
-        let subintervals = u64::try_from(subintervals).unwrap();
-        subinterval / subintervals
+    fn get_interval(subinterval: u64, subintervals: usize) -> Option<u64> {
+        u64::try_from(subintervals).map(|s| subinterval / s).ok()
     }
 
     // compute era for a given interval
@@ -627,11 +649,17 @@ impl Digest {
     pub fn compress(&self) -> Digest {
         let mut compressed_intervals = HashMap::new();
         let mut compressed_subintervals = HashMap::new();
-        if self.eras.contains_key(&EraType::Hot) {
-            for int in &self.eras.get(&EraType::Hot).unwrap().content {
-                compressed_intervals.insert(*int, self.intervals.get(int).unwrap().clone());
-                for sub in &self.intervals.get(int).unwrap().content {
-                    let subinterval = self.subintervals.get(sub).unwrap().clone();
+        if let Some(eras) = self.eras.get(&EraType::Hot) {
+            for int in &eras.content {
+                let Some(inter) = self.intervals.get(int) else {
+                    continue;
+                };
+
+                compressed_intervals.insert(*int, inter.clone());
+                for sub in &inter.content {
+                    let Some(subinterval) = self.subintervals.get(sub) else {
+                        continue;
+                    };
                     let comp_sub = SubInterval {
                         checksum: subinterval.checksum,
                         content: BTreeSet::new(),
@@ -640,9 +668,11 @@ impl Digest {
                 }
             }
         };
-        if self.eras.contains_key(&EraType::Warm) {
-            for int in &self.eras.get(&EraType::Warm).unwrap().content {
-                let interval = self.intervals.get(int).unwrap().clone();
+        if let Some(era) = self.eras.get(&EraType::Warm) {
+            for int in &era.content {
+                let Some(interval) = self.intervals.get(int) else {
+                    continue;
+                };
                 let comp_int = Interval {
                     checksum: interval.checksum,
                     content: BTreeSet::new(),
@@ -651,17 +681,17 @@ impl Digest {
             }
         };
         let mut compressed_eras = HashMap::new();
-        for era in self.eras.keys() {
-            if era.clone() == EraType::Cold {
+        for (key, era) in &self.eras {
+            if *key == EraType::Cold {
                 compressed_eras.insert(
                     EraType::Cold,
                     Interval {
-                        checksum: self.eras.get(era).unwrap().checksum,
+                        checksum: era.checksum,
                         content: BTreeSet::new(),
                     },
                 );
             } else {
-                compressed_eras.insert(era.clone(), self.eras.get(era).unwrap().clone());
+                compressed_eras.insert(key.clone(), era.clone());
             }
         }
         Digest {
@@ -746,7 +776,11 @@ impl Digest {
 // functions for alignment
 impl Digest {
     // check if the other era has more content
-    pub fn era_has_diff(&self, era: &EraType, other: &HashMap<EraType, Interval>) -> bool {
+    pub fn era_has_diff(
+        &self,
+        era: &EraType,
+        other: &HashMap<EraType, Interval>,
+    ) -> bool {
         match (other.get(era), self.eras.get(era)) {
             (Some(other_era), Some(my_era)) => other_era.checksum != my_era.checksum,
             (Some(_), None) => true,
@@ -757,30 +791,31 @@ impl Digest {
     // return mismatching intervals in an era
     pub fn get_interval_diff(&self, other_intervals: HashMap<u64, u64>) -> HashSet<u64> {
         let mut mis_int = HashSet::new();
-        for int in other_intervals.keys() {
-            if self.intervals.contains_key(int) {
-                if *other_intervals.get(int).unwrap() != self.intervals.get(int).unwrap().checksum {
-                    mis_int.insert(*int);
+        for (key, other_int) in &other_intervals {
+            if let Some(int) = self.intervals.get(key) {
+                if *other_int != int.checksum {
+                    mis_int.insert(*key);
                 }
             } else {
-                mis_int.insert(*int);
+                mis_int.insert(*key);
             }
         }
         mis_int
     }
 
     // return mismatching subintervals in an interval
-    pub fn get_subinterval_diff(&self, other_subintervals: HashMap<u64, u64>) -> HashSet<u64> {
+    pub fn get_subinterval_diff(
+        &self,
+        other_subintervals: HashMap<u64, u64>,
+    ) -> HashSet<u64> {
         let mut mis_sub = HashSet::new();
-        for sub in other_subintervals.keys() {
-            if self.subintervals.contains_key(sub) {
-                if *other_subintervals.get(sub).unwrap()
-                    != self.subintervals.get(sub).unwrap().checksum
-                {
-                    mis_sub.insert(*sub);
+        for (key, other_sub) in &other_subintervals {
+            if let Some(sub) = self.subintervals.get(key) {
+                if *other_sub != sub.checksum {
+                    mis_sub.insert(*key);
                 }
             } else {
-                mis_sub.insert(*sub);
+                mis_sub.insert(*key);
             }
         }
         mis_sub
@@ -800,23 +835,19 @@ impl Digest {
     }
 
     //return missing content in a subinterval
-    pub fn get_content_diff(&self, subinterval: u64, content: Vec<LogEntry>) -> Vec<LogEntry> {
-        if !self.subintervals.contains_key(&subinterval) {
-            return content;
+    pub fn get_content_diff(
+        &self,
+        subinterval: u64,
+        content: Vec<LogEntry>,
+    ) -> Vec<LogEntry> {
+        if let Some(sub) = self.subintervals.get(&subinterval) {
+            content
+                .into_iter()
+                .filter(|c| !sub.content.contains(c))
+                .collect()
+        } else {
+            content
         }
-        let mut mis_content = Vec::new();
-        for c in content {
-            if !self
-                .subintervals
-                .get(&subinterval)
-                .unwrap()
-                .content
-                .contains(&c)
-            {
-                mis_content.push(c);
-            }
-        }
-        mis_content
     }
 }
 
@@ -899,7 +930,8 @@ fn test_create_digest_with_initial_hot() {
             SubInterval {
                 checksum: 10827088509365589085,
                 content: BTreeSet::from([LogEntry {
-                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1")
+                        .unwrap(),
                     key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                 }]),
             },
@@ -955,7 +987,8 @@ fn test_create_digest_with_initial_warm() {
             SubInterval {
                 checksum: 10827088509365589085,
                 content: BTreeSet::from([LogEntry {
-                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1")
+                        .unwrap(),
                     key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                 }]),
             },
@@ -1011,7 +1044,8 @@ fn test_create_digest_with_initial_cold() {
             SubInterval {
                 checksum: 10827088509365589085,
                 content: BTreeSet::from([LogEntry {
-                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1")
+                        .unwrap(),
                     key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                 }]),
             },
@@ -1075,7 +1109,8 @@ fn test_update_digest_add_content() {
             SubInterval {
                 checksum: 10827088509365589085,
                 content: BTreeSet::from([LogEntry {
-                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1")
+                        .unwrap(),
                     key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                 }]),
             },
@@ -1118,7 +1153,10 @@ fn test_update_digest_remove_content() {
                 SubInterval {
                     checksum: 10007212639402189432,
                     content: BTreeSet::from([LogEntry {
-                        timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
+                        timestamp: Timestamp::from_str(
+                            "2022-12-21T15:00:00.000000000Z/1",
+                        )
+                        .unwrap(),
                         key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                     }]),
                 },
