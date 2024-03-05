@@ -277,7 +277,7 @@ mod tests {
                 payload: Put {
                     payload: sbuf.into(),
                     timestamp: None,
-                    encoding: Encoding::UNSPECIFIED,
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     ext_shm: None,
                     ext_attachment: None,
@@ -325,7 +325,7 @@ mod tests {
                 payload: Put {
                     payload: sbuf.into(),
                     timestamp: None,
-                    encoding: Encoding::UNSPECIFIED,
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     ext_shm: None,
                     ext_attachment: None,

@@ -383,19 +383,10 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         let raw = selector.decode().any(|(k, _)| k.as_ref() == RAW_KEY);
         let mut query = req.state().0.get(&selector).consolidation(consolidation);
         if !body.is_empty() {
-            let encoding = match req.content_type() {
-                Some(m) => match DefaultEncoding.parse(m.to_string()) {
-                    Ok(e) => e,
-                    Err(e) => {
-                        return Ok(response(
-                            StatusCode::BadRequest,
-                            "text/plain",
-                            &e.to_string(),
-                        ));
-                    }
-                },
-                None => Encoding::default(),
-            };
+            let encoding: Encoding = req
+                .content_type()
+                .map(|m| DefaultEncoding.parse(m.to_string()))
+                .unwrap_or_default();
             query = query.with_value(Value::from(body).with_encoding(encoding));
         }
         match query.res().await {
@@ -432,19 +423,10 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 }
             };
 
-            let encoding = match req.content_type() {
-                Some(m) => match DefaultEncoding.parse(m.to_string()) {
-                    Ok(e) => e,
-                    Err(e) => {
-                        return Ok(response(
-                            StatusCode::BadRequest,
-                            "text/plain",
-                            &e.to_string(),
-                        ));
-                    }
-                },
-                None => Encoding::default(),
-            };
+            let encoding: Encoding = req
+                .content_type()
+                .map(|m| DefaultEncoding.parse(m.to_string()))
+                .unwrap_or_default();
 
             // @TODO: Define the right congestion control value
             let session = &req.state().0;

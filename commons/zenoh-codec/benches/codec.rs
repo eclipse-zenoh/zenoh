@@ -87,7 +87,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::UNSPECIFIED,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -133,7 +133,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::UNSPECIFIED,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -174,7 +174,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::UNSPECIFIED,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -215,7 +215,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::UNSPECIFIED,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -243,7 +243,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::UNSPECIFIED,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -282,7 +282,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::UNSPECIFIED,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,

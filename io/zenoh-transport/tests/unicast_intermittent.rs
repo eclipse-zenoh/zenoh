@@ -303,7 +303,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             payload: Put {
                 payload: vec![0u8; MSG_SIZE].into(),
                 timestamp: None,
-                encoding: Encoding::UNSPECIFIED,
+                encoding: Encoding::empty(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,

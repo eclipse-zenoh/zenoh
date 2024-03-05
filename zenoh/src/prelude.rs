@@ -31,7 +31,7 @@ pub(crate) mod common {
         writer::HasWriter,
     };
     pub use zenoh_core::Resolve;
-    pub use zenoh_protocol::core::{Encoding, EncodingPrefix, EndPoint, Locator, ZenohId};
+    pub use zenoh_protocol::core::{Encoding, EncodingId, EndPoint, Locator, ZenohId};
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoCallbackReceiverPair;

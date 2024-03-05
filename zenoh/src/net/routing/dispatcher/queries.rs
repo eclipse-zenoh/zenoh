@@ -558,10 +558,10 @@ pub fn route_query(
                         ext_unknown: vec![],                   // @TODO: handle unknown extensions
                         payload: ReplyBody::Put(Put {
                             // @TODO: handle Del case
-                            timestamp: None, // @TODO: handle timestamp
-                            encoding: Encoding::UNSPECIFIED, // @TODO: handle encoding
-                            ext_sinfo: None, // @TODO: handle source info
-                            ext_attachment: None, // @TODO: expose it in the API
+                            timestamp: None,             // @TODO: handle timestamp
+                            encoding: Encoding::empty(), // @TODO: handle encoding
+                            ext_sinfo: None,             // @TODO: handle source info
+                            ext_attachment: None,        // @TODO: expose it in the API
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,
                             ext_unknown: vec![], // @TODO: handle unknown extensions

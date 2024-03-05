@@ -12,22 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
-use alloc::string::String;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::imsg,
-    core::encoding::{flag, Encoding, EncodingPrefix},
+    core::encoding::{flag, Encoding, EncodingId},
 };
 
 impl LCodec<&Encoding> for Zenoh080 {
     fn w_len(self, x: &Encoding) -> usize {
-        let (prefix, suffix) = (x.prefix(), x.suffix());
-        let mut len = self.w_len((prefix as u32) << 1);
-        if !suffix.is_empty() {
-            len += self.w_len(x.suffix());
+        let mut len = self.w_len((x.id as u32) << 1);
+        if let Some(schema) = x.schema.as_ref() {
+            len += schema.len();
         }
         len
     }
@@ -40,17 +38,16 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Encoding) -> Self::Output {
-        let mut prefix = (x.prefix() as u32) << 1;
-        let suffix = x.suffix();
+        let mut id = (x.id as u32) << 1;
 
-        if !suffix.is_empty() {
-            prefix |= flag::S;
+        if x.schema.is_some() {
+            id |= flag::S;
         }
         let zodec = Zenoh080Bounded::<u32>::new();
-        zodec.write(&mut *writer, prefix)?;
-        if !suffix.is_empty() {
+        zodec.write(&mut *writer, id)?;
+        if let Some(schema) = x.schema.as_ref() {
             let zodec = Zenoh080Bounded::<u8>::new();
-            zodec.write(&mut *writer, suffix)?;
+            zodec.write(&mut *writer, schema)?;
         }
         Ok(())
     }
@@ -64,23 +61,19 @@ where
 
     fn read(self, reader: &mut R) -> Result<Encoding, Self::Error> {
         let zodec = Zenoh080Bounded::<u32>::new();
-        let prefix: u32 = zodec.read(&mut *reader)?;
-        let (prefix, has_suffix) = (
-            (prefix >> 1) as EncodingPrefix,
-            imsg::has_flag(prefix as u8, flag::S as u8),
+        let id: u32 = zodec.read(&mut *reader)?;
+        let (id, has_suffix) = (
+            (id >> 1) as EncodingId,
+            imsg::has_flag(id as u8, flag::S as u8),
         );
 
-        let mut suffix = String::new();
+        let mut schema = None;
         if has_suffix {
             let zodec = Zenoh080Bounded::<u8>::new();
-            suffix = zodec.read(&mut *reader)?;
+            schema = Some(zodec.read(&mut *reader)?);
         }
 
-        let mut encoding: Encoding = Encoding::new(prefix);
-        if !suffix.is_empty() {
-            encoding = encoding.with_suffix(suffix).map_err(|_| DidntRead)?;
-        }
-
+        let encoding = Encoding { id, schema };
         Ok(encoding)
     }
 }
