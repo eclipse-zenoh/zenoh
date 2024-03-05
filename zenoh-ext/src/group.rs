@@ -237,11 +237,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 
     while let Ok(query) = queryable.recv_async().await {
         log::trace!("Serving query for: {}", &qres);
-        query
-            .reply(Ok(Sample::new(qres.clone(), buf.clone())))
-            .res()
-            .await
-            .unwrap();
+        query.reply(qres.clone(), buf.clone()).res().await.unwrap();
     }
 }
 

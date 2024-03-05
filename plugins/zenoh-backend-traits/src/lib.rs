@@ -325,6 +325,6 @@ impl Query {
             sample
         };
         // Send reply
-        self.q.reply(Ok(sample))
+        self.q.reply_sample(sample)
     }
 }

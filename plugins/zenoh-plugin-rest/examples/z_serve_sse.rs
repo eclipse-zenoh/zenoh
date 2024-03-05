@@ -49,11 +49,7 @@ async fn main() {
         let receiver = queryable.receiver.clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
-                request
-                    .reply(Ok(Sample::new(key, HTML)))
-                    .res()
-                    .await
-                    .unwrap();
+                request.reply(key, HTML).res().await.unwrap();
             }
         }
     });

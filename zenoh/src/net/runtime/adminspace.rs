@@ -15,7 +15,7 @@ use super::Runtime;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::{Sample, SyncResolve};
+use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
@@ -558,11 +558,11 @@ fn router_data(context: &AdminContext, query: Query) {
 
     log::trace!("AdminSpace router_data: {:?}", json);
     if let Err(e) = query
-        .reply(Ok(Sample::new(
+        .reply(
             reply_key,
             Value::from(json.to_string().as_bytes().to_vec())
                 .encoding(KnownEncoding::AppJson.into()),
-        )))
+        )
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -593,10 +593,10 @@ zenoh_build{{version="{}"}} 1
     );
 
     if let Err(e) = query
-        .reply(Ok(Sample::new(
+        .reply(
             reply_key,
             Value::from(metrics.as_bytes().to_vec()).encoding(KnownEncoding::TextPlain.into()),
-        )))
+        )
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -611,7 +611,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
-        .reply(Ok(Sample::new(
+        .reply(
             reply_key,
             Value::from(
                 tables
@@ -621,7 +621,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
                     .to_vec(),
             )
             .encoding(KnownEncoding::TextPlain.into()),
-        )))
+        )
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -636,7 +636,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
-        .reply(Ok(Sample::new(
+        .reply(
             reply_key,
             Value::from(
                 tables
@@ -646,7 +646,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
                     .to_vec(),
             )
             .encoding(KnownEncoding::TextPlain.into()),
-        )))
+        )
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -663,7 +663,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+            if let Err(e) = query.reply(key, Value::empty()).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -680,7 +680,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+            if let Err(e) = query.reply(key, Value::empty()).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -698,7 +698,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
             log::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::from(status)))).res() {
+            if let Err(e) = query.reply(key, Value::from(status)).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -717,10 +717,10 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
-                            .reply(Ok(Sample::new(
+                            .reply(
                                 key_expr,
                                 Value::from(plugin.path()).encoding(KnownEncoding::AppJson.into()),
-                            )))
+                            )
                             .res()
                         {
                             log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -744,10 +744,9 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            if let Err(e) = query.reply(Ok(Sample::new(
-                                key_expr,
+                            if let Err(e) = query.reply(key_expr,
                                 Value::from(response.value).encoding(KnownEncoding::AppJson.into()),
-                            )))
+                            )
                             .res()
                             {
                                 log::error!("Error sending AdminSpace reply: {:?}", e);
