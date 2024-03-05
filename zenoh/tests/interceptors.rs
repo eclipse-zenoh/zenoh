@@ -33,6 +33,10 @@ impl IntervalCounter {
         self.total_time.as_millis() as u32 / self.count
     }
 
+    fn get_count(&self) -> u32 {
+        self.count
+    }
+
     fn check_middle(&self, ms: u32) {
         let middle = self.get_middle();
         println!("Interval {}, count: {}, middle: {}", ms, self.count, middle);
@@ -120,7 +124,10 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
     }
 
     for _ in 0..100 {
-        if *zlock!(total_count) >= messages_count {
+        if *zlock!(total_count) >= messages_count
+            && zlock!(counter_r50_clone).get_count() > 0
+            && zlock!(counter_r100_clone).get_count() > 0
+        {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -220,7 +227,7 @@ fn downsampling_by_interface_impl(egress: bool) {
     }
 
     for _ in 0..100 {
-        if *zlock!(total_count) >= messages_count {
+        if *zlock!(total_count) >= messages_count && zlock!(counter_r100_clone).get_count() > 0 {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
