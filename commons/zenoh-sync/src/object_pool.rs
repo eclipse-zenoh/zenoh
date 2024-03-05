@@ -148,7 +148,4 @@ impl ZSliceBuffer for RecyclingObject<Box<[u8]>> {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn unique(&self) -> bool {
-        true
-    }
 }

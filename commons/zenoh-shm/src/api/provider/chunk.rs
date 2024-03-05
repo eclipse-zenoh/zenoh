@@ -39,3 +39,9 @@ pub struct AllocatedChunk {
     pub descriptor: ChunkDescriptor,
     pub data: AtomicPtr<u8>,
 }
+
+impl AllocatedChunk {
+    pub fn new(descriptor: ChunkDescriptor, data: AtomicPtr<u8>) -> Self {
+        Self { descriptor, data }
+    }
+}

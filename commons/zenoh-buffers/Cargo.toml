@@ -33,3 +33,4 @@ test = ["rand"]
 [dependencies]
 rand = { workspace = true, optional = true }
 zenoh-collections = { workspace = true, default-features = false }
+zenoh-core = { workspace = true, default-features = false }

@@ -19,25 +19,28 @@ use super::{
     types::{ChunkAllocResult, MemoryLayout},
 };
 
-// The provider backend trait
-// Implemet this interface to create a Zenoh-compatible shared memory provider
+/// The provider backend trait
+/// Implemet this interface to create a Zenoh-compatible shared memory provider
 pub trait SharedMemoryProviderBackend {
-    // Allocate the chunk of desired size
-    // If successful, the result's chunk size will be >= len
+    /// Allocate the chunk of desired size.
+    /// If successful, the result's chunk size will be >= len
     fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult;
 
-    // Deallocate the chunk
-    // It is guaranteed that chunk's len will correspond to the len returned from alloc(...)
+    /// Deallocate the chunk.
+    /// It is guaranteed that chunk's descriptor will correspond to the one returned from alloc(...)
     fn free(&self, chunk: &ChunkDescriptor);
 
-    // Defragment the memory
-    // Should return the size of largest defragmented chunk
+    /// Defragment the memory.
+    /// Should return the size of largest defragmented chunk
     fn defragment(&self) -> usize;
 
-    // Bytes available for use
-    // Note: Zenoh algorithms expect O(1) complexity for this method
+    /// Bytes available for use
     fn available(&self) -> usize;
 
-    // Maximum supported alignment
+    /// Check and calculate suitable layout for layout.
+    /// Depending on the implementation, backend may relayout allocations for bigger layouts.
+    /// This method is used to:
+    /// - validate, if the provided layout can be used with this backend
+    /// - adopt the layout for backend capabilities
     fn layout_for(&self, layout: MemoryLayout) -> ZResult<MemoryLayout>;
 }

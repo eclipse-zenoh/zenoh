@@ -17,16 +17,13 @@
 use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use std::borrow::Cow;
 use std::convert::TryFrom;
-#[cfg(feature = "shared-memory")]
-use std::sync::Arc;
+use zenoh_buffers::ZSlice;
 
 use zenoh_collections::Properties;
 use zenoh_result::ZError;
 
 use crate::buffers::ZBuf;
 use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};
-#[cfg(feature = "shared-memory")]
-use zenoh_shm::SharedMemoryBuf;
 
 /// A zenoh Value.
 #[non_exhaustive]
@@ -88,29 +85,10 @@ impl std::fmt::Display for Value {
 impl std::error::Error for Value {}
 
 // Shared memory conversion
-#[cfg(feature = "shared-memory")]
-impl From<Arc<SharedMemoryBuf>> for Value {
-    fn from(smb: Arc<SharedMemoryBuf>) -> Self {
+impl From<ZSlice> for Value {
+    fn from(slice: ZSlice) -> Self {
         Value {
-            payload: smb.into(),
-            encoding: KnownEncoding::AppOctetStream.into(),
-        }
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<Box<SharedMemoryBuf>> for Value {
-    fn from(smb: Box<SharedMemoryBuf>) -> Self {
-        let smb: Arc<SharedMemoryBuf> = smb.into();
-        Self::from(smb)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<SharedMemoryBuf> for Value {
-    fn from(smb: SharedMemoryBuf) -> Self {
-        Value {
-            payload: smb.into(),
+            payload: slice.into(),
             encoding: KnownEncoding::AppOctetStream.into(),
         }
     }

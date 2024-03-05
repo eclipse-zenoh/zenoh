@@ -119,11 +119,13 @@ impl<Inner: Sized> ClientStorage<Inner> {
     }
 }
 
-/// Safety: only immutable access to internal container is allowed,
+/// # Safety
+/// Only immutable access to internal container is allowed,
 /// so we are Send if the contained type is Send
 unsafe impl<Inner: Send> Send for ClientStorage<Inner> {}
 
-/// Safety: only immutable access to internal container is allowed,
+/// # Safety
+/// Only immutable access to internal container is allowed,
 /// so we are Sync if the contained type is Sync
 unsafe impl<Inner: Sync> Sync for ClientStorage<Inner> {}
 
@@ -165,8 +167,8 @@ impl SharedMemoryReader {
             watchdog,
         };
 
-        // Validate buffer's generation
-        match shmb.is_generation_valid() {
+        // Validate buffer
+        match shmb.is_valid() {
             true => Ok(shmb),
             false => bail!("Buffer is invalidated"),
         }

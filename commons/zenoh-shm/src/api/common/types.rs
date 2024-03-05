@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-// Unique protocol identifier
-// Here is a contract: it is up to user to make sure that incompatible SharedMemoryClient
-// and SharedMemoryProviderBackend implementations will never use the same ProtocolID
+/// Unique protocol identifier.
+/// Here is a contract: it is up to user to make sure that incompatible SharedMemoryClient
+/// and SharedMemoryProviderBackend implementations will never use the same ProtocolID
 pub type ProtocolID = u32;
 
-// Unique segment identifier
+/// Unique segment identifier
 pub type SegmentID = u32;
 
-// Chunk id within it's segment
+/// Chunk id within it's segment
 pub type ChunkID = u32;

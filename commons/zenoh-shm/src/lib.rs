@@ -129,8 +129,12 @@ impl SharedMemoryBuf {
         self.len() == 0
     }
 
-    pub fn is_generation_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
+    }
+
+    pub fn is_unique(&self) -> bool {
+        self.ref_count() == 1
     }
 
     pub fn ref_count(&self) -> u32 {
@@ -225,7 +229,10 @@ impl ZSliceBuffer for SharedMemoryBuf {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn unique(&self) -> bool {
-        self.header.header().refcount.load(Ordering::Relaxed) == 1
+    fn is_mutable(&self) -> bool {
+        self.is_valid() && self.is_unique()
+    }
+    fn is_valid(&self) -> bool {
+        self.is_valid()
     }
 }

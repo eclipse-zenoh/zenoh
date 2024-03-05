@@ -14,9 +14,8 @@
 
 use std::fmt::Display;
 
+use zenoh_buffers::ZSlice;
 use zenoh_result::{bail, ZResult};
-
-use crate::SharedMemoryBuf;
 
 use super::chunk::AllocatedChunk;
 
@@ -117,4 +116,4 @@ impl MemoryLayout {
 }
 
 pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
-pub type BufAllocResult = Result<SharedMemoryBuf, ZAllocError>;
+pub type BufAllocResult = Result<ZSlice, ZAllocError>;

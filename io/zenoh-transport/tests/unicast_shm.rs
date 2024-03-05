@@ -267,8 +267,10 @@ mod tests {
                 .res_async())
             .unwrap();
 
-            let bs = unsafe { sbuf.as_mut() };
-            bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
+            {
+                let mut sbuf_mut = unsafe { sbuf.as_mut().unchecked().res() };
+                sbuf_mut[0..8].copy_from_slice(&msg_count.to_le_bytes());
+            }
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
@@ -313,8 +315,10 @@ mod tests {
                 .res_async())
             .unwrap();
 
-            let bs = unsafe { sbuf.as_mut() };
-            bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
+            {
+                let mut sbuf_mut = unsafe { sbuf.as_mut().unchecked().res() };
+                sbuf_mut[0..8].copy_from_slice(&msg_count.to_le_bytes());
+            }
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),

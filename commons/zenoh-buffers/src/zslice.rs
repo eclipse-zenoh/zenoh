@@ -14,6 +14,7 @@
 use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::{BacktrackableReader, DidntRead, HasReader, Reader},
+    ZSliceMutBuilder,
 };
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
@@ -24,6 +25,7 @@ use core::{
     ops::{Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
     option,
 };
+use zenoh_core::zcondfeat;
 
 /*************************************/
 /*           ZSLICE BUFFER           */
@@ -32,7 +34,14 @@ pub trait ZSliceBuffer: Send + Sync + fmt::Debug {
     fn as_slice(&self) -> &[u8];
     fn as_mut_slice(&mut self) -> &mut [u8];
     fn as_any(&self) -> &dyn Any;
-    fn unique(&self) -> bool;
+    #[cfg(feature = "shared-memory")]
+    fn is_mutable(&self) -> bool {
+        true
+    }
+    #[cfg(feature = "shared-memory")]
+    fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 impl ZSliceBuffer for Vec<u8> {
@@ -44,9 +53,6 @@ impl ZSliceBuffer for Vec<u8> {
     }
     fn as_any(&self) -> &dyn Any {
         self
-    }
-    fn unique(&self) -> bool {
-        true
     }
 }
 
@@ -60,9 +66,6 @@ impl ZSliceBuffer for Box<[u8]> {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn unique(&self) -> bool {
-        true
-    }
 }
 
 impl<const N: usize> ZSliceBuffer for [u8; N] {
@@ -74,9 +77,6 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
     }
     fn as_any(&self) -> &dyn Any {
         self
-    }
-    fn unique(&self) -> bool {
-        false
     }
 }
 
@@ -147,6 +147,16 @@ impl ZSlice {
         self.len() == 0
     }
 
+    /// Checks if the underlying data is valid.
+    /// For shared memory buffers, the underlying data may be forcibly deallocated, and
+    /// this method provides and interface to check it
+    #[cfg(feature = "shared-memory")]
+    #[inline]
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.buf.is_valid()
+    }
+
     #[inline]
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
@@ -154,34 +164,11 @@ impl ZSlice {
         crate::unsafe_slice!(self.buf.as_slice(), self.range())
     }
 
+    /// Borrows ZSlice as mut
     #[inline]
     #[must_use]
-    pub fn try_as_slice_mut(&mut self) -> Option<&mut [u8]> {
-        if self.buf.unique() {
-            let range = self.range();
-            return Arc::get_mut(&mut self.buf)
-                .map(|val_mut| crate::unsafe_slice_mut!(val_mut.as_mut_slice(), range));
-        }
-        None
-    }
-
-    #[inline]
-    #[must_use]
-    pub fn as_slice_mut(&mut self) -> &mut [u8] {
-        // todo: try!
-        //let optimized = self.try_as_slice_mut();
-        //if let Some(val_mut) = optimized {
-        //    return val_mut;
-        //}
-        //drop(optimized);
-
-        // Copy-On-Write!
-        let newbuf = Arc::new(self.as_slice().to_vec());
-        self.buf = newbuf;
-        let range = self.range();
-        Arc::get_mut(&mut self.buf)
-            .map(|val_mut| crate::unsafe_slice_mut!(val_mut.as_mut_slice(), range))
-            .unwrap()
+    pub fn as_mut(&mut self) -> ZSliceMutBuilder {
+        ZSliceMutBuilder::new(self)
     }
 
     #[must_use]
@@ -197,6 +184,78 @@ impl ZSlice {
         } else {
             None
         }
+
+        //// cow
+        //let copy = slice.as_mut().copy_if_sharing().res();
+        //
+        //// fail
+        //let fail = slice.as_mut().fail_if_sharing().res();
+        //
+        //// no checks
+        //let unchecked = unsafe { slice.as_mut().res_unchecked() };
+    }
+
+    // PRIVATE:
+    #[inline]
+    #[must_use]
+    pub(crate) fn try_as_slice_mut(&mut self) -> Option<&mut [u8]> {
+        if zcondfeat!("shared-memory", self.buf.is_mutable(), true) {
+            let range = self.range();
+            return Arc::get_mut(&mut self.buf)
+                .map(|val_mut| crate::unsafe_slice_mut!(val_mut.as_mut_slice(), range));
+        }
+        None
+    }
+
+    // PRIVATE:
+    #[inline]
+    #[must_use]
+    pub(crate) fn is_unique(&mut self) -> bool {
+        if zcondfeat!("shared-memory", self.buf.is_mutable(), true) {
+            return Arc::get_mut(&mut self.buf).is_some();
+        }
+        false
+    }
+
+    // PRIVATE:
+    #[inline]
+    #[must_use]
+    pub(crate) unsafe fn as_slice_mut_unchecked(&mut self) -> &mut [u8] {
+        let range = self.range();
+        // todo: switch to Arc::get_mut_unchecked when it gets stable
+        return Arc::get_mut(&mut self.buf)
+            .map(|val_mut| crate::unsafe_slice_mut!(val_mut.as_mut_slice(), range))
+            .unwrap();
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) fn as_slice_mut(&mut self) -> &mut [u8] {
+        // todo: need to overcome this borrowchecker error
+        //let optimized = self.try_as_slice_mut();
+        //if let Some(val_mut) = optimized {
+        //    return val_mut;
+        //}
+        //drop(optimized);
+
+        // Copy-On-Write!
+        let newbuf = Arc::new(self.as_slice().to_vec());
+        self.buf = newbuf;
+        let range = self.range();
+        Arc::get_mut(&mut self.buf)
+            .map(|val_mut| crate::unsafe_slice_mut!(val_mut.as_mut_slice(), range))
+            .unwrap()
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) fn copy_as_slice_mut(&mut self) -> &mut [u8] {
+        let newbuf = Arc::new(self.as_slice().to_vec());
+        self.buf = newbuf;
+        let range = self.range();        
+        Arc::get_mut(&mut self.buf)
+            .map(|val_mut| crate::unsafe_slice_mut!(val_mut.as_mut_slice(), range))
+            .unwrap()
     }
 }
 

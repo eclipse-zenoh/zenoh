@@ -214,6 +214,7 @@ mod tests {
     #[cfg(feature = "shared-memory")]
     #[test]
     fn shm_api_example() {
+        use zenoh_buffers::ZBuf;
         use zenoh_result::{bail, ZResult};
         use zenoh_shm::api::provider::shared_memory_provider::{Deallocate, Defragment};
 
@@ -248,12 +249,27 @@ mod tests {
                 .backend(backend)
                 .res();
 
+
+
+
+
+
+
+
+
             // Create a layout for particular allocation arguments and particular SHM provider
             // The layout is validated for argument correctness and also is checked
             // against particular SHM provider's layouting capabilities.
-            // A layout is reusable and can handle series of similar allocations
+            // This layout is reusable and can handle series of similar allocations
             let buffer_layout = {
-                // Comprehensive configuration:
+                // OPTION 1: Simple (default) configuration:
+                let simple_layout = shared_memory_provider
+                    .alloc_layout()
+                    .size(512)
+                    .res()
+                    .unwrap();
+            
+                // OPTION 2: Comprehensive configuration:
                 let _comprehensive_layout = shared_memory_provider
                     .alloc_layout()
                     .size(512)
@@ -261,15 +277,19 @@ mod tests {
                     .res()
                     .unwrap();
 
-                // Simple (default) configuration:
-                let simple_layout = shared_memory_provider
-                    .alloc_layout()
-                    .size(512)
-                    .res()
-                    .unwrap();
-
                 simple_layout
             };
+
+
+
+
+
+
+
+
+
+
+
 
             // Allocate SharedMemoryBuf using asynchronous BlockOn<GarbageCollect<JustAlloc>> policy.
             // Policy generics collection is a mechanism to describe necessary allocation behaviour
@@ -283,7 +303,7 @@ mod tests {
             // ---DeallocateEldest
             // ---DeallocateOptimal
             // -BlockOn (sync and async)
-            let sbuf = async {
+            let mut sbuf = async {
                 // Some examples on how to use layout's interface:
 
                 // The default allocation, internally uses JustAlloc policy
@@ -320,13 +340,106 @@ mod tests {
             }
             .await;
 
+
+
+
+
+
+
+
+
+
+
+
+
+            // Fill recently-allocated buffer with data
+        
+            // ZSlice supports implicit sharing of underlying data, moreover, the underlying data may
+            // have it's own additional level of indirection that might support sharing (ex. shared memory).
+            // There are some options how to get mutable acces to the slice's data:
+            {
+                // Do copy if the underlying data reference is not unique.
+                // Uniqueness across multiple Sessions for shared-memory buffers is also validated.
+                let _cow = sbuf.as_mut().copy_if_sharing().res();
+            }
+            {
+                // Do copy anyway
+                let _copy = sbuf.as_mut().copy().res();
+            }
+            {
+                // Fail if the data reference is not unique, no copy-on-write applied
+                let _fail = sbuf.as_mut().fail_if_sharing().res();
+            }
+            {
+                // Unsafe, does not imply any checks, intended mostly for recently-allocated buffers.
+                // The concurrent access to the same slice is OK for Zenoh itself, so this method can
+                // also be used in combination with Sync data (ex. Atomics) for user-defined IPC
+                let _unchecked = unsafe { sbuf.as_mut().unchecked().res() };
+            }
+            {
+                // This API lets user more precise control
+                let _controllable = match sbuf.as_mut().is_sharing() {
+                    zenoh_buffers::SharingResult::Sharing(sharing) => sharing.res(),
+                    zenoh_buffers::SharingResult::Unique(unique) => unique.res(),
+                };
+            }
+            {
+                // here we use as_mut_unchecked() as we know that buffer reference is unique
+                let mut sbuf_mut = unsafe { sbuf.as_mut().unchecked().res() };
+                sbuf_mut[0..8].fill(0);
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            
+            // convert shm-allocated ZSlice into ZBuf
+            let mut zbuf: ZBuf = sbuf.into();
+
+            // example how to modify data in ZBuf
+            // currently we mutably access ZBuf on per-slice basis,
+            // and I think we need to support contiguous iteration
+            for slice in zbuf.zslices_mut() {
+                let mut slice_mut = slice.as_mut().copy_if_sharing().res();
+                for d in slice_mut.iter_mut() {
+                    *d = 0;
+                }
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             // Declare Session and Publisher (common code)
-            // Session and Publisher do not depend on SHM subsystem...
             let session = zenoh::open(Config::default()).res_async().await?;
             let publisher = session.declare_publisher("my/key/expr").res_async().await?;
 
-            // Publish sbuf
-            let _ = publisher.put(sbuf).res_async().await;
+            // Publish ZBuf
+            let _ = publisher.put(zbuf).res_async().await;
 
             bail!("Finished...")
         });

@@ -20,8 +20,8 @@ use zenoh_result::ZResult;
 
 use crate::api::common::types::ChunkID;
 
-// SharedMemorySegment - RAII interface to interact with particular shared segment
+/// SharedMemorySegment - RAII interface to interact with particular shared memory segment
 pub trait SharedMemorySegment: Debug + Send + Sync {
-    // Obtain the actual region of memory identified by it's id
+    /// Obtain the actual region of memory identified by it's id
     fn map(&self, chunk: ChunkID) -> ZResult<AtomicPtr<u8>>;
 }
