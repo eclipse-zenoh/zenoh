@@ -11,16 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task::sleep;
 use clap::Parser;
-use futures::prelude::*;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();
@@ -55,20 +53,23 @@ async fn main() {
 
     // Define the future to handle keyboard's input.
     let keyb = async {
-        let mut stdin = async_std::io::stdin();
+        let mut stdin = tokio::io::stdin();
         let mut input = [0_u8];
         loop {
             stdin.read_exact(&mut input).await.unwrap();
             match input[0] {
                 b'q' => break,
-                0 => sleep(Duration::from_secs(1)).await,
+                0 => tokio::time::sleep(Duration::from_secs(1)).await,
                 _ => subscriber.pull().res().await.unwrap(),
             }
         }
     };
 
     // Execute both futures concurrently until one of them returns.
-    subs.race(keyb).await;
+    tokio::select! {
+        _ = subs => {},
+        _ = keyb => {},
+    }
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

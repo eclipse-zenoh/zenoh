@@ -30,7 +30,7 @@ default = ["zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
-async-std = { workspace = true, features = ["attributes"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
 futures = { workspace = true }
@@ -55,10 +55,10 @@ license-file = ["../LICENSE", "0"]
 depends = "$auto"
 maintainer-scripts = ".deb"
 assets = [
-	# binary
-	["target/release/zenohd", "/usr/bin/", "755"],
-	# config
-	[".service/zenohd.json5", "/etc/zenohd/", "644"],
-	# service
-	[".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
+  # binary
+  ["target/release/zenohd", "/usr/bin/", "755"],
+  # config
+  [".service/zenohd.json5", "/etc/zenohd/", "644"],
+  # service
+  [".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
 ]

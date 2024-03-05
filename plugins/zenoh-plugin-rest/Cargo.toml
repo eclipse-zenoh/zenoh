@@ -33,7 +33,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow = { workspace = true, features = ["default"] }
-async-std = { workspace = true, features = ["default"] }
+async-std = { workspace = true, features = ["default", "attributes"] }
 base64 = { workspace = true }
 clap = { workspace = true }
 const_format = { workspace = true }

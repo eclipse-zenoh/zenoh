@@ -28,9 +28,9 @@ description = "Internal crate for zenoh."
 compression = []
 
 [dependencies]
-async-std = { workspace = true }
-zenoh-sync = { workspace = true }
 async-trait = { workspace = true }
+rustls = { workspace = true }
+rustls-webpki = { workspace = true }
 flume = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
@@ -40,3 +40,7 @@ zenoh-core = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "net", "fs", "sync", "time"] }
+tokio-util = { workspace = true, features = ["rt"] }
+futures = { workspace = true }

@@ -47,13 +47,13 @@ use crate::{
     },
     runtime::Runtime,
 };
-use async_std::task::JoinHandle;
 use std::{
     any::Any,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
     sync::Arc,
 };
+use tokio::task::JoinHandle;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -243,8 +243,8 @@ impl HatTables {
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
         {
-            let task = Some(async_std::task::spawn(async move {
-                async_std::task::sleep(std::time::Duration::from_millis(
+            let task = Some(zenoh_runtime::ZRuntime::Net.spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(
                     *TREES_COMPUTATION_DELAY_MS,
                 ))
                 .await;

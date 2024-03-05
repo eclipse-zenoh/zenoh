@@ -90,14 +90,10 @@ jobs:
 
       - name: Run tests
         run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-        env:
-          ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
-        env:
-          ASYNC_STD_THREAD_COUNT: 4
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -105,8 +101,6 @@ jobs:
 
       - name: Run doctests
         run: cargo test --doc
-        env:
-          ASYNC_STD_THREAD_COUNT: 4
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged

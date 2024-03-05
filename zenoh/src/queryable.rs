@@ -325,7 +325,8 @@ impl fmt::Debug for QueryableState {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use futures::prelude::*;
 /// use zenoh::prelude::r#async::*;
 ///
@@ -338,7 +339,7 @@ impl fmt::Debug for QueryableState {
 ///         .await
 ///         .unwrap();
 /// }
-/// # })
+/// # }
 /// ```
 #[derive(Debug)]
 pub(crate) struct CallbackQueryable<'a> {
@@ -357,13 +358,14 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// queryable.undeclare().res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableUndeclaration<'a> {
@@ -403,13 +405,14 @@ impl Drop for CallbackQueryable<'_> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -426,7 +429,8 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -436,7 +440,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> QueryableBuilder<'a, 'b, Callback>
@@ -466,7 +470,8 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -477,7 +482,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
@@ -494,7 +499,8 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -507,7 +513,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// while let Ok(query) = queryable.recv_async().await {
     ///     println!(">> Handling query '{}'", query.selector());
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
@@ -559,7 +565,8 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -576,7 +583,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///         .await
 ///         .unwrap();
 /// }
-/// # })
+/// # }
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]

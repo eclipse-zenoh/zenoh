@@ -143,13 +143,11 @@ jobs:
         run: cargo nextest run --release --features=${{ github.event.inputs.features}} --verbose
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-          ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run doctests
         run: cargo test --release --features=${{ github.event.inputs.features}} --doc
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-          ASYNC_STD_THREAD_COUNT: 4
 
   doc:
     name: Doc generation

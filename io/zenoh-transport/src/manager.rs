@@ -19,11 +19,12 @@ use crate::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use async_std::{sync::Mutex as AsyncMutex, task};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio_util::sync::CancellationToken;
 use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
@@ -73,7 +74,7 @@ use zenoh_result::{bail, ZResult};
 ///         .lease(Duration::from_secs(1))
 ///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
-///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
+///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
@@ -215,9 +216,7 @@ impl TransportManagerBuilder {
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
 
-        let (c, errors) = zenoh_link::LinkConfigurator::default()
-            .configurations(config)
-            .await;
+        let (c, errors) = zenoh_link::LinkConfigurator::default().configurations(config);
         if !errors.is_empty() {
             use std::fmt::Write;
             let mut formatter = String::from("Some protocols reported configuration errors:\r\n");
@@ -232,11 +231,7 @@ impl TransportManagerBuilder {
                 .from_config(config)
                 .await?,
         );
-        self = self.multicast(
-            TransportManagerBuilderMulticast::default()
-                .from_config(config)
-                .await?,
-        );
+        self = self.multicast(TransportManagerBuilderMulticast::default().from_config(config)?);
 
         Ok(self)
     }
@@ -317,39 +312,6 @@ impl Default for TransportManagerBuilder {
 }
 
 #[derive(Clone)]
-pub(crate) struct TransportExecutor {
-    executor: Arc<async_executor::Executor<'static>>,
-    sender: async_std::channel::Sender<()>,
-}
-
-impl TransportExecutor {
-    fn new(num_threads: usize) -> Self {
-        let (sender, receiver) = async_std::channel::bounded(1);
-        let executor = Arc::new(async_executor::Executor::new());
-        for i in 0..num_threads {
-            let exec = executor.clone();
-            let recv = receiver.clone();
-            std::thread::Builder::new()
-                .name(format!("zenoh-tx-{}", i))
-                .spawn(move || async_std::task::block_on(exec.run(recv.recv())))
-                .unwrap();
-        }
-        Self { executor, sender }
-    }
-
-    async fn stop(&self) {
-        let _ = self.sender.send(()).await;
-    }
-
-    pub(crate) fn spawn<T: Send + 'static>(
-        &self,
-        future: impl core::future::Future<Output = T> + Send + 'static,
-    ) -> async_executor::Task<T> {
-        self.executor.spawn(future)
-    }
-}
-
-#[derive(Clone)]
 pub struct TransportManager {
     pub config: Arc<TransportManagerConfig>,
     pub(crate) state: Arc<TransportManagerState>,
@@ -357,9 +319,9 @@ pub struct TransportManager {
     pub(crate) cipher: Arc<BlockCipher>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
-    pub(crate) tx_executor: TransportExecutor,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
+    pub(crate) token: CancellationToken,
 }
 
 impl TransportManager {
@@ -372,7 +334,6 @@ impl TransportManager {
         // @TODO: this should be moved into the unicast module
         let (new_unicast_link_sender, new_unicast_link_receiver) = flume::unbounded();
 
-        let tx_threads = params.config.tx_threads;
         let this = TransportManager {
             config: Arc::new(params.config),
             state: Arc::new(params.state),
@@ -380,17 +341,31 @@ impl TransportManager {
             cipher: Arc::new(cipher),
             locator_inspector: Default::default(),
             new_unicast_link_sender,
-            tx_executor: TransportExecutor::new(tx_threads),
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
+            token: CancellationToken::new(),
         };
 
         // @TODO: this should be moved into the unicast module
-        async_std::task::spawn({
+        zenoh_runtime::ZRuntime::Net.spawn({
             let this = this.clone();
+            let token = this.token.clone();
             async move {
-                while let Ok(link) = new_unicast_link_receiver.recv_async().await {
-                    this.handle_new_link_unicast(link).await;
+                // while let Ok(link) = new_unicast_link_receiver.recv_async().await {
+                //     this.handle_new_link_unicast(link).await;
+                // }
+                loop {
+                    tokio::select! {
+                        res = new_unicast_link_receiver.recv_async() => {
+                            if let Ok(link) = res {
+                                this.handle_new_link_unicast(link).await;
+                            }
+                        }
+
+                        _ = token.cancelled() => {
+                            break;
+                        }
+                    }
                 }
             }
         });
@@ -413,7 +388,10 @@ impl TransportManager {
 
     pub async fn close(&self) {
         self.close_unicast().await;
-        self.tx_executor.stop().await;
+        // TODO: Check this
+        self.token.cancel();
+        // WARN: depends on the auto-close of tokio runtime after dropped
+        // self.tx_executor.runtime.shutdown_background();
     }
 
     /*************************************/
@@ -443,16 +421,17 @@ impl TransportManager {
         }
     }
 
-    pub fn get_listeners(&self) -> Vec<EndPoint> {
-        let mut lsu = task::block_on(self.get_listeners_unicast());
-        let mut lsm = task::block_on(self.get_listeners_multicast());
+    pub async fn get_listeners(&self) -> Vec<EndPoint> {
+        let mut lsu = self.get_listeners_unicast().await;
+        let mut lsm = self.get_listeners_multicast().await;
         lsu.append(&mut lsm);
         lsu
     }
 
+    // TODO(yuyuan): Can we make this async as above?
     pub fn get_locators(&self) -> Vec<Locator> {
-        let mut lsu = task::block_on(self.get_locators_unicast());
-        let mut lsm = task::block_on(self.get_locators_multicast());
+        let mut lsu = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_unicast());
+        let mut lsm = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }

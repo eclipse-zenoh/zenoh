@@ -11,16 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
 use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
+use tokio::time::sleep;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
     env_logger::init();
@@ -40,7 +41,7 @@ async fn main() {
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Enter 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
+    let mut stdin = tokio::io::stdin();
     let mut input = [0_u8];
     loop {
         select!(

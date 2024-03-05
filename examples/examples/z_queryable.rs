@@ -11,17 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
 use futures::prelude::*;
 use futures::select;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();
@@ -41,7 +41,7 @@ async fn main() {
         .unwrap();
 
     println!("Enter 'q' to quit, 'e' to reply an error to next query...");
-    let mut stdin = async_std::io::stdin();
+    let mut stdin = tokio::io::stdin();
     let mut input = [0_u8];
     loop {
         select!(
@@ -75,7 +75,7 @@ async fn main() {
             _ = stdin.read_exact(&mut input).fuse() => {
                 match input[0] {
                     b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
+                    0 => tokio::time::sleep(Duration::from_secs(1)).await,
                     b'e' => send_errors.store(true, Relaxed),
                     _ => (),
                 }

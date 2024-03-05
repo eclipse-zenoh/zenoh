@@ -20,7 +20,6 @@
 mod multicast;
 mod unicast;
 
-use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 pub use multicast::*;
 use std::net::SocketAddr;
@@ -90,9 +89,7 @@ pub mod config {
 }
 
 pub async fn get_udp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {
-    let iter = address
-        .as_str()
-        .to_socket_addrs()
+    let iter = tokio::net::lookup_host(address.as_str().to_string())
         .await
         .map_err(|e| zerror!("{}", e))?;
     Ok(iter)
