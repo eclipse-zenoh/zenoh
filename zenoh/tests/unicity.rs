@@ -11,24 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::runtime::Handle;
 use zenoh::prelude::r#async::*;
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 async fn open_p2p_sessions() -> (Session, Session, Session) {
     // Open the sessions
@@ -133,7 +126,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         .unwrap();
 
         // Wait for the declaration to propagate
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         // Put data
         println!("[PS][03b] Putting on s03 session. {msg_count} msgs of {size} bytes.");
@@ -152,14 +145,14 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
                 println!("[PS][01b] Received {cnt1}/{msg_count}.");
                 println!("[PS][02b] Received {cnt2}/{msg_count}.");
                 if cnt1 < msg_count || cnt2 < msg_count {
-                    task::sleep(SLEEP).await;
+                    tokio::time::sleep(SLEEP).await;
                 } else {
                     break;
                 }
             }
         });
 
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         let cnt1 = msgs1.load(Ordering::Relaxed);
         println!("[QR][01c] Got on s01 session. {cnt1}/{msg_count} msgs.");
@@ -175,7 +168,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         ztimeout!(sub1.undeclare().res_async()).unwrap();
 
         // Wait for the declaration to propagate
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 }
 
@@ -197,7 +190,11 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
             .callback(move |sample| {
                 c_msgs1.fetch_add(1, Ordering::Relaxed);
                 let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                task::block_on(async { ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap() });
+                tokio::task::block_in_place(move || {
+                    Handle::current().block_on(async move {
+                        ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                    });
+                });
             })
             .res_async())
         .unwrap();
@@ -210,13 +207,17 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
             .callback(move |sample| {
                 c_msgs2.fetch_add(1, Ordering::Relaxed);
                 let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                task::block_on(async { ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap() });
+                tokio::task::block_in_place(move || {
+                    Handle::current().block_on(async move {
+                        ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                    });
+                });
             })
             .res_async())
         .unwrap();
 
         // Wait for the declaration to propagate
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         // Get data
         println!("[QR][03c] Getting on s03 session. {msg_count} msgs.");
@@ -244,35 +245,29 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
         ztimeout!(qbl2.undeclare().res_async()).unwrap();
 
         // Wait for the declaration to propagate
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 }
 
-#[test]
-fn zenoh_unicity_p2p() {
-    task::block_on(async {
-        zasync_executor_init!();
-        let _ = env_logger::try_init();
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_unicity_p2p() {
+    let _ = env_logger::try_init();
 
-        let (s01, s02, s03) = open_p2p_sessions().await;
-        test_unicity_pubsub(&s01, &s02, &s03).await;
-        test_unicity_qryrep(&s01, &s02, &s03).await;
-        close_sessions(s01, s02, s03).await;
-    });
+    let (s01, s02, s03) = open_p2p_sessions().await;
+    test_unicity_pubsub(&s01, &s02, &s03).await;
+    test_unicity_qryrep(&s01, &s02, &s03).await;
+    close_sessions(s01, s02, s03).await;
 }
 
-#[test]
-fn zenoh_unicity_brokered() {
-    task::block_on(async {
-        zasync_executor_init!();
-        let _ = env_logger::try_init();
-        let r = open_router_session().await;
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_unicity_brokered() {
+    let _ = env_logger::try_init();
+    let r = open_router_session().await;
 
-        let (s01, s02, s03) = open_client_sessions().await;
-        test_unicity_pubsub(&s01, &s02, &s03).await;
-        test_unicity_qryrep(&s01, &s02, &s03).await;
-        close_sessions(s01, s02, s03).await;
+    let (s01, s02, s03) = open_client_sessions().await;
+    test_unicity_pubsub(&s01, &s02, &s03).await;
+    test_unicity_qryrep(&s01, &s02, &s03).await;
+    close_sessions(s01, s02, s03).await;
 
-        close_router_session(r).await;
-    });
+    close_router_session(r).await;
 }

@@ -49,10 +49,17 @@ unstable = []
 default = ["test", "transport_multilink"]
 
 [dependencies]
-async-executor = { workspace = true }
-async-global-executor = { workspace = true }
-async-std = { workspace = true }
 async-trait = { workspace = true }
+tokio = { workspace = true, features = [
+  "sync",
+  "fs",
+  "time",
+  "macros",
+  "rt-multi-thread",
+  "io-util",
+  "net",
+] }
+tokio-util = { workspace = true, features = ["rt"]}
 flume = { workspace = true }
 log = { workspace = true }
 lz4_flex = { workspace = true }
@@ -74,7 +81,12 @@ zenoh-result = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
+
+
 
 [dev-dependencies]
+futures-util = { workspace = true }
 env_logger = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
+futures = { workspace = true }

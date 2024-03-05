@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{prelude::FutureExt, task};
 use std::{any::Any, convert::TryFrom, sync::Arc, time::Duration};
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
@@ -29,12 +28,6 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
 
 const RUNS: usize = 10;
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 // Transport Handler
 #[derive(Default)]
@@ -91,7 +84,7 @@ async fn run(endpoints: &[EndPoint]) {
             ztimeout!(sm.add_listener(e.clone())).unwrap();
         }
 
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         // Delete the listeners
         for e in endpoints.iter() {
@@ -99,52 +92,40 @@ async fn run(endpoints: &[EndPoint]) {
             ztimeout!(sm.del_listener(e)).unwrap();
         }
 
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn endpoint_tcp() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_tcp() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
         format!("tcp/127.0.0.1:{}", 7000).parse().unwrap(),
         format!("tcp/[::1]:{}", 7001).parse().unwrap(),
         format!("tcp/localhost:{}", 7002).parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(feature = "transport_udp")]
-#[test]
-fn endpoint_udp() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_udp() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
         format!("udp/127.0.0.1:{}", 7010).parse().unwrap(),
         format!("udp/[::1]:{}", 7011).parse().unwrap(),
         format!("udp/localhost:{}", 7012).parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-#[test]
-fn endpoint_unix() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_unix() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Remove the files if they still exists
     let f1 = "zenoh-test-unix-socket-0.sock";
     let f2 = "zenoh-test-unix-socket-1.sock";
@@ -155,7 +136,7 @@ fn endpoint_unix() {
         format!("unixsock-stream/{f1}").parse().unwrap(),
         format!("unixsock-stream/{f2}").parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(f2);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
@@ -163,30 +144,22 @@ fn endpoint_unix() {
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
-fn endpoint_ws() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_ws() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
         format!("ws/127.0.0.1:{}", 7020).parse().unwrap(),
         format!("ws/[::1]:{}", 7021).parse().unwrap(),
         format!("ws/localhost:{}", 7022).parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
-fn endpoint_unixpipe() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_unixpipe() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
         "unixpipe/endpoint_unixpipe".parse().unwrap(),
@@ -194,17 +167,13 @@ fn endpoint_unixpipe() {
         "unixpipe/endpoint_unixpipe3".parse().unwrap(),
         "unixpipe/endpoint_unixpipe4".parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
-#[test]
-fn endpoint_tcp_udp() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_tcp_udp() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
         format!("tcp/127.0.0.1:{}", 7030).parse().unwrap(),
@@ -212,7 +181,7 @@ fn endpoint_tcp_udp() {
         format!("tcp/[::1]:{}", 7032).parse().unwrap(),
         format!("udp/[::1]:{}", 7033).parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(all(
@@ -221,13 +190,9 @@ fn endpoint_tcp_udp() {
     feature = "transport_unixsock-stream",
     target_family = "unix"
 ))]
-#[test]
-fn endpoint_tcp_udp_unix() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_tcp_udp_unix() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Remove the file if it still exists
     let f1 = "zenoh-test-unix-socket-2.sock";
     let _ = std::fs::remove_file(f1);
@@ -239,7 +204,7 @@ fn endpoint_tcp_udp_unix() {
         format!("udp/[::1]:{}", 7043).parse().unwrap(),
         format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -249,13 +214,9 @@ fn endpoint_tcp_udp_unix() {
     feature = "transport_unixsock-stream",
     target_family = "unix"
 ))]
-#[test]
-fn endpoint_tcp_unix() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_tcp_unix() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Remove the file if it still exists
     let f1 = "zenoh-test-unix-socket-3.sock";
     let _ = std::fs::remove_file(f1);
@@ -265,7 +226,7 @@ fn endpoint_tcp_unix() {
         format!("tcp/[::1]:{}", 7051).parse().unwrap(),
         format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -275,13 +236,9 @@ fn endpoint_tcp_unix() {
     feature = "transport_unixsock-stream",
     target_family = "unix"
 ))]
-#[test]
-fn endpoint_udp_unix() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_udp_unix() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
     // Remove the file if it still exists
     let f1 = "zenoh-test-unix-socket-4.sock";
     let _ = std::fs::remove_file(f1); // Define the locators
@@ -290,20 +247,17 @@ fn endpoint_udp_unix() {
         format!("udp/[::1]:{}", 7061).parse().unwrap(),
         format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(feature = "transport_tls")]
-#[test]
-fn endpoint_tls() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_tls() {
     use zenoh_link::tls::config::*;
 
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -374,18 +328,15 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
         .unwrap();
 
     let endpoints = vec![endpoint];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(feature = "transport_quic")]
-#[test]
-fn endpoint_quic() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_quic() {
     use zenoh_link::quic::config::*;
 
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -455,5 +406,5 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
         )
         .unwrap();
     let endpoints = vec![endpoint];
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }

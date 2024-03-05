@@ -18,7 +18,7 @@ use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_ext::group::*;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     env_logger::init();
     let z = Arc::new(zenoh::open(Config::default()).res().await.unwrap());
