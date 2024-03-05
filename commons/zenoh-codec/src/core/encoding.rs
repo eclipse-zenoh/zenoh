@@ -25,7 +25,7 @@ impl LCodec<&Encoding> for Zenoh080 {
     fn w_len(self, x: &Encoding) -> usize {
         let mut len = self.w_len((x.id as u32) << 1);
         if let Some(schema) = x.schema.as_ref() {
-            len += schema.len();
+            len += self.w_len(schema.as_slice());
         }
         len
     }
