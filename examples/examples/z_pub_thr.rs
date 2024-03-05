@@ -28,7 +28,7 @@ fn main() {
         prio = p.try_into().unwrap();
     }
 
-    let payload_size: usize = args.payload_size;
+    let payload_size = args.payload_size;
 
     let data: Value = (0..payload_size)
         .map(|i| (i % 10) as u8)

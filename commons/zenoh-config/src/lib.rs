@@ -117,21 +117,26 @@ pub struct PolicyRule {
 
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(untagged)]
+#[serde(rename_all = "snake_case")]
+
 pub enum Subject {
     Interface(String),
     //Username(String)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum Action {
     Put,
-    Sub,
+    DeclareSub,
     Get,
-    Queryable,
+    DeclareQueryable,
 }
 pub const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum (change according to Action size)
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+
 pub enum Permission {
     Allow,
     Deny,

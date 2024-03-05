@@ -96,6 +96,7 @@ zenoh-collections = { workspace = true, features = ["std"] }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-crypto = { workspace = true }
+zenoh-keyexpr = { workspace = true }
 zenoh-link = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
@@ -105,10 +106,8 @@ zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
-zenoh-keyexpr = { workspace = true }
 [build-dependencies]
 rustc_version = { workspace = true }
-
 
 [lib]
 name = "zenoh"

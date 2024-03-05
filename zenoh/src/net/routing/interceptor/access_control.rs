@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use zenoh_config::{AclConfig, Action, Permission, Subject};
+use zenoh_config::{AclConfig, Action, Permission, Subject, ZenohId};
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{PushBody, RequestBody, ResponseBody},
@@ -21,11 +21,13 @@ struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,
     default_decision: bool,
+    zid: ZenohId,
 }
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,
     default_decision: bool,
+    zid: ZenohId,
 }
 
 pub(crate) fn acl_interceptor_factories(acl_config: AclConfig) -> ZResult<Vec<InterceptorFactory>> {
@@ -40,9 +42,9 @@ pub(crate) fn acl_interceptor_factories(acl_config: AclConfig) -> ZResult<Vec<In
                     enforcer: Arc::new(policy_enforcer),
                 }))
             }
-            Err(enforcer) => log::error!(
+            Err(e) => log::error!(
                 "Access control enabled but not initialized with error {}!",
-                enforcer
+                e
             ),
         }
     } else {
@@ -57,6 +59,12 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
+        let mut zid: ZenohId = ZenohId::default();
+        if let Ok(id) = transport.get_zid() {
+            zid = id;
+        } else {
+            log::error!("Error in trying to get zid");
+        }
         let mut interface_list: Vec<i32> = Vec::new();
         if let Ok(links) = transport.get_links() {
             for link in links {
@@ -81,6 +89,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                     Permission::Allow => true,
                     Permission::Deny => false,
                 },
+                zid,
             })),
             Some(Box::new(EgressAclEnforcer {
                 policy_enforcer: policy_enforcer.clone(),
@@ -89,6 +98,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                     Permission::Allow => true,
                     Permission::Deny => false,
                 },
+                zid,
             })),
         )
     }
@@ -138,18 +148,18 @@ impl InterceptorTrait for IngressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(enforcer) => {
-                        log::error!("Authorization incomplete due to error {}", enforcer);
+                    Err(e) => {
+                        log::error!("Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
 
             if !decision {
-                log::warn!("Unauthorized to Put");
+                log::warn!("{} is unauthorized to Put", self.zid);
                 return None;
             }
-            log::info!("Authorized access to Put");
+            log::info!("{} is authorized access to Put", self.zid);
         } else if let NetworkBody::Request(Request {
             payload: RequestBody::Query(_),
             ..
@@ -168,18 +178,18 @@ impl InterceptorTrait for IngressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(enforcer) => {
-                        log::error!("Authorization incomplete due to error {}", enforcer);
+                    Err(e) => {
+                        log::error!("Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
             if !decision {
-                log::warn!("Unauthorized to Query/Get");
+                log::warn!("{} is unauthorized to Query/Get", self.zid);
                 return None;
             }
 
-            log::info!("Authorized access to Query");
+            log::info!("{} is authorized access to Query", self.zid);
         }
         Some(ctx)
     }
@@ -200,7 +210,7 @@ impl InterceptorTrait for EgressAclEnforcer {
             for subject in &self.interface_list {
                 match self.policy_enforcer.policy_decision_point(
                     *subject,
-                    Action::Sub,
+                    Action::DeclareSub,
                     key_expr,
                     self.default_decision,
                 ) {
@@ -209,18 +219,18 @@ impl InterceptorTrait for EgressAclEnforcer {
                         break;
                     }
                     Ok(false) => continue,
-                    Err(enforcer) => {
-                        log::error!("Authorization incomplete due to error {}", enforcer);
+                    Err(e) => {
+                        log::error!("Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
             if !decision {
-                log::warn!("Unauthorized to Sub");
+                log::warn!("{} is unauthorized to Sub", self.zid);
                 return None;
             }
 
-            log::info!("Authorized access to Sub");
+            log::info!("{} is authorized access to Sub", self.zid);
         }
         Some(ctx)
     }
