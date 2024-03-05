@@ -90,6 +90,7 @@ impl Router {
                     None,
                     primitives.clone(),
                     None,
+                    None,
                     ctrl_lock.new_face(),
                 )
             })
@@ -124,7 +125,9 @@ impl Router {
             .map(|itor| itor.new_transport_unicast(&transport))
             .unzip();
         let (ingress, egress) = (
-            InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
+            Arc::new(InterceptorsChain::from(
+                ingress.into_iter().flatten().collect::<Vec<_>>(),
+            )),
             InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
         );
         let mux = Arc::new(Mux::new(transport.clone(), egress));
@@ -140,6 +143,7 @@ impl Router {
                     Some(stats),
                     mux.clone(),
                     None,
+                    Some(ingress.clone()),
                     ctrl_lock.new_face(),
                 )
             })
@@ -179,6 +183,7 @@ impl Router {
             None,
             mux.clone(),
             Some(transport),
+            None,
             ctrl_lock.new_face(),
         );
         let _ = mux.face.set(Face {
@@ -202,13 +207,13 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = InterceptorsChain::from(
+        let interceptor = Arc::new(InterceptorsChain::from(
             tables
                 .interceptors
                 .iter()
                 .filter_map(|itor| itor.new_peer_multicast(&transport))
                 .collect::<Vec<IngressInterceptor>>(),
-        );
+        ));
         let face_state = FaceState::new(
             fid,
             peer.zid,
@@ -217,6 +222,7 @@ impl Router {
             Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             Some(transport),
+            Some(interceptor.clone()),
             ctrl_lock.new_face(),
         );
         tables.mcast_faces.push(face_state.clone());

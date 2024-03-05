@@ -114,9 +114,14 @@ pub(crate) struct DownsamplingInterceptor {
 }
 
 impl InterceptorTrait for DownsamplingInterceptor {
+    fn compute_keyexpr_cache(&self, _key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        None
+    }
+
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
+        _cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         if matches!(ctx.msg.body, NetworkBody::Push(_)) {
             if let Some(key_expr) = ctx.full_key_expr() {

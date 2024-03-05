@@ -690,7 +690,7 @@ impl Config {
                         }),
                         Err(e) => bail!(e),
                     },
-                    Some("yaml") => Config::from_deserializer(serde_yaml::Deserializer::from_str(&content)).map_err(|e| match e {
+                    Some("yaml") | Some("yml") => Config::from_deserializer(serde_yaml::Deserializer::from_str(&content)).map_err(|e| match e {
                         Ok(c) => zerror!("Invalid configuration: {}", c).into(),
                         Err(e) => zerror!("YAML error: {}", e).into(),
                     }),

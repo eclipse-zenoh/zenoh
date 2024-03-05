@@ -29,7 +29,6 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bincode = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 shared_memory = { workspace = true }

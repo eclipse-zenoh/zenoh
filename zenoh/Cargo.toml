@@ -75,7 +75,6 @@ flume = { workspace = true }
 form_urlencoded = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-hex = { workspace = true, features = ["default"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
 ordered-float = { workspace = true }
