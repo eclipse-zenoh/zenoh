@@ -35,7 +35,7 @@ pub struct LTRIncluder;
 impl Includer<&[u8], &[u8]> for LTRIncluder {
     fn includes(&self, mut left: &[u8], mut right: &[u8]) -> bool {
         loop {
-            let (lchunk, lrest) = left.split_once(&DELIMITER);
+            let (lchunk, lrest) = Split::split_once(left, &DELIMITER);
             let lempty = lrest.is_empty();
             if lchunk == DOUBLE_WILD {
                 if (lempty && !right.has_verbatim()) || (!lempty && self.includes(lrest, right)) {
@@ -44,12 +44,12 @@ impl Includer<&[u8], &[u8]> for LTRIncluder {
                 if unsafe { right.has_direct_verbatim_non_empty() } {
                     return false;
                 }
-                right = right.split_once(&DELIMITER).1;
+                right = Split::split_once(right, &DELIMITER).1;
                 if right.is_empty() {
                     return false;
                 }
             } else {
-                let (rchunk, rrest) = right.split_once(&DELIMITER);
+                let (rchunk, rrest) = Split::split_once(right, &DELIMITER);
                 if rchunk.is_empty()
                     || rchunk == DOUBLE_WILD
                     || !self.non_double_wild_chunk_includes(lchunk, rchunk)

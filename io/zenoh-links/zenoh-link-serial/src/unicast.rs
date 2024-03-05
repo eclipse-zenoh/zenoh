@@ -183,9 +183,18 @@ impl LinkUnicastTrait for LinkUnicastSerial {
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
-        // @TODO: Not supported for now
-        log::debug!("The get_interface_names for LinkUnicastSerial is not supported");
-        vec![]
+        // For POSIX systems, the interface name refers to the file name without the path
+        // e.g. for serial port "/dev/ttyUSB0" interface name will be "ttyUSB0"
+        match z_serial::get_available_port_names() {
+            Ok(interfaces) => {
+                log::trace!("get_interface_names for serial: {:?}", interfaces);
+                interfaces
+            }
+            Err(e) => {
+                log::debug!("get_interface_names for serial failed: {:?}", e);
+                vec![]
+            }
+        }
     }
 
     #[inline(always)]

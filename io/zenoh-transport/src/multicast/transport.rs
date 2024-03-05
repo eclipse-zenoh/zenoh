@@ -343,7 +343,7 @@ impl TransportMulticastInner {
         .into_boxed_slice();
 
         let mut priority_rx = Vec::with_capacity(next_sns.len());
-        for (_, sn) in next_sns.iter().enumerate() {
+        for sn in next_sns.iter() {
             let tprx = TransportPriorityRx::make(
                 join.resolution.get(Field::FrameSN),
                 self.manager.config.defrag_buff_size,

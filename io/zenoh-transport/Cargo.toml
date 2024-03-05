@@ -88,6 +88,5 @@ zenoh-runtime = { workspace = true }
 [dev-dependencies]
 futures-util = { workspace = true }
 env_logger = { workspace = true }
-panic-message = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 futures = { workspace = true }

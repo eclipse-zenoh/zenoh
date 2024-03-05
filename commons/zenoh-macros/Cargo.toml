@@ -27,9 +27,7 @@ description = "Internal crate for zenoh."
 [dependencies]
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
-rustc_version = { workspace = true }
 syn = { workspace = true, features = ["full"] }
-unzip-n = { workspace = true }
 zenoh-keyexpr = { workspace = true, features = ["std"] }
 
 [lib]

@@ -40,7 +40,6 @@ tokio-util = { workspace = true, features = ["rt"] }
 uuid = { workspace = true, default-features = true }
 z-serial = { workspace = true }
 zenoh-collections = { workspace = true }
-zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }

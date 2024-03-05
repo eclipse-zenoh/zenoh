@@ -83,7 +83,7 @@ pub struct DownsamplingRuleConf {
     /// Downsampling will be applied for all key extensions if the parameter is None
     pub key_expr: OwnedKeyExpr,
     /// The maximum frequency in Hertz;
-    pub rate: f64,
+    pub freq: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

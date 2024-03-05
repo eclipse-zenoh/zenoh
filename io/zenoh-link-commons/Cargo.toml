@@ -32,10 +32,8 @@ async-trait = { workspace = true }
 rustls = { workspace = true }
 rustls-webpki = { workspace = true }
 flume = { workspace = true }
-lz4_flex = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
-typenum = { workspace = true }
 zenoh-buffers = { workspace = true }
 zenoh-codec = { workspace = true }
 zenoh-core = { workspace = true }

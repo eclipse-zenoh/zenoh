@@ -175,7 +175,7 @@ impl LinkManagerMulticastUdp {
                     })
                     .take(1)
                     .collect::<Vec<IpAddr>>()
-                    .get(0)
+                    .first()
                     .copied(),
             };
         }
@@ -195,7 +195,7 @@ impl LinkManagerMulticastUdp {
                     })
                     .take(1)
                     .collect::<Vec<IpAddr>>()
-                    .get(0)
+                    .first()
                     .copied();
 
                 match iface {

@@ -27,7 +27,7 @@ async fn create_session_pair(locator: &str) -> (Session, Session) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .listen
-            .set_endpoints(vec![locator.clone().parse().unwrap()])
+            .set_endpoints(vec![locator.parse().unwrap()])
             .unwrap();
         config
     };

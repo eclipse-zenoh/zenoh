@@ -779,26 +779,26 @@ impl Network {
         let idxs = self
             .graph
             .node_indices()
-            .filter_map(|idx| {
-                (self.full_linkstate
+            .filter(|&idx| {
+                self.full_linkstate
                     || self.gossip_multihop
                     || self.links.values().any(|link| link.zid == zid)
                     || (self.router_peers_failover_brokering
                         && idx == self.idx
-                        && whatami == WhatAmI::Router))
-                    .then(|| {
-                        (
-                            idx,
-                            Details {
-                                zid: true,
-                                locators: self.propagate_locators(idx),
-                                links: self.full_linkstate
-                                    || (self.router_peers_failover_brokering
-                                        && idx == self.idx
-                                        && whatami == WhatAmI::Router),
-                            },
-                        )
-                    })
+                        && whatami == WhatAmI::Router)
+            })
+            .map(|idx| {
+                (
+                    idx,
+                    Details {
+                        zid: true,
+                        locators: self.propagate_locators(idx),
+                        links: self.full_linkstate
+                            || (self.router_peers_failover_brokering
+                                && idx == self.idx
+                                && whatami == WhatAmI::Router),
+                    },
+                )
             })
             .collect();
         self.send_on_link(idxs, &transport);

@@ -30,7 +30,6 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 event-listener = { workspace = true }
-flume = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 zenoh-buffers = { workspace = true }

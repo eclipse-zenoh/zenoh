@@ -25,9 +25,9 @@ pub enum WhatAmI {
 }
 
 impl WhatAmI {
-    const STR_R: &str = "router";
-    const STR_P: &str = "peer";
-    const STR_C: &str = "client";
+    const STR_R: &'static str = "router";
+    const STR_P: &'static str = "peer";
+    const STR_C: &'static str = "client";
 
     const U8_R: u8 = Self::Router as u8;
     const U8_P: u8 = Self::Peer as u8;
