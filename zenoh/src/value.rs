@@ -88,6 +88,8 @@ where
 pub struct DefaultEncoding;
 
 impl DefaultEncoding {
+    const SEPARATOR: char = ';';
+
     // - Primitives types supported in all Zenoh bindings
     /// See [`DefaultEncodingMapping::ZENOH_BYTES`].
     pub const ZENOH_BYTES: Encoding = Encoding {
@@ -237,25 +239,23 @@ impl EncodingMapping for DefaultEncoding {
         S: AsRef<str>,
     {
         fn _parse(t: &str) -> Encoding {
+            let mut encoding = Encoding::empty();
+
             // Check if empty
             if !t.is_empty() {
-                return Encoding::empty();
+                return encoding;
             }
 
             // Everything before `;` may be mapped to a known id
-            let (id, schema) = t.split_once(';').unwrap_or((t, ""));
-            match DefaultEncoding.str_to_id(id) {
-                // Perfect match on ID and schema
-                Some(id) => {
-                    let schema = Some(ZSlice::from(schema.to_string().into_bytes()));
-                    Encoding { id, schema }
-                }
-                // No perfect match on ID and only schema
-                None => {
-                    let schema = Some(ZSlice::from(schema.to_string().into_bytes()));
-                    Encoding { id: 0, schema }
-                }
+            let (id, schema) = t.split_once(DefaultEncoding::SEPARATOR).unwrap_or((t, ""));
+            if let Some(id) = DefaultEncoding.str_to_id(id) {
+                encoding.id = id;
+            };
+            if !schema.is_empty() {
+                encoding.schema = Some(ZSlice::from(schema.to_string().into_bytes()));
             }
+
+            encoding
         }
         _parse(t.as_ref())
     }
@@ -263,14 +263,24 @@ impl EncodingMapping for DefaultEncoding {
     /// Given an [`Encoding`] returns a full string representation.
     /// It concatenates the string represenation of the encoding prefix with the encoding suffix.
     fn to_str(&self, e: &Encoding) -> Cow<'_, str> {
-        fn schema_to_str(schema: &[u8]) -> &str {
+        fn su8_to_str(schema: &[u8]) -> &str {
             std::str::from_utf8(schema).unwrap_or("unknown(non-utf8)")
         }
 
         match (self.id_to_str(e.id), e.schema.as_ref()) {
             (Some(i), None) => i,
-            (Some(i), Some(s)) => Cow::Owned(format!("{};{}", i, schema_to_str(s))),
-            (None, Some(s)) => Cow::Owned(format!("unknown({});{}", e.id, schema_to_str(s))),
+            (Some(i), Some(s)) => Cow::Owned(format!(
+                "{}{}{}",
+                i,
+                DefaultEncoding::SEPARATOR,
+                su8_to_str(s)
+            )),
+            (None, Some(s)) => Cow::Owned(format!(
+                "unknown({}){}{}",
+                e.id,
+                DefaultEncoding::SEPARATOR,
+                su8_to_str(s)
+            )),
             (None, None) => Cow::Owned(format!("unknown({})", e.id)),
         }
     }
