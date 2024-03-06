@@ -804,7 +804,7 @@ impl Session {
     pub(super) fn new(
         config: Config,
         #[cfg(feature = "shared-memory")] shm_reader: Option<Arc<SharedMemoryReader>>,
-    ) -> impl Resolve<ZResult<Session>> + Send {
+    ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
@@ -838,10 +838,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_prefix<'a>(
-        &'a self,
-        prefix: &'a str,
-    ) -> impl Resolve<ExprId> + Send + 'a {
+    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<ExprId> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -899,7 +896,7 @@ impl Session {
     pub(crate) fn declare_publication_intent<'a>(
         &'a self,
         _key_expr: KeyExpr<'a>,
-    ) -> impl Resolve<Result<(), std::convert::Infallible>> + Send + 'a {
+    ) -> impl Resolve<Result<(), std::convert::Infallible>> + 'a {
         ResolveClosure::new(move || {
             // log::trace!("declare_publication({:?})", key_expr);
             // let mut state = zwrite!(self.state);
@@ -2689,5 +2686,9 @@ impl crate::net::primitives::EPrimitives for Session {
     #[inline]
     fn send_close(&self) {
         (self as &dyn Primitives).send_close()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

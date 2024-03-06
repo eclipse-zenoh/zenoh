@@ -33,6 +33,10 @@ impl IntervalCounter {
         self.total_time.as_millis() as u32 / self.count
     }
 
+    fn get_count(&self) -> u32 {
+        self.count
+    }
+
     fn check_middle(&self, ms: u32) {
         let middle = self.get_middle();
         println!("Interval {}, count: {}, middle: {}", ms, self.count, middle);
@@ -51,8 +55,8 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
             {{
               flow: "{}",
               rules: [
-                {{ key_expr: "test/downsamples_by_keyexp/r100", rate: 10, }},
-                {{ key_expr: "test/downsamples_by_keyexp/r50", rate: 20, }}
+                {{ key_expr: "test/downsamples_by_keyexp/r100", freq: 10, }},
+                {{ key_expr: "test/downsamples_by_keyexp/r50", freq: 20, }}
               ],
             }},
           ] "#,
@@ -120,7 +124,10 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
     }
 
     for _ in 0..100 {
-        if *zlock!(total_count) >= messages_count {
+        if *zlock!(total_count) >= messages_count
+            && zlock!(counter_r50_clone).get_count() > 0
+            && zlock!(counter_r100_clone).get_count() > 0
+        {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -150,14 +157,14 @@ fn downsampling_by_interface_impl(egress: bool) {
               interfaces: ["lo", "lo0"],
               flow: "{0}",
               rules: [
-                {{ key_expr: "test/downsamples_by_interface/r100", rate: 10, }},
+                {{ key_expr: "test/downsamples_by_interface/r100", freq: 10, }},
               ],
             }},
             {{
               interfaces: ["some_unknown_interface"],
               flow: "{0}",
               rules: [
-                {{ key_expr: "test/downsamples_by_interface/all", rate: 10, }},
+                {{ key_expr: "test/downsamples_by_interface/all", freq: 10, }},
               ],
             }},
           ] "#,
@@ -220,7 +227,7 @@ fn downsampling_by_interface_impl(egress: bool) {
     }
 
     for _ in 0..100 {
-        if *zlock!(total_count) >= messages_count {
+        if *zlock!(total_count) >= messages_count && zlock!(counter_r100_clone).get_count() > 0 {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -253,8 +260,8 @@ fn downsampling_config_error_wrong_strategy() {
                 {
                   flow: "down",
                   rules: [
-                    { keyexpr: "test/downsamples_by_keyexp/r100", rate: 10, },
-                    { keyexpr: "test/downsamples_by_keyexp/r50", rate: 20, }
+                    { keyexpr: "test/downsamples_by_keyexp/r100", freq: 10, },
+                    { keyexpr: "test/downsamples_by_keyexp/r50", freq: 20, }
                   ],
                 },
               ]

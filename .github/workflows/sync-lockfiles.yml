@@ -30,6 +30,7 @@ jobs:
     needs: fetch
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         dependant:
           - zenoh-c
@@ -84,7 +85,7 @@ jobs:
       - name: Create/Update a pull request if the lockfile changed
         id: cpr
         # NOTE: If there is a pending PR, this action will simply update it with a forced push.
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v6
         with:
           title: Sync lockfile with Zenoh's
           body: Automated synchronization of the Cargo lockfile with Zenoh. This is done to ensure plugin ABI compatibility.

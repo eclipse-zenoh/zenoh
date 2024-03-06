@@ -150,7 +150,6 @@ tide = "0.16.0"
 token-cell = { version = "1.4.2", default-features = false }
 tokio = { version = "1.26.0", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-tungstenite = "0.20"
-typenum = "1.16.0"
 uhlc = { version = "0.6.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.3.1"
@@ -162,7 +161,7 @@ validated_struct = "2.1.0"
 vec_map = "0.8.2"
 webpki-roots = "0.26.0"
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
-z-serial = "0.2.1"
+z-serial = "0.2.3"
 zenoh-ext = { version = "0.11.0-dev", path = "zenoh-ext" }
 zenoh-shm = { version = "0.11.0-dev", path = "commons/zenoh-shm" }
 zenoh-result = { version = "0.11.0-dev", path = "commons/zenoh-result", default-features = false }

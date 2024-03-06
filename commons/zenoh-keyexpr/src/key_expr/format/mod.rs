@@ -509,7 +509,7 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
         let pattern = segments[i].spec.pattern();
         let start = self.buffer.len();
         write!(&mut self.buffer, "{value}").unwrap(); // Writing on `&mut String` should be infallible.
-        match (|| {
+        let mut set_value = || {
             let end = self.buffer.len();
             if start == end {
                 if !pattern.is_double_wild() {
@@ -529,7 +529,8 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
                 NonMaxU32::new(end.try_into().map_err(|_| ())?).ok_or(())?,
             ));
             Ok(())
-        })() {
+        };
+        match set_value() {
             Ok(()) => Ok(self),
             Err(()) => {
                 self.buffer.truncate(start);

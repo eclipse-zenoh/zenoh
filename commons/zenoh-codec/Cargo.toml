@@ -39,7 +39,8 @@ std = [
 shared-memory = [
     "std",
     "zenoh-shm",
-    "zenoh-protocol/shared-memory"
+    "zenoh-protocol/shared-memory",
+    "zenoh-buffers/shared-memory"
 ]
 complete_n = ["zenoh-protocol/complete_n"]
 
@@ -56,7 +57,6 @@ zenoh-shm = { workspace = true, optional = true }
 criterion = { workspace = true }
 env_logger = { workspace = true }
 rand = { workspace = true, features = ["default"] }
-uuid = { workspace = true, features = ["default"] }
 zenoh-protocol = { workspace = true, features = ["test"] }
 
 [[bench]]

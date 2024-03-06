@@ -19,6 +19,8 @@
 
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
+  /// For TCP/UDP on Linux, it is possible additionally specify the interface to be connected to: 
+  /// E.g. tcp/192.168.0.1:7447#iface=eth0, for connect only if the IP address is reachable via the interface eth0 
   connect: {
     endpoints: [
       // "<proto>/<address>"
@@ -28,6 +30,8 @@
   /// Which endpoints to listen on. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
   /// peers, or client can use to establish a zenoh session.
+  /// For TCP/UDP on Linux, it is possible additionally specify the interface to be listened to: 
+  /// E.g. tcp/0.0.0.0:7447#iface=eth0, for listen connection only on eth0
   listen: {
     endpoints: [
       // "<proto>/<address>"
@@ -121,9 +125,9 @@
   //      interfaces: [ "wlan0" ],
   //      /// Data flow messages will be processed on. ("egress" or "ingress")
   //      flow: "egress",
-  //      /// A list of downsampling rules: key_expression and the rate (maximum frequency in Hertz)
+  //      /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
   //      rules: [
-  //        { key_expr: "demo/example/zenoh-rs-pub", rate: 0.1 }, 
+  //        { key_expr: "demo/example/zenoh-rs-pub", freq: 0.1 }, 
   //      ],
   //    },
   //  ],
