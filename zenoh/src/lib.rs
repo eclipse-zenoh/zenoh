@@ -218,7 +218,7 @@ pub mod scouting;
 /// }
 /// # })
 /// ```
-/// tags{rust.scout.create, api.scout.create}
+/// tags{rust.scout, api.scout}
 pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
     config: TryIntoConfig,

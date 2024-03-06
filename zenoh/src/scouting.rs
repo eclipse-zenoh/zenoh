@@ -256,7 +256,7 @@ impl fmt::Debug for ScoutInner {
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-// tags{rust.scout}
+// tags{rust.scout.struct}
 pub struct Scout<Receiver> {
     pub(crate) scout: ScoutInner,
     pub receiver: Receiver,

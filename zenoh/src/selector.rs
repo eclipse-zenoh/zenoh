@@ -80,7 +80,7 @@ impl<'a> Selector<'a> {
         &self.parameters
     }
     /// Extracts the selector parameters into a hashmap, returning an error in case of duplicated parameter names.
-    // tags{rust.selector.parameters_map, api.selector.parameters.get.as_map}
+    // tags{rust.selector.parameters_map}
     pub fn parameters_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
     where
         K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
@@ -103,7 +103,7 @@ impl<'a> Selector<'a> {
     ///
     /// Note that calling this function may cause an allocation and copy if the selector's parameters wasn't
     /// already owned by `self`. `self` owns its parameters as soon as this function returns.
-    // tags{rust.selector.parameters_mut, api.selector.parameters.get_mut}
+    // tags{rust.selector.parameters_mut}
     pub fn parameters_mut(&mut self) -> &mut String {
         if let Cow::Borrowed(s) = self.parameters {
             self.parameters = Cow::Owned(s.to_owned())
@@ -140,7 +140,7 @@ impl<'a> Selector<'a> {
     }
 
     /// Returns this selectors components as a tuple.
-    /// tags{rust.selector.split, api.selector.split}
+    /// tags{rust.selector.split}
     pub fn split(self) -> (KeyExpr<'a>, Cow<'a, str>) {
         (self.key_expr, self.parameters)
     }
@@ -153,7 +153,7 @@ impl<'a> Selector<'a> {
         self
     }
 
-    // tags{rust.selector.extend, api.selector.extend}
+    // tags{rust.selector.extend}
     pub fn extend<'b, I, K, V>(&'b mut self, parameters: I)
     where
         I: IntoIterator,
@@ -417,7 +417,7 @@ pub trait Parameters<'a> {
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
-    // tags{rust.selector.parameters.time_range}
+    // tags{rust.selector.parameters.time_range, api.selector.time_range.get}
     fn time_range(&'a self) -> ZResult<Option<TimeRange>>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
