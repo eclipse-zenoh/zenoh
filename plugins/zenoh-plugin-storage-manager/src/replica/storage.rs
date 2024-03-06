@@ -25,7 +25,6 @@ use zenoh::buffers::ZBuf;
 use zenoh::prelude::r#async::*;
 use zenoh::query::ConsolidationMode;
 use zenoh::time::{Timestamp, NTP64};
-use zenoh::value::{DefaultEncoding, EncodingMapping};
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
@@ -695,7 +694,7 @@ fn serialize_update(update: &Update) -> String {
     let result = (
         update.kind.to_string(),
         update.data.timestamp.to_string(),
-        DefaultEncoding.to_str(&update.data.value.encoding),
+        update.data.value.encoding.to_string(),
         update.data.value.payload.slices().collect::<Vec<&[u8]>>(),
     );
     serde_json::to_string_pretty(&result).unwrap()
@@ -707,7 +706,7 @@ fn construct_update(data: String) -> Update {
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).with_encoding(DefaultEncoding.parse(result.2));
+    let value = Value::new(payload).with_encoding(result.2);
     let data = StoredData {
         value,
         timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()

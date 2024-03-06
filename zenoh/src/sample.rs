@@ -13,8 +13,9 @@
 //
 
 //! Sample primitives
+use crate::encoding::Encoding;
 use crate::payload::Payload;
-use crate::prelude::{Encoding, KeyExpr, ZenohId};
+use crate::prelude::{KeyExpr, ZenohId};
 use crate::time::{new_reception_timestamp, Timestamp};
 use crate::Value;
 #[zenoh_macros::unstable]
@@ -394,7 +395,7 @@ impl Sample {
         Sample {
             key_expr: key_expr.into(),
             payload: payload.into(),
-            encoding: Encoding::empty(),
+            encoding: Encoding::default(),
             kind: SampleKind::default(),
             timestamp: None,
             #[cfg(feature = "unstable")]
@@ -417,7 +418,7 @@ impl Sample {
         Ok(Sample {
             key_expr: key_expr.try_into().map_err(Into::into)?,
             payload: payload.into(),
-            encoding: Encoding::empty(),
+            encoding: Encoding::default(),
             kind: SampleKind::default(),
             timestamp: None,
             #[cfg(feature = "unstable")]

@@ -14,6 +14,7 @@
 use crate::admin;
 use crate::config::Config;
 use crate::config::Notifier;
+use crate::encoding::Encoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
@@ -55,7 +56,6 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
-use zenoh_protocol::core::Encoding;
 use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::zenoh::reply::ReplyBody;
@@ -701,7 +701,7 @@ impl Session {
             publisher: self.declare_publisher(key_expr),
             payload: payload.into(),
             kind: SampleKind::Put,
-            encoding: Encoding::empty(),
+            encoding: Encoding::default(),
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -735,7 +735,7 @@ impl Session {
             publisher: self.declare_publisher(key_expr),
             payload: Payload::empty(),
             kind: SampleKind::Delete,
-            encoding: Encoding::empty(),
+            encoding: Encoding::default(),
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -1817,7 +1817,7 @@ impl Session {
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
-                        encoding: v.encoding.clone(),
+                        encoding: v.encoding.clone().into(),
                         payload: v.payload.clone().into(),
                     }),
                     ext_attachment,
@@ -1836,7 +1836,7 @@ impl Session {
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
-                    encoding: v.encoding.clone(),
+                    encoding: v.encoding.clone().into(),
                     payload: v.payload.clone().into(),
                 }),
                 #[cfg(feature = "unstable")]
@@ -1908,7 +1908,7 @@ impl Session {
                 parameters,
                 value: body.map(|b| Value {
                     payload: b.payload.into(),
-                    encoding: b.encoding,
+                    encoding: b.encoding.into(),
                 }),
                 qid,
                 zid,
@@ -2193,7 +2193,7 @@ impl Primitives for Session {
             PushBody::Put(m) => {
                 let info = DataInfo {
                     kind: SampleKind::Put,
-                    encoding: Some(m.encoding),
+                    encoding: Some(m.encoding.into()),
                     timestamp: m.timestamp,
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
@@ -2264,11 +2264,11 @@ impl Primitives for Session {
                         let value = match e.ext_body {
                             Some(body) => Value {
                                 payload: body.payload.into(),
-                                encoding: body.encoding,
+                                encoding: body.encoding.into(),
                             },
                             None => Value {
                                 payload: Payload::empty(),
-                                encoding: Encoding::empty(),
+                                encoding: Encoding::default(),
                             },
                         };
                         let replier_id = match e.ext_sinfo {
@@ -2363,7 +2363,7 @@ impl Primitives for Session {
                                 payload,
                                 info: DataInfo {
                                     kind: SampleKind::Put,
-                                    encoding: Some(encoding),
+                                    encoding: Some(encoding.into()),
                                     timestamp,
                                     source_id: ext_sinfo.as_ref().map(|i| i.zid),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),

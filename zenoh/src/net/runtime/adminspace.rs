@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
+use crate::encoding::Encoding;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::payload::Payload;
@@ -19,7 +20,7 @@ use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
-use crate::value::{DefaultEncoding, Value};
+use crate::value::Value;
 use async_std::task;
 use log::{error, trace};
 use serde_json::json;
@@ -569,7 +570,7 @@ fn router_data(context: &AdminContext, query: Query) {
     };
     if let Err(e) = query
         .reply(Ok(
-            Sample::new(reply_key, payload).with_encoding(DefaultEncoding::APPLICATION_JSON)
+            Sample::new(reply_key, payload).with_encoding(Encoding::APPLICATION_JSON)
         ))
         .res_sync()
     {

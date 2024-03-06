@@ -248,7 +248,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         payload: match kind {
                             SampleKind::Put => ReplyBody::Put(Put {
                                 timestamp: data_info.timestamp,
-                                encoding: data_info.encoding.unwrap_or_default(),
+                                encoding: data_info.encoding.unwrap_or_default().into(),
                                 ext_sinfo,
                                 #[cfg(feature = "shared-memory")]
                                 ext_shm: None,
@@ -290,7 +290,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,
                             payload: payload.payload.into(),
-                            encoding: payload.encoding,
+                            encoding: payload.encoding.into(),
                         }),
                         code: 0, // TODO
                     }),

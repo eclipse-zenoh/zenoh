@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    encoding::Encoding,
     keyexpr,
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
     sample::DataInfo,
-    value::DefaultEncoding,
     Payload, Sample, Session, ZResult,
 };
 use async_std::task;
@@ -153,7 +153,7 @@ impl TransportMulticastEventHandler for Handler {
                 let expr = WireExpr::from(&(*KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid))
                     .to_owned();
                 let info = DataInfo {
-                    encoding: Some(DefaultEncoding::APPLICATION_JSON),
+                    encoding: Some(Encoding::APPLICATION_JSON),
                     ..Default::default()
                 };
                 self.session.handle_data(
@@ -199,7 +199,7 @@ impl TransportPeerEventHandler for PeerHandler {
         let mut s = DefaultHasher::new();
         link.hash(&mut s);
         let info = DataInfo {
-            encoding: Some(DefaultEncoding::APPLICATION_JSON),
+            encoding: Some(Encoding::APPLICATION_JSON),
             ..Default::default()
         };
         self.session.handle_data(

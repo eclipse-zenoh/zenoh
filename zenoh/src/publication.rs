@@ -13,6 +13,7 @@
 //
 
 //! Publishing primitives.
+use crate::encoding::Encoding;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::payload::Payload;
@@ -29,7 +30,6 @@ use crate::{
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::core::Encoding;
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
@@ -314,7 +314,7 @@ impl<'a> Publisher<'a> {
             publisher: self,
             payload,
             kind,
-            encoding: Encoding::empty(),
+            encoding: Encoding::ZENOH_BYTES,
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -840,7 +840,7 @@ fn resolve_put(
                     }
                     PushBody::Put(Put {
                         timestamp,
-                        encoding: encoding.clone(),
+                        encoding: encoding.clone().into(),
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
@@ -871,7 +871,7 @@ fn resolve_put(
     if publisher.destination != Locality::Remote {
         let data_info = DataInfo {
             kind,
-            encoding: Some(encoding.clone()),
+            encoding: Some(encoding),
             timestamp,
             ..Default::default()
         };

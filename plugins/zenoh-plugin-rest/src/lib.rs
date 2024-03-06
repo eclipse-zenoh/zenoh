@@ -21,6 +21,7 @@ use async_std::prelude::FutureExt;
 use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use futures::StreamExt;
 use http_types::Method;
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -32,7 +33,6 @@ use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
-use zenoh::value::{DefaultEncoding, EncodingMapping};
 use zenoh::Session;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
@@ -53,12 +53,11 @@ fn payload_to_json(payload: Payload) -> String {
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let encoding = DefaultEncoding.to_str(&sample.encoding).into_owned();
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
         sample.key_expr.as_str(),
         payload_to_json(sample.payload),
-        encoding,
+        sample.encoding,
         if let Some(ts) = sample.timestamp {
             ts.to_string()
         } else {
@@ -71,11 +70,10 @@ fn result_to_json(sample: Result<Sample, Value>) -> String {
     match sample {
         Ok(sample) => sample_to_json(sample),
         Err(err) => {
-            let encoding = DefaultEncoding.to_str(&err.encoding).into_owned();
             format!(
                 r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
                 payload_to_json(err.payload),
-                encoding,
+                err.encoding,
             )
         }
     }
@@ -138,12 +136,12 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
         Ok(reply) => match reply.sample {
             Ok(sample) => response(
                 StatusCode::Ok,
-                DefaultEncoding.to_str(&sample.encoding).as_ref(),
+                Cow::from(&sample.encoding).as_ref(),
                 String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
-                DefaultEncoding.to_str(&value.encoding).as_ref(),
+                Cow::from(&value.encoding).as_ref(),
                 String::from_utf8_lossy(&value.payload.contiguous()).as_ref(),
             ),
         },
@@ -385,7 +383,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| DefaultEncoding.parse(m.to_string()))
+                .map(|m| Encoding::from(m.to_string()))
                 .unwrap_or_default();
             query = query.with_value(Value::from(body).with_encoding(encoding));
         }
@@ -425,7 +423,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
 
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| DefaultEncoding.parse(m.to_string()))
+                .map(|m| Encoding::from(m.to_string()))
                 .unwrap_or_default();
 
             // @TODO: Define the right congestion control value

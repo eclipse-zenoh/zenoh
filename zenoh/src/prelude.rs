@@ -31,7 +31,7 @@ pub(crate) mod common {
         writer::HasWriter,
     };
     pub use zenoh_core::Resolve;
-    pub use zenoh_protocol::core::{Encoding, EncodingId, EndPoint, Locator, ZenohId};
+    pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoCallbackReceiverPair;
@@ -40,9 +40,10 @@ pub(crate) mod common {
     pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
     pub use crate::selector::{Parameter, Parameters, Selector};
 
+    pub use crate::encoding::Encoding;
     /// The encoding of a zenoh `Value`.
     pub use crate::payload::{DefaultSerializer, Deserialize, Payload, Serialize};
-    pub use crate::value::{DefaultEncoding, Value};
+    pub use crate::value::Value;
 
     #[zenoh_macros::unstable]
     pub use crate::sample::Locality;
