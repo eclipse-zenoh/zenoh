@@ -162,7 +162,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.get_builder.callback, api.get.callback}
+    // tags{rust.get_builder.callback, api.request.callback}
     pub fn callback<Callback>(self, callback: Callback) -> GetBuilder<'a, 'b, Callback>
     where
         Callback: Fn(Reply) + Send + Sync + 'static,
@@ -216,7 +216,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.get_builder.callback_mut, api.get.callback}
+    // tags{rust.get_builder.callback_mut, api.request.callback}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -247,7 +247,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.get_builder.with, api.get.channel}
+    // tags{rust.get_builder.with, api.request.channel}
     pub fn with<Handler>(self, handler: Handler) -> GetBuilder<'a, 'b, Handler>
     where
         Handler: IntoCallbackReceiverPair<'static, Reply>,
@@ -283,7 +283,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
 impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// Change the target of the query.
     #[inline]
-    // tags{rust.get_builder.target, api.get.target.set}
+    // tags{rust.get_builder.target, api.request.target.set}
     pub fn target(mut self, target: QueryTarget) -> Self {
         self.target = target;
         self
@@ -291,7 +291,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
     /// Change the consolidation mode of the query.
     #[inline]
-    // tags{rust.get_builder.consolidation, api.get.consolidation.set}
+    // tags{rust.get_builder.consolidation, api.request.consolidation.set}
     pub fn consolidation<QC: Into<QueryConsolidation>>(mut self, consolidation: QC) -> Self {
         self.consolidation = consolidation.into();
         self
@@ -301,7 +301,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
     #[inline]
-    // tags{rust.get_builder.allowed_destination, api.get.allowed_destination.set}
+    // tags{rust.get_builder.allowed_destination, api.request.allowed_destination.set}
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = destination;
         self
@@ -309,7 +309,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
     /// Set query timeout.
     #[inline]
-    // tags{rust.get_builder.timeout, api.get.timeout.set}
+    // tags{rust.get_builder.timeout, api.request.timeout.set}
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
@@ -317,7 +317,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
     /// Set query value.
     #[inline]
-    // tags{rust.get_builder.value, api.get.value.set}
+    // tags{rust.get_builder.value, api.request.value.set}
     pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
     where
         IntoValue: Into<Value>,
@@ -327,7 +327,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     #[zenoh_macros::unstable]
-    // tags{rust.get_builder.attachment, api.get.attachment.set}
+    // tags{rust.get_builder.attachment, api.request.attachment.set}
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self
@@ -339,7 +339,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
     /// expressions that don't intersect with the query's.
     #[zenoh_macros::unstable]
-    // tags{rust.get_builder.accept_replies, api.get.accept_replies.set}
+    // tags{rust.get_builder.accept_replies, api.request.accept_replies.set}
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         let Self {
             session,

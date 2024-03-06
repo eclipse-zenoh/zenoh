@@ -82,7 +82,7 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    // tags{rust.query.key_expr, api.query.key_expr.get}
+    // tags{rust.query.key_expr, api.query.keyexpr.get}
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.inner.key_expr
     }

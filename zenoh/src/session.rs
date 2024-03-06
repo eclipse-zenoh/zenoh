@@ -772,7 +772,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    // tags{rust.session.get, api.session.get}
+    // tags{rust.session.get, api.session.send_request}
     pub fn get<'a, 'b: 'a, IntoSelector>(
         &'a self,
         selector: IntoSelector,

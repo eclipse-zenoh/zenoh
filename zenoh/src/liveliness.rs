@@ -76,7 +76,7 @@ lazy_static::lazy_static!(
 ///     .unwrap();
 /// # })
 /// ```
-// tags{rust.liveliness, api.liveliness}
+// tags{rust.liveliness}
 #[zenoh_macros::unstable]
 pub struct Liveliness<'a> {
     pub(crate) session: SessionRef<'a>,
@@ -178,7 +178,7 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # })
     /// ```
-    // tags{rust.liveliness.get, api.liveliness.get}
+    // tags{rust.liveliness.get, api.liveliness.send_request}
     #[zenoh_macros::unstable]
     pub fn get<'b: 'a, TryIntoKeyExpr>(
         &'a self,
@@ -295,7 +295,7 @@ pub(crate) struct LivelinessTokenState {
 /// ```
 #[zenoh_macros::unstable]
 #[derive(Debug)]
-// tags{rust.liveliness_token, api.liveliness_token}
+// tags{rust.liveliness_token, api.liveliness.token}
 pub struct LivelinessToken<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<LivelinessTokenState>,
@@ -374,7 +374,7 @@ impl<'a> LivelinessToken<'a> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.liveliness_token.undeclare, api.liveliness_token.undeclare}
+    // tags{rust.liveliness_token.undeclare, api.liveliness.token.undeclare}
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
@@ -443,7 +443,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    // tags{rust.liveliness_subscriber_builder.callback, api.liveliness_subscriber.callback}
+    // tags{rust.liveliness_subscriber_builder.callback, api.liveliness.subscriber.callback}
     pub fn callback<Callback>(
         self,
         callback: Callback,
@@ -485,7 +485,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    // tags{rust.liveliness_subscriber_builder.callback_mut, api.liveliness_subscriber.callback_mut}
+    // tags{rust.liveliness_subscriber_builder.callback_mut}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -517,7 +517,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    // tags{rust.liveliness_subscriber_builder.with, api.liveliness_subscriber.channel}
+    // tags{rust.liveliness_subscriber_builder.with, api.liveliness.subscriber.channel}
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
@@ -640,7 +640,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
-    // tags{rust.liveliness_get_builder.callback, api.liveliness_get.callback}
+    // tags{rust.liveliness_get_builder.callback, api.liveliness.request.callback}
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> LivelinessGetBuilder<'a, 'b, Callback>
     where
@@ -682,7 +682,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.liveliness_get_builder.callback_mut, api.liveliness_get.callback_mut}
+    // tags{rust.liveliness_get_builder.callback_mut}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -714,7 +714,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.liveliness_get_builder.with, api.liveliness_get.channel}
+    // tags{rust.liveliness_get_builder.with, api.liveliness.request.channel}
     pub fn with<Handler>(self, handler: Handler) -> LivelinessGetBuilder<'a, 'b, Handler>
     where
         Handler: IntoCallbackReceiverPair<'static, Reply>,
@@ -737,7 +737,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
 impl<'a, 'b, Handler> LivelinessGetBuilder<'a, 'b, Handler> {
     /// Set query timeout.
     #[inline]
-    // tags{rust.liveliness_get_builder.timeout, api.liveliness_get.timeout.set}
+    // tags{rust.liveliness_get_builder.timeout, api.liveliness.request.timeout.set}
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self

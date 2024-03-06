@@ -418,7 +418,7 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     #[zenoh_macros::unstable]
-    // tags{rust.publisher.matching_status, api.publisher.matching_status.get}
+    // tags{rust.publisher.matching_status, api.publisher.send_matching_status_request}
     pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
         zenoh_core::ResolveFuture::new(async move {
             self.session
@@ -449,7 +449,7 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     #[zenoh_macros::unstable]
-    // tags{rust.publisher.matching_listener, api.publisher.matching_listener.get}
+    // tags{rust.publisher.matching_listener, api.publisher.declare_matching_listener}
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Borrow(self),
@@ -1018,7 +1018,7 @@ impl TryFrom<ProtocolPriority> for Priority {
 /// ```
 #[zenoh_macros::unstable]
 #[derive(Copy, Clone, Debug)]
-// tags{rust.matching_status, api.matching_status}
+// tags{rust.matching_status, api.matching.status}
 pub struct MatchingStatus {
     pub(crate) matching: bool,
 }
@@ -1042,7 +1042,7 @@ impl MatchingStatus {
     ///     .matching_subscribers();
     /// # })
     /// ```
-    // tags{rust.matching_status.matching_subscribers, api.matching_status.matching_subscribers.get}
+    // tags{rust.matching_status.matching_subscribers, api.matching.status.matching_subscribers.get}
     pub fn matching_subscribers(&self) -> bool {
         self.matching
     }
@@ -1084,7 +1084,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    // tags{rust.matching_listener_builder.callback, api.matching_listener.callback}
+    // tags{rust.matching_listener_builder.callback, api.matching.listener.callback}
     pub fn callback<Callback>(self, callback: Callback) -> MatchingListenerBuilder<'a, Callback>
     where
         Callback: Fn(MatchingStatus) + Send + Sync + 'static,
@@ -1119,7 +1119,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    // tags{rust.matching_listener_builder.callback_mut, api.matching_listener.callback_mut}
+    // tags{rust.matching_listener_builder.callback_mut}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -1156,7 +1156,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    // tags{rust.matching_listener_builder.with, api.matching_listener.with}
+    // tags{rust.matching_listener_builder.with, api.matching.listener.channel}
     pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, MatchingStatus>,
@@ -1278,7 +1278,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 /// # })
 /// ```
 #[zenoh_macros::unstable]
-// tags{rust.matching_listener, api.matching_listener}
+// tags{rust.matching_listener, api.matching.listener}
 pub struct MatchingListener<'a, Receiver> {
     pub(crate) listener: MatchingListenerInner<'a>,
     pub receiver: Receiver,
@@ -1303,7 +1303,7 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.matching_listener.undeclare, api.matching_listener.undeclare}
+    // tags{rust.matching_listener.undeclare, api.matching.listener.undeclare}
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
         self.listener.undeclare()
     }

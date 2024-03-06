@@ -49,7 +49,7 @@ mod consts {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-// tags{rust.encoding, api.options.encoding}
+// tags{rust.encoding}
 pub enum KnownEncoding {
     Empty = 0,
     AppOctetStream = 1,
