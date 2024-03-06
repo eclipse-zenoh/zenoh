@@ -313,7 +313,7 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    // tags{rust.key_expr.with_parameters, api.selector.create.from_keyexpr}
+    // tags{rust.key_expr.with_parameters, api.selector.create}
     pub fn with_parameters(self, selector: &'a str) -> Selector<'a> {
         Selector {
             key_expr: self,
@@ -321,7 +321,7 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    // tags{rust.key_expr.with_owned_parameters, api.selector.create.from_keyexpr}
+    // tags{rust.key_expr.with_owned_parameters}
     pub fn with_owned_parameters(self, selector: String) -> Selector<'a> {
         Selector {
             key_expr: self,

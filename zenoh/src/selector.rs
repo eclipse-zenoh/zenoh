@@ -66,6 +66,7 @@ use std::{
 // tags{rust.selector, api.selector}
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
+    // tags{api.selector.keyexpr{set,get}}
     pub key_expr: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
     pub(crate) parameters: Cow<'a, str>,

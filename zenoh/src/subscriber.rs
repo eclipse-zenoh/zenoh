@@ -459,7 +459,6 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     /// Change the subscription reliability.
     #[inline]
     // tags{rust.subscriber_builder.reliability, api.subscriber.reliability.set}
-    // tags{api.pull_subscriber.reliability.set}
     pub fn reliability(mut self, reliability: Reliability) -> Self {
         self.reliability = reliability;
         self
@@ -486,7 +485,6 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     #[zenoh_macros::unstable]
     #[inline]
     // tags{rust.subscriber_builder.allowed_origin, api.subscriber.allowed_origin.set}
-    // tags{api.pull_subscriber.allowed_origin.set}
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
         self
@@ -706,7 +704,7 @@ pub struct Subscriber<'a, Receiver> {
 /// # })
 /// ```
 #[non_exhaustive]
-// tags{rust.pull_subscriber, api.pull_subscriber}
+// tags{rust.pull_subscriber}
 pub struct PullSubscriber<'a, Receiver> {
     pub(crate) subscriber: PullSubscriberInner<'a>,
     pub receiver: Receiver,
@@ -746,7 +744,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.pull_subscriber.pull, api.pull_subscriber.pull}
+    // tags{rust.pull_subscriber.pul}
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.subscriber.pull()
     }
@@ -771,7 +769,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.pull_subscriber.undeclare, api.pull_subscriber.undeclare}
+    // tags{rust.pull_subscriber.undeclare}
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         self.subscriber.undeclare()
     }
