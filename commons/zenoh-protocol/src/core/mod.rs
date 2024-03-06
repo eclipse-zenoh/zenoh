@@ -130,7 +130,7 @@ impl ZenohId {
         ZenohId(uhlc::ID::rand())
     }
 
-    // tags{rust.zenoh_id.into_keyexpr, api.keyexpr.create.from_zid}
+    // tags{rust.zenoh_id.into_keyexpr, api.zid.to_keyexpr}
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
     }

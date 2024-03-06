@@ -533,7 +533,7 @@ impl Session {
         })
     }
 
-    // tags{rust.session.undeclare, api.session.undeclare}
+    // tags{rust.session.undeclare}
     pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
     where
         O: Resolve<ZResult<()>>,
