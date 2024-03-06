@@ -15,20 +15,18 @@
 //! Value primitives.
 use crate::{encoding::Encoding, payload::Payload};
 
-/// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the `payload`
-/// should be interpreted.
+/// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the [`Payload`] should be interpreted.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Value {
-    /// The payload of this [`Value`].
+    /// The binary [`Payload`] of this [`Value`].
     pub payload: Payload,
-    /// An [`Encoding`] description indicating how the payload should be interpreted.
+    /// The [`Encoding`] of this [`Value`].
     pub encoding: Encoding,
 }
 
 impl Value {
-    /// Creates a new [`Value`]. The enclosed [`Encoding`] is [empty](`Encoding::empty`) by default if
-    /// not specified via the [`encoding`](`Value::encoding`).
+    /// Creates a new [`Value`] with default [`Encoding`].
     pub fn new<T>(payload: T) -> Self
     where
         T: Into<Payload>,

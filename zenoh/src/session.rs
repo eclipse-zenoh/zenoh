@@ -670,7 +670,7 @@ impl Session {
     /// # Arguments
     ///
     /// * `key_expr` - Key expression matching the resources to put
-    /// * `value` - The value to put
+    /// * `payload` - The payload to put
     ///
     /// # Examples
     /// ```
@@ -679,8 +679,8 @@ impl Session {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session
-    ///     .put("key/expression", "value")
-    ///     .with_encoding(DefaultEncoding::TEXT_PLAIN)
+    ///     .put("key/expression", "payload")
+    ///     .with_encoding(Encoding::TEXT_PLAIN)
     ///     .res()
     ///     .await
     ///     .unwrap();
