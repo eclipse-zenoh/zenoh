@@ -1452,12 +1452,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glob"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
-
-[[package]]
 name = "gloo-timers"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1530,12 +1524,6 @@ name = "hermit-abi"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "443144c8cdadd93ebf52ddb4056d257f5b52c04d3c804e657d19eb73fc33668b"
-
-[[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hkdf"
@@ -2288,12 +2276,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "panic-message"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "384e52fd8fbd4cbe3c317e8216260c21a0f9134de108cea8a4dd4e7e152c472d"
-
-[[package]]
 name = "parking"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2496,20 +2478,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pnet"
-version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "130c5b738eeda2dc5796fe2671e49027e6935e817ab51b930a36ec9e6a206a64"
-dependencies = [
- "ipnetwork",
- "pnet_base",
- "pnet_datalink",
- "pnet_packet",
- "pnet_sys",
- "pnet_transport",
-]
-
-[[package]]
 name = "pnet_base"
 version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2532,39 +2500,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pnet_macros"
-version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "688b17499eee04a0408aca0aa5cba5fc86401d7216de8a63fdf7a4c227871804"
-dependencies = [
- "proc-macro2",
- "quote",
- "regex",
- "syn 2.0.33",
-]
-
-[[package]]
-name = "pnet_macros_support"
-version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eea925b72f4bd37f8eab0f221bbe4c78b63498350c983ffa9dd4bcde7e030f56"
-dependencies = [
- "pnet_base",
-]
-
-[[package]]
-name = "pnet_packet"
-version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9a005825396b7fe7a38a8e288dbc342d5034dac80c15212436424fef8ea90ba"
-dependencies = [
- "glob",
- "pnet_base",
- "pnet_macros",
- "pnet_macros_support",
-]
-
-[[package]]
 name = "pnet_sys"
 version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2572,18 +2507,6 @@ checksum = "417c0becd1b573f6d544f73671070b039051e5ad819cc64aa96377b536128d00"
 dependencies = [
  "libc",
  "winapi",
-]
-
-[[package]]
-name = "pnet_transport"
-version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2637e14d7de974ee2f74393afccbc8704f3e54e6eb31488715e72481d1662cc3"
-dependencies = [
- "libc",
- "pnet_base",
- "pnet_packet",
- "pnet_sys",
 ]
 
 [[package]]
@@ -4549,9 +4472,9 @@ dependencies = [
 
 [[package]]
 name = "z-serial"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a74ab200b318928231fa62809ca06397f2790d29ffb58d9cbbc7d517e93a6b17"
+checksum = "f113597c6b880587004169f14bc010e4b440981ab2ad669779d3654f9b1c4af1"
 dependencies = [
  "cobs",
  "futures",
@@ -4575,7 +4498,6 @@ dependencies = [
  "form_urlencoded",
  "futures",
  "git-version",
- "hex",
  "lazy_static",
  "log",
  "ordered-float",
@@ -4615,9 +4537,7 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "async-trait",
- "clap",
  "const_format",
- "env_logger",
  "futures",
  "git-version",
  "log",
@@ -4648,7 +4568,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "uhlc",
- "uuid",
  "zenoh-buffers",
  "zenoh-protocol",
  "zenoh-shm",
@@ -4780,9 +4699,7 @@ dependencies = [
  "async-trait",
  "flume",
  "log",
- "lz4_flex",
  "serde",
- "typenum",
  "zenoh-buffers",
  "zenoh-codec",
  "zenoh-core",
@@ -4829,7 +4746,6 @@ dependencies = [
  "uuid",
  "z-serial",
  "zenoh-collections",
- "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
@@ -4958,9 +4874,7 @@ version = "0.11.0-dev"
 dependencies = [
  "proc-macro2",
  "quote",
- "rustc_version 0.4.0",
  "syn 2.0.33",
- "unzip-n",
  "zenoh-keyexpr",
 ]
 
@@ -4969,7 +4883,6 @@ name = "zenoh-plugin-example"
 version = "0.11.0-dev"
 dependencies = [
  "async-std",
- "clap",
  "const_format",
  "env_logger",
  "futures",
@@ -5018,7 +4931,6 @@ dependencies = [
  "async-global-executor",
  "async-std",
  "async-trait",
- "clap",
  "const_format",
  "crc",
  "derive-new",
@@ -5064,12 +4976,10 @@ name = "zenoh-protocol"
 version = "0.11.0-dev"
 dependencies = [
  "const_format",
- "hex",
  "lazy_static",
  "rand 0.8.5",
  "serde",
  "uhlc",
- "uuid",
  "zenoh-buffers",
  "zenoh-keyexpr",
  "zenoh-result",
@@ -5086,7 +4996,6 @@ dependencies = [
 name = "zenoh-shm"
 version = "0.11.0-dev"
 dependencies = [
- "bincode",
  "log",
  "serde",
  "shared_memory",
@@ -5100,7 +5009,6 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "event-listener 4.0.0",
- "flume",
  "futures",
  "tokio",
  "zenoh-buffers",
@@ -5120,7 +5028,6 @@ dependencies = [
  "flume",
  "log",
  "lz4_flex",
- "panic-message",
  "paste",
  "rand 0.8.5",
  "ringbuffer-spsc",
@@ -5147,23 +5054,17 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "async-trait",
- "clap",
- "const_format",
  "flume",
- "futures",
- "hex",
  "home",
  "humantime",
  "lazy_static",
  "libc",
  "libloading",
  "log",
- "pnet",
  "pnet_datalink",
  "shellexpand",
  "winapi",
  "zenoh-core",
- "zenoh-protocol",
  "zenoh-result",
 ]
 
@@ -5198,7 +5099,6 @@ dependencies = [
  "rand 0.8.5",
  "rustc_version 0.4.0",
  "zenoh",
- "zenoh_backend_traits",
 ]
 
 [[package]]

@@ -28,7 +28,7 @@ pub use manager::{
     TransportManagerParamsMulticast,
 };
 use std::{
-    fmt,
+    fmt::{self, Write},
     sync::{Arc, Weak},
 };
 use transport::TransportMulticastInner;
@@ -147,12 +147,17 @@ impl fmt::Debug for TransportMulticast {
         match self.get_transport() {
             Ok(transport) => {
                 let is_shm = zcondfeat!("shared-memory", transport.is_shm(), false);
-                let peers: String = zread!(transport.peers)
-                    .iter()
-                    .map(|(l, p)| {
-                        format!("(locator: {}, zid: {}, whatami: {})", l, p.zid, p.whatami)
-                    })
-                    .collect();
+                let peers: String =
+                    zread!(transport.peers)
+                        .iter()
+                        .fold(String::new(), |mut output, (l, p)| {
+                            let _ = write!(
+                                output,
+                                "(locator: {}, zid: {}, whatami: {})",
+                                l, p.zid, p.whatami
+                            );
+                            output
+                        });
 
                 f.debug_struct("Transport Multicast")
                     .field("sn_resolution", &transport.get_sn_resolution())
