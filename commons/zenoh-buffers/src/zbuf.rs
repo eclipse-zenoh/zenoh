@@ -28,7 +28,7 @@ fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
 }
 
 #[derive(Debug, Clone, Default, Eq)]
-// tags{rust.zbuf, api.buffer}
+// tags{rust.zbuf}
 // tags{rust.zbuf.clone, api.buffer.rcinc}
 pub struct ZBuf {
     slices: SingleOrVec<ZSlice>,
@@ -36,7 +36,7 @@ pub struct ZBuf {
 
 impl ZBuf {
     #[must_use]
-    // tags{rust.zbuf.empty, api.buffer.create}
+    // tags{rust.zbuf.empty}
     pub fn empty() -> Self {
         Self::default()
     }
@@ -147,7 +147,7 @@ impl ZBuf {
 // Buffer
 impl Buffer for ZBuf {
     #[inline(always)]
-    // tags{rust.zbuf.buffer.len, api.buffer.len}
+    // tags{rust.zbuf.buffer.len}
     fn len(&self) -> usize {
         self.slices
             .as_ref()
@@ -395,7 +395,7 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
 
 #[cfg(feature = "std")]
 impl<'a> std::io::Read for ZBufReader<'a> {
-    // tags{rust.zbuf_reader.read, api.buffer.read}
+    // tags{rust.zbuf_reader.read}
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match <Self as Reader>::read(self, buf) {
             Ok(n) => Ok(n.get()),

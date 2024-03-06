@@ -48,17 +48,11 @@ pub(crate) enum Locality {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-// tags{rust.data_info, api.options.data_info}
 pub(crate) struct DataInfo {
-    // tags{rust.data_info.kind, api.options.data_info.kind}
     pub kind: SampleKind,
-    // tags{rust.data_info.encoding, api.options.data_info.encoding}
     pub encoding: Option<Encoding>,
-    // tags{rust.data_info.timestamp, api.options.data_info.timestamp}
     pub timestamp: Option<Timestamp>,
-    // tags{rust.data_info.source_id, api.options.data_info.source_id}
     pub source_id: Option<ZenohId>,
-    // tags{rust.data_info.source_sn, api.options.data_info.source_sn}
     pub source_sn: Option<SourceSn>,
     pub qos: QoS,
 }
@@ -348,16 +342,12 @@ pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 // tags{rust.sample, api.sample}
 pub struct Sample {
     /// The key expression on which this Sample was published.
-    // tags{rust.sample.key_expr, api.sample.key_expr}
     pub key_expr: KeyExpr<'static>,
     /// The value of this Sample.
-    // tags{rust.sample.value, api.sample.value}
     pub value: Value,
     /// The kind of this Sample.
-    // tags{rust.sample.kind, api.sample.kind}
     pub kind: SampleKind,
     /// The [`Timestamp`] of this Sample.
-    // tags{rust.sample.timestamp, api.sample.timestamp}
     pub timestamp: Option<Timestamp>,
     /// Quality of service settings this sample was sent with.
     pub qos: QoS,
@@ -370,7 +360,6 @@ pub struct Sample {
     /// </div>
     ///
     /// Infos on the source of this Sample.
-    // tags{rust.sample.source_info, api.sample.source_info}
     pub source_info: SourceInfo,
 
     #[cfg(feature = "unstable")]
@@ -381,14 +370,13 @@ pub struct Sample {
     /// </div>
     ///
     /// A map of key-value pairs, where each key and value are byte-slices.
-    // tags{rust.sample.attachment, api.sample.attachment}
     pub attachment: Option<Attachment>,
 }
 
 impl Sample {
     /// Creates a new Sample.
     #[inline]
-    // tags{rust.sample.new, api.sample.create.unchecked}
+    // tags{rust.sample.new, api.sample.create}
     pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
@@ -408,7 +396,7 @@ impl Sample {
     }
     /// Creates a new Sample.
     #[inline]
-    // tags{rust.sample.try_from, api.sample.create.checked}
+    // tags{rust.sample.try_from}
     pub fn try_from<TryIntoKeyExpr, IntoValue>(
         key_expr: TryIntoKeyExpr,
         value: IntoValue,
@@ -433,7 +421,6 @@ impl Sample {
 
     /// Creates a new Sample with optional data info.
     #[inline]
-    // tags{rust.sample.with_info, api.sample.create.with_info}
     pub(crate) fn with_info(
         key_expr: KeyExpr<'static>,
         payload: ZBuf,
@@ -516,7 +503,7 @@ impl Sample {
     }
 
     #[zenoh_macros::unstable]
-    // tags{rust.sample.attachment_mut, api.sample.attachment.get_mut}
+    // tags{rust.sample.attachment_mut}
     pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
         &mut self.attachment
     }

@@ -46,7 +46,7 @@ pub use zenoh_protocol::scouting::Hello;
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-// tags{rust.scout_builder, api.scout}
+// tags{rust.scout_builder}
 pub struct ScoutBuilder<Handler> {
     pub(crate) what: WhatAmIMatcher,
     pub(crate) config: ZResult<crate::config::Config>,
@@ -107,7 +107,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.scout_builder.callback_mut, api.scout.callback_mut}
+    // tags{rust.scout_builder.callback_mut}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -256,7 +256,7 @@ impl fmt::Debug for ScoutInner {
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-// tags{rust.scout, api.scout}
+// tags{rust.scout}
 pub struct Scout<Receiver> {
     pub(crate) scout: ScoutInner,
     pub receiver: Receiver,

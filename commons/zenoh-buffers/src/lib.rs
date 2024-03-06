@@ -80,8 +80,10 @@ macro_rules! unsafe_slice_mut {
 pub mod buffer {
     use alloc::{borrow::Cow, vec::Vec};
 
+    // tags{api.buffer.len}
     pub trait Buffer {
         /// Returns the number of bytes in the buffer.
+        // tags{api.buffer.len}
         fn len(&self) -> usize;
 
         /// Returns `true` if the buffer has a length of 0.
@@ -98,11 +100,13 @@ pub mod buffer {
             Self: 'a;
 
         /// Gets all the slices of this buffer.
+        // tags{api.buffer.slices}
         fn slices(&self) -> Self::Slices<'_>;
 
         /// Returns all the bytes of this buffer in a conitguous slice.
         /// This may require allocation and copy if the original buffer
         /// is not contiguous.
+        // tags{api.buffer.contiguous}
         fn contiguous(&self) -> Cow<'_, [u8]> {
             let mut slices = self.slices();
             match slices.len() {

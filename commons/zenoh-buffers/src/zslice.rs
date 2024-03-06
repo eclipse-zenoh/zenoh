@@ -94,7 +94,7 @@ pub struct ZSlice {
 }
 
 impl ZSlice {
-    // tags{rust.z_slice.make, api.buffer.create}
+    // tags{rust.z_slice.make}
     pub fn make(
         buf: Arc<dyn ZSliceBuffer>,
         start: usize,

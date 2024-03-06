@@ -110,12 +110,14 @@ impl AsRef<str> for KnownEncoding {
 // tags{rust.encoding, api.encoding}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Encoding {
+    // tags{}
     Exact(KnownEncoding),
+    // tags{}
     WithSuffix(KnownEncoding, CowStr<'static>),
 }
 
 impl Encoding {
-    // tags{rust.encoding.new, api.encoding.create}
+    // tags{rust.encoding.new}
     pub fn new<IntoCowStr>(prefix: u8, suffix: IntoCowStr) -> ZResult<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
@@ -133,7 +135,7 @@ impl Encoding {
     }
 
     /// Sets the suffix of this encoding.
-    // tags{rust.encoding.with_suffix, api.encoding.suffix.set}
+    // tags{rust.encoding.with_suffix}
     pub fn with_suffix<IntoCowStr>(self, suffix: IntoCowStr) -> ZResult<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
@@ -154,7 +156,7 @@ impl Encoding {
 
     /// Returns `true`if the string representation of this encoding starts with
     /// the string representation of ther given encoding.
-    // tags{rust.encoding.starts_with, api.encoding.starts_with}
+    // tags{rust.encoding.starts_with}
     pub fn starts_with<T>(&self, with: T) -> bool
     where
         T: Into<Encoding>,
@@ -163,14 +165,14 @@ impl Encoding {
         self.prefix() == with.prefix() && self.suffix().starts_with(with.suffix())
     }
 
-    // tags{rust.encoding.prefix, api.encoding.prefix.get}
+    // tags{rust.encoding.prefix}
     pub const fn prefix(&self) -> &KnownEncoding {
         match self {
             Encoding::Exact(e) | Encoding::WithSuffix(e, _) => e,
         }
     }
 
-    // tags{rust.encoding.suffix, api.encoding.suffix.get}
+    // tags{rust.encoding.suffix}
     pub fn suffix(&self) -> &str {
         match self {
             Encoding::Exact(_) => "",
@@ -204,7 +206,7 @@ impl Encoding {
     pub const APP_XHTML_XML: Encoding = Encoding::Exact(KnownEncoding::AppXhtmlXml);
     // tags{}
     pub const APP_XWWW_FORM_URLENCODED: Encoding =
-    // tags{}
+        // tags{}
         Encoding::Exact(KnownEncoding::AppXWwwFormUrlencoded);
     // tags{}
     pub const TEXT_JSON: Encoding = Encoding::Exact(KnownEncoding::TextJson);

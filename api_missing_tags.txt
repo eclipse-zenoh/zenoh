@@ -3,5 +3,3 @@ See https://github.com/ZettaScaleLabs/zenoh-tests/tree/tagging/api_matrix for de
 
 tags{api.logger.init(N/A)}
 This is necessary only for bindings, in Rust itself it's `envlogger::init()`
-
-tags{api.reply.encoding.set(TODO)}
