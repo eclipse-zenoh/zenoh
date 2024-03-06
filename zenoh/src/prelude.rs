@@ -42,7 +42,7 @@ pub(crate) mod common {
 
     pub use crate::encoding::Encoding;
     /// The encoding of a zenoh `Value`.
-    pub use crate::payload::{DefaultSerializer, Deserialize, Payload, Serialize};
+    pub use crate::payload::{Deserialize, Payload, Serialize};
     pub use crate::value::Value;
 
     #[zenoh_macros::unstable]

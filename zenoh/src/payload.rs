@@ -19,10 +19,11 @@ use std::{
     convert::Infallible,
     fmt::Debug,
     ops::{Deref, DerefMut},
+    string::FromUtf8Error,
     sync::Arc,
 };
 use zenoh_buffers::{buffer::SplitBuffer, reader::HasReader, writer::HasWriter, ZSlice};
-use zenoh_result::{ZError, ZResult};
+use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
 
@@ -30,10 +31,12 @@ use zenoh_shm::SharedMemoryBuf;
 pub struct Payload(ZBuf);
 
 impl Payload {
+    /// Create an empty payload.
     pub const fn empty() -> Self {
         Self(ZBuf::empty())
     }
 
+    /// Create a [`Payload`] from any type `T` that can implements [`Into<ZBuf>`].
     pub fn new<T>(t: T) -> Self
     where
         T: Into<ZBuf>,
@@ -56,15 +59,34 @@ impl DerefMut for Payload {
     }
 }
 
-impl From<Payload> for ZBuf {
-    fn from(value: Payload) -> Self {
-        value.0
+/// Provide some facilities specific to the Rust API to encode/decode a [`Value`] with an `Serialize`.
+impl Payload {
+    /// Encode an object of type `T` as a [`Value`] using the [`ZSerde`].
+    ///
+    /// ```rust
+    /// use zenoh::payload::Payload;
+    ///
+    /// let start = String::from("abc");
+    /// let payload = Payload::serialize(start.clone());
+    /// let end: String = payload.deserialize().unwrap();
+    /// assert_eq!(start, end);
+    /// ```
+    pub fn serialize<T>(t: T) -> Self
+    where
+        ZSerde: Serialize<T, Output = Payload>,
+    {
+        ZSerde.serialize(t)
     }
-}
 
-impl From<&Payload> for ZBuf {
-    fn from(value: &Payload) -> Self {
-        value.0.clone()
+    /// Decode an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// See [encode](Value::encode) for an example.
+    pub fn deserialize<T>(&self) -> ZResult<T>
+    where
+        ZSerde: Deserialize<T>,
+        <ZSerde as Deserialize<T>>::Error: Debug,
+    {
+        let t: T = ZSerde.deserialize(self).map_err(|e| zerror!("{:?}", e))?;
+        Ok(t)
     }
 }
 
@@ -83,8 +105,16 @@ pub trait Deserialize<T> {
     fn deserialize(self, t: &Payload) -> Result<T, Self::Error>;
 }
 
-// Octect stream
-impl Serialize<ZBuf> for DefaultSerializer {
+/// The default serializer for Zenoh payload. It supports primitives types, such as: vec<u8>, int, uint, float, string, bool.
+/// It also supports common Rust serde values.
+#[derive(Clone, Copy, Debug)]
+pub struct ZSerde;
+
+#[derive(Debug, Clone, Copy)]
+pub struct ZDeserializeError;
+
+// Bytes
+impl Serialize<ZBuf> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, t: ZBuf) -> Self::Output {
@@ -92,7 +122,13 @@ impl Serialize<ZBuf> for DefaultSerializer {
     }
 }
 
-impl Deserialize<ZBuf> for DefaultSerializer {
+impl From<Payload> for ZBuf {
+    fn from(value: Payload) -> Self {
+        value.0
+    }
+}
+
+impl Deserialize<ZBuf> for ZSerde {
     type Error = Infallible;
 
     fn deserialize(self, v: &Payload) -> Result<ZBuf, Self::Error> {
@@ -100,7 +136,13 @@ impl Deserialize<ZBuf> for DefaultSerializer {
     }
 }
 
-impl Serialize<Vec<u8>> for DefaultSerializer {
+impl From<&Payload> for ZBuf {
+    fn from(value: &Payload) -> Self {
+        value.0.clone()
+    }
+}
+
+impl Serialize<Vec<u8>> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, t: Vec<u8>) -> Self::Output {
@@ -108,7 +150,7 @@ impl Serialize<Vec<u8>> for DefaultSerializer {
     }
 }
 
-impl Serialize<&[u8]> for DefaultSerializer {
+impl Serialize<&[u8]> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, t: &[u8]) -> Self::Output {
@@ -116,7 +158,7 @@ impl Serialize<&[u8]> for DefaultSerializer {
     }
 }
 
-impl Deserialize<Vec<u8>> for DefaultSerializer {
+impl Deserialize<Vec<u8>> for ZSerde {
     type Error = Infallible;
 
     fn deserialize(self, v: &Payload) -> Result<Vec<u8>, Self::Error> {
@@ -125,7 +167,13 @@ impl Deserialize<Vec<u8>> for DefaultSerializer {
     }
 }
 
-impl<'a> Serialize<Cow<'a, [u8]>> for DefaultSerializer {
+impl From<&Payload> for Vec<u8> {
+    fn from(value: &Payload) -> Self {
+        value.contiguous().to_vec()
+    }
+}
+
+impl<'a> Serialize<Cow<'a, [u8]>> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, t: Cow<'a, [u8]>) -> Self::Output {
@@ -133,7 +181,7 @@ impl<'a> Serialize<Cow<'a, [u8]>> for DefaultSerializer {
     }
 }
 
-impl<'a> Deserialize<Cow<'a, [u8]>> for DefaultSerializer {
+impl<'a> Deserialize<Cow<'a, [u8]>> for ZSerde {
     type Error = Infallible;
 
     fn deserialize(self, v: &Payload) -> Result<Cow<'a, [u8]>, Self::Error> {
@@ -142,8 +190,14 @@ impl<'a> Deserialize<Cow<'a, [u8]>> for DefaultSerializer {
     }
 }
 
-// Text plain
-impl Serialize<String> for DefaultSerializer {
+impl<'a> From<&'a Payload> for Cow<'a, [u8]> {
+    fn from(value: &'a Payload) -> Self {
+        value.contiguous()
+    }
+}
+
+// String
+impl Serialize<String> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, s: String) -> Self::Output {
@@ -151,7 +205,7 @@ impl Serialize<String> for DefaultSerializer {
     }
 }
 
-impl Serialize<&str> for DefaultSerializer {
+impl Serialize<&str> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, s: &str) -> Self::Output {
@@ -159,15 +213,23 @@ impl Serialize<&str> for DefaultSerializer {
     }
 }
 
-impl Deserialize<String> for DefaultSerializer {
-    type Error = ZError;
+impl Deserialize<String> for ZSerde {
+    type Error = FromUtf8Error;
 
     fn deserialize(self, v: &Payload) -> Result<String, Self::Error> {
-        String::from_utf8(v.contiguous().to_vec()).map_err(|e| zerror!("{}", e.utf8_error()))
+        String::from_utf8(v.contiguous().to_vec())
     }
 }
 
-impl<'a> Serialize<Cow<'a, str>> for DefaultSerializer {
+impl TryFrom<&Payload> for String {
+    type Error = FromUtf8Error;
+
+    fn try_from(value: &Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl<'a> Serialize<Cow<'a, str>> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, s: Cow<'a, str>) -> Self::Output {
@@ -175,8 +237,8 @@ impl<'a> Serialize<Cow<'a, str>> for DefaultSerializer {
     }
 }
 
-impl<'a> Deserialize<Cow<'a, str>> for DefaultSerializer {
-    type Error = ZError;
+impl<'a> Deserialize<Cow<'a, str>> for ZSerde {
+    type Error = FromUtf8Error;
 
     fn deserialize(self, v: &Payload) -> Result<Cow<'a, str>, Self::Error> {
         let v: String = Self.deserialize(v)?;
@@ -184,10 +246,18 @@ impl<'a> Deserialize<Cow<'a, str>> for DefaultSerializer {
     }
 }
 
+impl TryFrom<&Payload> for Cow<'_, str> {
+    type Error = FromUtf8Error;
+
+    fn try_from(value: &Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
 // - Integers impl
 macro_rules! impl_int {
     ($t:ty, $encoding:expr) => {
-        impl Serialize<$t> for DefaultSerializer {
+        impl Serialize<$t> for ZSerde {
             type Output = Payload;
 
             fn serialize(self, t: $t) -> Self::Output {
@@ -200,7 +270,7 @@ macro_rules! impl_int {
             }
         }
 
-        impl Serialize<&$t> for DefaultSerializer {
+        impl Serialize<&$t> for ZSerde {
             type Output = Payload;
 
             fn serialize(self, t: &$t) -> Self::Output {
@@ -208,7 +278,7 @@ macro_rules! impl_int {
             }
         }
 
-        impl Serialize<&mut $t> for DefaultSerializer {
+        impl Serialize<&mut $t> for ZSerde {
             type Output = Payload;
 
             fn serialize(self, t: &mut $t) -> Self::Output {
@@ -216,48 +286,51 @@ macro_rules! impl_int {
             }
         }
 
-        impl Deserialize<$t> for DefaultSerializer {
-            type Error = ZError;
+        impl Deserialize<$t> for ZSerde {
+            type Error = ZDeserializeError;
 
             fn deserialize(self, v: &Payload) -> Result<$t, Self::Error> {
                 let p = v.contiguous();
                 let mut bs = (0 as $t).to_le_bytes();
                 if p.len() > bs.len() {
-                    bail!(
-                        "Decode error: {} invalid length ({} > {})",
-                        std::any::type_name::<$t>(),
-                        p.len(),
-                        bs.len()
-                    );
+                    return Err(ZDeserializeError);
                 }
                 bs[..p.len()].copy_from_slice(&p);
                 let t = <$t>::from_le_bytes(bs);
                 Ok(t)
             }
         }
+
+        impl TryFrom<&Payload> for $t {
+            type Error = ZDeserializeError;
+
+            fn try_from(value: &Payload) -> Result<Self, Self::Error> {
+                ZSerde.deserialize(value)
+            }
+        }
     };
 }
 
 // Zenoh unsigned integers
-impl_int!(u8, DefaultSerializer::ZENOH_UINT);
-impl_int!(u16, DefaultSerializer::ZENOH_UINT);
-impl_int!(u32, DefaultSerializer::ZENOH_UINT);
-impl_int!(u64, DefaultSerializer::ZENOH_UINT);
-impl_int!(usize, DefaultSerializer::ZENOH_UINT);
+impl_int!(u8, ZSerde::ZENOH_UINT);
+impl_int!(u16, ZSerde::ZENOH_UINT);
+impl_int!(u32, ZSerde::ZENOH_UINT);
+impl_int!(u64, ZSerde::ZENOH_UINT);
+impl_int!(usize, ZSerde::ZENOH_UINT);
 
 // Zenoh signed integers
-impl_int!(i8, DefaultSerializer::ZENOH_INT);
-impl_int!(i16, DefaultSerializer::ZENOH_INT);
-impl_int!(i32, DefaultSerializer::ZENOH_INT);
-impl_int!(i64, DefaultSerializer::ZENOH_INT);
-impl_int!(isize, DefaultSerializer::ZENOH_INT);
+impl_int!(i8, ZSerde::ZENOH_INT);
+impl_int!(i16, ZSerde::ZENOH_INT);
+impl_int!(i32, ZSerde::ZENOH_INT);
+impl_int!(i64, ZSerde::ZENOH_INT);
+impl_int!(isize, ZSerde::ZENOH_INT);
 
 // Zenoh floats
-impl_int!(f32, DefaultSerializer::ZENOH_FLOAT);
-impl_int!(f64, DefaultSerializer::ZENOH_FLOAT);
+impl_int!(f32, ZSerde::ZENOH_FLOAT);
+impl_int!(f64, ZSerde::ZENOH_FLOAT);
 
 // Zenoh bool
-impl Serialize<bool> for DefaultSerializer {
+impl Serialize<bool> for ZSerde {
     type Output = ZBuf;
 
     fn serialize(self, t: bool) -> Self::Output {
@@ -267,25 +340,33 @@ impl Serialize<bool> for DefaultSerializer {
     }
 }
 
-impl Deserialize<bool> for DefaultSerializer {
-    type Error = ZError;
+impl Deserialize<bool> for ZSerde {
+    type Error = ZDeserializeError;
 
     fn deserialize(self, v: &Payload) -> Result<bool, Self::Error> {
         let p = v.contiguous();
         if p.len() != 1 {
-            bail!("Decode error:: bool invalid length ({} != {})", p.len(), 1);
+            return Err(ZDeserializeError);
         }
         match p[0] {
             0 => Ok(false),
             1 => Ok(true),
-            invalid => bail!("Decode error: bool invalid value ({})", invalid),
+            _ => Err(ZDeserializeError),
         }
+    }
+}
+
+impl TryFrom<&Payload> for bool {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: &Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
     }
 }
 
 // - Zenoh advanced types encoders/decoders
 // JSON
-impl Serialize<&serde_json::Value> for DefaultSerializer {
+impl Serialize<&serde_json::Value> for ZSerde {
     type Output = Result<Payload, serde_json::Error>;
 
     fn serialize(self, t: &serde_json::Value) -> Self::Output {
@@ -295,7 +376,7 @@ impl Serialize<&serde_json::Value> for DefaultSerializer {
     }
 }
 
-impl Serialize<serde_json::Value> for DefaultSerializer {
+impl Serialize<serde_json::Value> for ZSerde {
     type Output = Result<Payload, serde_json::Error>;
 
     fn serialize(self, t: serde_json::Value) -> Self::Output {
@@ -303,11 +384,11 @@ impl Serialize<serde_json::Value> for DefaultSerializer {
     }
 }
 
-impl Deserialize<serde_json::Value> for DefaultSerializer {
-    type Error = ZError;
+impl Deserialize<serde_json::Value> for ZSerde {
+    type Error = serde_json::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_json::Value, Self::Error> {
-        serde_json::from_reader(v.reader()).map_err(|e| zerror!("{}", e))
+        serde_json::from_reader(v.reader())
     }
 }
 
@@ -315,12 +396,12 @@ impl TryFrom<serde_json::Value> for Payload {
     type Error = serde_json::Error;
 
     fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
-        DefaultSerializer.serialize(value)
+        ZSerde.serialize(value)
     }
 }
 
 // Yaml
-impl Serialize<&serde_yaml::Value> for DefaultSerializer {
+impl Serialize<&serde_yaml::Value> for ZSerde {
     type Output = Result<Payload, serde_yaml::Error>;
 
     fn serialize(self, t: &serde_yaml::Value) -> Self::Output {
@@ -330,7 +411,7 @@ impl Serialize<&serde_yaml::Value> for DefaultSerializer {
     }
 }
 
-impl Serialize<serde_yaml::Value> for DefaultSerializer {
+impl Serialize<serde_yaml::Value> for ZSerde {
     type Output = Result<Payload, serde_yaml::Error>;
 
     fn serialize(self, t: serde_yaml::Value) -> Self::Output {
@@ -338,11 +419,11 @@ impl Serialize<serde_yaml::Value> for DefaultSerializer {
     }
 }
 
-impl Deserialize<serde_yaml::Value> for DefaultSerializer {
-    type Error = ZError;
+impl Deserialize<serde_yaml::Value> for ZSerde {
+    type Error = serde_yaml::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_yaml::Value, Self::Error> {
-        serde_yaml::from_reader(v.reader()).map_err(|e| zerror!("{}", e))
+        serde_yaml::from_reader(v.reader())
     }
 }
 
@@ -350,12 +431,12 @@ impl TryFrom<serde_yaml::Value> for Payload {
     type Error = serde_yaml::Error;
 
     fn try_from(value: serde_yaml::Value) -> Result<Self, Self::Error> {
-        DefaultSerializer.serialize(value)
+        ZSerde.serialize(value)
     }
 }
 
 // CBOR
-impl Serialize<&serde_cbor::Value> for DefaultSerializer {
+impl Serialize<&serde_cbor::Value> for ZSerde {
     type Output = Result<Payload, serde_cbor::Error>;
 
     fn serialize(self, t: &serde_cbor::Value) -> Self::Output {
@@ -365,7 +446,7 @@ impl Serialize<&serde_cbor::Value> for DefaultSerializer {
     }
 }
 
-impl Serialize<serde_cbor::Value> for DefaultSerializer {
+impl Serialize<serde_cbor::Value> for ZSerde {
     type Output = Result<Payload, serde_cbor::Error>;
 
     fn serialize(self, t: serde_cbor::Value) -> Self::Output {
@@ -373,11 +454,11 @@ impl Serialize<serde_cbor::Value> for DefaultSerializer {
     }
 }
 
-impl Deserialize<serde_cbor::Value> for DefaultSerializer {
-    type Error = ZError;
+impl Deserialize<serde_cbor::Value> for ZSerde {
+    type Error = serde_cbor::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_cbor::Value, Self::Error> {
-        serde_cbor::from_reader(v.reader()).map_err(|e| zerror!("{}", e))
+        serde_cbor::from_reader(v.reader())
     }
 }
 
@@ -385,12 +466,12 @@ impl TryFrom<serde_cbor::Value> for Payload {
     type Error = serde_cbor::Error;
 
     fn try_from(value: serde_cbor::Value) -> Result<Self, Self::Error> {
-        DefaultSerializer.serialize(value)
+        ZSerde.serialize(value)
     }
 }
 
 // Pickle
-impl Serialize<&serde_pickle::Value> for DefaultSerializer {
+impl Serialize<&serde_pickle::Value> for ZSerde {
     type Output = Result<Payload, serde_pickle::Error>;
 
     fn serialize(self, t: &serde_pickle::Value) -> Self::Output {
@@ -404,7 +485,7 @@ impl Serialize<&serde_pickle::Value> for DefaultSerializer {
     }
 }
 
-impl Serialize<serde_pickle::Value> for DefaultSerializer {
+impl Serialize<serde_pickle::Value> for ZSerde {
     type Output = Result<Payload, serde_pickle::Error>;
 
     fn serialize(self, t: serde_pickle::Value) -> Self::Output {
@@ -412,12 +493,11 @@ impl Serialize<serde_pickle::Value> for DefaultSerializer {
     }
 }
 
-impl Deserialize<serde_pickle::Value> for DefaultSerializer {
-    type Error = ZError;
+impl Deserialize<serde_pickle::Value> for ZSerde {
+    type Error = serde_pickle::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_pickle::Value, Self::Error> {
         serde_pickle::value_from_reader(v.reader(), serde_pickle::DeOptions::default())
-            .map_err(|e| zerror!("{}", e))
     }
 }
 
@@ -425,13 +505,13 @@ impl TryFrom<serde_pickle::Value> for Payload {
     type Error = serde_pickle::Error;
 
     fn try_from(value: serde_pickle::Value) -> Result<Self, Self::Error> {
-        DefaultSerializer.serialize(value)
+        ZSerde.serialize(value)
     }
 }
 
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
-impl Serialize<Arc<SharedMemoryBuf>> for DefaultSerializer {
+impl Serialize<Arc<SharedMemoryBuf>> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, t: Arc<SharedMemoryBuf>) -> Self::Output {
@@ -440,7 +520,7 @@ impl Serialize<Arc<SharedMemoryBuf>> for DefaultSerializer {
 }
 
 #[cfg(feature = "shared-memory")]
-impl Serialize<Box<SharedMemoryBuf>> for DefaultSerializer {
+impl Serialize<Box<SharedMemoryBuf>> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, t: Box<SharedMemoryBuf>) -> Self::Output {
@@ -450,7 +530,7 @@ impl Serialize<Box<SharedMemoryBuf>> for DefaultSerializer {
 }
 
 #[cfg(feature = "shared-memory")]
-impl Serialize<SharedMemoryBuf> for DefaultSerializer {
+impl Serialize<SharedMemoryBuf> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, t: SharedMemoryBuf) -> Self::Output {
@@ -460,103 +540,10 @@ impl Serialize<SharedMemoryBuf> for DefaultSerializer {
 
 impl<T> From<T> for Payload
 where
-    DefaultSerializer: Serialize<T, Output = Payload>,
+    ZSerde: Serialize<T, Output = Payload>,
 {
     fn from(t: T) -> Self {
-        DefaultSerializer.serialize(t)
-    }
-}
-
-/// Default encoding mapping used by the [`DefaultSerializer`]. Please note that Zenoh does not
-/// impose any encoding mapping and users are free to use any mapping they like. The mapping
-/// here below is provided for user convenience and does its best to cover the most common
-/// cases. To implement a custom mapping refer to [`EncodingMapping`] trait.
-
-/// Default [`Encoding`] provided with Zenoh to facilitate the encoding and decoding
-/// of [`Value`]s in the Rust API. Please note that Zenoh does not impose any
-/// encoding and users are free to use any encoder they like. [`DefaultSerializer`]
-/// is simply provided as convenience to the users.
-
-///
-/// For compatibility purposes Zenoh reserves any prefix value from `0` to `1023` included.
-/// Any application is free to use any value from `1024` to `65535`.
-#[derive(Clone, Copy, Debug)]
-pub struct DefaultSerializer;
-
-/// Provide some facilities specific to the Rust API to encode/decode a [`Value`] with an `Serialize`.
-impl Payload {
-    /// Encode an object of type `T` as a [`Value`] using the [`DefaultSerializer`].
-    ///
-    /// ```rust
-    /// use zenoh::payload::Payload;
-    ///
-    /// let start = String::from("abc");
-    /// let payload = Payload::serialize(start.clone());
-    /// let end: String = payload.deserialize().unwrap();
-    /// assert_eq!(start, end);
-    /// ```
-    pub fn serialize<T>(t: T) -> Self
-    where
-        DefaultSerializer: Serialize<T, Output = Payload>,
-    {
-        Self::serialize_with(t, DefaultSerializer)
-    }
-
-    /// Encode an object of type `T` as a [`Value`] using a provided [`Serialize`].
-    ///
-    /// ```rust
-    /// use zenoh::prelude::{SplitBuffer, Payload, Serialize, Deserialize};
-    /// use zenoh_result::{self, zerror, ZError, ZResult};
-    ///
-    /// struct MySerialize;
-    ///
-    /// impl Serialize<String> for MySerialize {
-    ///     type Output = Payload;
-    ///
-    ///     fn serialize(self, s: String) -> Self::Output {
-    ///         Payload::new(s.into_bytes())
-    ///     }
-    /// }
-    ///
-    /// impl Deserialize<String> for MySerialize {
-    ///     type Error = ZError;
-    ///
-    ///     fn deserialize(self, v: &Payload) -> Result<String, Self::Error> {
-    ///         String::from_utf8(v.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
-    ///     }
-    /// }
-    ///
-    /// let start = String::from("abc");
-    /// let payload = Payload::serialize_with(start.clone(), MySerialize);
-    /// let end: String = payload.deserialize_with(MySerialize).unwrap();
-    /// assert_eq!(start, end);
-    /// ```
-    pub fn serialize_with<T, M>(t: T, m: M) -> Self
-    where
-        M: Serialize<T, Output = Payload>,
-    {
-        m.serialize(t)
-    }
-
-    /// Decode an object of type `T` from a [`Value`] using the [`DefaultSerializer`].
-    /// See [encode](Value::encode) for an example.
-    pub fn deserialize<T>(&self) -> ZResult<T>
-    where
-        DefaultSerializer: Deserialize<T>,
-        <DefaultSerializer as Deserialize<T>>::Error: Debug,
-    {
-        self.deserialize_with(DefaultSerializer)
-    }
-
-    /// Decode an object of type `T` from a [`Value`] using a provided [`Serialize`].
-    /// See [encode_with](Value::encode_with) for an example.
-    pub fn deserialize_with<T, M>(&self, m: M) -> ZResult<T>
-    where
-        M: Deserialize<T>,
-        <M as Deserialize<T>>::Error: Debug,
-    {
-        let t: T = m.deserialize(self).map_err(|e| zerror!("{:?}", e))?;
-        Ok(t)
+        ZSerde.serialize(t)
     }
 }
 
