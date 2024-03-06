@@ -80,7 +80,7 @@ macro_rules! unsafe_slice_mut {
 pub mod buffer {
     use alloc::{borrow::Cow, vec::Vec};
 
-    // tags{api.buffer.len}
+    // tags{api.buffer}
     pub trait Buffer {
         /// Returns the number of bytes in the buffer.
         // tags{api.buffer.len}
