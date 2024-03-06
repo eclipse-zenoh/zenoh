@@ -20,6 +20,7 @@ use crate::prelude::*;
 use crate::sample::Attachment;
 use crate::Session;
 use std::collections::HashMap;
+use std::fmt;
 use std::future::Ready;
 use std::time::Duration;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
@@ -93,6 +94,16 @@ pub(crate) struct QueryState {
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<'static, Reply>,
+}
+
+impl fmt::Debug for QueryState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Get")
+            .field("scope", &self.scope)
+            .field("selector", &self.selector)
+            .field("nb_final", &self.nb_final)
+            .finish()
+    }
 }
 
 /// A builder for initializing a `query`.

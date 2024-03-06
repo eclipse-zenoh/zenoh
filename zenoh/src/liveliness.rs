@@ -17,6 +17,7 @@
 //! see [`Liveliness`]
 
 use crate::query::Reply;
+use std::fmt;
 
 #[zenoh_macros::unstable]
 use {
@@ -253,10 +254,18 @@ impl AsyncResolve for LivelinessTokenBuilder<'_, '_> {
 }
 
 #[zenoh_macros::unstable]
-#[derive(Debug)]
 pub(crate) struct LivelinessTokenState {
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
+}
+
+impl fmt::Debug for LivelinessTokenState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("LivelinessToken")
+            .field("id", &self.id)
+            .field("key_expr", &self.key_expr)
+            .finish()
+    }
 }
 
 /// A token whose liveliness is tied to the Zenoh [`Session`](Session)

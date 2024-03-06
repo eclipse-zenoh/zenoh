@@ -43,6 +43,7 @@ impl fmt::Debug for SubscriberState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Subscriber")
             .field("id", &self.id)
+            .field("scope", &self.scope)
             .field("key_expr", &self.key_expr)
             .finish()
     }
