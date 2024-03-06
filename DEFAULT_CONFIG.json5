@@ -8,7 +8,7 @@
   /// WARNING: this id must be unique in your zenoh network.
   // id: "1234567890abcdef",
   /// The node's mode (router, peer or client)
-  mode: "peer",
+  mode: "router",
   /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenohd and available in admin space @/router/<id>
   metadata: {
     name: "strawberry",
@@ -277,39 +277,41 @@
         known_keys_file: null,
       },
     },
-    // acl: {
-    //   "enabled": true, //[true/false] acl will be activated only if this is set to true
-    //   "default_permission": "deny", //[deny/allow] default permission is deny (even if this is left empty or not specified)
-    //   "rules": //[action,permission,key_expression,subject]
-    //   [
-    //     {
-    //       "action": [
-    //         "put",
-    //         "get"
-    //       ],
-    //       "permission": "allow",
-    //       "key_expr": [
-    //         "test/thr",
-    //         "test/other"
-    //       ],
-    //       "interface": [
-    //         "lo0"
-    //       ]
-    //     },
-    //     {
-    //       "action": [
-    //         "declare_sub"
-    //       ],
-    //       "permission": "allow",
-    //       "interface": [
-    //         "lo0"
-    //       ],
-    //       "key_expr": [
-    //         "test/thr"
-    //       ]
-    //     }
-    //   ]
-    // }
+    acl: {
+      "enabled": true, //[true/false] acl will be activated only if this is set to true
+      "default_permission": "deny", //[deny/allow] default permission is deny (even if this is left empty or not specified)
+      "rules": //[action,permission,key_expression,subject]
+      [
+        {
+          "action": [
+            "put",
+            "get",
+            "declare_subscriber"
+          ],
+          "permission": "allow",
+          "key_expr": [
+            "test/thr",
+            "test/other",
+            "demo/example/**"
+          ],
+          "interface": [
+            "lo0"
+          ]
+        },
+        {
+          "action": [
+            "declare_subscriber"
+          ],
+          "permission": "allow",
+          "interface": [
+            "lo0"
+          ],
+          "key_expr": [
+            "test/thr"
+          ]
+        }
+      ]
+    }
   },
   /// Configure the Admin Space
   /// Unstable: this configuration part works as advertised, but may change in a future release

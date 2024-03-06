@@ -128,7 +128,7 @@ pub enum Subject {
 #[serde(rename_all = "snake_case")]
 pub enum Action {
     Put,
-    DeclareSub,
+    DeclareSubscriber,
     Get,
     DeclareQueryable,
 }

@@ -1,3 +1,5 @@
+use crate::KeyExpr;
+use std::any::Any;
 use std::sync::Arc;
 use zenoh_config::{AclConfig, Action, Permission, Subject, ZenohId};
 use zenoh_protocol::{
@@ -16,6 +18,18 @@ use super::{
 pub(crate) struct AclEnforcer {
     pub(crate) enforcer: Arc<PolicyEnforcer>,
 }
+
+/* effective blocking of multicast bypass */
+// struct DropAllMsg;
+
+// impl InterceptorTrait for DropAllMsg {
+//     fn intercept(
+//         &self,
+//         ctx: RoutingContext<NetworkMessage>,
+//     ) -> Option<RoutingContext<NetworkMessage>> {
+//         None
+//     }
+// }
 
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
@@ -116,9 +130,19 @@ impl InterceptorFactoryTrait for AclEnforcer {
 }
 
 impl InterceptorTrait for IngressAclEnforcer {
+    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        // let ke_id = zlock!(self.ke_id);
+        // if let Some(id) = ke_id.weight_at(&key_expr.clone()) {
+        //     Some(Box::new(Some(*id)))
+        // } else {
+        //     Some(Box::new(None::<usize>))
+        // }
+        None
+    }
     fn intercept<'a>(
         &self,
         ctx: RoutingContext<NetworkMessage>,
+        cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         let key_expr = ctx.full_expr()?; //TODO add caching
         if let NetworkBody::Push(Push {
@@ -196,9 +220,19 @@ impl InterceptorTrait for IngressAclEnforcer {
 }
 
 impl InterceptorTrait for EgressAclEnforcer {
+    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        // let ke_id = zlock!(self.ke_id);
+        // if let Some(id) = ke_id.weight_at(&key_expr.clone()) {
+        //     Some(Box::new(Some(*id)))
+        // } else {
+        //     Some(Box::new(None::<usize>))
+        // }
+        None
+    }
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
+        cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         let key_expr = ctx.full_expr()?; //TODO add caching
         if let NetworkBody::Push(Push {
@@ -210,7 +244,7 @@ impl InterceptorTrait for EgressAclEnforcer {
             for subject in &self.interface_list {
                 match self.policy_enforcer.policy_decision_point(
                     *subject,
-                    Action::DeclareSub,
+                    Action::DeclareSubscriber,
                     key_expr,
                     self.default_decision,
                 ) {
@@ -226,12 +260,43 @@ impl InterceptorTrait for EgressAclEnforcer {
                 }
             }
             if !decision {
-                log::warn!("{} is unauthorized to Sub", self.zid);
+                log::warn!("{} is unauthorized to be Subscriber", self.zid);
                 return None;
             }
 
-            log::info!("{} is authorized access to Sub", self.zid);
+            log::info!("{} is authorized access to be Subscriber", self.zid);
+        } else if let NetworkBody::Request(Request {
+            payload: RequestBody::Query(_),
+            ..
+        }) = &ctx.msg.body
+        {
+            let mut decision = self.default_decision;
+            for subject in &self.interface_list {
+                match self.policy_enforcer.policy_decision_point(
+                    *subject,
+                    Action::DeclareQueryable,
+                    key_expr,
+                    self.default_decision,
+                ) {
+                    Ok(true) => {
+                        decision = true;
+                        break;
+                    }
+                    Ok(false) => continue,
+                    Err(e) => {
+                        log::error!("Authorization incomplete due to error {}", e);
+                        return None;
+                    }
+                }
+            }
+            if !decision {
+                log::warn!("{} is unauthorized to be Queryable", self.zid);
+                return None;
+            }
+
+            log::info!("{} is authorized access to be Queryable", self.zid);
         }
+
         Some(ctx)
     }
 }
