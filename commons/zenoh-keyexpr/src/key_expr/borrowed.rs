@@ -305,7 +305,7 @@ impl keyexpr {
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)
     }
-    // tags{rust.keyexpr.chunks, api.keyexpr.chunks}
+    // tags{rust.keyexpr.chunks, api.keyexpr.iter}
     pub const fn chunks(&self) -> Chunks {
         Chunks {
             inner: self.as_str(),

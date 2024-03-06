@@ -777,7 +777,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
-    // tags{rust.subscriber.key_expr, api.subscriber.key_expr.get}
+    // tags{rust.subscriber.key_expr, api.subscriber.keyexpr.get}
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.subscriber.state.key_expr
     }

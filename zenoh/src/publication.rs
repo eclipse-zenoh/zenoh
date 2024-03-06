@@ -262,7 +262,7 @@ pub struct Publisher<'a> {
 
 impl<'a> Publisher<'a> {
     /// Get key expression of the publisher.
-    // tags{rust.publisher.key_expr, api.publisher.key_expr.get}
+    // tags{rust.publisher.key_expr, api.publisher.keyexpr.get}
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }

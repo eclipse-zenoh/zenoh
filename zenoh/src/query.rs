@@ -375,7 +375,7 @@ pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-// tags{rust.reply_key_expr, api.options.reply_key_expr}
+// tags{rust.reply_key_expr, api.options.reply_keyexpr}
 pub enum ReplyKeyExpr {
     Any,
     MatchingQuery,
@@ -383,7 +383,7 @@ pub enum ReplyKeyExpr {
 
 #[zenoh_macros::unstable]
 impl Default for ReplyKeyExpr {
-    // tags{rust.reply_key_expr.default, api.options.reply_key_expr.default}
+    // tags{rust.reply_key_expr.default, api.options.reply_keyexpr.default}
     fn default() -> Self {
         ReplyKeyExpr::MatchingQuery
     }
