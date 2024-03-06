@@ -69,7 +69,7 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
-///     .put("key/expression", "value")
+///     .put("key/expression", "payload")
 ///     .with_encoding(Encoding::TEXT_PLAIN)
 ///     .congestion_control(CongestionControl::Block)
 ///     .res()
@@ -112,66 +112,7 @@ impl PutBuilder<'_, '_> {
         self
     }
 
-    /// Set the encoding of the written data.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session
-    ///     .put("key/expression", "value")
-    ///     .with_encoding("text/plain")
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    ///
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session
-    ///     .put("key/expression", "value")
-    ///     .with_encoding(Encoding::TEXT_PLAIN)
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    ///
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::publication::CongestionControl;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session
-    ///     .put("key/expression", "value")
-    ///     .with_encoding("text/plain;utf-8")
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    ///
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::publication::CongestionControl;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session
-    ///     .put("key/expression", "value")
-    ///     .with_encoding(Encoding::TEXT_PLAIN.with_schema("utf8"))
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
+    /// Set the [`Encoding`] of the written data.
     #[inline]
     pub fn with_encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
     where
@@ -388,7 +329,7 @@ impl<'a> Publisher<'a> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
+    /// publisher.write(SampleKind::Put, "payload").res().await.unwrap();
     /// # })
     /// ```
     pub fn write<IntoPayload>(&self, kind: SampleKind, value: IntoPayload) -> Publication
