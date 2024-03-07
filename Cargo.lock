@@ -4723,7 +4723,6 @@ dependencies = [
  "rustls",
  "rustls-native-certs 0.7.0",
  "rustls-pemfile 2.0.0",
- "rustls-webpki 0.102.0",
  "secrecy",
  "zenoh-config",
  "zenoh-core",
