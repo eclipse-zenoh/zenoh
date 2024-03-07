@@ -501,7 +501,7 @@ impl Session {
         self.info().zid().res_sync()
     }
 
-    // tags{rust.session.hlc, api.session.hlc.get}
+    // tags{rust.session.hlc, api.session.hlc}
     pub fn hlc(&self) -> Option<&HLC> {
         self.runtime.hlc()
     }
@@ -569,7 +569,7 @@ impl Session {
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
-    // tags{rust.session.config, api.session.config.get}
+    // tags{rust.session.config, api.session.config{set,get}}
     pub fn config(&self) -> &Notifier<Config> {
         self.runtime.config()
     }

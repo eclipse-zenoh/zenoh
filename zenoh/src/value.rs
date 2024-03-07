@@ -34,10 +34,10 @@ use zenoh_shm::SharedMemoryBuf;
 // tags{rust.value, api.value}
 pub struct Value {
     /// The payload of this Value.
-    // tags{rust.value.payload, api.value.payload}
+    // tags{rust.value.payload, api.value.payload{set,get}}
     pub payload: ZBuf,
     /// An encoding description indicating how the associated payload is encoded.
-    // tags{rust.value.encoding, api.value.encoding}
+    // tags{rust.value.encoding, api.value.encoding{set,get}}
     pub encoding: Encoding,
 }
 

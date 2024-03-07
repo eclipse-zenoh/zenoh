@@ -401,7 +401,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.subscriber_builder.callback_mut, api.subscriber.callback_mut}
+    // tags{rust.subscriber_builder.callback_mut}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
