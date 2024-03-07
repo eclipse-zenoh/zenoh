@@ -31,6 +31,8 @@ use ::{std::sync::Arc, zenoh_shm::SharedMemoryBuf};
 ///
 /// # Examples
 ///
+/// ### String operations
+///
 /// Create an [`Encoding`] from a string and viceversa.
 /// ```
 /// use zenoh::prelude::Encoding;
@@ -39,6 +41,8 @@ use ::{std::sync::Arc, zenoh_shm::SharedMemoryBuf};
 /// let text: String = encoding.clone().into();
 /// assert_eq!("text/plain", &text);
 /// ```
+///
+/// ### Constants and cow operations
 ///
 /// Since some encoding values are internally optimized by Zenoh, it's generally more efficient to use
 /// the defined constants and [`Cow`][std::borrow::Cow] conversion to obtain its string representation.
@@ -51,6 +55,8 @@ use ::{std::sync::Arc, zenoh_shm::SharedMemoryBuf};
 /// // This does NOT allocate
 /// assert_eq!("text/plain", &Cow::from(Encoding::TEXT_PLAIN));
 /// ```
+///
+/// ### Schema
 ///
 /// Additionally, a schema can be associated to the encoding.
 /// The convetions is to use the `;` separator if an encoding is created from a string.
@@ -488,9 +494,13 @@ impl Encoding {
         Self::ZENOH_BYTES
     }
 
-    /// The default [`Encoding`] is [`ZENOH_BYTES`](Encoding::ZENOH_BYTES).
-    pub fn with_schema(mut self, s: &str) -> Self {
-        self.0.schema = Some(s.to_string().into_bytes().into());
+    /// Set a schema to this encoding. Zenoh does not define what a schema is and it is left to the implementer.
+    pub fn with_schema<S>(mut self, s: S) -> Self
+    where
+        S: Into<String>,
+    {
+        let s: String = s.into();
+        self.0.schema = Some(s.into_boxed_str().into_boxed_bytes().into());
         self
     }
 }
