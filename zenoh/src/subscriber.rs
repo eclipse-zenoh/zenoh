@@ -254,7 +254,7 @@ impl Drop for SubscriberInner<'_> {
 /// The mode for pull subscribers.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
-// tags{rust.pull_mode, api.options.pull_mode}
+// tags{rust.pull_mode}
 pub struct PullMode;
 
 impl From<PullMode> for SubMode {
@@ -272,7 +272,7 @@ impl From<PullMode> for Mode {
 /// The mode for push subscribers.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
-// tags{rust.push_mode, api.options.push_mode}
+// tags{rust.push_mode}
 pub struct PushMode;
 
 impl From<PushMode> for SubMode {

@@ -379,7 +379,6 @@ pub enum Reliability {
 
 impl Reliability {
     #[cfg(feature = "test")]
-    // tags{rust.reliability.rand, api.options.reliability.create.rand}
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -415,7 +414,7 @@ pub enum CongestionControl {
 /// The subscription mode.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
-// tags{rust.sub_mode, api.options.sub_mode}
+// tags{rust.sub_mode}
 pub enum SubMode {
     #[default]
     Push = 0,

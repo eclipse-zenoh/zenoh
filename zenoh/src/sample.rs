@@ -342,14 +342,20 @@ pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 // tags{rust.sample, api.sample}
 pub struct Sample {
     /// The key expression on which this Sample was published.
+    // tags{api.sample.key_expr{set,get}}
     pub key_expr: KeyExpr<'static>,
     /// The value of this Sample.
+    // tags{api.sample.payload{set,get}}
+    // tags{api.sample.encoding{set,get}}
     pub value: Value,
     /// The kind of this Sample.
+    // tags{api.sample.kind{set,get}}
     pub kind: SampleKind,
     /// The [`Timestamp`] of this Sample.
+    // tags{api.sample.timestamp{set,get}}
     pub timestamp: Option<Timestamp>,
     /// Quality of service settings this sample was sent with.
+    // tags{api.sample.qos{set,get}}
     pub qos: QoS,
 
     #[cfg(feature = "unstable")]
@@ -360,6 +366,7 @@ pub struct Sample {
     /// </div>
     ///
     /// Infos on the source of this Sample.
+    // tags{api.sample.source_info{set,get}}
     pub source_info: SourceInfo,
 
     #[cfg(feature = "unstable")]
@@ -370,6 +377,7 @@ pub struct Sample {
     /// </div>
     ///
     /// A map of key-value pairs, where each key and value are byte-slices.
+    // tags{api.sample.attachment{set,get}}
     pub attachment: Option<Attachment>,
 }
 

@@ -82,14 +82,14 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    // tags{rust.query.key_expr, api.query.keyexpr.get}
+    // tags{rust.query.key_expr, api.query.selector.keyexpr.get}
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.inner.key_expr
     }
 
     /// This Query's selector parameters.
     #[inline(always)]
-    // tags{rust.query.parameters, api.query.parameters.get}
+    // tags{rust.query.parameters, api.query.selector.parameters.get}
     pub fn parameters(&self) -> &str {
         &self.inner.parameters
     }
@@ -494,7 +494,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{rust.queryable_builder.callback_mut, api.queryable.callback_mut}
+    // tags{rust.queryable_builder.callback_mut}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,

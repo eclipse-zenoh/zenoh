@@ -93,7 +93,7 @@ pub struct Reply {
     // tags{api.reply.is_ok}
     pub sample: Result<Sample, Value>,
     /// The id of the zenoh instance that answered this Reply.
-    // tags{rust.reply.replier_id, api.reply.replier_id}
+    // tags{rust.reply.replier_id, api.reply.replier_id.get}
     pub replier_id: ZenohId,
 }
 
