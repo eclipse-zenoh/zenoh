@@ -11,10 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::payload::Payload;
 use phf::phf_map;
 use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
-use zenoh_buffers::ZSlice;
+use zenoh_buffers::{ZBuf, ZSlice};
 use zenoh_protocol::core::EncodingId;
+#[cfg(feature = "shared-memory")]
+use ::{std::sync::Arc, zenoh_shm::SharedMemoryBuf};
 
 /// Default encoding values used by Zenoh.
 ///
@@ -591,4 +594,132 @@ impl fmt::Display for Encoding {
         let s = Cow::from(self);
         f.write_str(s.as_ref())
     }
+}
+
+// - Encoding trait
+pub trait EncodingMapping {
+    const ENCODING: Encoding;
+}
+
+// Bytes
+impl EncodingMapping for Payload {
+    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
+}
+
+impl EncodingMapping for ZBuf {
+    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
+}
+
+impl EncodingMapping for Vec<u8> {
+    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
+}
+
+impl EncodingMapping for &[u8] {
+    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
+}
+
+impl EncodingMapping for Cow<'_, [u8]> {
+    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
+}
+
+// String
+impl EncodingMapping for String {
+    const ENCODING: Encoding = Encoding::ZENOH_STRING;
+}
+
+impl EncodingMapping for &str {
+    const ENCODING: Encoding = Encoding::ZENOH_STRING;
+}
+
+impl EncodingMapping for Cow<'_, str> {
+    const ENCODING: Encoding = Encoding::ZENOH_STRING;
+}
+
+// Zenoh unsigned integers
+impl EncodingMapping for u8 {
+    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+}
+
+impl EncodingMapping for u16 {
+    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+}
+
+impl EncodingMapping for u32 {
+    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+}
+
+impl EncodingMapping for u64 {
+    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+}
+
+impl EncodingMapping for usize {
+    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+}
+
+// Zenoh signed integers
+impl EncodingMapping for i8 {
+    const ENCODING: Encoding = Encoding::ZENOH_INT;
+}
+
+impl EncodingMapping for i16 {
+    const ENCODING: Encoding = Encoding::ZENOH_INT;
+}
+
+impl EncodingMapping for i32 {
+    const ENCODING: Encoding = Encoding::ZENOH_INT;
+}
+
+impl EncodingMapping for i64 {
+    const ENCODING: Encoding = Encoding::ZENOH_INT;
+}
+
+impl EncodingMapping for isize {
+    const ENCODING: Encoding = Encoding::ZENOH_INT;
+}
+
+// Zenoh floats
+impl EncodingMapping for f32 {
+    const ENCODING: Encoding = Encoding::ZENOH_FLOAT;
+}
+
+impl EncodingMapping for f64 {
+    const ENCODING: Encoding = Encoding::ZENOH_FLOAT;
+}
+
+// Zenoh bool
+impl EncodingMapping for bool {
+    const ENCODING: Encoding = Encoding::ZENOH_BOOL;
+}
+
+// - Zenoh advanced types encoders/decoders
+impl EncodingMapping for serde_json::Value {
+    const ENCODING: Encoding = Encoding::APPLICATION_JSON;
+}
+
+impl EncodingMapping for serde_yaml::Value {
+    const ENCODING: Encoding = Encoding::APPLICATION_YAML;
+}
+
+impl EncodingMapping for serde_cbor::Value {
+    const ENCODING: Encoding = Encoding::APPLICATION_CBOR;
+}
+
+impl EncodingMapping for serde_pickle::Value {
+    const ENCODING: Encoding = Encoding::APPLICATION_PYTHON_SERIALIZED_OBJECT;
+}
+
+// - Zenoh SHM
+#[cfg(feature = "shared-memory")]
+impl EncodingMapping for Arc<SharedMemoryBuf> {
+    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
+}
+
+#[cfg(feature = "shared-memory")]
+impl EncodingMapping for Box<SharedMemoryBuf> {
+    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
+}
+
+#[cfg(feature = "shared-memory")]
+impl EncodingMapping for SharedMemoryBuf {
+    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
 }
