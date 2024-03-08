@@ -40,8 +40,10 @@ async fn main() {
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
             Ok(sample) => {
-                // Alternatively you can deserialize the payload by using `err.payload.deserialize::<String>()`
-                let payload = String::try_from(sample.payload).unwrap_or_else(|e| format!("{}", e));
+                let payload = sample
+                    .payload
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
                 println!(
                     ">> Received ('{}': '{}')",
                     sample.key_expr.as_str(),
@@ -49,8 +51,10 @@ async fn main() {
                 );
             }
             Err(err) => {
-                // Alternatively you can deserialize the payload by using `err.payload.deserialize::<String>()`
-                let payload = String::try_from(err.payload).unwrap_or_else(|e| format!("{}", e));
+                let payload = err
+                    .payload
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
                 println!(">> Received (ERROR: '{}')", payload);
             }
         }

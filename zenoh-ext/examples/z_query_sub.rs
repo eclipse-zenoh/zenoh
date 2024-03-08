@@ -60,8 +60,7 @@ async fn main() {
         select!(
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
-                // Alternatively you can deserialize the payload by using `sample.payload.deserialize::<String>()`
-                let payload = String::try_from(&sample.payload).unwrap_or_else(|e| format!("{}", e));
+                let payload = sample.payload.deserialize::<String>().unwrap_or_else(|e| format!("{}", e));
                 println!(">> [Subscriber] Received {} ('{}': '{}')", sample.kind, sample.key_expr.as_str(), payload);
             },
 

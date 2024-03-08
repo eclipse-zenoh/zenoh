@@ -39,8 +39,10 @@ async fn main() {
         match reply.sample {
             Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr.as_str(),),
             Err(err) => {
-                // Alternatively you can deserialize the payload by using `err.payload.deserialize::<String>()`
-                let payload = String::try_from(err.payload).unwrap_or_else(|e| format!("{}", e));
+                let payload = err
+                    .payload
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
                 println!(">> Received (ERROR: '{}')", payload);
             }
         }

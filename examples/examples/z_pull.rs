@@ -44,8 +44,10 @@ async fn main() {
     // Define the future to handle incoming samples of the subscription.
     let subs = async {
         while let Ok(sample) = subscriber.recv_async().await {
-            // Alternatively you can deserialize the payload by using `err.payload.deserialize::<String>()`
-            let payload = String::try_from(sample.payload).unwrap_or_else(|e| format!("{}", e));
+            let payload = sample
+                .payload
+                .deserialize::<String>()
+                .unwrap_or_else(|e| format!("{}", e));
             println!(
                 ">> [Subscriber] Received {} ('{}': '{}')",
                 sample.kind,
