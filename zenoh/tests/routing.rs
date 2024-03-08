@@ -120,7 +120,7 @@ impl Task {
                 loop {
                     futures::select! {
                         query = queryable.recv_async() => {
-                            query?.reply(KeyExpr::try_from(ke.to_owned()).unwrap(), payload.clone()).res_async().await?;
+                            query?.reply(KeyExpr::try_from(ke.to_owned())?, payload.clone()).res_async().await?;
                         },
 
                         _ = async_std::task::sleep(Duration::from_millis(100)).fuse() => {

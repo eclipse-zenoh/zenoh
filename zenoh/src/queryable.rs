@@ -109,6 +109,7 @@ impl Query {
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
+    /// This api is for internal use only.
     #[inline(always)]
     pub fn reply_sample(&self, sample: Sample) -> ReplyBuilder<'_> {
         let Sample {
@@ -287,7 +288,7 @@ impl SyncResolve for ReplyBuilder<'_> {
         {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", self.key_expr, self.query.key_expr())
         }
-        #[allow(unused_mut)]
+        #[allow(unused_mut)] //will be unused if feature = "unstable" is not enabled
         let mut ext_sinfo = None;
         #[cfg(feature = "unstable")]
         {
