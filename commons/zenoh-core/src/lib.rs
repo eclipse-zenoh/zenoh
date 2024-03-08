@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 pub use lazy_static::lazy_static;
 pub mod macros;
-pub use macros::*;
+
 use std::future::{Future, Ready};
 
 // Re-exports after moving ZError/ZResult to zenoh-result

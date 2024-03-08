@@ -22,6 +22,7 @@ use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::sample::QoS;
 use crate::Encoding;
 use crate::SessionRef;
 use crate::Undeclarable;
@@ -857,7 +858,13 @@ fn resolve_put(
             kind,
             encoding: Some(value.encoding),
             timestamp,
-            ..Default::default()
+            source_id: None,
+            source_sn: None,
+            qos: QoS::from(ext::QoSType::new(
+                publisher.priority.into(),
+                publisher.congestion_control,
+                false,
+            )),
         };
 
         publisher.session.handle_data(
@@ -927,7 +934,8 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-impl From<Priority> for zenoh_protocol::core::Priority {
+type ProtocolPriority = zenoh_protocol::core::Priority;
+impl From<Priority> for ProtocolPriority {
     fn from(prio: Priority) -> Self {
         // The Priority in the prelude differs from the Priority in the core protocol only from
         // the missing Control priority. The Control priority is reserved for zenoh internal use
@@ -938,6 +946,22 @@ impl From<Priority> for zenoh_protocol::core::Priority {
         // For better robusteness, the correctness of the unsafe transmute operation is covered
         // by the unit test below.
         unsafe { std::mem::transmute::<Priority, zenoh_protocol::core::Priority>(prio) }
+    }
+}
+
+impl TryFrom<ProtocolPriority> for Priority {
+    type Error = zenoh_result::Error;
+    fn try_from(priority: ProtocolPriority) -> Result<Self, Self::Error> {
+        match priority {
+            ProtocolPriority::Control => bail!("'Control' is not a valid priority value."),
+            ProtocolPriority::RealTime => Ok(Priority::RealTime),
+            ProtocolPriority::InteractiveHigh => Ok(Priority::InteractiveHigh),
+            ProtocolPriority::InteractiveLow => Ok(Priority::InteractiveLow),
+            ProtocolPriority::DataHigh => Ok(Priority::DataHigh),
+            ProtocolPriority::Data => Ok(Priority::Data),
+            ProtocolPriority::DataLow => Ok(Priority::DataLow),
+            ProtocolPriority::Background => Ok(Priority::Background),
+        }
     }
 }
 

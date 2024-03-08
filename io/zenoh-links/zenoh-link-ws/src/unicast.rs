@@ -208,6 +208,13 @@ impl LinkUnicastTrait for LinkUnicastWs {
     }
 
     #[inline(always)]
+    fn get_interface_names(&self) -> Vec<String> {
+        // @TODO: Not supported for now
+        log::debug!("The get_interface_names for LinkUnicastWs is not supported");
+        vec![]
+    }
+
+    #[inline(always)]
     fn is_reliable(&self) -> bool {
         true
     }
@@ -409,7 +416,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         for (key, value) in guard.iter() {
             let listener_locator = value.endpoint.to_locator();
             if key.ip() == default_ipv4 {
-                match zenoh_util::net::get_local_addresses() {
+                match zenoh_util::net::get_local_addresses(None) {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
@@ -426,7 +433,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                     Err(err) => log::error!("Unable to get local addresses: {}", err),
                 }
             } else if key.ip() == default_ipv6 {
-                match zenoh_util::net::get_local_addresses() {
+                match zenoh_util::net::get_local_addresses(None) {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {

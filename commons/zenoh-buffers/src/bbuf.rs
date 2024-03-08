@@ -18,8 +18,11 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use alloc::{boxed::Box, sync::Arc};
+use alloc::sync::Arc;
 use core::{fmt, num::NonZeroUsize, option};
+
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BBuf {

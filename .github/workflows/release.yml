@@ -48,6 +48,11 @@ on:
         description: "build with specified features (comma separated, no space)"
         type: string
 
+env:
+  VERSION_CROSS: 0.2.4
+  VERSION_CARGO_DEB: 1.44.1
+  VERSION_CARGO_NEXTEST: 0.9.67
+
 jobs:
   checks:
     name: Code checks
@@ -67,13 +72,13 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy check
-        run: cargo clippy --all-targets --features=${{ github.event.inputs.features}} -- --deny warnings
+        run: cargo +stable clippy --all-targets --features=${{ github.event.inputs.features}} -- --deny warnings
 
       - name: Clippy unstable check
-        run: cargo clippy --all-targets  -- --deny warnings
+        run: cargo +stable clippy --all-targets  -- --deny warnings
 
       - name: Clippy all features
-        run: cargo clippy --all-targets --all-features -- --deny warnings
+        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
 
       - name: Environment setup
         id: env
@@ -130,7 +135,7 @@ jobs:
         run: rustup show
 
       - name: Install nextest
-        run: cargo install cargo-nextest --locked
+        run: cargo install --version ${{ env.VERSION_CARGO_NEXTEST }} --locked cargo-nextest
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
@@ -177,9 +182,24 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-unknown-linux-gnu, arch: amd64, os: ubuntu-20.04, build-cmd: "cargo" }
-          - { target: x86_64-unknown-linux-musl, arch: amd64, os: ubuntu-20.04, build-cmd: "cross" }
-          - { target: arm-unknown-linux-gnueabi, arch: armel, os: ubuntu-20.04, build-cmd: "cross" }
+          - {
+              target: x86_64-unknown-linux-gnu,
+              arch: amd64,
+              os: ubuntu-20.04,
+              build-cmd: "cargo",
+            }
+          - {
+              target: x86_64-unknown-linux-musl,
+              arch: amd64,
+              os: ubuntu-20.04,
+              build-cmd: "cross",
+            }
+          - {
+              target: arm-unknown-linux-gnueabi,
+              arch: armel,
+              os: ubuntu-20.04,
+              build-cmd: "cross",
+            }
           - {
               target: arm-unknown-linux-gnueabihf,
               arch: armhf,
@@ -192,16 +212,36 @@ jobs:
               os: ubuntu-20.04,
               build-cmd: "cross",
             }
-          - { target: aarch64-unknown-linux-gnu, arch: arm64, os: ubuntu-20.04, build-cmd: "cross" }
+          - {
+              target: aarch64-unknown-linux-gnu,
+              arch: arm64,
+              os: ubuntu-20.04,
+              build-cmd: "cross",
+            }
           - {
               target: aarch64-unknown-linux-musl,
               arch: arm64,
               os: ubuntu-20.04,
               build-cmd: "cross",
             }
-          - { target: x86_64-apple-darwin, arch: darwin, os: macos-latest, build-cmd: "cargo" }
-          - { target: aarch64-apple-darwin, arch: darwin, os: macos-latest, build-cmd: "cargo" }
-          - { target: x86_64-pc-windows-msvc, arch: win64, os: windows-2019, build-cmd: "cargo" }
+          - {
+              target: x86_64-apple-darwin,
+              arch: darwin,
+              os: macos-latest,
+              build-cmd: "cargo",
+            }
+          - {
+              target: aarch64-apple-darwin,
+              arch: darwin,
+              os: macos-latest,
+              build-cmd: "cargo",
+            }
+          - {
+              target: x86_64-pc-windows-msvc,
+              arch: win64,
+              os: windows-2019,
+              build-cmd: "cargo",
+            }
           # - { target: x86_64-pc-windows-gnu         , arch: win64 , os: windows-2019                  }
     steps:
       - name: Checkout source code
@@ -217,7 +257,7 @@ jobs:
         shell: bash
         run: |
           case ${{ matrix.job.target }} in
-            *-linux-gnu*) cargo install cargo-deb ;;
+            *-linux-gnu*) cargo install --version ${{ env.VERSION_CARGO_DEB }} cargo-deb ;;
           esac
 
           case ${{ matrix.job.target }} in
@@ -235,7 +275,7 @@ jobs:
               ;;
           esac
 
-          cargo install cross --git https://github.com/cross-rs/cross
+          cargo install --version ${{ env.VERSION_CROSS }} cross
 
       - name: Install Rust toolchain
         run: |
@@ -282,7 +322,6 @@ jobs:
               # check if debian packages has been created and packages them in a single tgz
               if [[ -d target/${TARGET}/debian ]]; then
                 cd target/${TARGET}/debian
-                ${GITHUB_WORKSPACE}/gen_zenoh_deb.sh ${{ needs.checks.outputs.ZENOH_VERSION }} ${{ matrix.job.arch }}
                 echo "Packaging ${DEBS_PKG_NAME}:"
                 zip ${DEBS_PKG_NAME} *.deb
                 cd -

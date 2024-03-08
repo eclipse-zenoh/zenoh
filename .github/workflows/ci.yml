@@ -21,6 +21,10 @@ on:
   schedule:
     - cron: "0 6 * * 1-5"
 
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  CARGO_PROFILE_DEV_DEBUG: false
+
 jobs:
   check:
     name: Run checks on ${{ matrix.os }}
@@ -41,22 +45,16 @@ jobs:
 
       - name: Code format check
         run: cargo fmt --check
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy
-        run: cargo clippy --all-targets -- --deny warnings
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+        run: cargo +stable clippy --all-targets -- --deny warnings
 
       - name: Clippy unstable targets
-        run: cargo clippy --all-targets --features unstable -- --deny warnings
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+        run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
 
       - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
-        run: cargo clippy --all-targets --all-features -- --deny warnings
+        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
 
       - name: Install generic no_std target
         # Generic no_std target architecture is x86_64-unknown-none
@@ -64,8 +62,6 @@ jobs:
 
       - name: Perform no_std checks
         run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -95,14 +91,12 @@ jobs:
       - name: Run tests
         run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
         env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
       - name: Check for feature leaks
@@ -112,7 +106,6 @@ jobs:
       - name: Run doctests
         run: cargo test --doc
         env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
