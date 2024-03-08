@@ -33,6 +33,10 @@ impl IntervalCounter {
         self.total_time.as_millis() as u32 / self.count
     }
 
+    fn get_count(&self) -> u32 {
+        self.count
+    }
+
     fn check_middle(&self, ms: u32) {
         let middle = self.get_middle();
         println!("Interval {}, count: {}, middle: {}", ms, self.count, middle);
@@ -40,14 +44,31 @@ impl IntervalCounter {
     }
 }
 
-#[test]
-fn downsampling_by_keyexpr() {
+fn downsampling_by_keyexpr_impl(egress: bool) {
     let _ = env_logger::builder().is_test(true).try_init();
 
     use zenoh::prelude::sync::*;
 
+    let ds_cfg = format!(
+        r#"
+          [
+            {{
+              flow: "{}",
+              rules: [
+                {{ key_expr: "test/downsamples_by_keyexp/r100", freq: 10, }},
+                {{ key_expr: "test/downsamples_by_keyexp/r50", freq: 20, }}
+              ],
+            }},
+          ] "#,
+        (if egress { "egress" } else { "ingress" })
+    );
+
     // declare subscriber
-    let zenoh_sub = zenoh::open(Config::default()).res().unwrap();
+    let mut config_sub = Config::default();
+    if !egress {
+        config_sub.insert_json5("downsampling", &ds_cfg).unwrap();
+    }
+    let zenoh_sub = zenoh::open(config_sub).res().unwrap();
 
     let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
     let counter_r100_clone = counter_r100.clone();
@@ -72,24 +93,11 @@ fn downsampling_by_keyexpr() {
         .unwrap();
 
     // declare publisher
-    let mut config = Config::default();
-    config
-        .insert_json5(
-            "downsampling",
-            r#"
-              [
-                {
-                  flow: "egress",
-                  rules: [
-                    { key_expr: "test/downsamples_by_keyexp/r100", rate: 10, },
-                    { key_expr: "test/downsamples_by_keyexp/r50", rate: 20, }
-                  ],
-                },
-              ]
-            "#,
-        )
-        .unwrap();
-    let zenoh_pub = zenoh::open(config).res().unwrap();
+    let mut config_pub = Config::default();
+    if egress {
+        config_pub.insert_json5("downsampling", &ds_cfg).unwrap();
+    }
+    let zenoh_pub = zenoh::open(config_pub).res().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples_by_keyexp/r100")
         .res()
@@ -116,7 +124,10 @@ fn downsampling_by_keyexpr() {
     }
 
     for _ in 0..100 {
-        if *zlock!(total_count) >= messages_count {
+        if *zlock!(total_count) >= messages_count
+            && zlock!(counter_r50_clone).get_count() > 0
+            && zlock!(counter_r100_clone).get_count() > 0
+        {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -127,18 +138,46 @@ fn downsampling_by_keyexpr() {
     zlock!(counter_r100_clone).check_middle(100);
 }
 
-#[cfg(unix)]
 #[test]
-fn downsampling_by_interface() {
+fn downsampling_by_keyexpr() {
+    downsampling_by_keyexpr_impl(true);
+    downsampling_by_keyexpr_impl(false);
+}
+
+#[cfg(unix)]
+fn downsampling_by_interface_impl(egress: bool) {
     let _ = env_logger::builder().is_test(true).try_init();
 
     use zenoh::prelude::sync::*;
 
+    let ds_cfg = format!(
+        r#"
+          [
+            {{
+              interfaces: ["lo", "lo0"],
+              flow: "{0}",
+              rules: [
+                {{ key_expr: "test/downsamples_by_interface/r100", freq: 10, }},
+              ],
+            }},
+            {{
+              interfaces: ["some_unknown_interface"],
+              flow: "{0}",
+              rules: [
+                {{ key_expr: "test/downsamples_by_interface/all", freq: 10, }},
+              ],
+            }},
+          ] "#,
+        (if egress { "egress" } else { "ingress" })
+    );
     // declare subscriber
     let mut config_sub = Config::default();
     config_sub
         .insert_json5("listen/endpoints", r#"["tcp/127.0.0.1:7447"]"#)
         .unwrap();
+    if !egress {
+        config_sub.insert_json5("downsampling", &ds_cfg).unwrap();
+    };
     let zenoh_sub = zenoh::open(config_sub).res().unwrap();
 
     let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
@@ -164,30 +203,9 @@ fn downsampling_by_interface() {
     config_pub
         .insert_json5("connect/endpoints", r#"["tcp/127.0.0.1:7447"]"#)
         .unwrap();
-    config_pub
-        .insert_json5(
-            "downsampling",
-            r#"
-              [
-                {
-                  interfaces: ["lo", "lo0"],
-                  flow: "egress",
-                  rules: [
-                    { key_expr: "test/downsamples_by_interface/r100", rate: 10, },
-                  ],
-                },
-                {
-                  interfaces: ["some_unknown_interface"],
-                  flow: "egress",
-                  rules: [
-                    { key_expr: "test/downsamples_by_interface/all", rate: 10, },
-                  ],
-                },
-              ]
-            "#,
-        )
-        .unwrap();
-
+    if egress {
+        config_pub.insert_json5("downsampling", &ds_cfg).unwrap();
+    }
     let zenoh_pub = zenoh::open(config_pub).res().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples_by_interface/r100")
@@ -209,7 +227,7 @@ fn downsampling_by_interface() {
     }
 
     for _ in 0..100 {
-        if *zlock!(total_count) >= messages_count {
+        if *zlock!(total_count) >= messages_count && zlock!(counter_r100_clone).get_count() > 0 {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -217,6 +235,13 @@ fn downsampling_by_interface() {
     assert!(*zlock!(total_count) >= messages_count);
 
     zlock!(counter_r100_clone).check_middle(100);
+}
+
+#[cfg(unix)]
+#[test]
+fn downsampling_by_interface() {
+    downsampling_by_interface_impl(true);
+    downsampling_by_interface_impl(false);
 }
 
 #[test]
@@ -235,8 +260,8 @@ fn downsampling_config_error_wrong_strategy() {
                 {
                   flow: "down",
                   rules: [
-                    { keyexpr: "test/downsamples_by_keyexp/r100", rate: 10, },
-                    { keyexpr: "test/downsamples_by_keyexp/r50", rate: 20, }
+                    { keyexpr: "test/downsamples_by_keyexp/r100", freq: 10, },
+                    { keyexpr: "test/downsamples_by_keyexp/r50", freq: 20, }
                   ],
                 },
               ]

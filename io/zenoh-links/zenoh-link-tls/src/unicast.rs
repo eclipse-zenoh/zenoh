@@ -28,27 +28,26 @@ use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::FutureExt;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures::io::AsyncReadExt;
 use futures::io::AsyncWriteExt;
-use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Cursor};
-use std::net::{IpAddr, Shutdown};
+use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{cell::UnsafeCell, io};
 use webpki::{
     anchor_from_trusted_cert,
     types::{CertificateDer, TrustAnchor},
 };
-use zenoh_core::{zasynclock, zread, zwrite};
+use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
@@ -197,9 +196,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
-        // @TODO: Not supported for now
-        log::debug!("The get_interface_names for LinkUnicastTls is not supported");
-        vec![]
+        get_ip_interface_names(&self.src_addr)
     }
 
     #[inline(always)]
@@ -237,42 +234,16 @@ impl fmt::Debug for LinkUnicastTls {
     }
 }
 
-/*************************************/
-/*          LISTENER                 */
-/*************************************/
-struct ListenerUnicastTls {
-    endpoint: EndPoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
-    handle: JoinHandle<ZResult<()>>,
-}
-
-impl ListenerUnicastTls {
-    fn new(
-        endpoint: EndPoint,
-        active: Arc<AtomicBool>,
-        signal: Signal,
-        handle: JoinHandle<ZResult<()>>,
-    ) -> ListenerUnicastTls {
-        ListenerUnicastTls {
-            endpoint,
-            active,
-            signal,
-            handle,
-        }
-    }
-}
-
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastTls>>>,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }
@@ -363,17 +334,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
 
-        // Spawn the accept loop for the listener
         let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
-        let c_listeners = self.listeners.clone();
-        let c_addr = local_addr;
+
         let handle = task::spawn(async move {
-            // Wait for the accept loop to terminate
-            let res = accept_task(socket, acceptor, c_active, c_signal, c_manager).await;
-            zwrite!(c_listeners).remove(&c_addr);
-            res
+            accept_task(socket, acceptor, c_active, c_signal, c_manager).await
         });
 
         // Update the endpoint locator address
@@ -383,69 +349,25 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             endpoint.metadata(),
         )?;
 
-        let listener = ListenerUnicastTls::new(endpoint, active, signal, handle);
-        // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(local_addr, listener);
+        self.listeners
+            .add_listener(endpoint, local_addr, active, signal, handle)
+            .await?;
 
         Ok(locator)
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         let epaddr = endpoint.address();
-
         let addr = get_tls_addr(&epaddr).await?;
-
-        // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
-            let e = zerror!(
-                "Can not delete the TLS listener because it has not been found: {}",
-                addr
-            );
-            log::trace!("{}", e);
-            e
-        })?;
-
-        // Send the stop signal
-        listener.active.store(false, Ordering::Release);
-        listener.signal.trigger();
-        listener.handle.await
+        self.listeners.del_listener(addr).await
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
-            .values()
-            .map(|x| x.endpoint.clone())
-            .collect()
+        self.listeners.get_endpoints()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
-
-        let guard = zread!(self.listeners);
-        for (key, value) in guard.iter() {
-            let (kip, kpt) = (key.ip(), key.port());
-
-            // Either ipv4/0.0.0.0 or ipv6/[::]
-            if kip.is_unspecified() {
-                let mut addrs = match kip {
-                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
-                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
-                };
-                let iter = addrs.drain(..).map(|x| {
-                    Locator::new(
-                        value.endpoint.protocol(),
-                        SocketAddr::new(x, kpt).to_string(),
-                        value.endpoint.metadata(),
-                    )
-                    .unwrap()
-                });
-                locators.extend(iter);
-            } else {
-                locators.push(value.endpoint.to_locator());
-            }
-        }
-
-        locators
+        self.listeners.get_locators()
     }
 }
 

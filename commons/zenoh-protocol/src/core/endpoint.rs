@@ -85,7 +85,7 @@ impl Parameters {
         }
     }
 
-    pub fn iter(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    pub fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> {
         s.split(LIST_SEPARATOR).filter_map(|prop| {
             if prop.is_empty() {
                 None
@@ -99,7 +99,7 @@ impl Parameters {
         Self::iter(s).find(|x| x.0 == k).map(|x| x.1)
     }
 
-    pub fn values<'s>(s: &'s str, k: &str) -> impl Iterator<Item = &'s str> + DoubleEndedIterator {
+    pub fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s str> {
         match Self::get(s, k) {
             Some(v) => v.split(VALUE_SEPARATOR),
             None => {
@@ -277,7 +277,7 @@ impl<'a> Metadata<'a> {
         self.as_str().is_empty()
     }
 
-    pub fn iter(&'a self) -> impl Iterator<Item = (&'a str, &'a str)> + DoubleEndedIterator {
+    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> {
         Parameters::iter(self.0)
     }
 
@@ -285,7 +285,7 @@ impl<'a> Metadata<'a> {
         Parameters::get(self.0, k)
     }
 
-    pub fn values(&'a self, k: &str) -> impl Iterator<Item = &'a str> + DoubleEndedIterator {
+    pub fn values(&'a self, k: &str) -> impl DoubleEndedIterator<Item = &'a str> {
         Parameters::values(self.0, k)
     }
 }
@@ -394,7 +394,7 @@ impl<'a> Config<'a> {
         self.as_str().is_empty()
     }
 
-    pub fn iter(&'a self) -> impl Iterator<Item = (&'a str, &'a str)> + DoubleEndedIterator {
+    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> {
         Parameters::iter(self.0)
     }
 
@@ -402,7 +402,7 @@ impl<'a> Config<'a> {
         Parameters::get(self.0, k)
     }
 
-    pub fn values(&'a self, k: &str) -> impl Iterator<Item = &'a str> + DoubleEndedIterator {
+    pub fn values(&'a self, k: &str) -> impl DoubleEndedIterator<Item = &'a str> {
         Parameters::values(self.0, k)
     }
 }

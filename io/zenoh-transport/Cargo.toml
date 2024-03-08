@@ -77,5 +77,4 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 env_logger = { workspace = true }
-panic-message = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }

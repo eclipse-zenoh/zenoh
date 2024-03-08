@@ -96,7 +96,7 @@ where
                         };
                     }
                     let chunk = node.chunk();
-                    let chunk_is_verbatim = chunk.as_bytes()[0] == b'@';
+                    let chunk_is_verbatim = chunk.first_byte() == b'@';
                     for i in *start..*end {
                         let kec_start = self.ke_indices[i];
                         if kec_start == self.key.len() {
@@ -136,7 +136,7 @@ where
                             }
                             None => {
                                 let key = unsafe { keyexpr::from_slice_unchecked(key) };
-                                if unlikely(key == "**") && chunk.as_bytes()[0] != b'@' {
+                                if unlikely(key == "**") && chunk.first_byte() != b'@' {
                                     push!(kec_start);
                                     node_matches = true;
                                 } else if key.includes(chunk) {
@@ -259,7 +259,7 @@ where
                         };
                     }
                     let chunk = node.chunk();
-                    let chunk_is_verbatim = chunk.as_bytes()[0] == b'@';
+                    let chunk_is_verbatim = chunk.first_byte() == b'@';
                     for i in *start..*end {
                         let kec_start = self.ke_indices[i];
                         if kec_start == self.key.len() {
@@ -299,7 +299,7 @@ where
                             }
                             None => {
                                 let key = unsafe { keyexpr::from_slice_unchecked(key) };
-                                if unlikely(key == "**") && chunk.as_bytes()[0] != b'@' {
+                                if unlikely(key == "**") && chunk.first_byte() != b'@' {
                                     push!(kec_start);
                                     node_matches = true;
                                 } else if key.includes(chunk) {
