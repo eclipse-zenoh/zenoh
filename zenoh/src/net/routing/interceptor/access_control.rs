@@ -18,19 +18,6 @@ use super::{
 pub(crate) struct AclEnforcer {
     pub(crate) enforcer: Arc<PolicyEnforcer>,
 }
-
-/* effective blocking of multicast bypass */
-// struct DropAllMsg;
-
-// impl InterceptorTrait for DropAllMsg {
-//     fn intercept(
-//         &self,
-//         ctx: RoutingContext<NetworkMessage>,
-//     ) -> Option<RoutingContext<NetworkMessage>> {
-//         None
-//     }
-// }
-
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,

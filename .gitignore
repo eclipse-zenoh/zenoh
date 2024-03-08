@@ -20,6 +20,3 @@
 .vscode
 
 cargo-timing*.html
-
-# #remove json changes
-# *.json5
