@@ -131,20 +131,16 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
 impl InterceptorTrait for IngressAclEnforcer {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        // let ke_id = zlock!(self.ke_id);
-        // if let Some(id) = ke_id.weight_at(&key_expr.clone()) {
-        //     Some(Box::new(Some(*id)))
-        // } else {
-        //     Some(Box::new(None::<usize>))
-        // }
-        None
+        Some(Box::new(key_expr.to_string()))
     }
     fn intercept<'a>(
         &self,
         ctx: RoutingContext<NetworkMessage>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        let key_expr = ctx.full_expr()?; //TODO add caching
+        let key_expr = cache
+            .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
+            .or_else(|| ctx.full_expr())?;
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
@@ -221,20 +217,17 @@ impl InterceptorTrait for IngressAclEnforcer {
 
 impl InterceptorTrait for EgressAclEnforcer {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        // let ke_id = zlock!(self.ke_id);
-        // if let Some(id) = ke_id.weight_at(&key_expr.clone()) {
-        //     Some(Box::new(Some(*id)))
-        // } else {
-        //     Some(Box::new(None::<usize>))
-        // }
-        None
+        Some(Box::new(key_expr.to_string()))
+        // None
     }
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        let key_expr = ctx.full_expr()?; //TODO add caching
+        let key_expr = cache
+            .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
+            .or_else(|| ctx.full_expr())?;
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
