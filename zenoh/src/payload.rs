@@ -229,6 +229,14 @@ impl TryFrom<&Payload> for String {
     }
 }
 
+impl TryFrom<Payload> for String {
+    type Error = FromUtf8Error;
+
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
 impl<'a> Serialize<Cow<'a, str>> for ZSerde {
     type Output = Payload;
 

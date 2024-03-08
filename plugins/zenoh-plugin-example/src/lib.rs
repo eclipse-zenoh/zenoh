@@ -21,7 +21,6 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
-use zenoh::payload::StringOrBase64;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
@@ -165,7 +164,9 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
             // on sample received by the Subscriber
             sample = sub.recv_async() => {
                 let sample = sample.unwrap();
-                info!("Received data ('{}': '{}')", sample.key_expr, StringOrBase64::from(sample.payload.clone()));
+                // Alternatively you can deserialize the payload by using `sample.payload.deserialize::<String>()`
+                let payload = String::try_from(&sample.payload).unwrap_or_else(|e| format!("{}", e));
+                info!("Received data ('{}': '{}')", sample.key_expr, payload);
                 stored.insert(sample.key_expr.to_string(), sample);
             },
             // on query received by the Queryable

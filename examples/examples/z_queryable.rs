@@ -18,7 +18,6 @@ use futures::select;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
@@ -50,7 +49,11 @@ async fn main() {
                 let query = query.unwrap();
                 match query.value() {
                     None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-                    Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), StringOrBase64::from(value.payload.clone())),
+                    Some(value) => {
+                        // Alternatively you can deserialize the payload by using `value.payload.deserialize::<String>()`
+                        let payload = String::try_from(&value.payload).unwrap_or_else(|e| format!("{}", e));
+                        println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), payload);
+                    },
                 }
                 let reply = if send_errors.swap(false, Relaxed) {
                     println!(

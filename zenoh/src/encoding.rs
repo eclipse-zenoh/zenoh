@@ -75,7 +75,7 @@ use ::{std::sync::Arc, zenoh_shm::SharedMemoryBuf};
 pub struct Encoding(zenoh_protocol::core::Encoding);
 
 impl Encoding {
-    const SEPARATOR: char = ';';
+    const SCHEMA_SEP: char = ';';
 
     // For compatibility purposes Zenoh reserves any prefix value from `0` to `1023` included.
 
@@ -521,7 +521,7 @@ impl From<&str> for Encoding {
         }
 
         // Everything before `;` may be mapped to a known id
-        let (id, schema) = t.split_once(Encoding::SEPARATOR).unwrap_or((t, ""));
+        let (id, schema) = t.split_once(Encoding::SCHEMA_SEP).unwrap_or((t, ""));
         if let Some(id) = Encoding::STR_TO_ID.get(id).copied() {
             inner.id = id;
         };
@@ -561,13 +561,13 @@ impl From<&Encoding> for Cow<'static, str> {
             (Some(i), None) => Cow::Borrowed(i),
             // ID and schema
             (Some(i), Some(s)) => {
-                Cow::Owned(format!("{}{}{}", i, Encoding::SEPARATOR, su8_to_str(s)))
+                Cow::Owned(format!("{}{}{}", i, Encoding::SCHEMA_SEP, su8_to_str(s)))
             }
             //
             (None, Some(s)) => Cow::Owned(format!(
                 "unknown({}){}{}",
                 encoding.0.id,
-                Encoding::SEPARATOR,
+                Encoding::SCHEMA_SEP,
                 su8_to_str(s)
             )),
             (None, None) => Cow::Owned(format!("unknown({})", encoding.0.id)),

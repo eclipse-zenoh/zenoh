@@ -14,7 +14,6 @@
 use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
@@ -40,15 +39,20 @@ async fn main() {
     .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
-            Ok(sample) => println!(
-                ">> Received ('{}': '{}')",
-                sample.key_expr.as_str(),
-                StringOrBase64::from(sample.payload),
-            ),
-            Err(err) => println!(
-                ">> Received (ERROR: '{}')",
-                StringOrBase64::from(err.payload)
-            ),
+            Ok(sample) => {
+                // Alternatively you can deserialize the payload by using `err.payload.deserialize::<String>()`
+                let payload = String::try_from(sample.payload).unwrap_or_else(|e| format!("{}", e));
+                println!(
+                    ">> Received ('{}': '{}')",
+                    sample.key_expr.as_str(),
+                    payload,
+                );
+            }
+            Err(err) => {
+                // Alternatively you can deserialize the payload by using `err.payload.deserialize::<String>()`
+                let payload = String::try_from(err.payload).unwrap_or_else(|e| format!("{}", e));
+                println!(">> Received (ERROR: '{}')", payload);
+            }
         }
     }
 }
