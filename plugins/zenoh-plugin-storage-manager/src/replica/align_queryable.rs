@@ -240,7 +240,7 @@ impl AlignQueryable {
                             }
                             Ordering::Equal => {
                                 log::debug!(
-                                    "[ALIGN QUERYABLE] Data in the storage is has good timestamp."
+                                    "[ALIGN QUERYABLE] Data in the storage has a good timestamp."
                                 );
                                 return Some(sample);
                             }
