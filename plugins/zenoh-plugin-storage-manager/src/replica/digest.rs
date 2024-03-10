@@ -528,14 +528,23 @@ impl Digest {
                 sub.content
                     .retain(|x| x.timestamp != entry.timestamp || x.key != entry.key);
                 subintervals_to_update.insert(subinterval);
-            }
-            if let Some(int) = current.intervals.get_mut(&interval) {
-                int.content.retain(|&x| x != subinterval);
-                intervals_to_update.insert(interval);
-            }
-            if let Some(e) = current.eras.get_mut(&era) {
-                e.content.retain(|&x| x != interval);
-                eras_to_update.insert(era.clone());
+
+                // Remove this subinterval from the parent interval if it's all empty
+                if sub.content.is_empty() {
+                    if let Some(int) = current.intervals.get_mut(&interval) {
+                        int.content.retain(|&x| x != subinterval);
+                        intervals_to_update.insert(interval);
+
+                        // We need to update the containing era if we've
+                        // emptied out this interval.
+                        if int.content.is_empty() {
+                            if let Some(e) = current.eras.get_mut(&era) {
+                                e.content.retain(|&x| x != interval);
+                            }
+                            eras_to_update.insert(era.clone());
+                        }
+                    }
+                }
             }
         }
         (
