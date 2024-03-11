@@ -31,6 +31,7 @@ use crate::queryable::*;
 #[cfg(feature = "unstable")]
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::sample::QoS;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
 use crate::Id;
@@ -802,7 +803,7 @@ impl Session {
     }
 
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> + Send {
+    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
@@ -830,10 +831,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_prefix<'a>(
-        &'a self,
-        prefix: &'a str,
-    ) -> impl Resolve<ExprId> + Send + 'a {
+    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<ExprId> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -891,7 +889,7 @@ impl Session {
     pub(crate) fn declare_publication_intent<'a>(
         &'a self,
         _key_expr: KeyExpr<'a>,
-    ) -> impl Resolve<Result<(), std::convert::Infallible>> + Send + 'a {
+    ) -> impl Resolve<Result<(), std::convert::Infallible>> + 'a {
         ResolveClosure::new(move || {
             // log::trace!("declare_publication({:?})", key_expr);
             // let mut state = zwrite!(self.state);
@@ -2059,6 +2057,7 @@ impl Primitives for Session {
                     kind: SampleKind::Put,
                     encoding: Some(m.encoding),
                     timestamp: m.timestamp,
+                    qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
@@ -2076,6 +2075,7 @@ impl Primitives for Session {
                     kind: SampleKind::Delete,
                     encoding: None,
                     timestamp: m.timestamp,
+                    qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
@@ -2229,6 +2229,7 @@ impl Primitives for Session {
                                     kind: SampleKind::Put,
                                     encoding: Some(encoding),
                                     timestamp,
+                                    qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
@@ -2246,6 +2247,7 @@ impl Primitives for Session {
                                     kind: SampleKind::Delete,
                                     encoding: None,
                                     timestamp,
+                                    qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
@@ -2580,5 +2582,9 @@ impl crate::net::primitives::EPrimitives for Session {
     #[inline]
     fn send_close(&self) {
         (self as &dyn Primitives).send_close()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

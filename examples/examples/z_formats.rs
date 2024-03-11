@@ -15,8 +15,8 @@
 use zenoh::prelude::keyexpr;
 
 zenoh::kedefine!(
-    pub file_format: "user_id/${user_id:*}/file/${file:**}",
-    pub(crate) settings_format: "user_id/${user_id:*}/settings/${setting:*/**}"
+    pub file_format: "user_id/${user_id:*}/file/${file:*/**}",
+    pub(crate) settings_format: "user_id/${user_id:*}/settings/${setting:**}"
 );
 
 fn main() {
@@ -28,6 +28,6 @@ fn main() {
     // Parsing
     let settings_ke = keyexpr::new("user_id/30/settings/dark_mode").unwrap();
     let parsed = settings_format::parse(settings_ke).unwrap();
-    assert_eq!(parsed.user_id(), keyexpr::new("30").ok());
+    assert_eq!(parsed.user_id(), keyexpr::new("30").unwrap());
     assert_eq!(parsed.setting(), keyexpr::new("dark_mode").ok());
 }

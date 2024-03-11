@@ -38,7 +38,8 @@ fn base_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    );
+    )
+    .unwrap();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -134,7 +135,8 @@ fn match_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    );
+    )
+    .unwrap();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -173,7 +175,8 @@ fn multisub_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    );
+    )
+    .unwrap();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -242,7 +245,8 @@ fn clean_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    );
+    )
+    .unwrap();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -546,6 +550,10 @@ impl EPrimitives for ClientPrimitives {
     fn send_response_final(&self, _ctx: RoutingContext<zenoh_protocol::network::ResponseFinal>) {}
 
     fn send_close(&self) {}
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 #[test]
@@ -556,7 +564,8 @@ fn client_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    );
+    )
+    .unwrap();
     let tables = router.tables.clone();
 
     let sub_info = SubscriberInfo {

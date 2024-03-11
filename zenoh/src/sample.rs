@@ -17,11 +17,13 @@ use crate::buffers::ZBuf;
 use crate::prelude::{KeyExpr, Value};
 use crate::query::Reply;
 use crate::time::{new_reception_timestamp, Timestamp};
+use crate::Priority;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
-use zenoh_protocol::core::{Encoding, EntityGlobalId};
+use zenoh_protocol::core::{CongestionControl, Encoding, EntityGlobalId};
+use zenoh_protocol::network::push::ext::QoSType;
 
 pub type SourceSn = u64;
 
@@ -50,6 +52,7 @@ pub(crate) struct DataInfo {
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<EntityGlobalId>,
     pub source_sn: Option<SourceSn>,
+    pub qos: QoS,
 }
 
 /// Informations on the source of a zenoh [`Sample`].
@@ -366,6 +369,8 @@ pub struct Sample {
     pub kind: SampleKind,
     /// The [`Timestamp`] of this Sample.
     pub timestamp: Option<Timestamp>,
+    /// Quality of service settings this sample was sent with.
+    pub qos: QoS,
 
     #[cfg(feature = "unstable")]
     /// <div class="stab unstable">
@@ -401,6 +406,7 @@ impl Sample {
             value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
@@ -423,6 +429,7 @@ impl Sample {
             value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
@@ -447,6 +454,7 @@ impl Sample {
                 value,
                 kind: data_info.kind,
                 timestamp: data_info.timestamp,
+                qos: data_info.qos,
                 #[cfg(feature = "unstable")]
                 source_info: data_info.into(),
                 #[cfg(feature = "unstable")]
@@ -458,6 +466,7 @@ impl Sample {
                 value,
                 kind: SampleKind::default(),
                 timestamp: None,
+                qos: QoS::default(),
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
                 #[cfg(feature = "unstable")]
@@ -547,5 +556,61 @@ impl TryFrom<Reply> for Sample {
 
     fn try_from(value: Reply) -> Result<Self, Self::Error> {
         value.sample
+    }
+}
+
+/// Structure containing quality of service data
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub struct QoS {
+    inner: QoSType,
+}
+
+impl QoS {
+    /// Gets priority of the message.
+    pub fn priority(&self) -> Priority {
+        match Priority::try_from(self.inner.get_priority()) {
+            Ok(p) => p,
+            Err(e) => {
+                log::trace!(
+                    "Failed to convert priority: {}; replacing with default value",
+                    e.to_string()
+                );
+                Priority::default()
+            }
+        }
+    }
+
+    /// Gets congestion control of the message.
+    pub fn congestion_control(&self) -> CongestionControl {
+        self.inner.get_congestion_control()
+    }
+
+    /// Gets express flag value. If true, the message is not batched during transmission, in order to reduce latency.
+    pub fn express(&self) -> bool {
+        self.inner.is_express()
+    }
+
+    /// Sets priority value.
+    pub fn with_priority(mut self, priority: Priority) -> Self {
+        self.inner.set_priority(priority.into());
+        self
+    }
+
+    /// Sets congestion control value.
+    pub fn with_congestion_control(mut self, congestion_control: CongestionControl) -> Self {
+        self.inner.set_congestion_control(congestion_control);
+        self
+    }
+
+    /// Sets express flag vlaue.
+    pub fn with_express(mut self, is_express: bool) -> Self {
+        self.inner.set_is_express(is_express);
+        self
+    }
+}
+
+impl From<QoSType> for QoS {
+    fn from(qos: QoSType) -> Self {
+        QoS { inner: qos }
     }
 }

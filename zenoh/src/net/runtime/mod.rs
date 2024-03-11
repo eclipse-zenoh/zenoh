@@ -97,7 +97,7 @@ impl Runtime {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config));
+        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config)?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),

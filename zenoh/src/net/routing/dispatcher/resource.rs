@@ -13,6 +13,7 @@
 //
 use super::face::FaceState;
 use super::tables::{Tables, TablesLock};
+use crate::net::routing::dispatcher::face::Face;
 use crate::net::routing::RoutingContext;
 use std::any::Any;
 use std::collections::HashMap;
@@ -59,6 +60,8 @@ pub(crate) struct SessionContext {
     pub(crate) subs: Option<SubscriberInfo>,
     pub(crate) qabl: Option<QueryableInfo>,
     pub(crate) last_values: HashMap<String, PushBody>,
+    pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
+    pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
 }
 
 #[derive(Default)]
@@ -443,6 +446,8 @@ impl Resource {
                             subs: None,
                             qabl: None,
                             last_values: HashMap::new(),
+                            in_interceptor_cache: None,
+                            e_interceptor_cache: None,
                         })
                     });
 
@@ -476,6 +481,7 @@ impl Resource {
                         },
                         nonwild_prefix.expr(),
                     ));
+                    face.update_interceptors_caches(&mut nonwild_prefix);
                     WireExpr {
                         scope: expr_id,
                         suffix: wildsuffix.into(),
@@ -631,6 +637,18 @@ impl Resource {
             get_mut_unchecked(res).context = Some(ResourceContext::new(hat));
         }
     }
+
+    pub(crate) fn get_ingress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
+        self.session_ctxs
+            .get(&face.state.id)
+            .and_then(|ctx| ctx.in_interceptor_cache.as_ref())
+    }
+
+    pub(crate) fn get_egress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
+        self.session_ctxs
+            .get(&face.state.id)
+            .and_then(|ctx| ctx.e_interceptor_cache.as_ref())
+    }
 }
 
 pub fn register_expr(
@@ -691,6 +709,8 @@ pub fn register_expr(
                             subs: None,
                             qabl: None,
                             last_values: HashMap::new(),
+                            in_interceptor_cache: None,
+                            e_interceptor_cache: None,
                         })
                     });
 
@@ -698,6 +718,7 @@ pub fn register_expr(
                     .remote_mappings
                     .insert(expr_id, res.clone());
                 wtables.update_matches_routes(&mut res);
+                face.update_interceptors_caches(&mut res);
                 drop(wtables);
             }
         },

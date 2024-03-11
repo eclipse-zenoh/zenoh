@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::net::TcpStream;
+use async_std::net::{TcpListener, TcpStream, UdpSocket};
 use std::net::{IpAddr, Ipv6Addr};
 use std::time::Duration;
 use zenoh_core::zconfigurable;
@@ -91,6 +91,39 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
     }
 }
 
+#[cfg(windows)]
+unsafe fn get_adapters_adresses(af_spec: i32) -> ZResult<Vec<u8>> {
+    use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+    let mut ret;
+    let mut retries = 0;
+    let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
+    let mut buffer: Vec<u8>;
+    loop {
+        buffer = Vec::with_capacity(size as usize);
+        ret = winapi::um::iphlpapi::GetAdaptersAddresses(
+            af_spec.try_into().unwrap(),
+            0,
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
+            &mut size,
+        );
+        if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {
+            break;
+        }
+        if retries >= *WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES {
+            break;
+        }
+        retries += 1;
+    }
+
+    if ret != 0 {
+        bail!("GetAdaptersAddresses returned {}", ret)
+    }
+
+    Ok(buffer)
+}
+
 pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
     #[cfg(unix)]
     {
@@ -117,31 +150,7 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
-            let mut ret;
-            let mut retries = 0;
-            let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
-            let mut buffer: Vec<u8>;
-            loop {
-                buffer = Vec::with_capacity(size as usize);
-                ret = winapi::um::iphlpapi::GetAdaptersAddresses(
-                    winapi::shared::ws2def::AF_INET.try_into().unwrap(),
-                    0,
-                    std::ptr::null_mut(),
-                    buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
-                    &mut size,
-                );
-                if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {
-                    break;
-                }
-                if retries >= *WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES {
-                    break;
-                }
-                retries += 1;
-            }
-
-            if ret != 0 {
-                bail!("GetAdaptersAddresses returned {}", ret)
-            }
+            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
 
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
@@ -201,12 +210,19 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
     }
 }
 
-pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
+pub fn get_local_addresses(interface: Option<&str>) -> ZResult<Vec<IpAddr>> {
     #[cfg(unix)]
     {
         Ok(pnet_datalink::interfaces()
             .into_iter()
-            .filter(|iface| iface.is_up() && iface.is_running())
+            .filter(|iface| {
+                if let Some(interface) = interface.as_ref() {
+                    if iface.name != *interface {
+                        return false;
+                    }
+                }
+                iface.is_up() && iface.is_running()
+            })
             .flat_map(|iface| iface.ips)
             .map(|ipnet| ipnet.ip())
             .collect())
@@ -218,35 +234,16 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
+            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_UNSPEC)?;
+
             let mut result = vec![];
-            let mut ret;
-            let mut retries = 0;
-            let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
-            let mut buffer: Vec<u8>;
-            loop {
-                buffer = Vec::with_capacity(size as usize);
-                ret = winapi::um::iphlpapi::GetAdaptersAddresses(
-                    winapi::shared::ws2def::AF_UNSPEC.try_into().unwrap(),
-                    0,
-                    std::ptr::null_mut(),
-                    buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
-                    &mut size,
-                );
-                if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {
-                    break;
-                }
-                if retries >= *WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES {
-                    break;
-                }
-                retries += 1;
-            }
-
-            if ret != 0 {
-                bail!("GetAdaptersAddresses returned {}", ret)
-            }
-
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
+                if let Some(interface) = interface.as_ref() {
+                    if ffi::pstr_to_string(iface.AdapterName) != *interface {
+                        continue;
+                    }
+                }
                 let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
                 while let Some(ucast_addr) = next_ucast_addr {
                     if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
@@ -317,33 +314,9 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
+            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
+
             let mut addrs = vec![];
-            let mut ret;
-            let mut retries = 0;
-            let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
-            let mut buffer: Vec<u8>;
-            loop {
-                buffer = Vec::with_capacity(size as usize);
-                ret = winapi::um::iphlpapi::GetAdaptersAddresses(
-                    winapi::shared::ws2def::AF_INET.try_into().unwrap(),
-                    0,
-                    std::ptr::null_mut(),
-                    buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
-                    &mut size,
-                );
-                if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {
-                    break;
-                }
-                if retries >= *WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES {
-                    break;
-                }
-                retries += 1;
-            }
-
-            if ret != 0 {
-                bail!("GetAdaptersAddresses returned {}", ret);
-            }
-
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
                 if name == ffi::pstr_to_string(iface.AdapterName)
@@ -380,31 +353,7 @@ pub fn get_index_of_interface(addr: IpAddr) -> ZResult<u32> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
-            let mut ret;
-            let mut retries = 0;
-            let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
-            let mut buffer: Vec<u8>;
-            loop {
-                buffer = Vec::with_capacity(size as usize);
-                ret = winapi::um::iphlpapi::GetAdaptersAddresses(
-                    winapi::shared::ws2def::AF_INET.try_into().unwrap(),
-                    0,
-                    std::ptr::null_mut(),
-                    buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
-                    &mut size,
-                );
-                if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {
-                    break;
-                }
-                if retries >= *WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES {
-                    break;
-                }
-                retries += 1;
-            }
-
-            if ret != 0 {
-                bail!("GetAdaptersAddresses returned {}", ret)
-            }
+            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
 
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
@@ -424,8 +373,59 @@ pub fn get_index_of_interface(addr: IpAddr) -> ZResult<u32> {
     }
 }
 
-pub fn get_ipv4_ipaddrs() -> Vec<IpAddr> {
-    get_local_addresses()
+pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
+    #[cfg(unix)]
+    {
+        if addr.is_unspecified() {
+            Ok(pnet_datalink::interfaces()
+                .iter()
+                .map(|iface| iface.name.clone())
+                .collect::<Vec<String>>())
+        } else {
+            Ok(pnet_datalink::interfaces()
+                .iter()
+                .filter(|iface| iface.ips.iter().any(|ipnet| ipnet.ip() == addr))
+                .map(|iface| iface.name.clone())
+                .collect::<Vec<String>>())
+        }
+    }
+    #[cfg(windows)]
+    {
+        let mut result = vec![];
+        unsafe {
+            use crate::ffi;
+            use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_UNSPEC)?;
+
+            if addr.is_unspecified() {
+                let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
+                while let Some(iface) = next_iface {
+                    result.push(ffi::pstr_to_string(iface.AdapterName));
+                    next_iface = iface.Next.as_ref();
+                }
+            } else {
+                let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
+                while let Some(iface) = next_iface {
+                    let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
+                    while let Some(ucast_addr) = next_ucast_addr {
+                        if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
+                            if ifaddr.ip() == addr {
+                                result.push(ffi::pstr_to_string(iface.AdapterName));
+                            }
+                        }
+                        next_ucast_addr = ucast_addr.Next.as_ref();
+                    }
+                    next_iface = iface.Next.as_ref();
+                }
+            }
+        }
+        Ok(result)
+    }
+}
+
+pub fn get_ipv4_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
+    get_local_addresses(interface)
         .unwrap_or_else(|_| vec![])
         .drain(..)
         .filter_map(|x| match x {
@@ -437,12 +437,12 @@ pub fn get_ipv4_ipaddrs() -> Vec<IpAddr> {
         .collect()
 }
 
-pub fn get_ipv6_ipaddrs() -> Vec<IpAddr> {
+pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
     const fn is_unicast_link_local(addr: &Ipv6Addr) -> bool {
         (addr.segments()[0] & 0xffc0) == 0xfe80
     }
 
-    let ipaddrs = get_local_addresses().unwrap_or_else(|_| vec![]);
+    let ipaddrs = get_local_addresses(interface).unwrap_or_else(|_| vec![]);
 
     // Get first all IPv4 addresses
     let ipv4_iter = ipaddrs
@@ -490,4 +490,54 @@ pub fn get_ipv6_ipaddrs() -> Vec<IpAddr> {
         .chain(yll_ipv6_addrs)
         .chain(priv_ipv4_addrs)
         .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn set_bind_to_device(socket: std::os::raw::c_int, iface: Option<&str>) {
+    if let Some(iface) = iface {
+        // @TODO: switch to bind_device after tokio porting
+        log::debug!("Listen at the interface: {}", iface);
+        unsafe {
+            libc::setsockopt(
+                socket,
+                libc::SOL_SOCKET,
+                libc::SO_BINDTODEVICE,
+                iface.as_ptr() as *const std::os::raw::c_void,
+                iface.len() as libc::socklen_t,
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_bind_to_device_tcp_listener(socket: &TcpListener, iface: Option<&str>) {
+    use std::os::fd::AsRawFd;
+    set_bind_to_device(socket.as_raw_fd(), iface);
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_bind_to_device_tcp_stream(socket: &TcpStream, iface: Option<&str>) {
+    use std::os::fd::AsRawFd;
+    set_bind_to_device(socket.as_raw_fd(), iface);
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) {
+    use std::os::fd::AsRawFd;
+    set_bind_to_device(socket.as_raw_fd(), iface);
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn set_bind_to_device_tcp_listener(_socket: &TcpListener, _iface: Option<&str>) {
+    log::warn!("Listen at the interface is not supported for this platform");
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn set_bind_to_device_tcp_stream(_socket: &TcpStream, _iface: Option<&str>) {
+    log::warn!("Listen at the interface is not supported for this platform");
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn set_bind_to_device_udp_socket(_socket: &UdpSocket, _iface: Option<&str>) {
+    log::warn!("Listen at the interface is not supported for this platform");
 }

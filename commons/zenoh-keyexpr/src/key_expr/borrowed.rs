@@ -11,13 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
-// use crate::core::WireExpr;
 use alloc::{
     borrow::{Borrow, ToOwned},
     format,
     string::String,
-    vec,
     vec::Vec,
 };
 use core::{
@@ -44,7 +43,7 @@ use zenoh_result::{bail, Error as ZError, ZResult};
 /// * Two sets A and B are equal if all A includes B and B includes A. The Key Expression language is designed so that string equality is equivalent to set equality.
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct keyexpr(str);
 
 impl keyexpr {
@@ -127,6 +126,11 @@ impl keyexpr {
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
     pub fn is_wild(&self) -> bool {
         self.0.contains(super::SINGLE_WILD as char)
+    }
+
+    pub(crate) const fn is_double_wild(&self) -> bool {
+        let bytes = self.0.as_bytes();
+        bytes.len() == 2 && bytes[0] == b'*'
     }
 
     /// Returns the longest prefix of `self` that doesn't contain any wildcard character (`**` or `$*`).
@@ -222,7 +226,7 @@ impl keyexpr {
     /// );
     /// ```
     pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
-        let mut result = vec![];
+        let mut result = alloc::vec![];
         'chunks: for i in (0..=self.len()).rev() {
             if if i == self.len() {
                 self.ends_with("**")
@@ -265,8 +269,8 @@ impl keyexpr {
         result
     }
 
-    pub fn as_str(&self) -> &str {
-        self
+    pub const fn as_str(&self) -> &str {
+        &self.0
     }
 
     /// # Safety
@@ -274,7 +278,7 @@ impl keyexpr {
     ///
     /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
-    pub unsafe fn from_str_unchecked(s: &str) -> &Self {
+    pub const unsafe fn from_str_unchecked(s: &str) -> &Self {
         core::mem::transmute(s)
     }
 
@@ -286,11 +290,249 @@ impl keyexpr {
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)
     }
-    pub fn chunks(&self) -> impl Iterator<Item = &Self> + DoubleEndedIterator {
-        self.split('/').map(|c| unsafe {
-            // Any chunk of a valid KE is itself a valid KE => we can safely call the unchecked constructor.
-            Self::from_str_unchecked(c)
-        })
+    pub const fn chunks(&self) -> Chunks {
+        Chunks {
+            inner: self.as_str(),
+        }
+    }
+    pub(crate) fn next_delimiter(&self, i: usize) -> Option<usize> {
+        self.as_str()
+            .get(i + 1..)
+            .and_then(|s| s.find('/').map(|j| i + 1 + j))
+    }
+    pub(crate) fn previous_delimiter(&self, i: usize) -> Option<usize> {
+        self.as_str().get(..i).and_then(|s| s.rfind('/'))
+    }
+    pub(crate) fn first_byte(&self) -> u8 {
+        unsafe { *self.as_bytes().get_unchecked(0) }
+    }
+    pub(crate) fn iter_splits_ltr(&self) -> SplitsLeftToRight {
+        SplitsLeftToRight {
+            inner: self,
+            index: 0,
+        }
+    }
+    pub(crate) fn iter_splits_rtl(&self) -> SplitsRightToLeft {
+        SplitsRightToLeft {
+            inner: self,
+            index: self.len(),
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct SplitsLeftToRight<'a> {
+    inner: &'a keyexpr,
+    index: usize,
+}
+impl<'a> SplitsLeftToRight<'a> {
+    fn right(&self) -> &'a str {
+        &self.inner[self.index + ((self.index != 0) as usize)..]
+    }
+    fn left(&self, followed_by_double: bool) -> &'a str {
+        &self.inner[..(self.index + ((self.index != 0) as usize + 2) * followed_by_double as usize)]
+    }
+}
+impl<'a> Iterator for SplitsLeftToRight<'a> {
+    type Item = (&'a keyexpr, &'a keyexpr);
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.index < self.inner.len() {
+            false => None,
+            true => {
+                let right = self.right();
+                let double_wild = right.starts_with("**");
+                let left = self.left(double_wild);
+                self.index = if left.is_empty() {
+                    self.inner.next_delimiter(0).unwrap_or(self.inner.len())
+                } else {
+                    self.inner
+                        .next_delimiter(left.len())
+                        .unwrap_or(self.inner.len() + (left.len() == self.inner.len()) as usize)
+                };
+                if left.is_empty() {
+                    self.next()
+                } else {
+                    // SAFETY: because any keyexpr split at `/` becomes 2 valid keyexprs by design, it's safe to assume the constraint is valid once both sides have been validated to not be empty.
+                    (!right.is_empty()).then(|| unsafe {
+                        (
+                            keyexpr::from_str_unchecked(left),
+                            keyexpr::from_str_unchecked(right),
+                        )
+                    })
+                }
+            }
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct SplitsRightToLeft<'a> {
+    inner: &'a keyexpr,
+    index: usize,
+}
+impl<'a> SplitsRightToLeft<'a> {
+    fn right(&self, followed_by_double: bool) -> &'a str {
+        &self.inner[(self.index
+            - ((self.index != self.inner.len()) as usize + 2) * followed_by_double as usize)..]
+    }
+    fn left(&self) -> &'a str {
+        &self.inner[..(self.index - ((self.index != self.inner.len()) as usize))]
+    }
+}
+impl<'a> Iterator for SplitsRightToLeft<'a> {
+    type Item = (&'a keyexpr, &'a keyexpr);
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.index {
+            0 => None,
+            _ => {
+                let left = self.left();
+                let double_wild = left.ends_with("**");
+                let right = self.right(double_wild);
+                self.index = if right.is_empty() {
+                    self.inner
+                        .previous_delimiter(self.inner.len())
+                        .map_or(0, |n| n + 1)
+                } else {
+                    self.inner
+                        .previous_delimiter(
+                            self.inner.len()
+                                - right.len()
+                                - (self.inner.len() != right.len()) as usize,
+                        )
+                        .map_or(0, |n| n + 1)
+                };
+                if right.is_empty() {
+                    self.next()
+                } else {
+                    // SAFETY: because any keyexpr split at `/` becomes 2 valid keyexprs by design, it's safe to assume the constraint is valid once both sides have been validated to not be empty.
+                    (!left.is_empty()).then(|| unsafe {
+                        (
+                            keyexpr::from_str_unchecked(left),
+                            keyexpr::from_str_unchecked(right),
+                        )
+                    })
+                }
+            }
+        }
+    }
+}
+#[test]
+fn splits() {
+    let ke = keyexpr::new("a/**/b/c").unwrap();
+    let mut splits = ke.iter_splits_ltr();
+    assert_eq!(
+        splits.next(),
+        Some((
+            keyexpr::new("a/**").unwrap(),
+            keyexpr::new("**/b/c").unwrap()
+        ))
+    );
+    assert_eq!(
+        splits.next(),
+        Some((keyexpr::new("a/**/b").unwrap(), keyexpr::new("c").unwrap()))
+    );
+    assert_eq!(splits.next(), None);
+    let mut splits = ke.iter_splits_rtl();
+    assert_eq!(
+        splits.next(),
+        Some((keyexpr::new("a/**/b").unwrap(), keyexpr::new("c").unwrap()))
+    );
+    assert_eq!(
+        splits.next(),
+        Some((
+            keyexpr::new("a/**").unwrap(),
+            keyexpr::new("**/b/c").unwrap()
+        ))
+    );
+    assert_eq!(splits.next(), None);
+    let ke = keyexpr::new("**").unwrap();
+    let mut splits = ke.iter_splits_ltr();
+    assert_eq!(
+        splits.next(),
+        Some((keyexpr::new("**").unwrap(), keyexpr::new("**").unwrap()))
+    );
+    assert_eq!(splits.next(), None);
+    let ke = keyexpr::new("ab").unwrap();
+    let mut splits = ke.iter_splits_ltr();
+    assert_eq!(splits.next(), None);
+    let ke = keyexpr::new("ab/cd").unwrap();
+    let mut splits = ke.iter_splits_ltr();
+    assert_eq!(
+        splits.next(),
+        Some((keyexpr::new("ab").unwrap(), keyexpr::new("cd").unwrap()))
+    );
+    assert_eq!(splits.next(), None);
+    for (i, ke) in crate::fuzzer::KeyExprFuzzer(rand::thread_rng())
+        .take(100)
+        .enumerate()
+    {
+        dbg!(i, &ke);
+        let splits = ke.iter_splits_ltr().collect::<Vec<_>>();
+        assert_eq!(splits, {
+            let mut rtl_rev = ke.iter_splits_rtl().collect::<Vec<_>>();
+            rtl_rev.reverse();
+            rtl_rev
+        });
+        assert!(!splits
+            .iter()
+            .any(|s| s.0.ends_with('/') || s.1.starts_with('/')));
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Chunks<'a> {
+    inner: &'a str,
+}
+impl<'a> Chunks<'a> {
+    /// Convert the remaining part of the iterator to a keyexpr if it is not empty.
+    pub const fn as_keyexpr(self) -> Option<&'a keyexpr> {
+        match self.inner.is_empty() {
+            true => None,
+            _ => Some(unsafe { keyexpr::from_str_unchecked(self.inner) }),
+        }
+    }
+    /// Peek at the next chunk without consuming it.
+    pub fn peek(&self) -> Option<&keyexpr> {
+        if self.inner.is_empty() {
+            None
+        } else {
+            Some(unsafe {
+                keyexpr::from_str_unchecked(
+                    &self.inner[..self.inner.find('/').unwrap_or(self.inner.len())],
+                )
+            })
+        }
+    }
+    /// Peek at the last chunk without consuming it.
+    pub fn peek_back(&self) -> Option<&keyexpr> {
+        if self.inner.is_empty() {
+            None
+        } else {
+            Some(unsafe {
+                keyexpr::from_str_unchecked(
+                    &self.inner[self.inner.rfind('/').map_or(0, |i| i + 1)..],
+                )
+            })
+        }
+    }
+}
+impl<'a> Iterator for Chunks<'a> {
+    type Item = &'a keyexpr;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.inner.is_empty() {
+            return None;
+        }
+        let (next, inner) = self.inner.split_once('/').unwrap_or((self.inner, ""));
+        self.inner = inner;
+        Some(unsafe { keyexpr::from_str_unchecked(next) })
+    }
+}
+impl<'a> DoubleEndedIterator for Chunks<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.inner.is_empty() {
+            return None;
+        }
+        let (inner, next) = self.inner.rsplit_once('/').unwrap_or(("", self.inner));
+        self.inner = inner;
+        Some(unsafe { keyexpr::from_str_unchecked(next) })
     }
 }
 

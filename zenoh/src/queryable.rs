@@ -195,6 +195,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     source_info,
                     #[cfg(feature = "unstable")]
                     attachment,
+                    ..
                 } = sample;
                 // Use a macro for inferring the proper const extension ID between Put and Del cases
                 macro_rules! ext_attachment {

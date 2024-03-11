@@ -24,12 +24,22 @@ use zenoh_transport::{
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
+#[cfg(target_os = "linux")]
+use zenoh_util::net::get_ipv4_ipaddrs;
+
 const TIMEOUT: Duration = Duration::from_secs(60);
+const TIMEOUT_EXPECTED: Duration = Duration::from_secs(5);
 const SLEEP: Duration = Duration::from_millis(100);
 
 macro_rules! ztimeout {
     ($f:expr) => {
         $f.timeout(TIMEOUT).await.unwrap()
+    };
+}
+
+macro_rules! ztimeout_expected {
+    ($f:expr) => {
+        $f.timeout(TIMEOUT_EXPECTED).await.unwrap()
     };
 }
 
@@ -80,7 +90,11 @@ impl TransportEventHandler for SHClientOpenClose {
     }
 }
 
-async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
+async fn openclose_transport(
+    listen_endpoint: &EndPoint,
+    connect_endpoint: &EndPoint,
+    lowlatency_transport: bool,
+) {
     /* [ROUTER] */
     let router_id = ZenohId::try_from([1]).unwrap();
 
@@ -140,7 +154,7 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     /* [1] */
     println!("\nTransport Open Close [1a1]");
     // Add the locator on the router
-    let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
+    let res = ztimeout!(router_manager.add_listener(listen_endpoint.clone()));
     println!("Transport Open Close [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Open Close [1a2]");
@@ -153,10 +167,11 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     let mut links_num = 1;
 
     println!("Transport Open Close [1c1]");
-    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+    let open_res =
+        ztimeout_expected!(client01_manager.open_transport_unicast(connect_endpoint.clone()));
     println!("Transport Open Close [1c2]: {res:?}");
-    assert!(res.is_ok());
-    let c_ses1 = res.unwrap();
+    assert!(open_res.is_ok());
+    let c_ses1 = open_res.unwrap();
     println!("Transport Open Close [1d1]");
     let transports = ztimeout!(client01_manager.get_transports_unicast());
     println!("Transport Open Close [1d2]: {transports:?}");
@@ -195,7 +210,7 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
         links_num = 2;
 
         println!("\nTransport Open Close [2a1]");
-        let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+        let res = ztimeout!(client01_manager.open_transport_unicast(connect_endpoint.clone()));
         println!("Transport Open Close [2a2]: {res:?}");
         assert!(res.is_ok());
         let c_ses2 = res.unwrap();
@@ -235,7 +250,7 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     // Open transport -> This should be rejected because
     // of the maximum limit of links per transport
     println!("\nTransport Open Close [3a1]");
-    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+    let res = ztimeout!(client01_manager.open_transport_unicast(connect_endpoint.clone()));
     println!("Transport Open Close [3a2]: {res:?}");
     assert!(res.is_err());
     println!("Transport Open Close [3b1]");
@@ -294,7 +309,7 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     links_num = 1;
 
     println!("\nTransport Open Close [5a1]");
-    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+    let res = ztimeout!(client01_manager.open_transport_unicast(connect_endpoint.clone()));
     println!("Transport Open Close [5a2]: {res:?}");
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
@@ -326,7 +341,7 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     // Open transport -> This should be rejected because
     // of the maximum limit of transports
     println!("\nTransport Open Close [6a1]");
-    let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
+    let res = ztimeout!(client02_manager.open_transport_unicast(connect_endpoint.clone()));
     println!("Transport Open Close [6a2]: {res:?}");
     assert!(res.is_err());
     println!("Transport Open Close [6b1]");
@@ -377,7 +392,7 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     links_num = 1;
 
     println!("\nTransport Open Close [8a1]");
-    let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
+    let res = ztimeout!(client02_manager.open_transport_unicast(connect_endpoint.clone()));
     println!("Transport Open Close [8a2]: {res:?}");
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();
@@ -435,7 +450,7 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     /* [10] */
     // Perform clean up of the open locators
     println!("\nTransport Open Close [10a1]");
-    let res = ztimeout!(router_manager.del_listener(endpoint));
+    let res = ztimeout!(router_manager.del_listener(listen_endpoint));
     println!("Transport Open Close [10a2]: {res:?}");
     assert!(res.is_ok());
 
@@ -457,11 +472,11 @@ async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
 }
 
 async fn openclose_universal_transport(endpoint: &EndPoint) {
-    openclose_transport(endpoint, false).await
+    openclose_transport(endpoint, endpoint, false).await
 }
 
 async fn openclose_lowlatency_transport(endpoint: &EndPoint) {
-    openclose_transport(endpoint, true).await
+    openclose_transport(endpoint, endpoint, true).await
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -785,4 +800,108 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         .unwrap();
 
     task::block_on(openclose_universal_transport(&endpoint));
+}
+
+#[cfg(feature = "transport_tcp")]
+#[cfg(target_os = "linux")]
+#[test]
+#[should_panic(expected = "TimeoutError")]
+fn openclose_tcp_only_connect_with_interface_restriction() {
+    let addrs = get_ipv4_ipaddrs(None);
+
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13001).parse().unwrap();
+
+    let connect_endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], 13001)
+        .parse()
+        .unwrap();
+
+    // should not connect to local interface and external address
+    task::block_on(openclose_transport(
+        &listen_endpoint,
+        &connect_endpoint,
+        false,
+    ));
+}
+
+#[cfg(feature = "transport_tcp")]
+#[cfg(target_os = "linux")]
+#[test]
+#[should_panic(expected = "assertion failed: open_res.is_ok()")]
+fn openclose_tcp_only_listen_with_interface_restriction() {
+    let addrs = get_ipv4_ipaddrs(None);
+
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let listen_endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], 13002)
+        .parse()
+        .unwrap();
+
+    let connect_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13002).parse().unwrap();
+
+    // should not connect to local interface and external address
+    task::block_on(openclose_transport(
+        &listen_endpoint,
+        &connect_endpoint,
+        false,
+    ));
+}
+
+#[cfg(feature = "transport_udp")]
+#[cfg(target_os = "linux")]
+#[test]
+#[should_panic(expected = "TimeoutError")]
+fn openclose_udp_only_connect_with_interface_restriction() {
+    let addrs = get_ipv4_ipaddrs(None);
+
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13003).parse().unwrap();
+
+    let connect_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13003)
+        .parse()
+        .unwrap();
+
+    // should not connect to local interface and external address
+    task::block_on(openclose_transport(
+        &listen_endpoint,
+        &connect_endpoint,
+        false,
+    ));
+}
+
+#[cfg(feature = "transport_udp")]
+#[cfg(target_os = "linux")]
+#[test]
+#[should_panic(expected = "assertion failed: open_res.is_ok()")]
+fn openclose_udp_onlyi_listen_with_interface_restriction() {
+    let addrs = get_ipv4_ipaddrs(None);
+
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let listen_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13004)
+        .parse()
+        .unwrap();
+
+    let connect_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13004).parse().unwrap();
+
+    // should not connect to local interface and external address
+    task::block_on(openclose_transport(
+        &listen_endpoint,
+        &connect_endpoint,
+        false,
+    ));
 }

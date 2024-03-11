@@ -87,7 +87,8 @@ fn propagate_simple_subscription_to(
     src_face: &mut Arc<FaceState>,
     full_peer_net: bool,
 ) {
-    if (src_face.id != dst_face.id || res.expr().starts_with(PREFIX_LIVELINESS))
+    if (src_face.id != dst_face.id
+        || (dst_face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)))
         && !face_hat!(dst_face).local_subs.contains_key(res)
         && if full_peer_net {
             dst_face.whatami == WhatAmI::Client
@@ -279,6 +280,8 @@ fn register_client_subscription(
                         subs: Some(*sub_info),
                         qabl: None,
                         last_values: HashMap::new(),
+                        in_interceptor_cache: None,
+                        e_interceptor_cache: None,
                     }),
                 );
             }

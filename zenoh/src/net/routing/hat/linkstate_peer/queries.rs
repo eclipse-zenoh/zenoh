@@ -286,6 +286,8 @@ fn register_client_queryable(
                 subs: None,
                 qabl: None,
                 last_values: HashMap::new(),
+                in_interceptor_cache: None,
+                e_interceptor_cache: None,
             })
         }))
         .qabl = Some(*qabl_info);
