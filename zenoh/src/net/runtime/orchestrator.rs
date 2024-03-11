@@ -423,7 +423,11 @@ impl Runtime {
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         socket.set_nonblocking(true)?;
-        Ok(UdpSocket::from_std(socket.into())?)
+
+        // UdpSocket::from_std requires a runtime even though it's a sync function
+        let udp_socket = zenoh_runtime::ZRuntime::Net
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
+        Ok(udp_socket)
     }
 
     pub fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
@@ -453,7 +457,11 @@ impl Runtime {
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         socket.set_nonblocking(true)?;
-        Ok(UdpSocket::from_std(socket.into())?)
+
+        // UdpSocket::from_std requires a runtime even though it's a sync function
+        let udp_socket = zenoh_runtime::ZRuntime::Net
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
+        Ok(udp_socket)
     }
 
     async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {

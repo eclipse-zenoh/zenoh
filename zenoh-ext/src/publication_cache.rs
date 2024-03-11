@@ -165,8 +165,9 @@ impl<'a> PublicationCache<'a> {
         let resources_limit = conf.resources_limit;
         let history = conf.history;
 
+        // TODO(yuyuan): use CancellationToken to manage it
         let (stoptx, stoprx) = bounded::<bool>(1);
-        tokio::task::spawn(async move {
+        zenoh_runtime::ZRuntime::TX.spawn(async move {
             let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                 HashMap::with_capacity(resources_limit.unwrap_or(32));
             let limit = resources_limit.unwrap_or(usize::MAX);
