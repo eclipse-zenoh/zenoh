@@ -22,8 +22,8 @@
 //! # Storing Key Expressions
 //! This module provides 3 flavours to store strings that have been validated to respect the KE syntax:
 //! - [`keyexpr`] is the equivalent of a [`str`],
-//! - [`OwnedKeyExpr`] works like an [`Arc<str>`],
-//! - [`KeyExpr`] works like a [`Cow<str>`], but also stores some additional context internal to Zenoh to optimize
+//! - [`OwnedKeyExpr`] works like an [`std::sync::Arc<str>`],
+//! - [`KeyExpr`] works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
 //! routing and network usage.
 //!
 //! All of these types [`Deref`](core::ops::Deref) to [`keyexpr`], which notably has methods to check whether a given [`keyexpr::intersects`] with another,
