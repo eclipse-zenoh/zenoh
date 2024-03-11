@@ -34,9 +34,9 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::reader::SharedMemoryReader;
+use zenoh_shm::api::client_storage::GLOBAL_CLIENT_STORAGE;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::reader::GLOBAL_READER;
+use zenoh_shm::reader::SharedMemoryReader;
 
 /// # Examples
 /// ```
@@ -135,12 +135,12 @@ pub struct TransportManagerBuilder {
     tx_threads: usize,
     protocols: Option<Vec<String>>,
     #[cfg(feature = "shared-memory")]
-    shm_reader: Option<Arc<SharedMemoryReader>>,
+    shm_reader: Option<SharedMemoryReader>,
 }
 
 impl TransportManagerBuilder {
     #[cfg(feature = "shared-memory")]
-    pub fn shm_reader(mut self, shm_reader: Option<Arc<SharedMemoryReader>>) -> Self {
+    pub fn shm_reader(mut self, shm_reader: Option<SharedMemoryReader>) -> Self {
         self.shm_reader = shm_reader;
         self
     }
@@ -258,7 +258,9 @@ impl TransportManagerBuilder {
         let mut prng = PseudoRng::from_entropy();
 
         #[cfg(feature = "shared-memory")]
-        let shm_reader = self.shm_reader.unwrap_or_else(|| GLOBAL_READER.clone());
+        let shm_reader = self
+            .shm_reader
+            .unwrap_or_else(|| SharedMemoryReader::new(GLOBAL_CLIENT_STORAGE.clone()));
 
         let unicast = self.unicast.build(
             &mut prng,
@@ -385,7 +387,7 @@ pub struct TransportManager {
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     pub(crate) tx_executor: TransportExecutor,
     #[cfg(feature = "shared-memory")]
-    pub(crate) shmr: Arc<SharedMemoryReader>,
+    pub(crate) shmr: SharedMemoryReader,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
 }
@@ -394,7 +396,7 @@ impl TransportManager {
     pub fn new(
         params: TransportManagerParams,
         mut prng: PseudoRng,
-        #[cfg(feature = "shared-memory")] shmr: Arc<SharedMemoryReader>,
+        #[cfg(feature = "shared-memory")] shmr: SharedMemoryReader,
     ) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];

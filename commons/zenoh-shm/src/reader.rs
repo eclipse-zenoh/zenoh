@@ -12,144 +12,38 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use lazy_static::lazy_static;
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_core::{bail, zerror};
+use zenoh_result::ZResult;
 
 use crate::{
     api::{
-        client::{
-            shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
-        },
+        client::shared_memory_segment::SharedMemorySegment,
+        client_storage::SharedMemoryClientStorage,
         common::types::{ProtocolID, SegmentID},
-        protocol_implementations::posix::{
-            posix_shared_memory_client::PosixSharedMemoryClient, protocol_id::POSIX_PROTOCOL_ID,
-        },
     },
     header::subscription::GLOBAL_HEADER_SUBSCRIPTION,
     watchdog::confirmator::GLOBAL_CONFIRMATOR,
     SharedMemoryBuf, SharedMemoryBufInfo,
 };
 
-lazy_static! {
-    pub static ref GLOBAL_READER: Arc<SharedMemoryReader> = Arc::new(
-        SharedMemoryReader::builder()
-            .with_default_client_set()
-            .build()
-    );
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-struct GlobalDataSegmentID {
-    protocol: ProtocolID,
-    segment: SegmentID,
-}
-
-impl GlobalDataSegmentID {
-    fn new(protocol: ProtocolID, segment: SegmentID) -> Self {
-        Self { protocol, segment }
-    }
-}
-
-pub struct SharedMemoryReaderClientSetBuilder;
-
-impl SharedMemoryReaderClientSetBuilder {
-    pub fn empty(self) -> SharedMemoryReaderBuilder {
-        let clients = HashMap::default();
-        SharedMemoryReaderBuilder::new(clients)
-    }
-
-    pub fn with_default_client_set(self) -> SharedMemoryReaderBuilder {
-        let clients = HashMap::from([(
-            POSIX_PROTOCOL_ID,
-            Box::new(PosixSharedMemoryClient {}) as Box<dyn SharedMemoryClient>,
-        )]);
-        SharedMemoryReaderBuilder::new(clients)
-    }
-}
-
-pub struct SharedMemoryReaderBuilder {
-    clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>,
-}
-
-impl SharedMemoryReaderBuilder {
-    fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
-        Self { clients }
-    }
-
-    pub fn with_client<Tclient>(mut self, id: ProtocolID, client: Box<Tclient>) -> ZResult<Self>
-    where
-        Tclient: SharedMemoryClient + 'static,
-    {
-        match self.clients.entry(id) {
-            std::collections::hash_map::Entry::Occupied(occupied) => {
-                bail!("Client already exists for id {id}: {:?}!", occupied)
-            }
-            std::collections::hash_map::Entry::Vacant(vacant) => {
-                vacant.insert(client as Box<dyn SharedMemoryClient>);
-                Ok(self)
-            }
-        }
-    }
-
-    pub fn build(self) -> SharedMemoryReader {
-        SharedMemoryReader::new(self.clients)
-    }
-}
-
-#[derive(Debug)]
-struct ClientStorage<Inner>
-where
-    Inner: Sized,
-{
-    clients: HashMap<ProtocolID, Inner>,
-}
-
-impl<Inner: Sized> ClientStorage<Inner> {
-    fn new(clients: HashMap<ProtocolID, Inner>) -> Self {
-        Self { clients }
-    }
-
-    fn get_clients(&self) -> &HashMap<ProtocolID, Inner> {
-        &self.clients
-    }
-}
-
-/// # Safety
-/// Only immutable access to internal container is allowed,
-/// so we are Send if the contained type is Send
-unsafe impl<Inner: Send> Send for ClientStorage<Inner> {}
-
-/// # Safety
-/// Only immutable access to internal container is allowed,
-/// so we are Sync if the contained type is Sync
-unsafe impl<Inner: Sync> Sync for ClientStorage<Inner> {}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SharedMemoryReader {
-    clients: ClientStorage<Box<dyn SharedMemoryClient>>,
-    segments: RwLock<HashMap<GlobalDataSegmentID, Arc<dyn SharedMemorySegment>>>,
+    client_storage: Arc<SharedMemoryClientStorage>,
 }
 
-impl Eq for SharedMemoryReader {}
+impl Deref for SharedMemoryReader {
+    type Target = SharedMemoryClientStorage;
 
-impl PartialEq for SharedMemoryReader {
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
+    fn deref(&self) -> &Self::Target {
+        &self.client_storage
     }
 }
 
 impl SharedMemoryReader {
-    pub fn builder() -> SharedMemoryReaderClientSetBuilder {
-        SharedMemoryReaderClientSetBuilder
-    }
-
-    pub fn supported_protocols(&self) -> Vec<ProtocolID> {
-        self.clients.get_clients().keys().copied().collect()
+    pub fn new(client_storage: Arc<SharedMemoryClientStorage>) -> Self {
+        Self { client_storage }
     }
 
     pub fn read_shmbuf(&self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
@@ -210,11 +104,44 @@ impl SharedMemoryReader {
             }
         }
     }
+}
 
-    fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
-        Self {
-            clients: ClientStorage::new(clients),
-            segments: RwLock::default(),
-        }
+#[derive(Debug)]
+pub(crate) struct ClientStorage<Inner>
+where
+    Inner: Sized,
+{
+    clients: HashMap<ProtocolID, Inner>,
+}
+
+impl<Inner: Sized> ClientStorage<Inner> {
+    pub(crate) fn new(clients: HashMap<ProtocolID, Inner>) -> Self {
+        Self { clients }
+    }
+
+    pub(crate) fn get_clients(&self) -> &HashMap<ProtocolID, Inner> {
+        &self.clients
+    }
+}
+
+/// # Safety
+/// Only immutable access to internal container is allowed,
+/// so we are Send if the contained type is Send
+unsafe impl<Inner: Send> Send for ClientStorage<Inner> {}
+
+/// # Safety
+/// Only immutable access to internal container is allowed,
+/// so we are Sync if the contained type is Sync
+unsafe impl<Inner: Sync> Sync for ClientStorage<Inner> {}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(crate) struct GlobalDataSegmentID {
+    protocol: ProtocolID,
+    segment: SegmentID,
+}
+
+impl GlobalDataSegmentID {
+    fn new(protocol: ProtocolID, segment: SegmentID) -> Self {
+        Self { protocol, segment }
     }
 }

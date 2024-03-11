@@ -15,14 +15,14 @@ use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
-use zenoh_examples::CommonArgs;
-use zenoh_shm::api::{
-    factory::SharedMemoryFactory,
-    protocol_implementations::posix::{
-        posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-        protocol_id::POSIX_PROTOCOL_ID,
-    },
+use zenoh::shm::protocol_implementations::posix::{
+    posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+    protocol_id::POSIX_PROTOCOL_ID,
 };
+use zenoh::shm::provider::shared_memory_provider::SharedMemoryProviderBuilder;
+use zenoh::shm::provider::types::AllocAlignment;
+use zenoh::shm::provider::types::MemoryLayout;
+use zenoh_examples::CommonArgs;
 
 #[async_std::main]
 async fn main() {
@@ -37,22 +37,47 @@ async fn main() {
 
     let z = zenoh::open(config).res().await.unwrap();
 
-    let mut factory = SharedMemoryFactory::builder()
-        .provider(POSIX_PROTOCOL_ID, move || {
-            Ok(Box::new(
-                PosixSharedMemoryProviderBackend::builder()
-                    .with_size(sm_size)?
-                    .res()?,
-            ))
-        })
-        .unwrap()
-        .build();
-    let shm = factory.provider(POSIX_PROTOCOL_ID).unwrap();
+    // Construct an SHM backend
+    let backend = {
+        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
+        // The initialisation of SHM backend is completely backend-specific and user is free to do
+        // anything reasonable here. This code is execuated at the provider's first use
 
-    let mut buf = shm.alloc().with_size(size).unwrap().res().unwrap();
-    let bs = unsafe { buf.as_mut_slice() };
-    for b in bs {
-        *b = rand::random::<u8>();
+        // Alignment for POSIX SHM provider
+        // All allocations will be aligned corresponding to this alignment -
+        // that means that the provider will be able to satisfy allocation layouts
+        // with alignment <= provider_alignment
+        let provider_alignment = AllocAlignment::default();
+
+        // Create layout for POSIX Provider's memory
+        let provider_layout = MemoryLayout::new(sm_size, provider_alignment).unwrap();
+
+        PosixSharedMemoryProviderBackend::builder()
+            .with_layout(provider_layout)
+            .res()
+            .unwrap()
+    };
+
+    // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
+    let shared_memory_provider = SharedMemoryProviderBuilder::builder()
+        .protocol_id::<POSIX_PROTOCOL_ID>()
+        .backend(backend)
+        .res();
+
+    let mut buf = shared_memory_provider
+        .alloc_layout()
+        .size(size)
+        .res()
+        .unwrap()
+        .alloc()
+        .res()
+        .unwrap();
+
+    {
+        let mut buf_mut = unsafe { buf.mutate_unchecked() };
+        for b in buf_mut.as_mut() {
+            *b = rand::random::<u8>();
+        }
     }
 
     let publisher = z.declare_publisher("test/thr")

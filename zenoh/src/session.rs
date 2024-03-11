@@ -83,7 +83,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::reader::SharedMemoryReader;
+use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_util::core::AsyncResolve;
 
 zconfigurable! {
@@ -803,7 +803,7 @@ impl Session {
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
         config: Config,
-        #[cfg(feature = "shared-memory")] shm_reader: Option<Arc<SharedMemoryReader>>,
+        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<SharedMemoryClientStorage>>,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             log::debug!("Config: {:?}", &config);
@@ -812,7 +812,7 @@ impl Session {
             match Runtime::init(
                 config,
                 #[cfg(feature = "shared-memory")]
-                shm_reader,
+                shm_clients,
             )
             .await
             {

@@ -16,14 +16,14 @@ use std::time::{Duration, Instant};
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
-use zenoh_examples::CommonArgs;
-use zenoh_shm::api::{
-    factory::SharedMemoryFactory,
-    protocol_implementations::posix::{
-        posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-        protocol_id::POSIX_PROTOCOL_ID,
-    },
+use zenoh::shm::protocol_implementations::posix::{
+    posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+    protocol_id::POSIX_PROTOCOL_ID,
 };
+use zenoh::shm::provider::shared_memory_provider::SharedMemoryProviderBuilder;
+use zenoh::shm::provider::types::AllocAlignment;
+use zenoh::shm::provider::types::MemoryLayout;
+use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
@@ -53,19 +53,41 @@ fn main() {
 
     let mut samples = Vec::with_capacity(n);
 
-    let c_size = size;
-    let mut factory = SharedMemoryFactory::builder()
-        .provider(POSIX_PROTOCOL_ID, move || {
-            Ok(Box::new(
-                PosixSharedMemoryProviderBackend::builder()
-                    .with_size(c_size)?
-                    .res()?,
-            ))
-        })
+    // Construct an SHM backend
+    let backend = {
+        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
+        // The initialisation of SHM backend is completely backend-specific and user is free to do
+        // anything reasonable here. This code is execuated at the provider's first use
+
+        // Alignment for POSIX SHM provider
+        // All allocations will be aligned corresponding to this alignment -
+        // that means that the provider will be able to satisfy allocation layouts
+        // with alignment <= provider_alignment
+        let provider_alignment = AllocAlignment::default();
+
+        // Create layout for POSIX Provider's memory
+        let provider_layout = MemoryLayout::new(size, provider_alignment).unwrap();
+
+        PosixSharedMemoryProviderBackend::builder()
+            .with_layout(provider_layout)
+            .res()
+            .unwrap()
+    };
+
+    // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
+    let shared_memory_provider = SharedMemoryProviderBuilder::builder()
+        .protocol_id::<POSIX_PROTOCOL_ID>()
+        .backend(backend)
+        .res();
+
+    let buf = shared_memory_provider
+        .alloc_layout()
+        .size(size)
+        .res()
         .unwrap()
-        .build();
-    let shm = factory.provider(POSIX_PROTOCOL_ID).unwrap();
-    let buf = shm.alloc().with_size(size).unwrap().res().unwrap();
+        .alloc()
+        .res()
+        .unwrap();
 
     // -- warmup --
     println!("Warming up for {warmup:?}...");

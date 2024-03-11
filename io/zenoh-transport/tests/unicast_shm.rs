@@ -268,7 +268,7 @@ mod tests {
             .unwrap();
 
             {
-                let mut sbuf_mut = unsafe { sbuf.as_mut().unchecked().res() };
+                let mut sbuf_mut = unsafe { sbuf.mutate_unchecked() };
                 sbuf_mut[0..8].copy_from_slice(&msg_count.to_le_bytes());
             }
 
@@ -316,7 +316,7 @@ mod tests {
             .unwrap();
 
             {
-                let mut sbuf_mut = unsafe { sbuf.as_mut().unchecked().res() };
+                let mut sbuf_mut = unsafe { sbuf.mutate_unchecked() };
                 sbuf_mut[0..8].copy_from_slice(&msg_count.to_le_bytes());
             }
 

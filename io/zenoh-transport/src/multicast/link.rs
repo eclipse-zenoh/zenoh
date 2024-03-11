@@ -36,7 +36,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+use zenoh_buffers::{as_mut_slice_featureless, BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::{zcondfeat, zlock};
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
@@ -215,7 +215,11 @@ impl TransportLinkMulticastRx {
         const ERR: &str = "Read error from link: ";
 
         let mut into = (buff)();
-        let (n, locator) = self.inner.link.read(into.as_mut_slice()).await?;
+        let (n, locator) = self
+            .inner
+            .link
+            .read(unsafe { as_mut_slice_featureless(&mut into) })
+            .await?;
         let buffer = ZSlice::make(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
         let mut batch = RBatch::new(self.inner.config.batch, buffer);
         batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;

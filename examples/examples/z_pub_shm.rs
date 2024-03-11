@@ -12,18 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
+use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::shm::api::provider::shared_memory_provider::{BlockOn, GarbageCollect};
-use zenoh::shm::api::provider::types::AllocAlignment;
-use zenoh::{config::Config, shm::api::provider::types::AllocLayout};
-use zenoh_examples::CommonArgs;
-use zenoh_shm::api::{
-    factory::SharedMemoryFactory,
-    protocol_implementations::posix::{
-        posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-        protocol_id::POSIX_PROTOCOL_ID,
-    },
+use zenoh::shm::protocol_implementations::posix::{
+    posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+    protocol_id::POSIX_PROTOCOL_ID,
 };
+use zenoh::shm::provider::shared_memory_provider::SharedMemoryProviderBuilder;
+use zenoh::shm::provider::shared_memory_provider::{BlockOn, GarbageCollect};
+use zenoh::shm::provider::types::AllocAlignment;
+use zenoh::shm::provider::types::MemoryLayout;
+use zenoh_examples::CommonArgs;
 
 const N: usize = 10;
 const K: u32 = 3;
@@ -43,30 +42,49 @@ async fn main() -> Result<(), zenoh::Error> {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Creating Shared Memory Factory...");
-    let mut factory = SharedMemoryFactory::builder()
-        .provider(POSIX_PROTOCOL_ID, || {
-            Ok(Box::new(
-                PosixSharedMemoryProviderBackend::builder()
-                    .with_size(N * 1024)?
-                    .res()?,
-            ))
-        })
-        .unwrap()
-        .build();
-    println!("Retrieving Shared Memory Provider...");
-    let shm = factory.provider(POSIX_PROTOCOL_ID).unwrap();
+    println!("Creating POSIX SHM backend...");
+    // Construct an SHM backend
+    let backend = {
+        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
+        // The initialisation of SHM backend is completely backend-specific and user is free to do
+        // anything reasonable here. This code is execuated at the provider's first use
 
-    println!("Allocating Shared Memory Buffer...");
+        // Alignment for POSIX SHM provider
+        // All allocations will be aligned corresponding to this alignment -
+        // that means that the provider will be able to satisfy allocation layouts
+        // with alignment <= provider_alignment
+        let provider_alignment = AllocAlignment::default();
+
+        // Create layout for POSIX Provider's memory
+        let provider_layout = MemoryLayout::new(N * 1024, provider_alignment).unwrap();
+
+        PosixSharedMemoryProviderBackend::builder()
+            .with_layout(provider_layout)
+            .res()
+            .unwrap()
+    };
+
+    println!("Creating SHM Provider with POSIX backend...");
+    // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
+    let shared_memory_provider = SharedMemoryProviderBuilder::builder()
+        .protocol_id::<POSIX_PROTOCOL_ID>()
+        .backend(backend)
+        .res();
+
     let publisher = session.declare_publisher(&path).res().await.unwrap();
 
-    let layout = AllocLayout::new(1024, AllocAlignment::default(), shm).unwrap();
+    println!("Allocating Shared Memory Buffer...");
+
+    let layout = shared_memory_provider
+        .alloc_layout()
+        .size(1024)
+        .res()
+        .unwrap();
 
     for idx in 0..(K * N as u32) {
-        let mut sbuf = shm
+        let mut sbuf = layout
             .alloc()
             .with_policy::<BlockOn<GarbageCollect>>()
-            .with_layout(&layout)
             .res_async()
             .await
             .unwrap();
@@ -75,36 +93,25 @@ async fn main() -> Result<(), zenoh::Error> {
         // of the write. This is simply to have the same format as zn_pub.
         let prefix = format!("[{idx:4}] ");
         let prefix_len = prefix.as_bytes().len();
-
-        // Retrive a mutable slice from the SharedMemoryBuf.
-        //
-        // This operation is marked unsafe since we cannot guarantee a single mutable reference
-        // across multiple processes. Thus if you use it, and you'll inevitable have to use it,
-        // you have to keep in mind that if you have multiple process retrieving a mutable slice
-        // you may get into concurrent writes. That said, if you have a serial pipeline and
-        // the buffer is flowing through the pipeline this will not create any issues.
-        //
-        // In short, whilst this operation is marked as unsafe, you are safe if you can
-        // guarantee that in your application only one process at the time will actually write.
-        let slice = unsafe { sbuf.as_mut_slice() };
         let slice_len = prefix_len + value.as_bytes().len();
-        slice[0..prefix_len].copy_from_slice(prefix.as_bytes());
-        slice[prefix_len..slice_len].copy_from_slice(value.as_bytes());
+
+        {
+            let mut buf_mut = unsafe { sbuf.mutate_unchecked() };
+            buf_mut[0..prefix_len].copy_from_slice(prefix.as_bytes());
+            buf_mut[prefix_len..slice_len].copy_from_slice(value.as_bytes());
+        }
 
         // Write the data
         println!(
             "Put SHM Data ('{}': '{}')",
             path,
-            String::from_utf8_lossy(&slice[0..slice_len])
+            String::from_utf8_lossy(&sbuf[0..slice_len])
         );
         publisher.put(sbuf.clone()).res().await?;
 
         // Dropping the SharedMemoryBuf means to free it.
         drop(sbuf);
     }
-
-    // Signal the SharedMemoryManager to garbage collect all the freed SharedMemoryBuf.
-    let _freed = shm.garbage_collect();
 
     Ok(())
 }

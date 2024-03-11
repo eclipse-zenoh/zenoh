@@ -85,8 +85,6 @@ use handlers::DefaultHandler;
 use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
-#[cfg(feature = "shared-memory")]
-use shm::reader::SharedMemoryReader;
 use std::future::Ready;
 #[cfg(feature = "shared-memory")]
 use std::sync::Arc;
@@ -94,6 +92,10 @@ use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
+#[cfg(feature = "shared-memory")]
+pub use zenoh_shm::api as shm;
+#[cfg(feature = "shared-memory")]
+pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_util::concat_enabled_features;
 
 /// A zenoh error.
@@ -148,8 +150,6 @@ pub mod queryable;
 pub mod sample;
 pub mod subscriber;
 pub mod value;
-#[cfg(feature = "shared-memory")]
-pub use zenoh_shm as shm;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
@@ -269,7 +269,7 @@ where
     OpenBuilder {
         config,
         #[cfg(feature = "shared-memory")]
-        shm_reader: None,
+        shm_clients: None,
     }
 }
 
@@ -291,7 +291,7 @@ where
 {
     config: TryIntoConfig,
     #[cfg(feature = "shared-memory")]
-    shm_reader: Option<Arc<SharedMemoryReader>>,
+    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
 }
 
 #[cfg(feature = "shared-memory")]
@@ -300,8 +300,8 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    pub fn with_shm_reader(mut self, shm_reader: Arc<SharedMemoryReader>) -> Self {
-        self.shm_reader = Some(shm_reader);
+    pub fn with_shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
+        self.shm_clients = Some(shm_clients);
         self
     }
 }
@@ -327,7 +327,7 @@ where
         Session::new(
             config,
             #[cfg(feature = "shared-memory")]
-            self.shm_reader,
+            self.shm_clients,
         )
         .res_sync()
     }

@@ -40,6 +40,8 @@ use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
+use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
+#[cfg(feature = "shared-memory")]
 use zenoh_shm::reader::SharedMemoryReader;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
@@ -50,13 +52,13 @@ use zenoh_transport::{
 #[derive(Default)]
 pub struct RuntimeBuilder {
     #[cfg(feature = "shared-memory")]
-    shm_reader: Option<Arc<SharedMemoryReader>>,
+    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
 }
 
 impl RuntimeBuilder {
     #[cfg(feature = "shared-memory")]
-    pub fn shm_reader(mut self, shm_reader: Arc<SharedMemoryReader>) -> Self {
-        self.shm_reader = Some(shm_reader);
+    pub fn shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
+        self.shm_clients = Some(shm_clients);
         self
     }
 
@@ -64,7 +66,7 @@ impl RuntimeBuilder {
         let mut runtime = Runtime::init(
             config,
             #[cfg(feature = "shared-memory")]
-            self.shm_reader,
+            self.shm_clients,
         )
         .await?;
         match runtime.start().await {
@@ -114,7 +116,7 @@ impl Runtime {
 
     pub(crate) async fn init(
         config: Config,
-        #[cfg(feature = "shared-memory")] shm_reader: Option<Arc<SharedMemoryReader>>,
+        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<SharedMemoryClientStorage>>,
     ) -> ZResult<Runtime> {
         log::debug!("Zenoh Rust API {}", GIT_VERSION);
 
@@ -141,7 +143,7 @@ impl Runtime {
 
         let transport_manager = zcondfeat!(
             "shared-memory",
-            transport_manager.shm_reader(shm_reader),
+            transport_manager.shm_reader(shm_clients.map(SharedMemoryReader::new)),
             transport_manager
         )
         .build(handler.clone())?;

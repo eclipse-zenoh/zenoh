@@ -12,149 +12,49 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::ZSlice;
-use core::ops::{Deref, DerefMut};
-
-/*************************************/
-/*              BUILDER              */
-/*************************************/
-pub struct ZSliceMutBuilder<'a> {
-    slice: &'a mut ZSlice,
-}
-
-impl<'a> ZSliceMutBuilder<'a> {
-    pub(crate) fn new(slice: &'a mut ZSlice) -> Self {
-        Self { slice }
-    }
-
-    /// Check if ZSlice shares the underlying data.
-    /// Will return current ZSlice state along with proper resolving builder
-    pub fn is_sharing(self) -> SharingResult<'a> {
-        match self.slice.is_unique() {
-            true => SharingResult::Unique(ZSliceMutBuilderUncheckedSafe::new(self.slice)),
-            false => SharingResult::Sharing(ZSliceMutBuilderCopy::new(self.slice)),
-        }
-    }
-
-    /// Perform implicit copy if ZSlice shares the underlying data
-    pub fn copy_if_sharing(self) -> ZSliceMutBuilderCopyIfShared<'a> {
-        ZSliceMutBuilderCopyIfShared::new(self.slice)
-    }
-
-    /// Perform implicit copy anyway
-    pub fn copy(self) -> ZSliceMutBuilderCopy<'a> {
-        ZSliceMutBuilderCopy::new(self.slice)
-    }
-
-    /// Fail and return None if ZSlice shares the underlying data
-    pub fn fail_if_sharing(self) -> ZSliceMutBuilderFail<'a> {
-        ZSliceMutBuilderFail::new(self.slice)
-    }
-
-    /// # Safety
-    /// Unconditionally borrows ZSlice's data as mutable without runtime checks.
-    /// This is safe if all of the following conditions are met:
-    /// - ZSlice instance uniquely references the underlying data
-    /// - shared memory reference for underlying data is unique (for shared-memory buffers)
-    /// This method is mostly usable for mutating recently-allocated shared memory buffers
-    pub unsafe fn unchecked(self) -> ZSliceMutBuilderUncheckedUnsafe<'a> {
-        ZSliceMutBuilderUncheckedUnsafe::new(self.slice)
-    }
-}
-
-pub enum SharingResult<'a> {
-    Sharing(ZSliceMutBuilderCopy<'a>),
-    Unique(ZSliceMutBuilderUncheckedSafe<'a>),
-}
-
-pub struct ZSliceMutBuilderUncheckedSafe<'a> {
-    inner: ZSliceMutBuilderUncheckedUnsafe<'a>,
-}
-
-impl<'a> ZSliceMutBuilderUncheckedSafe<'a> {
-    fn new(slice: &'a mut ZSlice) -> Self {
-        Self {
-            inner: ZSliceMutBuilderUncheckedUnsafe::new(slice),
-        }
-    }
-
-    pub fn res(self) -> ZSliceMut<'a> {
-        unsafe { self.inner.res() }
-    }
-}
-
-pub struct ZSliceMutBuilderUncheckedUnsafe<'a> {
-    slice: &'a mut ZSlice,
-}
-
-impl<'a> ZSliceMutBuilderUncheckedUnsafe<'a> {
-    fn new(slice: &'a mut ZSlice) -> Self {
-        Self { slice }
-    }
-
-    /// # Safety
-    /// Unconditionally borrows ZSlice's data as mutable without runtime checks.
-    /// This is safe if all of the following conditions are met:
-    /// - ZSlice instance is unique
-    /// - shared memory reference for underlying data is unique (for shared-memory buffers)
-    /// This method is mostly usable for mutating recently-allocated shared memory buffers
-    pub unsafe fn res(self) -> ZSliceMut<'a> {
-        ZSliceMut::new(self.slice.as_slice_mut_unchecked())
-    }
-}
-
-pub struct ZSliceMutBuilderCopy<'a> {
-    slice: &'a mut ZSlice,
-}
-
-impl<'a> ZSliceMutBuilderCopy<'a> {
-    fn new(slice: &'a mut ZSlice) -> Self {
-        Self { slice }
-    }
-
-    pub fn res(self) -> ZSliceMut<'a> {
-        ZSliceMut::new(self.slice.copy_as_slice_mut())
-    }
-}
-
-pub struct ZSliceMutBuilderCopyIfShared<'a> {
-    slice: &'a mut ZSlice,
-}
-
-impl<'a> ZSliceMutBuilderCopyIfShared<'a> {
-    fn new(slice: &'a mut ZSlice) -> Self {
-        Self { slice }
-    }
-
-    pub fn res(self) -> ZSliceMut<'a> {
-        ZSliceMut::new(self.slice.as_slice_mut())
-    }
-}
-
-pub struct ZSliceMutBuilderFail<'a> {
-    slice: &'a mut ZSlice,
-}
-
-impl<'a> ZSliceMutBuilderFail<'a> {
-    fn new(slice: &'a mut ZSlice) -> Self {
-        Self { slice }
-    }
-
-    pub fn res(self) -> Option<ZSliceMut<'a>> {
-        self.slice.try_as_slice_mut().map(ZSliceMut::new)
-    }
-}
+use core::ops::{Deref, DerefMut, Range};
 
 /*************************************/
 /*             ZSLICEMUT             */
 /*************************************/
 pub struct ZSliceMut<'a> {
     slice: &'a mut [u8],
+    start: &'a mut usize,
+    end: &'a mut usize,
 }
 
 impl<'a> ZSliceMut<'a> {
-    fn new(slice: &'a mut [u8]) -> Self {
-        Self { slice }
+    pub(crate) fn new(slice: &'a mut [u8], start: &'a mut usize, end: &'a mut usize) -> Self {
+        Self { slice, start, end }
+    }
+
+    pub fn range(&self) -> Range<usize> {
+        *self.start..*self.end
+    }
+
+    pub fn set_range(&mut self, range: Range<usize>) -> bool {
+        match self.slice.len() >= range.end {
+            true => {
+                *self.start = range.start;
+                *self.end = range.end;
+                true
+            }
+            false => false,
+        }
+    }
+
+    pub fn available_len(&self) -> usize {
+        self.slice.len()
+    }
+
+    pub fn len(&self) -> usize {
+        *self.end - *self.start
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        *self.end == *self.start
     }
 }
 
@@ -166,13 +66,13 @@ impl<'a> Deref for ZSliceMut<'a> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.slice
+        crate::unsafe_slice!(self.slice, *self.start..*self.end)
     }
 }
 
 impl<'a> DerefMut for ZSliceMut<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.slice
+        crate::unsafe_slice_mut!(self.slice, *self.start..*self.end)
     }
 }
 

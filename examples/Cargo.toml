@@ -27,7 +27,7 @@ readme = "README.md"
 publish = false
 
 [features]
-shared-memory = ["zenoh/shared-memory", "zenoh-shm"]
+shared-memory = ["zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
 transport_unixpipe = ["zenoh/transport_unixpipe"]
 
@@ -51,7 +51,6 @@ json5 = { workspace = true }
 log = { workspace = true }
 zenoh = { workspace = true }
 zenoh-ext = { workspace = true }
-zenoh-shm = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
@@ -156,3 +155,8 @@ required-features = ["shared-memory"]
 [[example]]
 name = "z_pong"
 path = "examples/z_pong.rs"
+
+[[example]]
+name = "z_alloc_shm"
+path = "examples/z_alloc_shm.rs"
+required-features = ["shared-memory"]

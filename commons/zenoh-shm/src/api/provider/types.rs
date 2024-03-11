@@ -33,7 +33,7 @@ impl From<zenoh_result::Error> for ZAllocError {
     }
 }
 
-// alignemnt in powers of 2: 0 == 1-byte alignment, 1 == 2byte, 2 == 4byte, 4 == 8byte etc
+// alignemnt in powers of 2: 0 == 1-byte alignment, 1 == 2byte, 2 == 4byte, 3 == 8byte etc
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AllocAlignment {
     pow: u32,
@@ -48,7 +48,7 @@ impl Display for AllocAlignment {
 impl Default for AllocAlignment {
     fn default() -> Self {
         Self {
-            pow: (std::mem::align_of::<u32>() as f64).sqrt() as u32 - 1,
+            pow: (std::mem::align_of::<u32>() as f64).log2().round() as u32,
         }
     }
 }
