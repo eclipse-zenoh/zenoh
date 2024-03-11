@@ -27,6 +27,7 @@ use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
 
+#[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Payload(ZBuf);
 
