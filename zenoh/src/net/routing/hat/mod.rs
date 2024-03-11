@@ -32,8 +32,8 @@ use zenoh_protocol::{
     core::WireExpr,
     network::{
         declare::{
-            queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, QueryableId,
-            SubscriberId,
+            queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, InterestId,
+            QueryableId, SubscriberId,
         },
         Oam,
     },
@@ -116,6 +116,23 @@ pub(crate) trait HatBaseTrait {
 }
 
 pub(crate) trait HatPubSubTrait {
+    #[allow(clippy::too_many_arguments)] // TODO refactor
+    fn declare_sub_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        current: bool,
+        future: bool,
+        aggregate: bool,
+    );
+    fn undeclare_sub_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+    );
     fn declare_subscription(
         &self,
         tables: &mut Tables,
@@ -148,6 +165,23 @@ pub(crate) trait HatPubSubTrait {
 }
 
 pub(crate) trait HatQueriesTrait {
+    #[allow(clippy::too_many_arguments)] // TODO refactor
+    fn declare_qabl_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        current: bool,
+        future: bool,
+        aggregate: bool,
+    );
+    fn undeclare_qabl_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+    );
     fn declare_queryable(
         &self,
         tables: &mut Tables,

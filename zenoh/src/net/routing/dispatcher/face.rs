@@ -16,11 +16,14 @@ use super::tables::TablesLock;
 use super::{resource::*, tables};
 use crate::net::primitives::{McastMux, Mux, Primitives};
 use crate::net::routing::interceptor::{InterceptorTrait, InterceptorsChain};
+use crate::net::routing::RoutingContext;
 use crate::KeyExpr;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use zenoh_protocol::network::declare::{FinalInterest, InterestId};
+use zenoh_protocol::network::{ext, Declare, DeclareBody};
 use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
@@ -38,6 +41,7 @@ pub struct FaceState {
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
+    pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
@@ -66,6 +70,7 @@ impl FaceState {
             #[cfg(feature = "stats")]
             stats,
             primitives,
+            remote_key_interests: HashMap::new(),
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
             next_qid: 0,
@@ -208,11 +213,75 @@ impl Primitives for Face {
                     msg.ext_nodeid.node_id,
                 );
             }
-            zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::DeclareInterest(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::FinalInterest(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::UndeclareInterest(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
+                log::warn!("Received unsupported {m:?}")
+            }
+            zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
+                log::warn!("Received unsupported {m:?}")
+            }
+            zenoh_protocol::network::DeclareBody::DeclareInterest(m) => {
+                if m.interest.keyexprs() && m.interest.future() {
+                    register_expr_interest(
+                        &self.tables,
+                        &mut self.state.clone(),
+                        m.id,
+                        m.wire_expr.as_ref(),
+                    );
+                }
+                if m.interest.subscribers() {
+                    declare_sub_interest(
+                        ctrl_lock.as_ref(),
+                        &self.tables,
+                        &mut self.state.clone(),
+                        m.id,
+                        m.wire_expr.as_ref(),
+                        m.interest.current(),
+                        m.interest.future(),
+                        m.interest.aggregate(),
+                    );
+                }
+                if m.interest.queryables() {
+                    declare_qabl_interest(
+                        ctrl_lock.as_ref(),
+                        &self.tables,
+                        &mut self.state.clone(),
+                        m.id,
+                        m.wire_expr.as_ref(),
+                        m.interest.current(),
+                        m.interest.future(),
+                        m.interest.aggregate(),
+                    );
+                }
+                if m.interest.current() {
+                    self.state.primitives.send_declare(RoutingContext::new_out(
+                        Declare {
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::FinalInterest(FinalInterest { id: m.id }),
+                        },
+                        self.clone(),
+                    ));
+                }
+            }
+            zenoh_protocol::network::DeclareBody::FinalInterest(m) => {
+                log::warn!("Received unsupported {m:?}")
+            }
+            zenoh_protocol::network::DeclareBody::UndeclareInterest(m) => {
+                unregister_expr_interest(&self.tables, &mut self.state.clone(), m.id);
+                undeclare_sub_interest(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                );
+                undeclare_qabl_interest(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                );
+            }
         }
         drop(ctrl_lock);
     }

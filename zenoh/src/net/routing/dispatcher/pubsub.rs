@@ -22,13 +22,96 @@ use std::sync::RwLock;
 use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::declare::{Mode, SubscriberId};
+use zenoh_protocol::network::declare::{InterestId, Mode, SubscriberId};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::{declare::ext, Push},
     zenoh::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
+
+#[allow(clippy::too_many_arguments)] // TODO refactor
+pub(crate) fn declare_sub_interest(
+    hat_code: &(dyn HatTrait + Send + Sync),
+    tables: &TablesLock,
+    face: &mut Arc<FaceState>,
+    id: InterestId,
+    expr: Option<&WireExpr>,
+    current: bool,
+    future: bool,
+    aggregate: bool,
+) {
+    if let Some(expr) = expr {
+        let rtables = zread!(tables.tables);
+        match rtables
+            .get_mapping(face, &expr.scope, expr.mapping)
+            .cloned()
+        {
+            Some(mut prefix) => {
+                log::debug!(
+                    "{} Declare sub interest {} ({}{})",
+                    face,
+                    id,
+                    prefix.expr(),
+                    expr.suffix
+                );
+                let res = Resource::get_resource(&prefix, &expr.suffix);
+                let (mut res, mut wtables) = if res
+                    .as_ref()
+                    .map(|r| r.context.is_some())
+                    .unwrap_or(false)
+                {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables, &mut res, matches);
+                    (res, wtables)
+                };
+
+                hat_code.declare_sub_interest(
+                    &mut wtables,
+                    face,
+                    id,
+                    Some(&mut res),
+                    current,
+                    future,
+                    aggregate,
+                );
+            }
+            None => log::error!(
+                "{} Declare sub interest {} for unknown scope {}!",
+                face,
+                id,
+                expr.scope
+            ),
+        }
+    } else {
+        let mut wtables = zwrite!(tables.tables);
+        hat_code.declare_sub_interest(&mut wtables, face, id, None, current, future, aggregate);
+    }
+}
+
+pub(crate) fn undeclare_sub_interest(
+    hat_code: &(dyn HatTrait + Send + Sync),
+    tables: &TablesLock,
+    face: &mut Arc<FaceState>,
+    id: InterestId,
+) {
+    log::debug!("{} Undeclare sub interest {}", face, id,);
+    let mut wtables = zwrite!(tables.tables);
+    hat_code.undeclare_sub_interest(&mut wtables, face, id);
+}
 
 pub(crate) fn declare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),

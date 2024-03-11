@@ -22,13 +22,13 @@ use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::QueryableId;
+use zenoh_protocol::network::declare::{InterestId, QueryableId};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::declare::{
@@ -126,18 +126,11 @@ fn register_client_queryable(
     // Register queryable
     {
         let res = get_mut_unchecked(res);
-        get_mut_unchecked(res.session_ctxs.entry(face.id).or_insert_with(|| {
-            Arc::new(SessionContext {
-                face: face.clone(),
-                local_expr_id: None,
-                remote_expr_id: None,
-                subs: None,
-                qabl: None,
-                last_values: HashMap::new(),
-                in_interceptor_cache: None,
-                e_interceptor_cache: None,
-            })
-        }))
+        get_mut_unchecked(
+            res.session_ctxs
+                .entry(face.id)
+                .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
+        )
         .qabl = Some(*qabl_info);
     }
     face_hat_mut!(face).remote_qabls.insert(id, res.clone());
@@ -258,6 +251,28 @@ lazy_static::lazy_static! {
 }
 
 impl HatQueriesTrait for HatCode {
+    fn declare_qabl_interest(
+        &self,
+        _tables: &mut Tables,
+        _face: &mut Arc<FaceState>,
+        _id: InterestId,
+        _res: Option<&mut Arc<Resource>>,
+        _current: bool,
+        _future: bool,
+        _aggregate: bool,
+    ) {
+        todo!()
+    }
+
+    fn undeclare_qabl_interest(
+        &self,
+        _tables: &mut Tables,
+        _face: &mut Arc<FaceState>,
+        _id: InterestId,
+    ) {
+        todo!()
+    }
+
     fn declare_queryable(
         &self,
         tables: &mut Tables,

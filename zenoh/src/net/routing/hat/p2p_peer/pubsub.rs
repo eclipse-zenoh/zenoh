@@ -25,7 +25,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::SubscriberId;
+use zenoh_protocol::network::declare::{InterestId, SubscriberId};
 use zenoh_protocol::{
     core::{Reliability, WhatAmI},
     network::declare::{
@@ -105,19 +105,11 @@ fn register_client_subscription(
                 }
             },
             None => {
-                res.session_ctxs.insert(
-                    face.id,
-                    Arc::new(SessionContext {
-                        face: face.clone(),
-                        local_expr_id: None,
-                        remote_expr_id: None,
-                        subs: Some(*sub_info),
-                        qabl: None,
-                        last_values: HashMap::new(),
-                        in_interceptor_cache: None,
-                        e_interceptor_cache: None,
-                    }),
-                );
+                let ctx = res
+                    .session_ctxs
+                    .entry(face.id)
+                    .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
+                get_mut_unchecked(ctx).subs = Some(*sub_info);
             }
         }
     }
@@ -258,6 +250,28 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
 }
 
 impl HatPubSubTrait for HatCode {
+    fn declare_sub_interest(
+        &self,
+        _tables: &mut Tables,
+        _face: &mut Arc<FaceState>,
+        _id: InterestId,
+        _res: Option<&mut Arc<Resource>>,
+        _current: bool,
+        _future: bool,
+        _aggregate: bool,
+    ) {
+        todo!()
+    }
+
+    fn undeclare_sub_interest(
+        &self,
+        _tables: &mut Tables,
+        _face: &mut Arc<FaceState>,
+        _id: InterestId,
+    ) {
+        todo!()
+    }
+
     fn declare_subscription(
         &self,
         tables: &mut Tables,
