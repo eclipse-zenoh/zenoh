@@ -81,36 +81,50 @@ impl Encoding {
 
     // - Primitives types supported in all Zenoh bindings
     /// Just some bytes.
+    ///
+    /// Constant alias for string: `"zenoh/bytes"`.
     pub const ZENOH_BYTES: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 0,
         schema: None,
     });
     /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, or 64bit. Binary reprensentation uses two's complement.
+    ///
+    /// Constant alias for string: `"zenoh/int"`.
     pub const ZENOH_INT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 1,
         schema: None,
     });
     /// A VLE-encoded little-endian unsigned integer. Either 8bit, 16bit, 32bit, or 64bit.
+    ///
+    /// Constant alias for string: `"zenoh/uint"`.
     pub const ZENOH_UINT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 2,
         schema: None,
     });
     /// A VLE-encoded float. Either little-endian 32bit or 64bit. Binary representation uses *IEEE 754-2008* *binary32* or *binary64*, respectively.
+    ///
+    /// Constant alias for string: `"zenoh/float"`.
     pub const ZENOH_FLOAT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 3,
         schema: None,
     });
     /// A boolean. `0` is `false`, `1` is `true`. Other values are invalid.
+    ///
+    /// Constant alias for string: `"zenoh/bool"`.
     pub const ZENOH_BOOL: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 4,
         schema: None,
     });
     /// A UTF-8 string.
+    ///
+    /// Constant alias for string: `"zenoh/string"`.
     pub const ZENOH_STRING: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 5,
         schema: None,
     });
     /// A zenoh error.
+    ///
+    /// Constant alias for string: `"zenoh/error"`.
     pub const ZENOH_ERROR: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 6,
         schema: None,
@@ -118,252 +132,352 @@ impl Encoding {
 
     // - Advanced types may be supported in some of the Zenoh bindings.
     /// An application-specific stream of bytes.
+    ///
+    /// Constant alias for string: `"application/octet-stream"`.
     pub const APPLICATION_OCTET_STREAM: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 7,
         schema: None,
     });
     /// A textual file.
+    ///
+    /// Constant alias for string: `"text/plain"`.
     pub const TEXT_PLAIN: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 8,
         schema: None,
     });
     /// JSON data intended to be consumed by an application.
+    ///
+    /// Constant alias for string: `"application/json"`.
     pub const APPLICATION_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 9,
         schema: None,
     });
     /// JSON data intended to be human readable.
+    ///
+    /// Constant alias for string: `"text/json"`.
     pub const TEXT_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 10,
         schema: None,
     });
     /// A Common Data Representation (CDR)-encoded data.
+    ///
+    /// Constant alias for string: `"application/cdr"`.
     pub const APPLICATION_CDR: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 11,
         schema: None,
     });
     /// A Concise Binary Object Representation (CBOR)-encoded data.
+    ///
+    /// Constant alias for string: `"application/cbor"`.
     pub const APPLICATION_CBOR: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 12,
         schema: None,
     });
     /// YAML data intended to be consumed by an application.
+    ///
+    /// Constant alias for string: `"application/yaml"`.
     pub const APPLICATION_YAML: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 13,
         schema: None,
     });
     /// YAML data intended to be human readable.
+    ///
+    /// Constant alias for string: `"text/yaml"`.
     pub const TEXT_YAML: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 14,
         schema: None,
     });
     /// JSON5 encoded data that are human readable.
+    ///
+    /// Constant alias for string: `"text/json5"`.
     pub const TEXT_JSON5: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 15,
         schema: None,
     });
     /// A Python object serialized using [pickle](https://docs.python.org/3/library/pickle.html).
+    ///
+    /// Constant alias for string: `"application/python-serialized-object"`.
     pub const APPLICATION_PYTHON_SERIALIZED_OBJECT: Encoding =
         Self(zenoh_protocol::core::Encoding {
             id: 16,
             schema: None,
         });
     /// An application-specific protobuf-encoded data.
+    ///
+    /// Constant alias for string: `"application/protobuf"`.
     pub const APPLICATION_PROTOBUF: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 17,
         schema: None,
     });
     /// A Java serialized object.
+    ///
+    /// Constant alias for string: `"application/java-serialized-object"`.
     pub const APPLICATION_JAVA_SERIALIZED_OBJECT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 18,
         schema: None,
     });
     /// An [openmetrics](https://github.com/OpenObservability/OpenMetrics) data, common used by [Prometheus](https://prometheus.io/).
+    ///
+    /// Constant alias for string: `"application/openmetrics-text"`.
     pub const APPLICATION_OPENMETRICS_TEXT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 19,
         schema: None,
     });
     /// A Portable Network Graphics (PNG) image.
+    ///
+    /// Constant alias for string: `"image/png"`.
     pub const IMAGE_PNG: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 20,
         schema: None,
     });
     /// A Joint Photographic Experts Group (JPEG) image.
+    ///
+    /// Constant alias for string: `"image/jpeg"`.
     pub const IMAGE_JPEG: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 21,
         schema: None,
     });
     /// A Graphics Interchange Format (GIF) image.
+    ///
+    /// Constant alias for string: `"image/gif"`.
     pub const IMAGE_GIF: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 22,
         schema: None,
     });
     /// A BitMap (BMP) image.
+    ///
+    /// Constant alias for string: `"image/bmp"`.
     pub const IMAGE_BMP: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 23,
         schema: None,
     });
     /// A Web Protable (WebP) image.
+    ///
+    ///  Constant alias for string: `"image/webp"`.
     pub const IMAGE_WEBP: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 24,
         schema: None,
     });
-    /// An XML file.
+    /// An XML file intended to be consumed by an application..
+    ///
+    /// Constant alias for string: `"application/xml"`.
     pub const APPLICATION_XML: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 25,
         schema: None,
     });
     /// An encoded a list of tuples, each consisting of a name and a value.
+    ///
+    /// Constant alias for string: `"application/x-www-form-urlencoded"`.
     pub const APPLICATION_X_WWW_FORM_URLENCODED: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 26,
         schema: None,
     });
     /// An HTML file.
+    ///
+    /// Constant alias for string: `"text/html"`.
     pub const TEXT_HTML: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 27,
         schema: None,
     });
-    /// An XML file.
+    /// An XML file that is human readable.
+    ///
+    /// Constant alias for string: `"text/xml"`.
     pub const TEXT_XML: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 28,
         schema: None,
     });
     /// A CSS file.
+    ///
+    /// Constant alias for string: `"text/css"`.
     pub const TEXT_CSS: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 29,
         schema: None,
     });
     /// A JavaScript file.
+    ///
+    /// Constant alias for string: `"text/javascript"`.
     pub const TEXT_JAVASCRIPT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 30,
         schema: None,
     });
     /// A MarkDown file.
+    ///
+    /// Constant alias for string: `"text/markdown"`.
     pub const TEXT_MARKDOWN: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 31,
         schema: None,
     });
     /// A CSV file.
+    ///
+    /// Constant alias for string: `"text/csv"`.
     pub const TEXT_CSV: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 32,
         schema: None,
     });
     /// An application-specific SQL query.
+    ///
+    /// Constant alias for string: `"application/sql"`.
     pub const APPLICATION_SQL: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 33,
         schema: None,
     });
     /// Constrained Application Protocol (CoAP) data intended for CoAP-to-HTTP and HTTP-to-CoAP proxies.
+    ///
+    /// Constant alias for string: `"application/coap-payload"`.
     pub const APPLICATION_COAP_PAYLOAD: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 34,
         schema: None,
     });
     /// Defines a JSON document structure for expressing a sequence of operations to apply to a JSON document.
+    ///
+    /// Constant alias for string: `"application/json-patch+json"`.
     pub const APPLICATION_JSON_PATCH_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 35,
         schema: None,
     });
     /// A JSON text sequence consists of any number of JSON texts, all encoded in UTF-8.
+    ///
+    /// Constant alias for string: `"application/json-seq"`.
     pub const APPLICATION_JSON_SEQ: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 36,
         schema: None,
     });
     /// A JSONPath defines a string syntax for selecting and extracting JSON values from within a given JSON value.
+    ///
+    /// Constant alias for string: `"application/jsonpath"`.
     pub const APPLICATION_JSONPATH: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 37,
         schema: None,
     });
     /// A JSON Web Token (JWT).
+    ///
+    /// Constant alias for string: `"application/jwt"`.
     pub const APPLICATION_JWT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 38,
         schema: None,
     });
     /// An application-specific MPEG-4 encoded data, either audio or video.
+    ///
+    /// Constant alias for string: `"application/mp4"`.
     pub const APPLICATION_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 39,
         schema: None,
     });
     /// A SOAP 1.2 message serialized as XML 1.0.
+    ///
+    /// Constant alias for string: `"application/soap+xml"`.
     pub const APPLICATION_SOAP_XML: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 40,
         schema: None,
     });
     /// A YANG-encoded data commonly used by the Network Configuration Protocol (NETCONF).
+    ///
+    /// Constant alias for string: `"application/yang"`.
     pub const APPLICATION_YANG: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 41,
         schema: None,
     });
     /// A MPEG-4 Advanced Audio Coding (AAC) media.
+    ///
+    /// Constant alias for string: `"audio/aac"`.
     pub const AUDIO_AAC: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 42,
         schema: None,
     });
     /// A Free Lossless Audio Codec (FLAC) media.
+    ///
+    /// Constant alias for string: `"audio/flac"`.
     pub const AUDIO_FLAC: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 43,
         schema: None,
     });
     /// An audio codec defined in MPEG-1, MPEG-2, MPEG-4, or registered at the MP4 registration authority.
+    ///
+    /// Constant alias for string: `"audio/mp4"`.
     pub const AUDIO_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 44,
         schema: None,
     });
     /// An Ogg-encapsulated audio stream.
+    ///
+    /// Constant alias for string: `"audio/ogg"`.
     pub const AUDIO_OGG: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 45,
         schema: None,
     });
     /// A Vorbis-encoded audio stream.
+    ///
+    /// Constant alias for string: `"audio/vorbis"`.
     pub const AUDIO_VORBIS: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 46,
         schema: None,
     });
     /// A h261-encoded video stream.
+    ///
+    /// Constant alias for string: `"video/h261"`.
     pub const VIDEO_H261: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 47,
         schema: None,
     });
     /// A h263-encoded video stream.
+    ///
+    /// Constant alias for string: `"video/h263"`.
     pub const VIDEO_H263: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 48,
         schema: None,
     });
     /// A h264-encoded video stream.
+    ///
+    /// Constant alias for string: `"video/h264"`.
     pub const VIDEO_H264: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 49,
         schema: None,
     });
     /// A h265-encoded video stream.
+    ///
+    /// Constant alias for string: `"video/h265"`.
     pub const VIDEO_H265: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 50,
         schema: None,
     });
     /// A h266-encoded video stream.
+    ///
+    /// Constant alias for string: `"video/h266"`.
     pub const VIDEO_H266: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 51,
         schema: None,
     });
     /// A video codec defined in MPEG-1, MPEG-2, MPEG-4, or registered at the MP4 registration authority.
+    ///
+    /// Constant alias for string: `"video/mp4"`.
     pub const VIDEO_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 52,
         schema: None,
     });
     /// An Ogg-encapsulated video stream.
+    ///
+    /// Constant alias for string: `"video/ogg"`.
     pub const VIDEO_OGG: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 53,
         schema: None,
     });
     /// An uncompressed, studio-quality video stream.
+    ///
+    /// Constant alias for string: `"video/raw"`.
     pub const VIDEO_RAW: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 54,
         schema: None,
     });
     /// A VP8-encoded video stream.
+    ///
+    /// Constant alias for string: `"video/vp8"`.
     pub const VIDEO_VP8: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 55,
         schema: None,
     });
     /// A VP9-encoded video stream.
+    ///
+    /// Constant alias for string: `"video/vp9"`.
     pub const VIDEO_VP9: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 56,
         schema: None,
@@ -494,7 +608,8 @@ impl Encoding {
         Self::ZENOH_BYTES
     }
 
-    /// Set a schema to this encoding. Zenoh does not define what a schema is and it is left to the implementer.
+    /// Set a schema to this encoding. Zenoh does not define what a schema is and its semantichs is left to the implementer.
+    /// E.g. a common schema for `text/plain` encoding is `utf-8`.
     pub fn with_schema<S>(mut self, s: S) -> Self
     where
         S: Into<String>,
