@@ -17,7 +17,6 @@
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::sample::DataInfo;
 use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
@@ -28,11 +27,9 @@ use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::{
-    core::WireExpr,
-    network::{response, Mapping, RequestId, Response, ResponseFinal},
-    zenoh::{self, ext::ValueType, reply::ReplyBody, Del, Put, ResponseBody},
-};
+use zenoh_protocol::core::{EntityId, WireExpr};
+use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
+use zenoh_protocol::zenoh::{self, ext::ValueType, reply::ReplyBody, Del, Put, ResponseBody};
 use zenoh_result::ZResult;
 
 pub(crate) struct QueryInner {
@@ -64,6 +61,7 @@ impl Drop for QueryInner {
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
+    pub(crate) eid: EntityId,
 }
 
 impl Query {
@@ -192,22 +190,12 @@ impl SyncResolve for ReplyBuilder<'_> {
                     kind,
                     encoding,
                     timestamp,
-                    qos,
                     #[cfg(feature = "unstable")]
                     source_info,
                     #[cfg(feature = "unstable")]
                     attachment,
+                    ..
                 } = sample;
-                #[allow(unused_mut)]
-                let mut data_info = DataInfo {
-                    kind,
-                    encoding: Some(encoding),
-                    timestamp,
-                    qos,
-                    source_id: None,
-                    source_sn: None,
-                };
-
                 // Use a macro for inferring the proper const extension ID between Put and Del cases
                 macro_rules! ext_attachment {
                     () => {{
@@ -222,21 +210,17 @@ impl SyncResolve for ReplyBuilder<'_> {
                         ext_attachment
                     }};
                 }
-
+                #[allow(unused_mut)]
+                let mut ext_sinfo = None;
                 #[cfg(feature = "unstable")]
                 {
-                    data_info.source_id = source_info.source_id;
-                    data_info.source_sn = source_info.source_sn;
+                    if source_info.source_id.is_some() || source_info.source_sn.is_some() {
+                        ext_sinfo = Some(zenoh::put::ext::SourceInfoType {
+                            id: source_info.source_id.unwrap_or_default(),
+                            sn: source_info.source_sn.unwrap_or_default() as u32,
+                        })
+                    }
                 }
-                let ext_sinfo = if data_info.source_id.is_some() || data_info.source_sn.is_some() {
-                    Some(zenoh::put::ext::SourceInfoType {
-                        zid: data_info.source_id.unwrap_or_default(),
-                        eid: 0, // @TODO use proper EntityId (#703)
-                        sn: data_info.source_sn.unwrap_or_default() as u32,
-                    })
-                } else {
-                    None
-                };
                 self.query.inner.primitives.send_response(Response {
                     rid: self.query.inner.qid,
                     wire_expr: WireExpr {
@@ -249,8 +233,8 @@ impl SyncResolve for ReplyBuilder<'_> {
                         ext_unknown: vec![],
                         payload: match kind {
                             SampleKind::Put => ReplyBody::Put(Put {
-                                timestamp: data_info.timestamp,
-                                encoding: data_info.encoding.unwrap_or_default().into(),
+                                timestamp,
+                                encoding: encoding.into(),
                                 ext_sinfo,
                                 #[cfg(feature = "shared-memory")]
                                 ext_shm: None,
@@ -270,7 +254,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,
-                        eid: 0, // @TODO use proper EntityId (#703)
+                        eid: self.query.eid,
                     }),
                 });
                 Ok(())
@@ -300,7 +284,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,
-                        eid: 0, // @TODO use proper EntityId (#703)
+                        eid: self.query.eid,
                     }),
                 });
                 Ok(())
@@ -607,6 +591,29 @@ pub struct Queryable<'a, Receiver> {
 }
 
 impl<'a, Receiver> Queryable<'a, Receiver> {
+    /// Returns the [`EntityGlobalId`] of this Queryable.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let queryable_id = queryable.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.queryable.session.zid(),
+            eid: self.queryable.state.id,
+        }
+    }
+
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())

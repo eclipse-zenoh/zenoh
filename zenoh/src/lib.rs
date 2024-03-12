@@ -79,7 +79,7 @@ extern crate zenoh_core;
 #[macro_use]
 extern crate zenoh_result;
 
-pub(crate) type Id = usize;
+pub(crate) type Id = u32;
 
 use git_version::git_version;
 use handlers::DefaultHandler;

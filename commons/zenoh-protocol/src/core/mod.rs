@@ -261,6 +261,27 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
+/// The unique id of a zenoh entity inside it's parent [`Session`].
+pub type EntityId = u32;
+
+/// The global unique id of a zenoh entity.
+#[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
+pub struct EntityGlobalId {
+    pub zid: ZenohId,
+    pub eid: EntityId,
+}
+
+impl EntityGlobalId {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+        Self {
+            zid: ZenohId::rand(),
+            eid: rand::thread_rng().gen(),
+        }
+    }
+}
+
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Priority {

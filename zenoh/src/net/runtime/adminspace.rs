@@ -32,6 +32,7 @@ use std::sync::Mutex;
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
+use zenoh_protocol::network::declare::QueryableId;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -59,6 +60,7 @@ type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
 
 pub struct AdminSpace {
     zid: ZenohId,
+    queryable_id: QueryableId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
@@ -189,6 +191,7 @@ impl AdminSpace {
         });
         let admin = Arc::new(AdminSpace {
             zid: runtime.zid(),
+            queryable_id: runtime.next_id(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
@@ -278,7 +281,7 @@ impl AdminSpace {
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                id: 0, // @TODO use proper QueryableId (#703)
+                id: runtime.next_id(),
                 wire_expr: [&root_key, "/**"].concat().into(),
                 ext_info: QueryableInfo {
                     complete: 0,
@@ -292,7 +295,7 @@ impl AdminSpace {
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: 0, // @TODO use proper SubscriberId (#703)
+                id: runtime.next_id(),
                 wire_expr: [&root_key, "/config/**"].concat().into(),
                 ext_info: SubscriberInfo::DEFAULT,
             }),
@@ -431,6 +434,7 @@ impl Primitives for AdminSpace {
                     #[cfg(feature = "unstable")]
                     attachment: query.ext_attachment.map(Into::into),
                 }),
+                eid: self.queryable_id,
             };
 
             for (key, handler) in &self.handlers {

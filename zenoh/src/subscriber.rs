@@ -25,6 +25,8 @@ use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::network::declare::{subscriber::ext::SubscriberInfo, Mode};
 
 /// The kind of reliability.
@@ -32,6 +34,7 @@ pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
+    pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,
@@ -741,6 +744,29 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
 }
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {
+    /// Returns the [`EntityGlobalId`] of this Subscriber.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let subscriber_id = subscriber.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.subscriber.session.zid(),
+            eid: self.subscriber.state.id,
+        }
+    }
+
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.subscriber.state.key_expr
