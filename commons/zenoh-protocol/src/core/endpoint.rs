@@ -497,7 +497,12 @@ impl fmt::Debug for ConfigMut<'_> {
     }
 }
 
-/// A `String` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
+/// A string that respects the [`EndPoint`] canon form: `<locator>[#<config>]`.
+///
+/// `<locator>` is a valid [`Locator`] and `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
+/// `<config>` is optional and can be provided to configure some aspectes for an [`EndPoint`], e.g. the interface to listen on or connect to.
+///
+/// A full [`EndPoint`] string is hence in the form of `<proto>/<address>[?<metadata>][#config]`.
 #[derive(Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
