@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use crate::admin;
 use crate::config::Config;
 use crate::config::Notifier;
+use crate::encoding::Encoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
@@ -23,6 +23,7 @@ use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
+use crate::payload::Payload;
 use crate::prelude::Locality;
 use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
@@ -31,6 +32,7 @@ use crate::queryable::*;
 #[cfg(feature = "unstable")]
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::sample::QoS;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
 use crate::Id;
@@ -669,7 +671,7 @@ impl Session {
     /// # Arguments
     ///
     /// * `key_expr` - Key expression matching the resources to put
-    /// * `value` - The value to put
+    /// * `payload` - The payload to put
     ///
     /// # Examples
     /// ```
@@ -678,28 +680,29 @@ impl Session {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session
-    ///     .put("key/expression", "value")
-    ///     .encoding(KnownEncoding::TextPlain)
+    ///     .put("key/expression", "payload")
+    ///     .with_encoding(Encoding::TEXT_PLAIN)
     ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoValue>(
+    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoPayload>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-        value: IntoValue,
+        payload: IntoPayload,
     ) -> PutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
-            value: value.into(),
+            payload: payload.into(),
             kind: SampleKind::Put,
+            encoding: Encoding::default(),
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -731,8 +734,9 @@ impl Session {
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
-            value: Value::empty(),
+            payload: Payload::empty(),
             kind: SampleKind::Delete,
+            encoding: Encoding::default(),
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -798,7 +802,7 @@ impl Session {
     }
 
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> + Send {
+    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
@@ -826,10 +830,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_prefix<'a>(
-        &'a self,
-        prefix: &'a str,
-    ) -> impl Resolve<ExprId> + Send + 'a {
+    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<ExprId> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -887,7 +888,7 @@ impl Session {
     pub(crate) fn declare_publication_intent<'a>(
         &'a self,
         _key_expr: KeyExpr<'a>,
-    ) -> impl Resolve<Result<(), std::convert::Infallible>> + Send + 'a {
+    ) -> impl Resolve<Result<(), std::convert::Infallible>> + 'a {
         ResolveClosure::new(move || {
             // log::trace!("declare_publication({:?})", key_expr);
             // let mut state = zwrite!(self.state);
@@ -1671,7 +1672,7 @@ impl Session {
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
             #[allow(unused_mut)]
-            let mut sample = Sample::with_info(key_expr, payload.clone(), info.clone());
+            let mut sample = Sample::new(key_expr, payload.clone()).with_info(info.clone());
             #[cfg(feature = "unstable")]
             {
                 sample.attachment = attachment.clone();
@@ -1680,7 +1681,7 @@ impl Session {
         }
         if let Some((cb, key_expr)) = last {
             #[allow(unused_mut)]
-            let mut sample = Sample::with_info(key_expr, payload, info);
+            let mut sample = Sample::new(key_expr, payload).with_info(info);
             #[cfg(feature = "unstable")]
             {
                 sample.attachment = attachment;
@@ -1787,8 +1788,8 @@ impl Session {
         );
 
         let primitives = state.primitives.as_ref().unwrap().clone();
-
         drop(state);
+
         if destination != Locality::SessionLocal {
             #[allow(unused_mut)]
             let mut ext_attachment = None;
@@ -1814,8 +1815,8 @@ impl Session {
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
-                        encoding: v.encoding.clone(),
-                        payload: v.payload.clone(),
+                        encoding: v.encoding.clone().into(),
+                        payload: v.payload.clone().into(),
                     }),
                     ext_attachment,
                     ext_unknown: vec![],
@@ -1833,8 +1834,8 @@ impl Session {
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
-                    encoding: v.encoding.clone(),
-                    payload: v.payload.clone(),
+                    encoding: v.encoding.clone().into(),
+                    payload: v.payload.clone().into(),
                 }),
                 #[cfg(feature = "unstable")]
                 attachment,
@@ -1904,8 +1905,8 @@ impl Session {
                 key_expr,
                 parameters,
                 value: body.map(|b| Value {
-                    payload: b.payload,
-                    encoding: b.encoding,
+                    payload: b.payload.into(),
+                    encoding: b.encoding.into(),
                 }),
                 qid,
                 zid,
@@ -2190,8 +2191,9 @@ impl Primitives for Session {
             PushBody::Put(m) => {
                 let info = DataInfo {
                     kind: SampleKind::Put,
-                    encoding: Some(m.encoding),
+                    encoding: Some(m.encoding.into()),
                     timestamp: m.timestamp,
+                    qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
@@ -2209,6 +2211,7 @@ impl Primitives for Session {
                     kind: SampleKind::Delete,
                     encoding: None,
                     timestamp: m.timestamp,
+                    qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
@@ -2260,12 +2263,12 @@ impl Primitives for Session {
                         std::mem::drop(state);
                         let value = match e.ext_body {
                             Some(body) => Value {
-                                payload: body.payload,
-                                encoding: body.encoding,
+                                payload: body.payload.into(),
+                                encoding: body.encoding.into(),
                             },
                             None => Value {
-                                payload: ZBuf::empty(),
-                                encoding: zenoh_protocol::core::Encoding::EMPTY,
+                                payload: Payload::empty(),
+                                encoding: Encoding::default(),
                             },
                         };
                         let replier_id = match e.ext_sinfo {
@@ -2360,8 +2363,9 @@ impl Primitives for Session {
                                 payload,
                                 info: DataInfo {
                                     kind: SampleKind::Put,
-                                    encoding: Some(encoding),
+                                    encoding: Some(encoding.into()),
                                     timestamp,
+                                    qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.zid),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
@@ -2379,6 +2383,7 @@ impl Primitives for Session {
                                     kind: SampleKind::Delete,
                                     encoding: None,
                                     timestamp,
+                                    qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.zid),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
@@ -2389,7 +2394,7 @@ impl Primitives for Session {
 
                         #[allow(unused_mut)]
                         let mut sample =
-                            Sample::with_info(key_expr.into_owned(), payload, Some(info));
+                            Sample::new(key_expr.into_owned(), payload).with_info(Some(info));
                         #[cfg(feature = "unstable")]
                         {
                             sample.attachment = attachment;
@@ -2713,5 +2718,9 @@ impl crate::net::primitives::EPrimitives for Session {
     #[inline]
     fn send_close(&self) {
         (self as &dyn Primitives).send_close()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

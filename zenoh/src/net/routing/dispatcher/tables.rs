@@ -28,6 +28,7 @@ use zenoh_config::unwrap_or_default;
 use zenoh_config::Config;
 use zenoh_protocol::core::{ExprId, WhatAmI, ZenohId};
 use zenoh_protocol::network::Mapping;
+use zenoh_result::ZResult;
 // use zenoh_collections::Timer;
 use zenoh_sync::get_mut_unchecked;
 
@@ -76,7 +77,12 @@ pub struct Tables {
 }
 
 impl Tables {
-    pub fn new(zid: ZenohId, whatami: WhatAmI, hlc: Option<Arc<HLC>>, config: &Config) -> Self {
+    pub fn new(
+        zid: ZenohId,
+        whatami: WhatAmI,
+        hlc: Option<Arc<HLC>>,
+        config: &Config,
+    ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
         let router_peers_failover_brokering =
@@ -84,7 +90,7 @@ impl Tables {
         // let queries_default_timeout =
         //     Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let hat_code = hat::new_hat(whatami, config);
-        Tables {
+        Ok(Tables {
             zid,
             whatami,
             face_counter: 0,
@@ -96,11 +102,11 @@ impl Tables {
             faces: HashMap::new(),
             mcast_groups: vec![],
             mcast_faces: vec![],
-            interceptors: interceptor_factories(config),
+            interceptors: interceptor_factories(config)?,
             pull_caches_lock: Mutex::new(()),
             hat: hat_code.new_tables(router_peers_failover_brokering),
             hat_code: hat_code.into(),
-        }
+        })
     }
 
     #[doc(hidden)]

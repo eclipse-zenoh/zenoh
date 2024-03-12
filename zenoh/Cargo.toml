@@ -74,16 +74,19 @@ flume = { workspace = true }
 form_urlencoded = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-hex = { workspace = true, features = ["default"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
 ordered-float = { workspace = true }
 paste = { workspace = true }
 petgraph = { workspace = true }
+phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 regex = { workspace = true }
 serde = { workspace = true, features = ["default"] }
+serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+serde-pickle = { workspace = true }
+serde_yaml = { workspace = true }
 socket2 = { workspace = true }
 stop-token = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
@@ -95,6 +98,7 @@ zenoh-collections = { workspace = true, features = ["std"] }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-crypto = { workspace = true }
+zenoh-keyexpr = { workspace = true }
 zenoh-link = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-plugin-trait = { workspace = true }

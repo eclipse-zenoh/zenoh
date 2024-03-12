@@ -14,6 +14,8 @@
 mod demux;
 mod mux;
 
+use std::any::Any;
+
 pub use demux::*;
 pub use mux::*;
 use zenoh_protocol::network::{Declare, Push, Request, Response, ResponseFinal};
@@ -35,6 +37,8 @@ pub trait Primitives: Send + Sync {
 }
 
 pub(crate) trait EPrimitives: Send + Sync {
+    fn as_any(&self) -> &dyn Any;
+
     fn send_declare(&self, ctx: RoutingContext<Declare>);
 
     fn send_push(&self, msg: Push);
@@ -77,4 +81,8 @@ impl EPrimitives for DummyPrimitives {
     fn send_response_final(&self, _ctx: RoutingContext<ResponseFinal>) {}
 
     fn send_close(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }

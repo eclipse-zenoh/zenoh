@@ -14,25 +14,22 @@
 
 //! Queryable primitives.
 
+use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::query::ReplyKeyExpr;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
-use crate::sample::SampleKind;
-#[zenoh_macros::unstable]
+use crate::sample::QoS;
 use crate::sample::SourceInfo;
+use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
-
+#[cfg(feature = "unstable")]
+use crate::{query::ReplyKeyExpr, sample::Attachment};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
 use uhlc::Timestamp;
-use zenoh_buffers::ZBuf;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::{
     core::WireExpr,
@@ -116,9 +113,11 @@ impl Query {
     pub fn reply_sample(&self, sample: Sample) -> ReplyBuilder<'_> {
         let Sample {
             key_expr,
-            value,
+            payload,
             kind,
+            encoding,
             timestamp,
+            qos,
             #[cfg(feature = "unstable")]
             source_info,
             #[cfg(feature = "unstable")]
@@ -127,9 +126,11 @@ impl Query {
         ReplyBuilder {
             query: self,
             key_expr,
-            value,
+            payload,
             kind,
+            encoding,
             timestamp,
+            qos,
             #[cfg(feature = "unstable")]
             source_info,
             #[cfg(feature = "unstable")]
@@ -143,21 +144,23 @@ impl Query {
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
-    pub fn reply<IntoKeyExpr, IntoValue>(
+    pub fn reply<IntoKeyExpr, IntoPayload>(
         &self,
         key_expr: IntoKeyExpr,
-        value: IntoValue,
+        payload: IntoPayload,
     ) -> ReplyBuilder<'_>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
         ReplyBuilder {
             query: self,
             key_expr: key_expr.into(),
-            value: value.into(),
+            payload: payload.into(),
             kind: SampleKind::Put,
             timestamp: None,
+            encoding: Encoding::default(),
+            qos: response::ext::QoSType::RESPONSE.into(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
@@ -190,9 +193,11 @@ impl Query {
         ReplyBuilder {
             query: self,
             key_expr: key_expr.into(),
-            value: ZBuf::empty().into(),
+            payload: Payload::empty(),
             kind: SampleKind::Delete,
             timestamp: None,
+            encoding: Encoding::default(),
+            qos: response::ext::QoSType::RESPONSE.into(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
@@ -245,9 +250,11 @@ impl fmt::Display for Query {
 pub struct ReplyBuilder<'a> {
     query: &'a Query,
     key_expr: KeyExpr<'static>,
-    value: Value,
+    payload: Payload,
     kind: SampleKind,
+    encoding: Encoding,
     timestamp: Option<Timestamp>,
+    qos: QoS,
     #[cfg(feature = "unstable")]
     source_info: SourceInfo,
     #[cfg(feature = "unstable")]
@@ -275,6 +282,11 @@ impl<'a> ReplyBuilder<'a> {
     }
     pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
         self.timestamp = Some(timestamp);
+        self
+    }
+
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
         self
     }
 }
@@ -315,7 +327,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                 payload: match self.kind {
                     SampleKind::Put => ReplyBody::Put(Put {
                         timestamp: self.timestamp,
-                        encoding: self.value.encoding,
+                        encoding: self.encoding.into(),
                         ext_sinfo,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
@@ -324,7 +336,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         #[cfg(not(feature = "unstable"))]
                         ext_attachment: None,
                         ext_unknown: vec![],
-                        payload: self.value.payload,
+                        payload: self.payload.into(),
                     }),
                     SampleKind::Delete => ReplyBody::Del(Del {
                         timestamp: self.timestamp,
@@ -337,7 +349,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     }),
                 },
             }),
-            ext_qos: response::ext::QoSType::RESPONSE,
+            ext_qos: self.qos.into(),
             ext_tstamp: None,
             ext_respid: Some(response::ext::ResponderIdType {
                 zid: self.query.inner.zid,
@@ -377,8 +389,8 @@ impl SyncResolve for ReplyErrBuilder<'_> {
                 ext_body: Some(ValueType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
-                    payload: self.value.payload,
-                    encoding: self.value.encoding,
+                    payload: self.value.payload.into(),
+                    encoding: self.value.encoding.into(),
                 }),
                 code: 0, // TODO
             }),

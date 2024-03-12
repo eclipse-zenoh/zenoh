@@ -19,18 +19,16 @@ use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
-use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zlock, zread, zwrite};
+use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    NewLinkChannelSender,
+    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -209,6 +207,11 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     }
 
     #[inline(always)]
+    fn get_interface_names(&self) -> Vec<String> {
+        get_ip_interface_names(&self.src_addr)
+    }
+
+    #[inline(always)]
     fn is_reliable(&self) -> bool {
         false
     }
@@ -235,42 +238,16 @@ impl fmt::Debug for LinkUnicastUdp {
     }
 }
 
-/*************************************/
-/*          LISTENER                 */
-/*************************************/
-struct ListenerUnicastUdp {
-    endpoint: EndPoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
-    handle: JoinHandle<ZResult<()>>,
-}
-
-impl ListenerUnicastUdp {
-    fn new(
-        endpoint: EndPoint,
-        active: Arc<AtomicBool>,
-        signal: Signal,
-        handle: JoinHandle<ZResult<()>>,
-    ) -> ListenerUnicastUdp {
-        ListenerUnicastUdp {
-            endpoint,
-            active,
-            signal,
-            handle,
-        }
-    }
-}
-
 pub struct LinkManagerUnicastUdp {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastUdp>>>,
+    listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastUdp {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }
@@ -284,6 +261,7 @@ impl LinkManagerUnicastUdp {
     async fn new_link_inner(
         &self,
         dst_addr: &SocketAddr,
+        iface: Option<&str>,
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
         // Establish a UDP socket
         let socket = UdpSocket::bind(SocketAddr::new(
@@ -300,6 +278,8 @@ impl LinkManagerUnicastUdp {
             log::warn!("{}", e);
             e
         })?;
+
+        zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface);
 
         // Connect the socket to the remote address
         socket.connect(dst_addr).await.map_err(|e| {
@@ -324,13 +304,19 @@ impl LinkManagerUnicastUdp {
         Ok((socket, src_addr, dst_addr))
     }
 
-    async fn new_listener_inner(&self, addr: &SocketAddr) -> ZResult<(UdpSocket, SocketAddr)> {
+    async fn new_listener_inner(
+        &self,
+        addr: &SocketAddr,
+        iface: Option<&str>,
+    ) -> ZResult<(UdpSocket, SocketAddr)> {
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
             log::warn!("{}", e);
             e
         })?;
+
+        zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface);
 
         let local_addr = socket.local_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
@@ -348,10 +334,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let dst_addrs = get_udp_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
+        let config = endpoint.config();
+        let iface = config.get(BIND_INTERFACE);
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
-            match self.new_link_inner(&da).await {
+            match self.new_link_inner(&da, iface).await {
                 Ok((socket, src_addr, dst_addr)) => {
                     // Create UDP link
                     let link = Arc::new(LinkUnicastUdp::new(
@@ -385,10 +373,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let addrs = get_udp_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
+        let config = endpoint.config();
+        let iface = config.get(BIND_INTERFACE);
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match self.new_listener_inner(&da).await {
+            match self.new_listener_inner(&da, iface).await {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(
@@ -398,27 +388,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                         endpoint.config(),
                     )?;
 
-                    // Spawn the accept loop for the listener
                     let active = Arc::new(AtomicBool::new(true));
                     let signal = Signal::new();
-                    let mut listeners = zwrite!(self.listeners);
 
                     let c_active = active.clone();
                     let c_signal = signal.clone();
                     let c_manager = self.manager.clone();
-                    let c_listeners = self.listeners.clone();
-                    let c_addr = local_addr;
+
                     let handle = task::spawn(async move {
-                        // Wait for the accept loop to terminate
-                        let res = accept_read_task(socket, c_active, c_signal, c_manager).await;
-                        zwrite!(c_listeners).remove(&c_addr);
-                        res
+                        accept_read_task(socket, c_active, c_signal, c_manager).await
                     });
 
                     let locator = endpoint.to_locator();
-                    let listener = ListenerUnicastUdp::new(endpoint, active, signal, handle);
-                    // Update the list of active listeners on the manager
-                    listeners.insert(local_addr, listener);
+                    self.listeners
+                        .add_listener(endpoint, local_addr, active, signal, handle)
+                        .await?;
 
                     return Ok(locator);
                 }
@@ -446,73 +430,35 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
 
         // Stop the listener
         let mut errs: Vec<ZError> = vec![];
-        let mut listener = None;
+        let mut failed = true;
         for a in addrs {
-            match zwrite!(self.listeners).remove(&a) {
-                Some(l) => {
-                    // We cannot keep a sync guard across a .await
-                    // Break the loop and assign the listener.
-                    listener = Some(l);
+            match self.listeners.del_listener(a).await {
+                Ok(_) => {
+                    failed = false;
                     break;
                 }
-                None => {
-                    errs.push(zerror!("{}", a).into());
+                Err(err) => {
+                    errs.push(zerror!("{}", err).into());
                 }
             }
         }
 
-        match listener {
-            Some(l) => {
-                // Send the stop signal
-                l.active.store(false, Ordering::Release);
-                l.signal.trigger();
-                l.handle.await
-            }
-            None => {
-                bail!(
-                    "Can not delete the UDP listener bound to {}: {:?}",
-                    endpoint,
-                    errs
-                )
-            }
+        if failed {
+            bail!(
+                "Can not delete the TCP listener bound to {}: {:?}",
+                endpoint,
+                errs
+            )
         }
+        Ok(())
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
-            .values()
-            .map(|l| l.endpoint.clone())
-            .collect()
+        self.listeners.get_endpoints()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
-
-        let guard = zread!(self.listeners);
-        for (key, value) in guard.iter() {
-            let (kip, kpt) = (key.ip(), key.port());
-
-            // Either ipv4/0.0.0.0 or ipv6/[::]
-            if kip.is_unspecified() {
-                let mut addrs = match kip {
-                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
-                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
-                };
-                let iter = addrs.drain(..).map(|x| {
-                    Locator::new(
-                        value.endpoint.protocol(),
-                        SocketAddr::new(x, kpt).to_string(),
-                        value.endpoint.metadata(),
-                    )
-                    .unwrap()
-                });
-                locators.extend(iter);
-            } else {
-                locators.push(value.endpoint.to_locator());
-            }
-        }
-
-        locators
+        self.listeners.get_locators()
     }
 }
 

@@ -39,7 +39,6 @@ json5 = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"] }
-zenoh_backend_traits = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }

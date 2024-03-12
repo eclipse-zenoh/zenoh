@@ -49,7 +49,10 @@ async fn main() {
                 let query = query.unwrap();
                 match query.value() {
                     None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-                    Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), value),
+                    Some(value) => {
+                        let payload = value.payload.deserialize::<String>().unwrap_or_else(|e| format!("{}", e));
+                        println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), payload);
+                    },
                 }
                 if send_errors.swap(false, Relaxed) {
                     println!(

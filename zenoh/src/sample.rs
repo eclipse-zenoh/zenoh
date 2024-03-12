@@ -13,17 +13,19 @@
 //
 
 //! Sample primitives
-use crate::buffers::ZBuf;
-use crate::prelude::{KeyExpr, Value, ZenohId};
-use crate::query::Reply;
+use crate::encoding::Encoding;
+use crate::payload::Payload;
+use crate::prelude::{KeyExpr, ZenohId};
 use crate::time::{new_reception_timestamp, Timestamp};
+use crate::Priority;
+use crate::Value;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
 };
-use zenoh_protocol::core::Encoding;
+use zenoh_protocol::{core::CongestionControl, network::push::ext::QoSType};
 
 pub type SourceSn = u64;
 
@@ -52,6 +54,7 @@ pub(crate) struct DataInfo {
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<ZenohId>,
     pub source_sn: Option<SourceSn>,
+    pub qos: QoS,
 }
 
 /// Informations on the source of a zenoh [`Sample`].
@@ -354,12 +357,16 @@ pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 pub struct Sample {
     /// The key expression on which this Sample was published.
     pub key_expr: KeyExpr<'static>,
-    /// The value of this Sample.
-    pub value: Value,
+    /// The payload of this Sample.
+    pub payload: Payload,
     /// The kind of this Sample.
     pub kind: SampleKind,
+    /// The encoding of this sample
+    pub encoding: Encoding,
     /// The [`Timestamp`] of this Sample.
     pub timestamp: Option<Timestamp>,
+    /// Quality of service settings this sample was sent with.
+    pub qos: QoS,
 
     #[cfg(feature = "unstable")]
     /// <div class="stab unstable">
@@ -385,16 +392,18 @@ pub struct Sample {
 impl Sample {
     /// Creates a new Sample.
     #[inline]
-    pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
+    pub fn new<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
         Sample {
             key_expr: key_expr.into(),
-            value: value.into(),
+            payload: payload.into(),
+            encoding: Encoding::default(),
             kind: SampleKind::default(),
             timestamp: None,
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
@@ -403,20 +412,22 @@ impl Sample {
     }
     /// Creates a new Sample.
     #[inline]
-    pub fn try_from<TryIntoKeyExpr, IntoValue>(
+    pub fn try_from<TryIntoKeyExpr, IntoPayload>(
         key_expr: TryIntoKeyExpr,
-        value: IntoValue,
+        payload: IntoPayload,
     ) -> Result<Self, zenoh_result::Error>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
         Ok(Sample {
             key_expr: key_expr.try_into().map_err(Into::into)?,
-            value: value.into(),
+            payload: payload.into(),
+            encoding: Encoding::default(),
             kind: SampleKind::default(),
             timestamp: None,
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
@@ -426,38 +437,30 @@ impl Sample {
 
     /// Creates a new Sample with optional data info.
     #[inline]
-    pub(crate) fn with_info(
-        key_expr: KeyExpr<'static>,
-        payload: ZBuf,
-        data_info: Option<DataInfo>,
-    ) -> Self {
-        let mut value: Value = payload.into();
-        if let Some(data_info) = data_info {
-            if let Some(encoding) = &data_info.encoding {
-                value.encoding = encoding.clone();
+    pub(crate) fn with_info(mut self, mut data_info: Option<DataInfo>) -> Self {
+        if let Some(mut data_info) = data_info.take() {
+            self.kind = data_info.kind;
+            if let Some(encoding) = data_info.encoding.take() {
+                self.encoding = encoding;
             }
-            Sample {
-                key_expr,
-                value,
-                kind: data_info.kind,
-                timestamp: data_info.timestamp,
-                #[cfg(feature = "unstable")]
-                source_info: data_info.into(),
-                #[cfg(feature = "unstable")]
-                attachment: None,
-            }
-        } else {
-            Sample {
-                key_expr,
-                value,
-                kind: SampleKind::default(),
-                timestamp: None,
-                #[cfg(feature = "unstable")]
-                source_info: SourceInfo::empty(),
-                #[cfg(feature = "unstable")]
-                attachment: None,
+            self.qos = data_info.qos;
+            self.timestamp = data_info.timestamp;
+            #[cfg(feature = "unstable")]
+            {
+                self.source_info = SourceInfo {
+                    source_id: data_info.source_id,
+                    source_sn: data_info.source_sn,
+                };
             }
         }
+        self
+    }
+
+    /// Sets the encoding of this Sample.
+    #[inline]
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
     }
 
     /// Gets the timestamp of this Sample.
@@ -513,33 +516,70 @@ impl Sample {
     }
 }
 
-impl std::ops::Deref for Sample {
-    type Target = Value;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
+impl From<Sample> for Value {
+    fn from(sample: Sample) -> Self {
+        Value::new(sample.payload).with_encoding(sample.encoding)
     }
 }
 
-impl std::ops::DerefMut for Sample {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
-    }
+/// Structure containing quality of service data
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub struct QoS {
+    inner: QoSType,
 }
 
-impl std::fmt::Display for Sample {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
-            SampleKind::Delete => write!(f, "{}({})", self.kind, self.key_expr),
-            _ => write!(f, "{}({}: {})", self.kind, self.key_expr, self.value),
+impl QoS {
+    /// Gets priority of the message.
+    pub fn priority(&self) -> Priority {
+        match Priority::try_from(self.inner.get_priority()) {
+            Ok(p) => p,
+            Err(e) => {
+                log::trace!(
+                    "Failed to convert priority: {}; replacing with default value",
+                    e.to_string()
+                );
+                Priority::default()
+            }
         }
     }
+
+    /// Gets congestion control of the message.
+    pub fn congestion_control(&self) -> CongestionControl {
+        self.inner.get_congestion_control()
+    }
+
+    /// Gets express flag value. If true, the message is not batched during transmission, in order to reduce latency.
+    pub fn express(&self) -> bool {
+        self.inner.is_express()
+    }
+
+    /// Sets priority value.
+    pub fn with_priority(mut self, priority: Priority) -> Self {
+        self.inner.set_priority(priority.into());
+        self
+    }
+
+    /// Sets congestion control value.
+    pub fn with_congestion_control(mut self, congestion_control: CongestionControl) -> Self {
+        self.inner.set_congestion_control(congestion_control);
+        self
+    }
+
+    /// Sets express flag vlaue.
+    pub fn with_express(mut self, is_express: bool) -> Self {
+        self.inner.set_is_express(is_express);
+        self
+    }
 }
 
-impl TryFrom<Reply> for Sample {
-    type Error = Value;
+impl From<QoSType> for QoS {
+    fn from(qos: QoSType) -> Self {
+        QoS { inner: qos }
+    }
+}
 
-    fn try_from(value: Reply) -> Result<Self, Self::Error> {
-        value.sample
+impl From<QoS> for QoSType {
+    fn from(qos: QoS) -> Self {
+       qos.inner
     }
 }

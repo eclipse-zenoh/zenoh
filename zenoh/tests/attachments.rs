@@ -73,7 +73,10 @@ fn queries() {
                 attachment.insert(&k, &k);
             }
             query
-                .reply(query.key_expr().clone(), query.value().unwrap().clone())
+                .reply(
+                    query.key_expr().clone(),
+                    query.value().unwrap().payload.clone(),
+                )
                 .with_attachment(attachment)
                 .res()
                 .unwrap();

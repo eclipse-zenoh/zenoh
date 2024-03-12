@@ -20,7 +20,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
-use alloc::boxed::Box;
 use anyhow::Error as AnyError;
 use core::fmt;
 
@@ -39,6 +38,8 @@ pub const fn unlikely(b: bool) -> bool {
     b
 }
 
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use core::any::Any;
 

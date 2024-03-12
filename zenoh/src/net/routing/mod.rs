@@ -24,6 +24,7 @@ pub mod router;
 
 use std::{cell::OnceCell, sync::Arc};
 
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 
 use self::{dispatcher::face::Face, router::Resource};
@@ -124,10 +125,7 @@ impl RoutingContext<NetworkMessage> {
     }
 
     #[inline]
-    pub(crate) fn full_expr(&self) -> Option<&str> {
-        if self.full_expr.get().is_some() {
-            return Some(self.full_expr.get().as_ref().unwrap());
-        }
+    pub(crate) fn prefix(&self) -> Option<&Arc<Resource>> {
         if let Some(face) = self.outface.get() {
             if let Some(wire_expr) = self.wire_expr() {
                 let wire_expr = wire_expr.to_owned();
@@ -139,12 +137,7 @@ impl RoutingContext<NetworkMessage> {
                         let _ = self.prefix.set(prefix);
                     }
                 }
-                if let Some(prefix) = self.prefix.get().cloned() {
-                    let _ = self
-                        .full_expr
-                        .set(prefix.expr() + wire_expr.suffix.as_ref());
-                    return Some(self.full_expr.get().as_ref().unwrap());
-                }
+                return self.prefix.get();
             }
         }
         if let Some(face) = self.inface.get() {
@@ -158,14 +151,30 @@ impl RoutingContext<NetworkMessage> {
                         let _ = self.prefix.set(prefix);
                     }
                 }
-                if let Some(prefix) = self.prefix.get().cloned() {
-                    let _ = self
-                        .full_expr
-                        .set(prefix.expr() + wire_expr.suffix.as_ref());
-                    return Some(self.full_expr.get().as_ref().unwrap());
-                }
+                return self.prefix.get();
             }
         }
         None
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn full_expr(&self) -> Option<&str> {
+        if self.full_expr.get().is_some() {
+            return Some(self.full_expr.get().as_ref().unwrap());
+        }
+        if let Some(prefix) = self.prefix() {
+            let _ = self
+                .full_expr
+                .set(prefix.expr() + self.wire_expr().unwrap().suffix.as_ref());
+            return Some(self.full_expr.get().as_ref().unwrap());
+        }
+        None
+    }
+
+    #[inline]
+    pub(crate) fn full_key_expr(&self) -> Option<OwnedKeyExpr> {
+        let full_expr = self.full_expr()?;
+        OwnedKeyExpr::new(full_expr).ok()
     }
 }

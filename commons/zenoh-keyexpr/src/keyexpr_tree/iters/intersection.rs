@@ -95,7 +95,7 @@ where
                         };
                     }
                     let chunk = node.chunk();
-                    let chunk_is_verbatim = chunk.as_bytes()[0] == b'@';
+                    let chunk_is_verbatim = chunk.first_byte() == b'@';
                     if unlikely(chunk.as_bytes() == b"**") {
                         // If the current node is `**`, it is guaranteed to match...
                         node_matches = true;
@@ -295,7 +295,7 @@ where
                         };
                     }
                     let chunk = node.chunk();
-                    let chunk_is_verbatim = chunk.as_bytes()[0] == b'@';
+                    let chunk_is_verbatim = chunk.first_byte() == b'@';
                     if unlikely(chunk.as_bytes() == b"**") {
                         // If the current node is `**`, it is guaranteed to match...
                         node_matches = true;

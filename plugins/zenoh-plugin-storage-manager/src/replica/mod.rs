@@ -26,6 +26,7 @@ use std::str;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use urlencoding::encode;
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
@@ -40,7 +41,7 @@ pub mod storage;
 pub use align_queryable::AlignQueryable;
 pub use aligner::Aligner;
 pub use digest::{Digest, DigestConfig, EraType, LogEntry};
-pub use snapshotter::{ReplicationInfo, Snapshotter};
+pub use snapshotter::Snapshotter;
 pub use storage::{ReplicationService, StorageService};
 
 const ERA: &str = "era";
@@ -226,9 +227,9 @@ impl Replica {
                 from,
                 sample.kind,
                 sample.key_expr.as_str(),
-                sample.value
+                StringOrBase64::from(sample.payload.clone())
             );
-            let digest: Digest = match serde_json::from_str(&format!("{}", sample.value)) {
+            let digest: Digest = match serde_json::from_str(&StringOrBase64::from(sample.payload)) {
                 Ok(digest) => digest,
                 Err(e) => {
                     log::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);

@@ -102,7 +102,7 @@ home = "0.5.4"
 http-types = "2.12.0"
 humantime = "2.1.0"
 json5 = "0.4.1"
-jsonschema = "0.17.1"
+jsonschema = { version = "0.17.1", default-features = false }
 keyed-set = "0.4.4"
 lazy_static = "1.4.0"
 libc = "0.2.139"
@@ -110,11 +110,12 @@ libloading = "0.8"
 log = "0.4.17"
 lz4_flex = "0.11"
 nix = { version = "0.27", features = ["fs"] }
-num_cpus = "1.15.0"
+num_cpus = "1.16.0"
 ordered-float = "4.1.1"
 panic-message = "0.3.0"
 paste = "1.0.12"
 petgraph = "0.6.3"
+phf = { version = "0.11.2", features = ["macros"] }
 pnet = "0.34"
 pnet_datalink = "0.34"
 proc-macro2 = "1.0.51"
@@ -136,7 +137,9 @@ secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
 serde = { version = "1.0.154", default-features = false, features = [
   "derive",
 ] } # Default features are disabled due to usage in no_std crates
-serde_json = "1.0.94"
+serde_cbor = "0.11.2"
+serde_json = "1.0.114"
+serde-pickle = "1.1.1"
 serde_yaml = "0.9.19"
 sha3 = "0.10.6"
 shared_memory = "0.12.4"
@@ -148,7 +151,6 @@ tide = "0.16.0"
 token-cell = { version = "1.4.2", default-features = false }
 tokio = { version = "1.26.0", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-tungstenite = "0.20"
-typenum = "1.16.0"
 uhlc = { version = "0.6.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.3.1"
@@ -160,7 +162,7 @@ validated_struct = "2.1.0"
 vec_map = "0.8.2"
 webpki-roots = "0.26.0"
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
-z-serial = "0.2.1"
+z-serial = "0.2.3"
 zenoh-ext = { version = "0.11.0-dev", path = "zenoh-ext" }
 zenoh-shm = { version = "0.11.0-dev", path = "commons/zenoh-shm" }
 zenoh-result = { version = "0.11.0-dev", path = "commons/zenoh-result", default-features = false }

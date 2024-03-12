@@ -41,8 +41,8 @@ pub use wire_expr::*;
 
 mod cowstr;
 pub use cowstr::CowStr;
-mod encoding;
-pub use encoding::{Encoding, KnownEncoding};
+pub mod encoding;
+pub use encoding::{Encoding, EncodingId};
 
 pub mod locator;
 pub use locator::*;

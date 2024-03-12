@@ -13,9 +13,11 @@
 //
 
 //! Subscribing primitives.
-use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::handlers::{locked, Callback, DefaultHandler, IntoCallbackReceiverPair};
+use crate::key_expr::KeyExpr;
 use crate::prelude::Locality;
-use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
+use crate::sample::Sample;
+use crate::Id;
 use crate::Undeclarable;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
@@ -48,7 +50,7 @@ impl fmt::Debug for SubscriberState {
 /// A subscriber that provides data through a callback.
 ///
 /// CallbackSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function
+/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
 /// and the [`callback`](SubscriberBuilder::callback) function
 /// of the resulting builder.
 ///
@@ -62,7 +64,7 @@ impl fmt::Debug for SubscriberState {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload) })
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -80,7 +82,7 @@ pub(crate) struct SubscriberInner<'a> {
 /// CallbackPullSubscribers only provide data when explicitely pulled by the
 /// application with the [`pull`](CallbackPullSubscriber::pull) function.
 /// CallbackPullSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function,
+/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
 /// the [`callback`](SubscriberBuilder::callback) function
 /// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
 /// of the resulting builder.
@@ -95,7 +97,7 @@ pub(crate) struct SubscriberInner<'a> {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
 ///     .pull_mode()
 ///     .res()
 ///     .await
@@ -118,7 +120,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
     ///     .pull_mode()
     ///     .res()
     ///     .await
@@ -327,7 +329,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -402,7 +404,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {}", sample.key_expr, sample.value);
+    ///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
     /// }
     /// # })
     /// ```
@@ -612,7 +614,7 @@ where
 /// A subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
 ///
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function
+/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
 /// and the [`with`](SubscriberBuilder::with) function
 /// of the resulting builder.
 ///
@@ -631,7 +633,7 @@ where
 ///     .await
 ///     .unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
-///     println!("Received: {} {}", sample.key_expr, sample.value);
+///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
 /// }
 /// # })
 /// ```
@@ -647,7 +649,7 @@ pub struct Subscriber<'a, Receiver> {
 /// PullSubscribers only provide data when explicitely pulled by the
 /// application with the [`pull`](PullSubscriber::pull) function.
 /// PullSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function,
+/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
 /// the [`with`](SubscriberBuilder::with) function
 /// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
 /// of the resulting builder.

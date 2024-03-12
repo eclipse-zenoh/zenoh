@@ -460,7 +460,7 @@ impl RBatch {
         let mut into = (buff)();
         let n = lz4_flex::block::decompress_into(payload, into.as_mut_slice())
             .map_err(|_| zerror!("Decompression error"))?;
-        let zslice = ZSlice::make(Arc::new(into), 0, n)
+        let zslice = ZSlice::new(Arc::new(into), 0, n)
             .map_err(|_| zerror!("Invalid decompression buffer length"))?;
         Ok(zslice)
     }
@@ -579,7 +579,7 @@ mod tests {
             ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: PushBody::Put(Put {
                 timestamp: None,
-                encoding: Encoding::DEFAULT,
+                encoding: Encoding::empty(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,

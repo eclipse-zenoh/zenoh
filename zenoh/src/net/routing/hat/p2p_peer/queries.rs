@@ -129,6 +129,8 @@ fn register_client_queryable(
                 subs: None,
                 qabl: None,
                 last_values: HashMap::new(),
+                in_interceptor_cache: None,
+                e_interceptor_cache: None,
             })
         }))
         .qabl = Some(*qabl_info);
@@ -316,17 +318,26 @@ impl HatQueriesTrait for HatCode {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for (sid, context) in &mres.session_ctxs {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                if let Some(qabl_info) = context.qabl.as_ref() {
-                    route.push(QueryTargetQabl {
-                        direction: (context.face.clone(), key_expr.to_owned(), NodeId::default()),
-                        complete: if complete {
-                            qabl_info.complete as u64
-                        } else {
-                            0
-                        },
-                        distance: 0.5,
-                    });
+                if match tables.whatami {
+                    WhatAmI::Router => context.face.whatami != WhatAmI::Router,
+                    _ => source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client,
+                } {
+                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                    if let Some(qabl_info) = context.qabl.as_ref() {
+                        route.push(QueryTargetQabl {
+                            direction: (
+                                context.face.clone(),
+                                key_expr.to_owned(),
+                                NodeId::default(),
+                            ),
+                            complete: if complete {
+                                qabl_info.complete as u64
+                            } else {
+                                0
+                            },
+                            distance: 0.5,
+                        });
+                    }
                 }
             }
         }

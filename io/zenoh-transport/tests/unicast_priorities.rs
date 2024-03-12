@@ -301,7 +301,7 @@ async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUn
                 payload: Put {
                     payload: vec![0u8; *ms].into(),
                     timestamp: None,
-                    encoding: Encoding::DEFAULT,
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,

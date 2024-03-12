@@ -58,21 +58,6 @@ rand = { workspace = true, features = ["default"] }
 [build-dependencies]
 rustc_version = { workspace = true }
 
-[package.metadata.deb]
-name = "zenohd"
-maintainer = "zenoh-dev@eclipse.org"
-copyright = "2022 ZettaScale Technology"
-section = "net"
-license-file = ["../LICENSE", "0"]
-depends = "$auto"
-maintainer-scripts = "zenoh/.deb"
-assets = [
-  # binary
-  ["target/release/zenohd", "/usr/bin/", "755"],
-  # service
-  [".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
-]
-
 [[example]]
 name = "z_scout"
 path = "examples/z_scout.rs"

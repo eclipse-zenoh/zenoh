@@ -41,7 +41,7 @@ fn main() {
 
     let _sub = session
         .declare_subscriber(key_expr_ping)
-        .callback(move |sample| publisher.put(sample.value).res().unwrap())
+        .callback(move |sample| publisher.put(sample.payload).res().unwrap())
         .res()
         .unwrap();
     for _ in stdin().bytes().take_while(|b| !matches!(b, Ok(b'q'))) {}
