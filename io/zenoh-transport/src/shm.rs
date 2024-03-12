@@ -18,7 +18,7 @@ use zenoh_core::{zasyncread, zasyncwrite, zerror};
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{
-        err::{ext::ErrBodyType, Err},
+        err::Err,
         ext::ShmType,
         query::{ext::QueryBodyType, Query},
         reply::ReplyBody,
@@ -123,31 +123,11 @@ impl MapShm for Reply {
 // Impl - Err
 impl MapShm for Err {
     fn map_to_shminfo(&mut self) -> ZResult<bool> {
-        if let Self {
-            ext_body: Some(ErrBodyType {
-                payload, ext_shm, ..
-            }),
-            ..
-        } = self
-        {
-            map_to_shminfo!(payload, ext_shm)
-        } else {
-            Ok(false)
-        }
+        Ok(false)
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
-        if let Self {
-            ext_body: Some(ErrBodyType {
-                payload, ext_shm, ..
-            }),
-            ..
-        } = self
-        {
-            map_to_shmbuf!(payload, ext_shm, shmr)
-        } else {
-            Ok(false)
-        }
+    fn map_to_shmbuf(&mut self, _shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+        Ok(false)
     }
 }
 

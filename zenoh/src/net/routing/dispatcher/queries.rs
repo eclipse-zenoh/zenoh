@@ -491,7 +491,7 @@ macro_rules! inc_res_stats {
                     ResponseBody::Err(e) => {
                         stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
                         stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](
-                            e.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
+                            e.payload.len()
                         );
                     }
                 }

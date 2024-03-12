@@ -31,7 +31,7 @@ use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::{
     core::WireExpr,
     network::{response, Mapping, RequestId, Response, ResponseFinal},
-    zenoh::{self, ext::ValueType, reply::ReplyBody, Del, Put, ResponseBody},
+    zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
 use zenoh_result::ZResult;
 
@@ -284,17 +284,10 @@ impl SyncResolve for ReplyBuilder<'_> {
                         mapping: Mapping::Sender,
                     },
                     payload: ResponseBody::Err(zenoh::Err {
-                        timestamp: None,
-                        is_infrastructure: false,
+                        encoding: payload.encoding.into(),
                         ext_sinfo: None,
                         ext_unknown: vec![],
-                        ext_body: Some(ValueType {
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            payload: payload.payload.into(),
-                            encoding: payload.encoding.into(),
-                        }),
-                        code: 0, // TODO
+                        payload: payload.payload.into(),
                     }),
                     ext_qos: response::ext::QoSType::RESPONSE,
                     ext_tstamp: None,
