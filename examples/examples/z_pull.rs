@@ -44,11 +44,15 @@ async fn main() {
     // Define the future to handle incoming samples of the subscription.
     let subs = async {
         while let Ok(sample) = subscriber.recv_async().await {
+            let payload = sample
+                .payload
+                .deserialize::<String>()
+                .unwrap_or_else(|e| format!("{}", e));
             println!(
                 ">> [Subscriber] Received {} ('{}': '{}')",
                 sample.kind,
                 sample.key_expr.as_str(),
-                sample.value,
+                payload,
             );
         }
     };

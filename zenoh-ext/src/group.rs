@@ -252,7 +252,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
         .await
         .unwrap();
     while let Ok(s) = sub.recv_async().await {
-        match bincode::deserialize::<GroupNetEvent>(&(s.value.payload.contiguous())) {
+        match bincode::deserialize::<GroupNetEvent>(&(s.payload.contiguous())) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
                     log::debug!("Member join: {:?}", &je.member);
@@ -342,7 +342,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                             }
                                         }
                                         Err(e) => {
-                                            log::warn!("Error received: {}", e);
+                                            log::warn!("Error received: {:?}", e);
                                         }
                                     }
                                 }

@@ -710,7 +710,7 @@ fn client_test() {
         ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::DEFAULT,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -743,7 +743,7 @@ fn client_test() {
         ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::DEFAULT,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -776,7 +776,7 @@ fn client_test() {
         ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::DEFAULT,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -809,7 +809,7 @@ fn client_test() {
         ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::DEFAULT,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -842,7 +842,7 @@ fn client_test() {
         ext::QoSType::DEFAULT,
         PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::DEFAULT,
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,

@@ -41,8 +41,8 @@ pub use wire_expr::*;
 
 mod cowstr;
 pub use cowstr::CowStr;
-mod encoding;
-pub use encoding::{Encoding, KnownEncoding};
+pub mod encoding;
+pub use encoding::{Encoding, EncodingId};
 
 pub mod locator;
 pub use locator::*;
@@ -261,8 +261,10 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
+/// The unique id of a zenoh entity inside it's parent [`Session`].
 pub type EntityId = u32;
 
+/// The global unique id of a zenoh entity.
 #[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
 pub struct EntityGlobalId {
     pub zid: ZenohId,

@@ -32,20 +32,22 @@ pub(crate) mod common {
     };
     pub use zenoh_core::Resolve;
 
-    pub(crate) type Id = u32;
+    pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
+    #[zenoh_macros::unstable]
+    pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoCallbackReceiverPair;
-    pub use crate::selector::{Parameter, Parameters, Selector};
     pub use crate::session::{Session, SessionDeclarations};
 
-    pub use crate::query::{QueryConsolidation, QueryTarget};
+    pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+    pub use crate::selector::{Parameter, Parameters, Selector};
 
-    pub use crate::value::Value;
+    pub use crate::encoding::Encoding;
     /// The encoding of a zenoh `Value`.
-    pub use zenoh_protocol::core::{Encoding, KnownEncoding};
+    pub use crate::payload::{Deserialize, Payload, Serialize};
+    pub use crate::value::Value;
 
-    pub use crate::query::ConsolidationMode;
     #[zenoh_macros::unstable]
     pub use crate::sample::Locality;
     #[cfg(not(feature = "unstable"))]
@@ -58,19 +60,6 @@ pub(crate) mod common {
     #[zenoh_macros::unstable]
     pub use crate::publication::PublisherDeclarations;
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
-
-    /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
-    pub use zenoh_protocol::core::EndPoint;
-    /// The global unique id of a zenoh entity.
-    #[zenoh_macros::unstable]
-    pub use zenoh_protocol::core::EntityGlobalId;
-    /// The unique id of a zenoh entity inside it's parent [`Session`].
-    #[zenoh_macros::unstable]
-    pub use zenoh_protocol::core::EntityId;
-    /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
-    pub use zenoh_protocol::core::Locator;
-    /// The global unique id of a zenoh peer.
-    pub use zenoh_protocol::core::ZenohId;
 }
 
 /// Prelude to import when using Zenoh's sync API.
