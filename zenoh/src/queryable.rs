@@ -31,11 +31,9 @@ use std::ops::Deref;
 use std::sync::Arc;
 use uhlc::Timestamp;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::{
-    core::WireExpr,
-    network::{response, Mapping, RequestId, Response, ResponseFinal},
-    zenoh::{self, ext::ValueType, reply::ReplyBody, Del, Put, ResponseBody},
-};
+use zenoh_protocol::core::{EntityId, WireExpr};
+use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
+use zenoh_protocol::zenoh::{self, ext::ValueType, reply::ReplyBody, Del, Put, ResponseBody};
 use zenoh_result::ZResult;
 
 pub(crate) struct QueryInner {
@@ -67,6 +65,7 @@ impl Drop for QueryInner {
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
+    pub(crate) eid: EntityId,
 }
 
 impl Query {
@@ -302,14 +301,13 @@ impl SyncResolve for ReplyBuilder<'_> {
         {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", self.key_expr, self.query.key_expr())
         }
-        #[allow(unused_mut)] //will be unused if feature = "unstable" is not enabled
+        #[allow(unused_mut)] // will be unused if feature = "unstable" is not enabled
         let mut ext_sinfo = None;
         #[cfg(feature = "unstable")]
         {
             if self.source_info.source_id.is_some() || self.source_info.source_sn.is_some() {
                 ext_sinfo = Some(zenoh::put::ext::SourceInfoType {
-                    zid: self.source_info.source_id.unwrap_or_default(),
-                    eid: 0, // @TODO use proper EntityId (#703)
+                    id: self.source_info.source_id.unwrap_or_default(),
                     sn: self.source_info.source_sn.unwrap_or_default() as u32,
                 })
             }
@@ -353,7 +351,7 @@ impl SyncResolve for ReplyBuilder<'_> {
             ext_tstamp: None,
             ext_respid: Some(response::ext::ResponderIdType {
                 zid: self.query.inner.zid,
-                eid: 0, // @TODO use proper EntityId (#703)
+                eid: self.query.eid,
             }),
         });
         Ok(())
@@ -398,7 +396,7 @@ impl SyncResolve for ReplyErrBuilder<'_> {
             ext_tstamp: None,
             ext_respid: Some(response::ext::ResponderIdType {
                 zid: self.query.inner.zid,
-                eid: 0, // @TODO use proper EntityId (#703)
+                eid: self.query.eid,
             }),
         });
         Ok(())
@@ -702,6 +700,29 @@ pub struct Queryable<'a, Receiver> {
 }
 
 impl<'a, Receiver> Queryable<'a, Receiver> {
+    /// Returns the [`EntityGlobalId`] of this Queryable.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let queryable_id = queryable.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.queryable.session.zid(),
+            eid: self.queryable.state.id,
+        }
+    }
+
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())

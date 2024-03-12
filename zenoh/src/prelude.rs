@@ -31,7 +31,10 @@ pub(crate) mod common {
         writer::HasWriter,
     };
     pub use zenoh_core::Resolve;
+
     pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
+    #[zenoh_macros::unstable]
+    pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoCallbackReceiverPair;
@@ -49,6 +52,8 @@ pub(crate) mod common {
     pub use crate::sample::Locality;
     #[cfg(not(feature = "unstable"))]
     pub(crate) use crate::sample::Locality;
+    #[zenoh_macros::unstable]
+    pub use crate::sample::SourceInfo;
     pub use crate::sample::{Sample, SampleKind};
 
     pub use crate::publication::Priority;

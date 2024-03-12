@@ -15,16 +15,16 @@
 //! Sample primitives
 use crate::encoding::Encoding;
 use crate::payload::Payload;
-use crate::prelude::{KeyExpr, ZenohId};
+use crate::prelude::{KeyExpr, Value};
 use crate::time::{new_reception_timestamp, Timestamp};
 use crate::Priority;
-use crate::Value;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
 };
+use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::{core::CongestionControl, network::push::ext::QoSType};
 
 pub type SourceSn = u64;
@@ -52,7 +52,7 @@ pub(crate) struct DataInfo {
     pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    pub source_id: Option<ZenohId>,
+    pub source_id: Option<EntityGlobalId>,
     pub source_sn: Option<SourceSn>,
     pub qos: QoS,
 }
@@ -61,16 +61,24 @@ pub(crate) struct DataInfo {
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
-    /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
-    pub source_id: Option<ZenohId>,
+    /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
+    pub source_id: Option<EntityGlobalId>,
     /// The sequence number of the [`Sample`] from the source.
     pub source_sn: Option<SourceSn>,
 }
 
 #[test]
 #[cfg(feature = "unstable")]
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 fn source_info_stack_size() {
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 2);
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 40);
+}
+
+#[test]
+#[cfg(feature = "unstable")]
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn source_info_stack_size() {
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 48);
 }
 
 #[zenoh_macros::unstable]
