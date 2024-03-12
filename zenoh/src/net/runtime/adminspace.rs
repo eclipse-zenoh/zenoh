@@ -17,7 +17,7 @@ use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::payload::Payload;
 use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::{Sample, SyncResolve};
+use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
@@ -577,9 +577,8 @@ fn router_data(context: &AdminContext, query: Query) {
         }
     };
     if let Err(e) = query
-        .reply(Ok(
-            Sample::new(reply_key, payload).with_encoding(Encoding::APPLICATION_JSON)
-        ))
+        .reply(reply_key, payload)
+        .with_encoding(Encoding::APPLICATION_JSON)
         .res_sync()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -609,7 +608,7 @@ zenoh_build{{version="{}"}} 1
             .openmetrics_text(),
     );
 
-    if let Err(e) = query.reply(Ok(Sample::new(reply_key, metrics))).res() {
+    if let Err(e) = query.reply(reply_key, metrics).res() {
         log::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
@@ -622,10 +621,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            tables.hat_code.info(&tables, WhatAmI::Router),
-        )))
+        .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -640,10 +636,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            tables.hat_code.info(&tables, WhatAmI::Peer),
-        )))
+        .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -660,7 +653,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Payload::empty()))).res() {
+            if let Err(e) = query.reply(key, Payload::empty()).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -677,7 +670,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Payload::empty()))).res() {
+            if let Err(e) = query.reply(key, Payload::empty()).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -697,7 +690,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
             let status = serde_json::to_value(status).unwrap();
             match Payload::try_from(status) {
                 Ok(zbuf) => {
-                    if let Err(e) = query.reply(Ok(Sample::new(key, zbuf))).res_sync() {
+                    if let Err(e) = query.reply(key, zbuf).res_sync() {
                         log::error!("Error sending AdminSpace reply: {:?}", e);
                     }
                 }
@@ -718,8 +711,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
-                        if let Err(e) = query.reply(Ok(Sample::new(key_expr, plugin.path()))).res()
-                        {
+                        if let Err(e) = query.reply(key_expr, plugin.path()).res() {
                             log::error!("Error sending AdminSpace reply: {:?}", e);
                         }
                     }
@@ -743,7 +735,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             match Payload::try_from(response.value) {
                                 Ok(zbuf) => {
-                                    if let Err(e) = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync() {
+                                    if let Err(e) = query.reply(key_expr, zbuf).res_sync() {
                                         log::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
                                 },

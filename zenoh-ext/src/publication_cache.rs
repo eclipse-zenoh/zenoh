@@ -201,7 +201,7 @@ impl<'a> PublicationCache<'a> {
                         }
                     },
 
-                    // on query, reply with cach content
+                    // on query, reply with cache content
                     query = quer_recv.recv_async() => {
                         if let Ok(query) = query {
                             if !query.selector().key_expr.as_str().contains('*') {
@@ -212,7 +212,7 @@ impl<'a> PublicationCache<'a> {
                                                 continue;
                                             }
                                         }
-                                        if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
+                                        if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
                                             log::warn!("Error replying to query: {}", e);
                                         }
                                     }
@@ -226,7 +226,7 @@ impl<'a> PublicationCache<'a> {
                                                     continue;
                                                 }
                                             }
-                                            if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
+                                            if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
                                                 log::warn!("Error replying to query: {}", e);
                                             }
                                         }

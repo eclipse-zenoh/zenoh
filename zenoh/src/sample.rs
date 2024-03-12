@@ -585,3 +585,9 @@ impl From<QoSType> for QoS {
         QoS { inner: qos }
     }
 }
+
+impl From<QoS> for QoSType {
+    fn from(qos: QoS) -> Self {
+        qos.inner
+    }
+}
