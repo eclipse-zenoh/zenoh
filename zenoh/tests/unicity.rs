@@ -196,7 +196,12 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
             .declare_queryable(key_expr)
             .callback(move |sample| {
                 c_msgs1.fetch_add(1, Ordering::Relaxed);
-                task::block_on(async { ztimeout!(sample.reply(KeyExpr::try_from(key_expr).unwrap(), vec![0u8; size]).res_async()).unwrap() });
+                task::block_on(async {
+                    ztimeout!(sample
+                        .reply(KeyExpr::try_from(key_expr).unwrap(), vec![0u8; size])
+                        .res_async())
+                    .unwrap()
+                });
             })
             .res_async())
         .unwrap();
@@ -208,7 +213,12 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
             .declare_queryable(key_expr)
             .callback(move |sample| {
                 c_msgs2.fetch_add(1, Ordering::Relaxed);
-                task::block_on(async { ztimeout!(sample.reply(KeyExpr::try_from(key_expr).unwrap(), vec![0u8; size]).res_async()).unwrap() });
+                task::block_on(async {
+                    ztimeout!(sample
+                        .reply(KeyExpr::try_from(key_expr).unwrap(), vec![0u8; size])
+                        .res_async())
+                    .unwrap()
+                });
             })
             .res_async())
         .unwrap();

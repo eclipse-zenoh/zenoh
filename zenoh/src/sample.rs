@@ -580,6 +580,6 @@ impl From<QoSType> for QoS {
 
 impl From<QoS> for QoSType {
     fn from(qos: QoS) -> Self {
-       qos.inner
+        qos.inner
     }
 }
