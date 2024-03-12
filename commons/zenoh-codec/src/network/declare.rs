@@ -488,7 +488,6 @@ where
         let id: subscriber::SubscriberId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         let mut ext_wire_expr = common::ext::WireExprType::null();
 
         let mut has_ext = imsg::has_flag(self.header, subscriber::flag::Z);
@@ -670,7 +669,6 @@ where
         let id: queryable::QueryableId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         let mut ext_wire_expr = common::ext::WireExprType::null();
 
         let mut has_ext = imsg::has_flag(self.header, queryable::flag::Z);
@@ -818,7 +816,6 @@ where
         let id: token::TokenId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         let mut ext_wire_expr = common::ext::WireExprType::null();
 
         let mut has_ext = imsg::has_flag(self.header, interest::flag::Z);
@@ -1037,7 +1034,6 @@ where
         let id: interest::InterestId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         let mut ext_wire_expr = common::ext::WireExprType::null();
 
         let mut has_ext = imsg::has_flag(self.header, interest::flag::Z);

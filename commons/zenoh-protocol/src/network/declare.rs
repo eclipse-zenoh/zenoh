@@ -177,7 +177,6 @@ pub mod common {
     pub mod ext {
         use super::*;
 
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub type WireExprExt = zextzbuf!(0x0f, true);
         #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct WireExprType {
@@ -604,7 +603,6 @@ pub mod queryable {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareQueryable {
         pub id: QueryableId,
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub ext_wire_expr: common::ext::WireExprType,
     }
 
@@ -690,7 +688,6 @@ pub mod token {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareToken {
         pub id: TokenId,
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub ext_wire_expr: common::ext::WireExprType,
     }
 
@@ -1104,7 +1101,6 @@ pub mod interest {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareInterest {
         pub id: InterestId,
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub ext_wire_expr: common::ext::WireExprType,
     }
 
