@@ -214,7 +214,7 @@ fn send_sourced_queryable_to_net_childs(
                                     node_id: routing_context,
                                 },
                                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id: 0,
+                                    id: 0, // Sourced queryables do not use ids
                                     wire_expr: key_expr,
                                     ext_info: *qabl_info,
                                 }),
@@ -492,7 +492,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                                     node_id: routing_context,
                                 },
                                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                    id: 0,
+                                    id: 0, // Sourced queryables do not use ids
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
