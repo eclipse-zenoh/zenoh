@@ -32,7 +32,7 @@ use zenoh_buffers::{
 use zenoh_protocol::common::{iext, ZExtUnit};
 use zenoh_protocol::{
     common::{imsg, ZExtZBufHeader},
-    core::{Encoding, ZenohId},
+    core::{Encoding, EntityGlobalId, EntityId, ZenohId},
     zenoh::{ext, id, PushBody, RequestBody, ResponseBody},
 };
 
@@ -150,9 +150,9 @@ where
 // Extension: SourceInfo
 impl<const ID: u8> LCodec<&ext::SourceInfoType<{ ID }>> for Zenoh080 {
     fn w_len(self, x: &ext::SourceInfoType<{ ID }>) -> usize {
-        let ext::SourceInfoType { zid, eid, sn } = x;
+        let ext::SourceInfoType { id, sn } = x;
 
-        1 + self.w_len(zid) + self.w_len(*eid) + self.w_len(*sn)
+        1 + self.w_len(&id.zid) + self.w_len(id.eid) + self.w_len(*sn)
     }
 }
 
@@ -164,18 +164,18 @@ where
 
     fn write(self, writer: &mut W, x: (&ext::SourceInfoType<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
-        let ext::SourceInfoType { zid, eid, sn } = x;
+        let ext::SourceInfoType { id, sn } = x;
 
         let header: ZExtZBufHeader<{ ID }> = ZExtZBufHeader::new(self.w_len(x));
         self.write(&mut *writer, (&header, more))?;
 
-        let flags: u8 = (zid.size() as u8 - 1) << 4;
+        let flags: u8 = (id.zid.size() as u8 - 1) << 4;
         self.write(&mut *writer, flags)?;
 
-        let lodec = Zenoh080Length::new(zid.size());
-        lodec.write(&mut *writer, zid)?;
+        let lodec = Zenoh080Length::new(id.zid.size());
+        lodec.write(&mut *writer, &id.zid)?;
 
-        self.write(&mut *writer, eid)?;
+        self.write(&mut *writer, id.eid)?;
         self.write(&mut *writer, sn)?;
         Ok(())
     }
@@ -196,10 +196,16 @@ where
         let lodec = Zenoh080Length::new(length);
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
-        let eid: u32 = self.codec.read(&mut *reader)?;
+        let eid: EntityId = self.codec.read(&mut *reader)?;
         let sn: u32 = self.codec.read(&mut *reader)?;
 
-        Ok((ext::SourceInfoType { zid, eid, sn }, more))
+        Ok((
+            ext::SourceInfoType {
+                id: EntityGlobalId { zid, eid },
+                sn,
+            },
+            more,
+        ))
     }
 }
 

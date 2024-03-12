@@ -66,6 +66,7 @@ fn base_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face.upgrade().unwrap(),
+        0,
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
         NodeId::default(),
@@ -167,6 +168,76 @@ fn match_test() {
 }
 
 #[test]
+fn multisub_test() {
+    let config = Config::default();
+    let router = Router::new(
+        ZenohId::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        Some(Arc::new(HLC::default())),
+        &config,
+    )
+    .unwrap();
+    let tables = router.tables.clone();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face0 = Arc::downgrade(&router.new_primitives(primitives).state);
+    assert!(face0.upgrade().is_some());
+
+    // --------------
+    let sub_info = SubscriberInfo {
+        reliability: Reliability::Reliable,
+        mode: Mode::Push,
+    };
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        0,
+        &"sub".into(),
+        &sub_info,
+        NodeId::default(),
+    );
+    let optres = Resource::get_resource(zread!(tables.tables)._get_root(), "sub")
+        .map(|res| Arc::downgrade(&res));
+    assert!(optres.is_some());
+    let res = optres.unwrap();
+    assert!(res.upgrade().is_some());
+
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        1,
+        &"sub".into(),
+        &sub_info,
+        NodeId::default(),
+    );
+    assert!(res.upgrade().is_some());
+
+    undeclare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        0,
+        &WireExpr::empty(),
+        NodeId::default(),
+    );
+    assert!(res.upgrade().is_some());
+
+    undeclare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        1,
+        &WireExpr::empty(),
+        NodeId::default(),
+    );
+    assert!(res.upgrade().is_none());
+
+    tables::close_face(&tables, &face0);
+}
+
+#[test]
 fn clean_test() {
     let config = Config::default();
     let router = Router::new(
@@ -241,6 +312,7 @@ fn clean_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
+        0,
         &"todrop1/todrop11".into(),
         &sub_info,
         NodeId::default(),
@@ -255,6 +327,7 @@ fn clean_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
+        1,
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
         NodeId::default(),
@@ -270,7 +343,8 @@ fn clean_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
-        &WireExpr::from(1).with_suffix("/todrop12"),
+        1,
+        &WireExpr::empty(),
         NodeId::default(),
     );
 
@@ -284,7 +358,8 @@ fn clean_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
-        &"todrop1/todrop11".into(),
+        0,
+        &WireExpr::empty(),
         NodeId::default(),
     );
     assert!(res1.upgrade().is_some());
@@ -302,6 +377,7 @@ fn clean_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
+        2,
         &"todrop3".into(),
         &sub_info,
         NodeId::default(),
@@ -316,7 +392,8 @@ fn clean_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
-        &"todrop3".into(),
+        2,
+        &WireExpr::empty(),
         NodeId::default(),
     );
     assert!(res1.upgrade().is_some());
@@ -331,6 +408,7 @@ fn clean_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
+        3,
         &"todrop5".into(),
         &sub_info,
         NodeId::default(),
@@ -339,6 +417,7 @@ fn clean_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
+        4,
         &"todrop6".into(),
         &sub_info,
         NodeId::default(),
@@ -518,6 +597,7 @@ fn client_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
+        0,
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
@@ -565,6 +645,7 @@ fn client_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face1.upgrade().unwrap(),
+        0,
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
@@ -612,6 +693,7 @@ fn client_test() {
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
         &mut face2.upgrade().unwrap(),
+        0,
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
         NodeId::default(),

@@ -40,11 +40,11 @@ use super::{
 };
 use std::{
     any::Any,
-    collections::{HashMap, HashSet},
-    sync::Arc,
+    collections::HashMap,
+    sync::{atomic::AtomicU32, Arc},
 };
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
+use zenoh_protocol::network::declare::{queryable::ext::QueryableInfo, QueryableId, SubscriberId};
 use zenoh_protocol::network::Oam;
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
@@ -131,7 +131,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for mut res in face
+        for (_id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -159,7 +159,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for mut res in face
+        for (_id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -290,19 +290,21 @@ impl HatContext {
 }
 
 struct HatFace {
-    local_subs: HashSet<Arc<Resource>>,
-    remote_subs: HashSet<Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
-    remote_qabls: HashSet<Arc<Resource>>,
+    next_id: AtomicU32, // @TODO: manage rollover and uniqueness
+    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    remote_subs: HashMap<SubscriberId, Arc<Resource>>,
+    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfo)>,
+    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
 
 impl HatFace {
     fn new() -> Self {
         Self {
-            local_subs: HashSet::new(),
-            remote_subs: HashSet::new(),
+            next_id: AtomicU32::new(0),
+            local_subs: HashMap::new(),
+            remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),
-            remote_qabls: HashSet::new(),
+            remote_qabls: HashMap::new(),
         }
     }
 }

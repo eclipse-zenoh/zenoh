@@ -13,14 +13,11 @@
 //
 
 //! Publishing primitives.
-use crate::encoding::Encoding;
-use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
+use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::{DataInfo, QoS, Sample, SampleKind};
-use crate::Locality;
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
@@ -30,10 +27,11 @@ use crate::{
 };
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
+#[zenoh_macros::unstable]
+use zenoh_protocol::zenoh::ext::SourceInfoType;
 use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::zenoh::Put;
@@ -148,6 +146,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
 
         let publisher = Publisher {
             session,
+            #[cfg(feature = "unstable")]
+            eid: 0, // This is a one shot Publisher
             key_expr: key_expr?,
             congestion_control,
             priority,
@@ -159,6 +159,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
             self.payload,
             self.kind,
             self.encoding,
+            #[cfg(feature = "unstable")]
+            None,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
@@ -241,6 +243,8 @@ impl std::fmt::Debug for PublisherRef<'_> {
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
+    #[cfg(feature = "unstable")]
+    pub(crate) eid: EntityId,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
@@ -248,6 +252,29 @@ pub struct Publisher<'a> {
 }
 
 impl<'a> Publisher<'a> {
+    /// Returns the [`EntityGlobalId`] of this Publisher.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let publisher_id = publisher.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.session.zid(),
+            eid: self.eid,
+        }
+    }
+
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
@@ -316,6 +343,8 @@ impl<'a> Publisher<'a> {
             payload,
             kind,
             encoding: Encoding::ZENOH_BYTES,
+            #[cfg(feature = "unstable")]
+            source_info: None,
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -604,6 +633,8 @@ pub struct Publication<'a> {
     kind: SampleKind,
     encoding: Encoding,
     #[cfg(feature = "unstable")]
+    pub(crate) source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
 
@@ -616,6 +647,27 @@ impl<'a> Publication<'a> {
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
+        self
+    }
+
+    /// Send data with the given [`SourceInfo`].
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("Value").with_source_info(SourceInfo {
+    ///     source_id: Some(publisher.id()),
+    ///     source_sn: Some(0),
+    /// }).res().await.unwrap();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.source_info = Some(source_info);
         self
     }
 }
@@ -631,6 +683,8 @@ impl SyncResolve for Publication<'_> {
             self.payload,
             self.kind,
             self.encoding,
+            #[cfg(feature = "unstable")]
+            self.source_info,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
@@ -660,6 +714,8 @@ impl<'a> Sink<Sample> for Publisher<'a> {
             payload: item.payload,
             kind: item.kind,
             encoding: item.encoding,
+            #[cfg(feature = "unstable")]
+            source_info: None,
             #[cfg(feature = "unstable")]
             attachment: item.attachment,
         }
@@ -784,8 +840,12 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
         self.session
             .declare_publication_intent(key_expr.clone())
             .res_sync()?;
+        #[cfg(feature = "unstable")]
+        let eid = self.session.runtime.next_id();
         let publisher = Publisher {
             session: self.session,
+            #[cfg(feature = "unstable")]
+            eid,
             key_expr,
             congestion_control: self.congestion_control,
             priority: self.priority,
@@ -809,6 +869,7 @@ fn resolve_put(
     payload: Payload,
     kind: SampleKind,
     encoding: Encoding,
+    #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")] attachment: Option<Attachment>,
 ) -> ZResult<()> {
     log::trace!("write({:?}, [...])", &publisher.key_expr);
@@ -842,6 +903,12 @@ fn resolve_put(
                     PushBody::Put(Put {
                         timestamp,
                         encoding: encoding.clone().into(),
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.map(|s| SourceInfoType {
+                            id: s.source_id.unwrap_or_default(),
+                            sn: s.source_sn.unwrap_or_default() as u32,
+                        }),
+                        #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
@@ -861,6 +928,12 @@ fn resolve_put(
                     }
                     PushBody::Del(Del {
                         timestamp,
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.map(|s| SourceInfoType {
+                            id: s.source_id.unwrap_or_default(),
+                            sn: s.source_sn.unwrap_or_default() as u32,
+                        }),
+                        #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         ext_attachment,
                         ext_unknown: vec![],

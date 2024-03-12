@@ -177,7 +177,6 @@ pub mod common {
     pub mod ext {
         use super::*;
 
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub type WireExprExt = zextzbuf!(0x0f, true);
         #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct WireExprType {
@@ -193,6 +192,10 @@ pub mod common {
                         mapping: Mapping::Receiver,
                     },
                 }
+            }
+
+            pub fn is_null(&self) -> bool {
+                self.wire_expr.is_empty()
             }
 
             #[cfg(feature = "test")]
@@ -286,9 +289,11 @@ pub mod keyexpr {
 }
 
 pub mod subscriber {
+    use crate::core::EntityId;
+
     use super::*;
 
-    pub type SubscriberId = u32;
+    pub type SubscriberId = EntityId;
 
     pub mod flag {
         pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
@@ -441,7 +446,6 @@ pub mod subscriber {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareSubscriber {
         pub id: SubscriberId,
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub ext_wire_expr: common::ext::WireExprType,
     }
 
@@ -460,9 +464,11 @@ pub mod subscriber {
 }
 
 pub mod queryable {
+    use crate::core::EntityId;
+
     use super::*;
 
-    pub type QueryableId = u32;
+    pub type QueryableId = EntityId;
 
     pub mod flag {
         pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
@@ -597,7 +603,6 @@ pub mod queryable {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareQueryable {
         pub id: QueryableId,
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub ext_wire_expr: common::ext::WireExprType,
     }
 
@@ -683,7 +688,6 @@ pub mod token {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareToken {
         pub id: TokenId,
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub ext_wire_expr: common::ext::WireExprType,
     }
 
@@ -1097,7 +1101,6 @@ pub mod interest {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareInterest {
         pub id: InterestId,
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub ext_wire_expr: common::ext::WireExprType,
     }
 

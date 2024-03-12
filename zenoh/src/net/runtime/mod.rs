@@ -30,6 +30,7 @@ use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
@@ -48,6 +49,7 @@ use zenoh_transport::{
 struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
+    next_id: AtomicU32,
     metadata: serde_json::Value,
     router: Arc<Router>,
     config: Notifier<Config>,
@@ -114,6 +116,7 @@ impl Runtime {
             state: Arc::new(RuntimeState {
                 zid,
                 whatami,
+                next_id: AtomicU32::new(1), // 0 is reserved for routing core
                 metadata,
                 router,
                 config: config.clone(),
@@ -152,6 +155,11 @@ impl Runtime {
 
     pub fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
         zwrite!(self.state.transport_handlers).push(handler);
+    }
+
+    #[inline]
+    pub fn next_id(&self) -> u32 {
+        self.state.next_id.fetch_add(1, Ordering::SeqCst)
     }
 
     pub async fn close(&self) -> ZResult<()> {

@@ -200,7 +200,7 @@ impl From<ResponseFinal> for NetworkMessage {
 pub mod ext {
     use crate::{
         common::{imsg, ZExtZ64},
-        core::{CongestionControl, Priority, ZenohId},
+        core::{CongestionControl, EntityId, Priority, ZenohId},
     };
     use core::fmt;
 
@@ -407,19 +407,19 @@ pub mod ext {
     /// %      eid      %
     /// +---------------+
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct EntityIdType<const ID: u8> {
+    pub struct EntityGlobalIdType<const ID: u8> {
         pub zid: ZenohId,
-        pub eid: u32,
+        pub eid: EntityId,
     }
 
-    impl<const ID: u8> EntityIdType<{ ID }> {
+    impl<const ID: u8> EntityGlobalIdType<{ ID }> {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
             let zid = ZenohId::rand();
-            let eid: u32 = rng.gen();
+            let eid: EntityId = rng.gen();
             Self { zid, eid }
         }
     }

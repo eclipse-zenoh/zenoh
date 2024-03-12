@@ -21,16 +21,14 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-use zenoh_protocol::zenoh::reply::ReplyBody;
-use zenoh_protocol::zenoh::Put;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
-        declare::{ext, queryable::ext::QueryableInfo},
+        declare::{ext, queryable::ext::QueryableInfo, QueryableId},
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
-    zenoh::{query::Consolidation, Reply, RequestBody, ResponseBody},
+    zenoh::{query::Consolidation, reply::ReplyBody, Put, Reply, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
@@ -44,17 +42,24 @@ pub(crate) fn declare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
+    id: QueryableId,
     expr: &WireExpr,
     qabl_info: &QueryableInfo,
     node_id: NodeId,
 ) {
-    log::debug!("Register queryable {}", face);
     let rtables = zread!(tables.tables);
     match rtables
         .get_mapping(face, &expr.scope, expr.mapping)
         .cloned()
     {
         Some(mut prefix) => {
+            log::debug!(
+                "{} Declare queryable {} ({}{})",
+                face,
+                id,
+                prefix.expr(),
+                expr.suffix
+            );
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
                 if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
@@ -76,7 +81,7 @@ pub(crate) fn declare_queryable(
                     (res, wtables)
                 };
 
-            hat_code.declare_queryable(&mut wtables, face, &mut res, qabl_info, node_id);
+            hat_code.declare_queryable(&mut wtables, face, id, &mut res, qabl_info, node_id);
 
             disable_matches_query_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -93,7 +98,12 @@ pub(crate) fn declare_queryable(
             }
             drop(wtables);
         }
-        None => log::error!("Declare queryable for unknown scope {}!", expr.scope),
+        None => log::error!(
+            "{} Declare queryable {} for unknown scope {}!",
+            face,
+            id,
+            expr.scope
+        ),
     }
 }
 
@@ -101,37 +111,57 @@ pub(crate) fn undeclare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
+    id: QueryableId,
     expr: &WireExpr,
     node_id: NodeId,
 ) {
-    let rtables = zread!(tables.tables);
-    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-
-                hat_code.undeclare_queryable(&mut wtables, face, &mut res, node_id);
-
-                disable_matches_query_routes(&mut wtables, &mut res);
-                drop(wtables);
-
-                let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
-                drop(rtables);
-
-                let wtables = zwrite!(tables.tables);
-                for (mut res, query_routes) in matches_query_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_query_routes(query_routes);
+    let res = if expr.is_empty() {
+        None
+    } else {
+        let rtables = zread!(tables.tables);
+        match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+            Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
+                Some(res) => Some(res),
+                None => {
+                    log::error!(
+                        "{} Undeclare unknown queryable {}{}!",
+                        face,
+                        prefix.expr(),
+                        expr.suffix
+                    );
+                    return;
                 }
-                Resource::clean(&mut res);
-                drop(wtables);
+            },
+            None => {
+                log::error!(
+                    "{} Undeclare queryable with unknown scope {}",
+                    face,
+                    expr.scope
+                );
+                return;
             }
-            None => log::error!("Undeclare unknown queryable!"),
-        },
-        None => log::error!("Undeclare queryable with unknown scope!"),
+        }
+    };
+    let mut wtables = zwrite!(tables.tables);
+    if let Some(mut res) = hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id) {
+        log::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
+        disable_matches_query_routes(&mut wtables, &mut res);
+        drop(wtables);
+
+        let rtables = zread!(tables.tables);
+        let matches_query_routes = compute_matches_query_routes(&rtables, &res);
+        drop(rtables);
+
+        let wtables = zwrite!(tables.tables);
+        for (mut res, query_routes) in matches_query_routes {
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_query_routes(query_routes);
+        }
+        Resource::clean(&mut res);
+        drop(wtables);
+    } else {
+        log::error!("{} Undeclare unknown queryable {}", face, id);
     }
 }
 
@@ -586,7 +616,7 @@ pub fn route_query(
                                 ext_tstamp: None,
                                 ext_respid: Some(response::ext::ResponderIdType {
                                     zid,
-                                    eid: 0, // @TODO use proper ResponderId (#703)
+                                    eid: 0, // 0 is reserved for routing core
                                 }),
                             },
                             expr.full_expr().to_string(),
@@ -701,8 +731,9 @@ pub fn route_query(
         }
         None => {
             log::error!(
-                "Route query with unknown scope {}! Send final reply.",
-                expr.scope
+                "{} Route query with unknown scope {}! Send final reply.",
+                face,
+                expr.scope,
             );
             drop(rtables);
             face.primitives

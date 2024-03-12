@@ -48,7 +48,7 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -57,6 +57,8 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::zenoh::reply::ReplyBody;
@@ -97,9 +99,10 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
+    #[cfg(feature = "unstable")]
+    pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     //pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
@@ -121,9 +124,10 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
-            decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            remote_subscribers: HashMap::new(),
             //publications: Vec::new(),
             subscribers: HashMap::new(),
             queryables: HashMap::new(),
@@ -967,19 +971,20 @@ impl Session {
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let id = self.runtime.next_id();
         let key_expr = match scope {
             Some(scope) => scope / key_expr,
             None => key_expr.clone(),
         };
 
-        let sub_state = Arc::new(SubscriberState {
+        let mut sub_state = SubscriberState {
             id,
+            remote_id: id,
             key_expr: key_expr.clone().into_owned(),
             scope: scope.clone().map(|e| e.into_owned()),
             origin,
             callback,
-        });
+        };
 
         #[cfg(not(feature = "unstable"))]
         let declared_sub = origin != Locality::SessionLocal;
@@ -989,29 +994,39 @@ impl Session {
                 .as_str()
                 .starts_with(crate::liveliness::PREFIX_LIVELINESS);
 
-        let declared_sub = declared_sub
-            .then(|| {
-                match state
-                .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
-                .iter()
-                .find(|s| s.includes( &key_expr))
-                {
-                    Some(join_sub) => {
-                        let joined_sub = state.subscribers.values().any(|s| {
-                            s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
-                        });
-                        (!joined_sub).then(|| join_sub.clone().into())
+        let declared_sub =
+            declared_sub
+                .then(|| {
+                    match state
+                        .aggregated_subscribers
+                        .iter()
+                        .find(|s| s.includes(&key_expr))
+                    {
+                        Some(join_sub) => {
+                            if let Some(joined_sub) = state.subscribers.values().find(|s| {
+                                s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
+                            }) {
+                                sub_state.remote_id = joined_sub.remote_id;
+                                None
+                            } else {
+                                Some(join_sub.clone().into())
+                            }
+                        }
+                        None => {
+                            if let Some(twin_sub) = state.subscribers.values().find(|s| {
+                                s.origin != Locality::SessionLocal && s.key_expr == key_expr
+                            }) {
+                                sub_state.remote_id = twin_sub.remote_id;
+                                None
+                            } else {
+                                Some(key_expr.clone())
+                            }
+                        }
                     }
-                    None => {
-                        let twin_sub = state
-                            .subscribers
-                            .values()
-                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == key_expr);
-                        (!twin_sub).then(|| key_expr.clone())
-                    }
-                }
-            })
-            .flatten();
+                })
+                .flatten();
+
+        let sub_state = Arc::new(sub_state);
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
         for res in state
@@ -1064,7 +1079,7 @@ impl Session {
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                    id: id as u32,
+                    id,
                     wire_expr: key_expr.to_wire(self).to_owned(),
                     ext_info: *info,
                 }),
@@ -1080,7 +1095,7 @@ impl Session {
         Ok(sub_state)
     }
 
-    pub(crate) fn unsubscribe(&self, sid: usize) -> ZResult<()> {
+    pub(crate) fn unsubscribe(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("unsubscribe({:?})", sub_state);
@@ -1110,65 +1125,28 @@ impl Session {
             if send_forget {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
-                let key_expr = &sub_state.key_expr;
-                match state
-                    .aggregated_subscribers
-                    .iter()
-                    .find(|s| s.includes(key_expr))
-                {
-                    Some(join_sub) => {
-                        let joined_sub = state.subscribers.values().any(|s| {
-                            s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
-                        });
-                        if !joined_sub {
-                            let primitives = state.primitives.as_ref().unwrap().clone();
-                            let wire_expr = WireExpr::from(join_sub).to_owned();
-                            drop(state);
-                            primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // @TODO use proper SubscriberId (#703)
-                                    ext_wire_expr: WireExprType { wire_expr },
-                                }),
-                            });
-
-                            #[cfg(feature = "unstable")]
-                            {
-                                let state = zread!(self.state);
-                                self.update_status_down(&state, &sub_state.key_expr)
-                            }
-                        }
+                if !state.subscribers.values().any(|s| {
+                    s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
+                }) {
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
+                    primitives.send_declare(Declare {
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id: sub_state.remote_id,
+                            ext_wire_expr: WireExprType {
+                                wire_expr: WireExpr::empty(),
+                            },
+                        }),
+                    });
+                    #[cfg(feature = "unstable")]
+                    {
+                        let state = zread!(self.state);
+                        self.update_status_down(&state, &sub_state.key_expr)
                     }
-                    None => {
-                        let twin_sub = state
-                            .subscribers
-                            .values()
-                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
-                        if !twin_sub {
-                            let primitives = state.primitives.as_ref().unwrap().clone();
-                            drop(state);
-                            primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // @TODO use proper SubscriberId (#703)
-                                    ext_wire_expr: WireExprType {
-                                        wire_expr: key_expr.to_wire(self).to_owned(),
-                                    },
-                                }),
-                            });
-
-                            #[cfg(feature = "unstable")]
-                            {
-                                let state = zread!(self.state);
-                                self.update_status_down(&state, &sub_state.key_expr)
-                            }
-                        }
-                    }
-                };
+                }
             }
             Ok(())
         } else {
@@ -1185,7 +1163,7 @@ impl Session {
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         log::trace!("queryable({:?})", key_expr);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let id = self.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.to_owned(),
@@ -1193,158 +1171,48 @@ impl Session {
             origin,
             callback,
         });
-        #[cfg(feature = "complete_n")]
-        {
-            state.queryables.insert(id, qable_state.clone());
 
-            if origin != Locality::SessionLocal && complete {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, key_expr);
-                drop(state);
-                let qabl_info = QueryableInfo {
-                    complete,
-                    distance: 0,
-                };
-                primitives.send_declare(Declare {
-                    ext_qos: declare::ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id: id as u32,
-                        wire_expr: key_expr.to_owned(),
-                        ext_info: qabl_info,
-                    }),
-                });
-            }
-        }
-        #[cfg(not(feature = "complete_n"))]
-        {
-            let twin_qabl = Session::twin_qabl(&state, key_expr);
-            let complete_twin_qabl = twin_qabl && Session::complete_twin_qabl(&state, key_expr);
+        state.queryables.insert(id, qable_state.clone());
 
-            state.queryables.insert(id, qable_state.clone());
-
-            if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
-            {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = u8::from(!complete_twin_qabl && complete);
-                drop(state);
-                let qabl_info = QueryableInfo {
-                    complete,
-                    distance: 0,
-                };
-                primitives.send_declare(Declare {
-                    ext_qos: declare::ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id: id as u32,
-                        wire_expr: key_expr.to_owned(),
-                        ext_info: qabl_info,
-                    }),
-                });
-            }
+        if origin != Locality::SessionLocal {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            let qabl_info = QueryableInfo {
+                complete: if complete { 1 } else { 0 },
+                distance: 0,
+            };
+            primitives.send_declare(Declare {
+                ext_qos: declare::ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                    id,
+                    wire_expr: key_expr.to_owned(),
+                    ext_info: qabl_info,
+                }),
+            });
         }
         Ok(qable_state)
     }
 
-    pub(crate) fn twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
-        state.queryables.values().any(|q| {
-            q.origin != Locality::SessionLocal
-                && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                    == state.local_wireexpr_to_expr(key).unwrap()
-        })
-    }
-
-    #[cfg(not(feature = "complete_n"))]
-    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
-        state.queryables.values().any(|q| {
-            q.origin != Locality::SessionLocal
-                && q.complete
-                && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                    == state.local_wireexpr_to_expr(key).unwrap()
-        })
-    }
-
-    #[cfg(feature = "complete_n")]
-    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr) -> u8 {
-        state
-            .queryables
-            .values()
-            .filter(|q| {
-                q.origin != Locality::SessionLocal
-                    && q.complete
-                    && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                        == state.local_wireexpr_to_expr(key).unwrap()
-            })
-            .count() as u8
-    }
-
-    pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
+    pub(crate) fn close_queryable(&self, qid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("close_queryable({:?})", qable_state);
             if qable_state.origin != Locality::SessionLocal {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                if Session::twin_qabl(&state, &qable_state.key_expr) {
-                    // There still exist Queryables on the same KeyExpr.
-                    if qable_state.complete {
-                        #[cfg(feature = "complete_n")]
-                        {
-                            let complete =
-                                Session::complete_twin_qabls(&state, &qable_state.key_expr);
-                            drop(state);
-                            let qabl_info = QueryableInfo {
-                                complete,
-                                distance: 0,
-                            };
-                            primitives.send_declare(Declare {
-                                ext_qos: declare::ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id: 0, // @TODO use proper QueryableId (#703)
-                                    wire_expr: qable_state.key_expr.clone(),
-                                    ext_info: qabl_info,
-                                }),
-                            });
-                        }
-                        #[cfg(not(feature = "complete_n"))]
-                        {
-                            if !Session::complete_twin_qabl(&state, &qable_state.key_expr) {
-                                drop(state);
-                                let qabl_info = QueryableInfo {
-                                    complete: 0,
-                                    distance: 0,
-                                };
-                                primitives.send_declare(Declare {
-                                    ext_qos: declare::ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id: 0, // @TODO use proper QueryableId (#703)
-                                        wire_expr: qable_state.key_expr.clone(),
-                                        ext_info: qabl_info,
-                                    }),
-                                });
-                            }
-                        }
-                    }
-                } else {
-                    // There are no more Queryables on the same KeyExpr.
-                    drop(state);
-                    primitives.send_declare(Declare {
-                        ext_qos: declare::ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id: 0, // @TODO use proper QueryableId (#703)
-                            ext_wire_expr: WireExprType {
-                                wire_expr: qable_state.key_expr.clone(),
-                            },
-                        }),
-                    });
-                }
+                drop(state);
+                primitives.send_declare(Declare {
+                    ext_qos: declare::ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                        id: qable_state.id,
+                        ext_wire_expr: WireExprType {
+                            wire_expr: qable_state.key_expr.clone(),
+                        },
+                    }),
+                });
             }
             Ok(())
         } else {
@@ -1359,7 +1227,7 @@ impl Session {
     ) -> ZResult<Arc<LivelinessTokenState>> {
         let mut state = zwrite!(self.state);
         log::trace!("declare_liveliness({:?})", key_expr);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let id = self.runtime.next_id();
         let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
         let tok_state = Arc::new(LivelinessTokenState {
             id,
@@ -1374,7 +1242,7 @@ impl Session {
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: id as u32,
+                id,
                 wire_expr: key_expr.to_wire(self).to_owned(),
                 ext_info: SubscriberInfo::DEFAULT,
             }),
@@ -1383,7 +1251,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn undeclare_liveliness(&self, tid: usize) -> ZResult<()> {
+    pub(crate) fn undeclare_liveliness(&self, tid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(tok_state) = state.tokens.remove(&tid) {
             trace!("undeclare_liveliness({:?})", tok_state);
@@ -1398,10 +1266,8 @@ impl Session {
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId (#703)
-                        ext_wire_expr: WireExprType {
-                            wire_expr: key_expr.to_wire(self).to_owned(),
-                        },
+                        id: tok_state.id,
+                        ext_wire_expr: WireExprType::null(),
                     }),
                 });
             }
@@ -1418,8 +1284,7 @@ impl Session {
         callback: Callback<'static, MatchingStatus>,
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
-
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let id = self.runtime.next_id();
         log::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
@@ -1554,7 +1419,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn undeclare_matches_listener_inner(&self, sid: usize) -> ZResult<()> {
+    pub(crate) fn undeclare_matches_listener_inner(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(state) = state.matching_listeners.remove(&sid) {
             trace!("undeclare_matches_listener_inner({:?})", state);
@@ -1856,15 +1721,15 @@ impl Session {
         body: Option<QueryBodyType>,
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
-        let (primitives, key_expr, callbacks) = {
+        let (primitives, key_expr, queryables) = {
             let state = zread!(self.state);
             match state.wireexpr_to_keyexpr(key_expr, local) {
                 Ok(key_expr) => {
-                    let callbacks = state
+                    let queryables = state
                         .queryables
-                        .values()
+                        .iter()
                         .filter(
-                            |queryable|
+                            |(_, queryable)|
                                 (queryable.origin == Locality::Any
                                     || (local == (queryable.origin == Locality::SessionLocal)))
                                 &&
@@ -1881,12 +1746,12 @@ impl Session {
                                     }
                                 }
                         )
-                        .map(|qable| qable.callback.clone())
-                        .collect::<Vec<Arc<dyn Fn(Query) + Send + Sync>>>();
+                        .map(|(id, qable)| (*id, qable.callback.clone()))
+                        .collect::<Vec<(u32, Arc<dyn Fn(Query) + Send + Sync>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr.into_owned(),
-                        callbacks,
+                        queryables,
                     )
                 }
                 Err(err) => {
@@ -1898,29 +1763,30 @@ impl Session {
 
         let parameters = parameters.to_owned();
 
-        let zid = self.runtime.zid(); // @TODO build/use prebuilt specific zid
+        let zid = self.runtime.zid();
 
-        let query = Query {
-            inner: Arc::new(QueryInner {
-                key_expr,
-                parameters,
-                value: body.map(|b| Value {
-                    payload: b.payload.into(),
-                    encoding: b.encoding.into(),
-                }),
-                qid,
-                zid,
-                primitives: if local {
-                    Arc::new(self.clone())
-                } else {
-                    primitives
-                },
-                #[cfg(feature = "unstable")]
-                attachment,
+        let query_inner = Arc::new(QueryInner {
+            key_expr,
+            parameters,
+            value: body.map(|b| Value {
+                payload: b.payload.into(),
+                encoding: b.encoding.into(),
             }),
-        };
-        for callback in callbacks.iter() {
-            callback(query.clone());
+            qid,
+            zid,
+            primitives: if local {
+                Arc::new(self.clone())
+            } else {
+                primitives
+            },
+            #[cfg(feature = "unstable")]
+            attachment,
+        });
+        for (eid, callback) in queryables {
+            callback(Query {
+                inner: query_inner.clone(),
+                eid,
+            });
         }
     }
 }
@@ -2111,9 +1977,13 @@ impl Primitives for Session {
                 trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
                 #[cfg(feature = "unstable")]
                 {
-                    let state = zread!(self.state);
-                    match state.wireexpr_to_keyexpr(&m.wire_expr, false) {
+                    let mut state = zwrite!(self.state);
+                    match state
+                        .wireexpr_to_keyexpr(&m.wire_expr, false)
+                        .map(|e| e.into_owned())
+                    {
                         Ok(expr) => {
+                            state.remote_subscribers.insert(m.id, expr.clone());
                             self.update_status_up(&state, &expr);
 
                             if expr
@@ -2141,33 +2011,30 @@ impl Primitives for Session {
                 trace!("recv UndeclareSubscriber {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
-                    let state = zread!(self.state);
-                    match state.wireexpr_to_keyexpr(&m.ext_wire_expr.wire_expr, false) {
-                        Ok(expr) => {
-                            self.update_status_down(&state, &expr);
+                    let mut state = zwrite!(self.state);
+                    if let Some(expr) = state.remote_subscribers.remove(&m.id) {
+                        self.update_status_down(&state, &expr);
 
-                            if expr
-                                .as_str()
-                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                            {
-                                drop(state);
-                                let data_info = DataInfo {
-                                    kind: SampleKind::Delete,
-                                    ..Default::default()
-                                };
-                                self.handle_data(
-                                    false,
-                                    &m.ext_wire_expr.wire_expr,
-                                    Some(data_info),
-                                    ZBuf::default(),
-                                    #[cfg(feature = "unstable")]
-                                    None,
-                                );
-                            }
+                        if expr
+                            .as_str()
+                            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                        {
+                            drop(state);
+                            let data_info = DataInfo {
+                                kind: SampleKind::Delete,
+                                ..Default::default()
+                            };
+                            self.handle_data(
+                                false,
+                                &m.ext_wire_expr.wire_expr,
+                                Some(data_info),
+                                ZBuf::default(),
+                                #[cfg(feature = "unstable")]
+                                None,
+                            );
                         }
-                        Err(err) => {
-                            log::error!("Received Forget Subscriber for unkown key_expr: {}", err)
-                        }
+                    } else {
+                        log::error!("Received Undeclare Subscriber for unkown id: {}", m.id);
                     }
                 }
             }
@@ -2194,7 +2061,7 @@ impl Primitives for Session {
                     encoding: Some(m.encoding.into()),
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.handle_data(
@@ -2212,7 +2079,7 @@ impl Primitives for Session {
                     encoding: None,
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.handle_data(
@@ -2266,7 +2133,7 @@ impl Primitives for Session {
                             encoding: e.encoding.into(),
                         };
                         let replier_id = match e.ext_sinfo {
-                            Some(info) => info.zid,
+                            Some(info) => info.id.zid,
                             None => ZenohId::rand(),
                         };
                         let new_reply = Reply {
@@ -2360,7 +2227,7 @@ impl Primitives for Session {
                                     encoding: Some(encoding.into()),
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.zid),
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
                                 #[cfg(feature = "unstable")]
@@ -2378,7 +2245,7 @@ impl Primitives for Session {
                                     encoding: None,
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.zid),
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
                                 #[cfg(feature = "unstable")]
