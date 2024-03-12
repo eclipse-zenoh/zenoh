@@ -111,6 +111,8 @@ impl Query {
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     /// This api is for internal use only.
     #[inline(always)]
+    #[cfg(feature = "unstable")]
+    #[doc(hidden)]
     pub fn reply_sample(&self, sample: Sample) -> ReplyBuilder<'_> {
         let Sample {
             key_expr,
