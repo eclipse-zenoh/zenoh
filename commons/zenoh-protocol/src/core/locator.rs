@@ -16,10 +16,9 @@ use alloc::{borrow::ToOwned, string::String};
 use core::{convert::TryFrom, fmt, hash::Hash, str::FromStr};
 use zenoh_result::{Error as ZError, ZResult};
 
-// Locator
-/// A `String` that respects the [`Locator`] canon form: `<proto>/<address>[?<metadata>]`.
+/// A string that respects the [`Locator`] canon form: `<proto>/<address>[?<metadata>]`.
 ///
-/// Such that `<metadata>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
+/// `<metadata>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
 #[derive(Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
