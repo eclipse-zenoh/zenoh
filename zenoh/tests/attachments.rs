@@ -75,7 +75,7 @@ fn queries() {
             query
                 .reply(Ok(Sample::new(
                     query.key_expr().clone(),
-                    query.value().unwrap().clone(),
+                    query.value().unwrap().payload.clone(),
                 )
                 .with_attachment(attachment)))
                 .res()

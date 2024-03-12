@@ -114,7 +114,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         let sub1 = ztimeout!(s01
             .declare_subscriber(key_expr)
             .callback(move |sample| {
-                assert_eq!(sample.value.payload.len(), size);
+                assert_eq!(sample.payload.len(), size);
                 c_msgs1.fetch_add(1, Ordering::Relaxed);
             })
             .res_async())
@@ -126,7 +126,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         let sub2 = ztimeout!(s02
             .declare_subscriber(key_expr)
             .callback(move |sample| {
-                assert_eq!(sample.value.payload.len(), size);
+                assert_eq!(sample.payload.len(), size);
                 c_msgs2.fetch_add(1, Ordering::Relaxed);
             })
             .res_async())
@@ -224,7 +224,7 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
         for _ in 0..msg_count {
             let rs = ztimeout!(s03.get(key_expr).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.sample.unwrap().value.payload.len(), size);
+                assert_eq!(s.sample.unwrap().payload.len(), size);
                 cnt += 1;
             }
         }

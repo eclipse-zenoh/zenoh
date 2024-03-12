@@ -13,9 +13,11 @@
 //
 
 //! Subscribing primitives.
-use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::handlers::{locked, Callback, DefaultHandler, IntoCallbackReceiverPair};
+use crate::key_expr::KeyExpr;
 use crate::prelude::Locality;
-use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
+use crate::sample::Sample;
+use crate::Id;
 use crate::Undeclarable;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
@@ -62,7 +64,7 @@ impl fmt::Debug for SubscriberState {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload) })
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -95,7 +97,7 @@ pub(crate) struct SubscriberInner<'a> {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
 ///     .pull_mode()
 ///     .res()
 ///     .await
@@ -118,7 +120,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
     ///     .pull_mode()
     ///     .res()
     ///     .await
@@ -327,7 +329,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -402,7 +404,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {}", sample.key_expr, sample.value);
+    ///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
     /// }
     /// # })
     /// ```
@@ -631,7 +633,7 @@ where
 ///     .await
 ///     .unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
-///     println!("Received: {} {}", sample.key_expr, sample.value);
+///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
 /// }
 /// # })
 /// ```

@@ -209,12 +209,14 @@ pub mod ext {
         }
     }
 
+    /// ```text
     ///   7 6 5 4 3 2 1 0
     ///  +-+-+-+-+-+-+-+-+
     ///  ~   encoding    ~
     ///  +---------------+
-    ///  ~ pl: [u8;z32]  ~  -- Payload
+    ///  ~ pl: <u8;z32>  ~  -- Payload
     ///  +---------------+
+    /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct ValueType<const VID: u8, const SID: u8> {
         #[cfg(feature = "shared-memory")]

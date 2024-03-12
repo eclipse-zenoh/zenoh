@@ -17,14 +17,12 @@
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::query::ReplyKeyExpr;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
-
+#[cfg(feature = "unstable")]
+use crate::{query::ReplyKeyExpr, sample::Attachment};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
@@ -190,8 +188,9 @@ impl SyncResolve for ReplyBuilder<'_> {
                 }
                 let Sample {
                     key_expr,
-                    value: Value { payload, encoding },
+                    payload,
                     kind,
+                    encoding,
                     timestamp,
                     qos,
                     #[cfg(feature = "unstable")]
@@ -251,13 +250,13 @@ impl SyncResolve for ReplyBuilder<'_> {
                         payload: match kind {
                             SampleKind::Put => ReplyBody::Put(Put {
                                 timestamp: data_info.timestamp,
-                                encoding: data_info.encoding.unwrap_or_default(),
+                                encoding: data_info.encoding.unwrap_or_default().into(),
                                 ext_sinfo,
                                 #[cfg(feature = "shared-memory")]
                                 ext_shm: None,
                                 ext_attachment: ext_attachment!(),
                                 ext_unknown: vec![],
-                                payload,
+                                payload: payload.into(),
                             }),
                             SampleKind::Delete => ReplyBody::Del(Del {
                                 timestamp,
@@ -292,8 +291,8 @@ impl SyncResolve for ReplyBuilder<'_> {
                         ext_body: Some(ValueType {
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,
-                            payload: payload.payload,
-                            encoding: payload.encoding,
+                            payload: payload.payload.into(),
+                            encoding: payload.encoding.into(),
                         }),
                         code: 0, // TODO
                     }),

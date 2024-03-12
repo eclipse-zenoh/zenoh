@@ -12,11 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    encoding::Encoding,
     keyexpr,
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
     sample::DataInfo,
-    Sample, Session, ZResult,
+    Payload, Sample, Session, ZResult,
 };
 use async_std::task;
 use std::{
@@ -25,10 +26,7 @@ use std::{
     sync::Arc,
 };
 use zenoh_core::SyncResolve;
-use zenoh_protocol::{
-    core::{Encoding, KnownEncoding, WireExpr},
-    network::NetworkMessage,
-};
+use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
@@ -71,7 +69,12 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
             let key_expr = *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
-                    let _ = query.reply(Ok(Sample::new(key_expr, value))).res_sync();
+                    match Payload::try_from(value) {
+                        Ok(zbuf) => {
+                            let _ = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync();
+                        }
+                        Err(e) => log::debug!("Admin query error: {}", e),
+                    }
                 }
             }
 
@@ -83,7 +86,12 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid / *KE_LINK / lid;
                     if query.key_expr().intersects(&key_expr) {
                         if let Ok(value) = serde_json::value::to_value(link) {
-                            let _ = query.reply(Ok(Sample::new(key_expr, value))).res_sync();
+                            match Payload::try_from(value) {
+                                Ok(zbuf) => {
+                                    let _ = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync();
+                                }
+                                Err(e) => log::debug!("Admin query error: {}", e),
+                            }
                         }
                     }
                 }
@@ -145,7 +153,7 @@ impl TransportMulticastEventHandler for Handler {
                 let expr = WireExpr::from(&(*KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid))
                     .to_owned();
                 let info = DataInfo {
-                    encoding: Some(Encoding::Exact(KnownEncoding::AppJson)),
+                    encoding: Some(Encoding::APPLICATION_JSON),
                     ..Default::default()
                 };
                 self.session.handle_data(
@@ -191,7 +199,7 @@ impl TransportPeerEventHandler for PeerHandler {
         let mut s = DefaultHasher::new();
         link.hash(&mut s);
         let info = DataInfo {
-            encoding: Some(Encoding::Exact(KnownEncoding::AppJson)),
+            encoding: Some(Encoding::APPLICATION_JSON),
             ..Default::default()
         };
         self.session.handle_data(

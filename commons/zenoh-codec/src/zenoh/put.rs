@@ -54,7 +54,7 @@ where
         if timestamp.is_some() {
             header |= flag::T;
         }
-        if encoding != &Encoding::DEFAULT {
+        if encoding != &Encoding::empty() {
             header |= flag::E;
         }
         let mut n_exts = (ext_sinfo.is_some()) as u8
@@ -73,7 +73,7 @@ where
         if let Some(ts) = timestamp.as_ref() {
             self.write(&mut *writer, ts)?;
         }
-        if encoding != &Encoding::DEFAULT {
+        if encoding != &Encoding::empty() {
             self.write(&mut *writer, encoding)?;
         }
 
@@ -143,7 +143,7 @@ where
             timestamp = Some(self.codec.read(&mut *reader)?);
         }
 
-        let mut encoding = Encoding::DEFAULT;
+        let mut encoding = Encoding::empty();
         if imsg::has_flag(self.header, flag::E) {
             encoding = self.codec.read(&mut *reader)?;
         }
