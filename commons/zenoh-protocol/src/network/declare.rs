@@ -177,6 +177,19 @@ pub mod common {
     pub mod ext {
         use super::*;
 
+        /// Flags:
+        /// - N: Named          If N==1 then the key expr has name/suffix
+        /// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+        ///
+        ///  7 6 5 4 3 2 1 0
+        /// +-+-+-+-+-+-+-+-+
+        /// |X|X|X|X|X|X|M|N|
+        /// +-+-+-+---------+
+        /// ~ key_scope:z16 ~
+        /// +---------------+
+        /// ~  key_suffix   ~  if N==1 -- <u8;z16>
+        /// +---------------+
+        ///
         pub type WireExprExt = zextzbuf!(0x0f, true);
         #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct WireExprType {

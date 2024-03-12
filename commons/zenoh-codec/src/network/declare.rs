@@ -1075,7 +1075,7 @@ where
         if x.wire_expr.has_suffix() {
             flags |= 1;
         }
-        if let Mapping::Receiver = wire_expr.mapping {
+        if let Mapping::Sender = wire_expr.mapping {
             flags |= 1 << 1;
         }
         codec.write(&mut zriter, flags)?;
@@ -1115,9 +1115,9 @@ where
             String::new()
         };
         let mapping = if imsg::has_flag(flags, 1 << 1) {
-            Mapping::Receiver
-        } else {
             Mapping::Sender
+        } else {
+            Mapping::Receiver
         };
 
         Ok((
