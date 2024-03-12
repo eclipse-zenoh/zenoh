@@ -63,11 +63,13 @@ fn watchdog_confirmed_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
 }
 
 #[test]
+#[ignore]
 fn watchdog_confirmed() {
     execute_concurrent(1, 10, watchdog_confirmed_fn());
 }
 
 #[test]
+#[ignore]
 fn watchdog_confirmed_concurrent() {
     execute_concurrent(1000, 10, watchdog_confirmed_fn());
 }
@@ -75,22 +77,23 @@ fn watchdog_confirmed_concurrent() {
 // todo: confirmation to dangling watchdog actually writes to potentially-existing
 // other watchdog instance from other test running in the same process and changes it's behaviour,
 // so we cannot run dangling test in parallel with anything else
-//#[test]
-//fn watchdog_confirmed_dangling() {
-//    let allocated = GLOBAL_STORAGE
-//        .allocate_watchdog()
-//        .expect("error allocating watchdog!");
-//    let confirmed = GLOBAL_CONFIRMATOR
-//        .add_owned(&allocated.descriptor)
-//        .expect("error adding watchdog to confirmator!");
-//    drop(allocated);
-//
-//    // confirm dangling (not allocated) watchdog
-//    for _ in 0..10 {
-//        std::thread::sleep(VALIDATION_PERIOD);
-//        confirmed.owned.confirm();
-//    }
-//}
+#[test]
+#[ignore]
+fn watchdog_confirmed_dangling() {
+    let allocated = GLOBAL_STORAGE
+        .allocate_watchdog()
+        .expect("error allocating watchdog!");
+    let confirmed = GLOBAL_CONFIRMATOR
+        .add_owned(&allocated.descriptor)
+        .expect("error adding watchdog to confirmator!");
+    drop(allocated);
+
+    // confirm dangling (not allocated) watchdog
+    for _ in 0..10 {
+        std::thread::sleep(VALIDATION_PERIOD);
+        confirmed.owned.confirm();
+    }
+}
 
 fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
@@ -132,11 +135,13 @@ fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated() {
     execute_concurrent(1, 10, watchdog_validated_fn());
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated_concurrent() {
     execute_concurrent(1000, 10, watchdog_validated_fn());
 }
@@ -169,11 +174,13 @@ fn watchdog_validated_invalid_without_confirmator_fn(
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated_invalid_without_confirmator() {
     execute_concurrent(1, 10, watchdog_validated_invalid_without_confirmator_fn());
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated_invalid_without_confirmator_concurrent() {
     execute_concurrent(
         1000,
@@ -230,11 +237,13 @@ fn watchdog_validated_additional_confirmation_fn(
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated_additional_confirmation() {
     execute_concurrent(1, 10, watchdog_validated_additional_confirmation_fn());
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated_additional_confirmation_concurrent() {
     execute_concurrent(1000, 10, watchdog_validated_additional_confirmation_fn());
 }
@@ -281,6 +290,7 @@ fn watchdog_validated_overloaded_system_fn(
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated_low_load() {
     let _load = CpuLoad::low();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());

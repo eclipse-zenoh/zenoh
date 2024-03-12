@@ -29,6 +29,7 @@ shared-memory = [
     "zenoh-protocol/shared-memory",
     "zenoh-shm",
     "zenoh-codec/shared-memory",
+    "zenoh-buffers/shared-memory",
     "zenoh-sync/shared-memory",
 ]
 auth_pubkey = ["transport_auth", "rsa"]

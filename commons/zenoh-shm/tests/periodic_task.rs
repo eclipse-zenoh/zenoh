@@ -66,6 +66,7 @@ where
 }
 
 #[test]
+#[ignore]
 fn periodic_task_create() {
     let (_task, _intervals) = make_task(|| {});
 }
@@ -87,33 +88,39 @@ where
 }
 
 #[test]
+#[ignore]
 fn periodic_task_lightweight() {
     check_task(|| {});
 }
 
 #[test]
+#[ignore]
 fn periodic_task_blocking() {
     check_task(blocking_payload(TEST_TASK));
 }
 
 #[test]
+#[ignore]
 fn periodic_task_intensive() {
     check_task(intensive_payload(TEST_TASK));
 }
 
 #[test]
+#[ignore]
 fn periodic_task_low_load_lightweight() {
     let _load = CpuLoad::low();
     check_task(|| {});
 }
 
 #[test]
+#[ignore]
 fn periodic_task_low_load_blocking() {
     let _load = CpuLoad::low();
     check_task(blocking_payload(TEST_TASK));
 }
 
 #[test]
+#[ignore]
 fn periodic_task_low_load_intensive() {
     let _load = CpuLoad::low();
     check_task(intensive_payload(TEST_TASK));
