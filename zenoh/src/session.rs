@@ -2128,15 +2128,9 @@ impl Primitives for Session {
                     Some(query) => {
                         let callback = query.callback.clone();
                         std::mem::drop(state);
-                        let value = match e.ext_body {
-                            Some(body) => Value {
-                                payload: body.payload.into(),
-                                encoding: body.encoding.into(),
-                            },
-                            None => Value {
-                                payload: Payload::empty(),
-                                encoding: Encoding::default(),
-                            },
+                        let value = Value {
+                            payload: e.payload.into(),
+                            encoding: e.encoding.into(),
                         };
                         let replier_id = match e.ext_sinfo {
                             Some(info) => info.id.zid,

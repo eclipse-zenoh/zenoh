@@ -31,9 +31,11 @@ use std::ops::Deref;
 use std::sync::Arc;
 use uhlc::Timestamp;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::core::{EntityId, WireExpr};
-use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
-use zenoh_protocol::zenoh::{self, ext::ValueType, reply::ReplyBody, Del, Put, ResponseBody};
+use zenoh_protocol::{
+    core::{EntityId, WireExpr},
+    network::{response, Mapping, RequestId, Response, ResponseFinal},
+    zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
+};
 use zenoh_result::ZResult;
 
 pub(crate) struct QueryInner {
@@ -380,17 +382,10 @@ impl SyncResolve for ReplyErrBuilder<'_> {
                 mapping: Mapping::Sender,
             },
             payload: ResponseBody::Err(zenoh::Err {
-                timestamp: None,
-                is_infrastructure: false,
+                encoding: self.value.encoding.into(),
                 ext_sinfo: None,
                 ext_unknown: vec![],
-                ext_body: Some(ValueType {
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    payload: self.value.payload.into(),
-                    encoding: self.value.encoding.into(),
-                }),
-                code: 0, // TODO
+                payload: self.value.payload.into(),
             }),
             ext_qos: response::ext::QoSType::RESPONSE,
             ext_tstamp: None,
