@@ -234,30 +234,30 @@
         max_message_size: 1073741824,
       },
       /// Configure TLS specific parameters
-      tls: {
-        server_private_key: "myserver.key",
-        server_certificate: "myserver.crt"
-      }
       // tls: {
-      //   /// Path to the certificate of the certificate authority used to validate either the server
-      //   /// or the client's keys and certificates, depending on the node's mode. If not specified
-      //   /// on router mode then the default WebPKI certificates are used instead.
-      //   root_ca_certificate: null,
-      //   /// Path to the TLS server private key
-      //   server_private_key: null,
-      //   /// Path to the TLS server public certificate
-      //   server_certificate: null,
-      //   /// Client authentication, if true enables mTLS (mutual authentication)
-      //   client_auth: false,
-      //   /// Path to the TLS client private key
-      //   client_private_key: null,
-      //   /// Path to the TLS client public certificate
-      //   client_certificate: null,
-      //   // Whether or not to use server name verification, if set to false zenoh will disregard the common names of the certificates when verifying servers.
-      //   // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
-      //   // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
-      //   server_name_verification: null,
-      // },
+      //   server_private_key: "myserver.key",
+      //   server_certificate: "myserver.crt"
+      // }
+      tls: {
+        /// Path to the certificate of the certificate authority used to validate either the server
+        /// or the client's keys and certificates, depending on the node's mode. If not specified
+        /// on router mode then the default WebPKI certificates are used instead.
+        root_ca_certificate: "ca.crt",
+        /// Path to the TLS server private key
+        server_private_key: "myserver.key",
+        /// Path to the TLS server public certificate
+        server_certificate: "myserver.crt",
+        /// Client authentication, if true enables mTLS (mutual authentication)
+        client_auth: true,
+        /// Path to the TLS client private key
+        client_private_key: null,
+        /// Path to the TLS client public certificate
+        client_certificate: null,
+        // Whether or not to use server name verification, if set to false zenoh will disregard the common names of the certificates when verifying servers.
+        // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
+        // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
+        server_name_verification: null,
+      },
     },
     /// Shared memory configuration
     shared_memory: {
