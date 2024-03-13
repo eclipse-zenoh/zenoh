@@ -149,7 +149,7 @@ jobs:
       live-run: ${{ inputs.live-run }}
       version: ${{ needs.tag.outputs.version }}
       repo: ${{ github.repository }}
-      tags: "eclipse/zenoh:${{ inputs.version }}"
+      tags: "eclipse/zenoh:${{ needs.tag.outputs.version }}"
       binary: zenohd
       files: |
         zenohd
@@ -169,7 +169,7 @@ jobs:
       live-run: ${{ inputs.live-run }}
       version: ${{ needs.tag.outputs.version }}
       repo: ${{ github.repository }}
-      tags: "${{ github.repository }}:${{ inputs.version }}"
+      tags: "${{ github.repository }}:${{ needs.tag.outputs.version }}"
       binary: zenohd
       files: |
         zenohd
