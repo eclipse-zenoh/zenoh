@@ -94,7 +94,7 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
     /// Parameters:
     /// * `selector`: the full selector of the query (usually only key_expr part is used). This selector is
     /// exactly the same as it was requested by user, for example "@/router/ROUTER_ID/plugins/PLUGIN_NAME/some/plugin/info" or "@/router/*/plugins/*/foo/bar".
-    /// But the plugin's [adminspace_getter] is called only if the selector matches the [plugin_status_key]
+    /// But the plugin's [RunningPluginTrait::adminspace_getter] is called only if the selector matches the `plugin_status_key`
     /// * `plugin_status_key`: the actual path to plugin's status in the admin space. For example "@/router/ROUTER_ID/plugins/PLUGIN_NAME"
     /// Returns value:
     /// * `Ok(Vec<Response>)`: the list of responses to the query. For example if plugins can return information on subleys "foo", "bar", "foo/buzz" and "bar/buzz"

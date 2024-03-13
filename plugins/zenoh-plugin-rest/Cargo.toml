@@ -35,7 +35,6 @@ crate-type = ["cdylib", "rlib"]
 anyhow = { workspace = true, features = ["default"] }
 async-std = { workspace = true, features = ["default"] }
 base64 = { workspace = true }
-clap = { workspace = true }
 const_format = { workspace = true }
 env_logger = { workspace = true }
 flume = { workspace = true }
@@ -59,6 +58,9 @@ schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 jsonschema = { workspace = true }
+
+[dev-dependencies]
+clap = { workspace = true }
 
 [[example]]
 name = "z_serve_sse"

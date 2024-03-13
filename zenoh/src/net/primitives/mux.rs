@@ -50,7 +50,13 @@ impl Primitives for Mux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -68,7 +74,13 @@ impl Primitives for Mux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -86,7 +98,13 @@ impl Primitives for Mux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -104,7 +122,13 @@ impl Primitives for Mux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -122,7 +146,13 @@ impl Primitives for Mux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -148,7 +178,15 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -163,7 +201,13 @@ impl EPrimitives for Mux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -183,7 +227,15 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -200,7 +252,15 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -217,13 +277,25 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
 
     fn send_close(&self) {
         // self.handler.closing().await;
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -254,7 +326,13 @@ impl Primitives for McastMux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -272,7 +350,13 @@ impl Primitives for McastMux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -290,7 +374,13 @@ impl Primitives for McastMux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -308,7 +398,13 @@ impl Primitives for McastMux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -326,7 +422,13 @@ impl Primitives for McastMux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -352,7 +454,15 @@ impl EPrimitives for McastMux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -367,7 +477,13 @@ impl EPrimitives for McastMux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let ctx = RoutingContext::new_out(msg, face.clone());
-            if let Some(ctx) = self.interceptor.intercept(ctx) {
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
@@ -387,7 +503,15 @@ impl EPrimitives for McastMux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -404,7 +528,15 @@ impl EPrimitives for McastMux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -421,12 +553,24 @@ impl EPrimitives for McastMux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
 
     fn send_close(&self) {
         // self.handler.closing().await;
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

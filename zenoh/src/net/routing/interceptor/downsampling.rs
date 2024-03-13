@@ -19,12 +19,13 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
 use crate::net::routing::interceptor::*;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use zenoh_config::{DownsamplingFlow, DownsamplingItemConf, DownsamplingRuleConf};
 use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_keyexpr::keyexpr_tree::IKeyExprTreeMut;
 use zenoh_keyexpr::keyexpr_tree::{support::UnknownWildness, KeBoxTree};
+use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
 use zenoh_protocol::network::NetworkBody;
 use zenoh_result::ZResult;
 
@@ -82,12 +83,16 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 
         match self.flow {
             DownsamplingFlow::Ingress => (
-                Some(Box::new(DownsamplingInterceptor::new(self.rules.clone()))),
+                Some(Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
+                    self.rules.clone(),
+                )))),
                 None,
             ),
             DownsamplingFlow::Egress => (
                 None,
-                Some(Box::new(DownsamplingInterceptor::new(self.rules.clone()))),
+                Some(Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
+                    self.rules.clone(),
+                )))),
             ),
         }
     }
@@ -110,26 +115,45 @@ struct Timestate {
 }
 
 pub(crate) struct DownsamplingInterceptor {
-    ke_state: Arc<Mutex<KeBoxTree<Timestate, UnknownWildness, KeyedSetProvider>>>,
+    ke_id: Arc<Mutex<KeBoxTree<usize, UnknownWildness, KeyedSetProvider>>>,
+    ke_state: Arc<Mutex<HashMap<usize, Timestate>>>,
 }
 
 impl InterceptorTrait for DownsamplingInterceptor {
+    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        let ke_id = zlock!(self.ke_id);
+        if let Some(id) = ke_id.weight_at(&key_expr.clone()) {
+            Some(Box::new(Some(*id)))
+        } else {
+            Some(Box::new(None::<usize>))
+        }
+    }
+
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
+        cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         if matches!(ctx.msg.body, NetworkBody::Push(_)) {
-            if let Some(key_expr) = ctx.full_key_expr() {
-                let mut ke_state = zlock!(self.ke_state);
-                if let Some(state) = ke_state.weight_at_mut(&key_expr.clone()) {
-                    let timestamp = std::time::Instant::now();
+            if let Some(cache) = cache {
+                if let Some(id) = cache.downcast_ref::<Option<usize>>() {
+                    if let Some(id) = id {
+                        let mut ke_state = zlock!(self.ke_state);
+                        if let Some(state) = ke_state.get_mut(id) {
+                            let timestamp = std::time::Instant::now();
 
-                    if timestamp - state.latest_message_timestamp >= state.threshold {
-                        state.latest_message_timestamp = timestamp;
-                        return Some(ctx);
-                    } else {
-                        return None;
+                            if timestamp - state.latest_message_timestamp >= state.threshold {
+                                state.latest_message_timestamp = timestamp;
+                                return Some(ctx);
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            log::debug!("unxpected cache ID {}", id);
+                        }
                     }
+                } else {
+                    log::debug!("unxpected cache type {:?}", ctx.full_expr());
                 }
             }
         }
@@ -142,17 +166,19 @@ const NANOS_PER_SEC: f64 = 1_000_000_000.0;
 
 impl DownsamplingInterceptor {
     pub fn new(rules: Vec<DownsamplingRuleConf>) -> Self {
-        let mut ke_state = KeBoxTree::default();
-        for rule in rules {
+        let mut ke_id = KeBoxTree::default();
+        let mut ke_state = HashMap::default();
+        for (id, rule) in rules.into_iter().enumerate() {
             let mut threshold = std::time::Duration::MAX;
             let mut latest_message_timestamp = std::time::Instant::now();
-            if rule.rate != 0.0 {
+            if rule.freq != 0.0 {
                 threshold =
-                    std::time::Duration::from_nanos((1. / rule.rate * NANOS_PER_SEC) as u64);
+                    std::time::Duration::from_nanos((1. / rule.freq * NANOS_PER_SEC) as u64);
                 latest_message_timestamp -= threshold;
             }
+            ke_id.insert(&rule.key_expr, id);
             ke_state.insert(
-                &rule.key_expr,
+                id,
                 Timestate {
                     threshold,
                     latest_message_timestamp,
@@ -160,6 +186,7 @@ impl DownsamplingInterceptor {
             );
         }
         Self {
+            ke_id: Arc::new(Mutex::new(ke_id)),
             ke_state: Arc::new(Mutex::new(ke_state)),
         }
     }

@@ -19,9 +19,13 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::quote;
-use zenoh_keyexpr::format::{
-    macro_support::{self, SegmentBuilder},
-    KeFormat,
+use syn::LitStr;
+use zenoh_keyexpr::{
+    format::{
+        macro_support::{self, SegmentBuilder},
+        KeFormat,
+    },
+    key_expr::keyexpr,
 };
 
 const RUSTC_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "/version.rs"));
@@ -90,11 +94,34 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
         }
     });
     let getters = specs.iter().map(|spec| {
-        let id = &source[spec.spec_start..(spec.spec_start + spec.id_end as usize)];
+        let source = &source[spec.spec_start..spec.spec_end];
+        let id = &source[..(spec.id_end as usize)];
         let get_id = quote::format_ident!("{}", id);
-        quote! {
-            pub fn #get_id (&self) -> Option<& ::zenoh::key_expr::keyexpr> {
-                unsafe {self._0.get(#id).unwrap_unchecked()}
+        let pattern = unsafe {
+            keyexpr::from_str_unchecked(if spec.pattern_end != u16::MAX {
+                &source[(spec.id_end as usize + 1)..(spec.spec_start + spec.pattern_end as usize)]
+            } else {
+                &source[(spec.id_end as usize + 1)..]
+            })
+        };
+        let doc = format!("Get the parsed value for `{id}`.\n\nThis value is guaranteed to be a valid key expression intersecting with `{pattern}`");
+        if pattern.as_bytes() == b"**" {
+            quote! {
+                #[doc = #doc]
+                /// Since the pattern is `**`, this may return `None` if the pattern didn't consume any chunks.
+                pub fn #get_id (&self) -> Option<& ::zenoh::key_expr::keyexpr> {
+                    unsafe {
+                        let s =self._0.get(#id).unwrap_unchecked();
+                        (!s.is_empty()).then(|| ::zenoh::key_expr::keyexpr::from_str_unchecked(s))
+                    }
+                }
+            }
+        } else {
+            quote! {
+                #[doc = #doc]
+                pub fn #get_id (&self) -> &::zenoh::key_expr::keyexpr {
+                    unsafe {::zenoh::key_expr::keyexpr::from_str_unchecked(self._0.get(#id).unwrap_unchecked())}
+                }
             }
         }
     });
@@ -225,7 +252,7 @@ impl syn::parse::Parse for FormatDeclarations {
 /// - `formatter()`, a function that constructs a `Formatter` specialized for your format:
 ///     - for every spec in your format, `Formatter` will have a method named after the spec's `id` that lets you set a value for that field of your format. These methods will return `Result<&mut Formatter, FormatError>`.
 /// - `parse(target: &keyexpr) -> ZResult<Parsed<'_>>` will parse the provided key expression according to your format. Just like `KeFormat::parse`, parsing is lazy: each field will match the smallest subsection of your `target` that is included in its pattern.
-///     - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks.
+///     - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `&keyexpr`; except for specs whose pattern was `**`, these will return an `Option<&keyexpr>`, where `None` signifies that the pattern was matched by an empty list of chunks.
 #[proc_macro]
 pub fn kedefine(tokens: TokenStream) -> TokenStream {
     let declarations: FormatDeclarations = syn::parse(tokens).unwrap();
@@ -238,7 +265,7 @@ pub fn kedefine(tokens: TokenStream) -> TokenStream {
 - `formatter()`, a function that constructs a `Formatter` specialized for your format:
     - for every spec in your format, `Formatter` will have a method named after the spec's `id` that lets you set a value for that field of your format. These methods will return `Result<&mut Formatter, FormatError>`.
 - `parse(target: &keyexpr) -> ZResult<Parsed<'_>>` will parse the provided key expression according to your format. Just like `KeFormat::parse`, parsing is lazy: each field will match the smallest subsection of your `target` that is included in its pattern.
-    - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks."
+    - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `&keyexpr`; except for specs whose pattern was `**`, these will return an `Option<&keyexpr>`, where `None` signifies that the pattern was matched by an empty list of chunks."
     );
     let support = keformat_support(&source);
     quote! {
@@ -313,4 +340,15 @@ pub fn keformat(tokens: TokenStream) -> TokenStream {
         Err(e) => Err(e.into()),
     })
     .into()
+}
+
+/// Equivalent to [`keyexpr::new`](zenoh_keyexpr::keyexpr::new), but the check is run at compile-time and will throw a compile error in case of failure.
+#[proc_macro]
+pub fn ke(tokens: TokenStream) -> TokenStream {
+    let value: LitStr = syn::parse(tokens).unwrap();
+    let ke = value.value();
+    match zenoh_keyexpr::keyexpr::new(&ke) {
+        Ok(_) => quote!(unsafe {::zenoh::key_expr::keyexpr::from_str_unchecked(#ke)}).into(),
+        Err(e) => panic!("{}", e),
+    }
 }

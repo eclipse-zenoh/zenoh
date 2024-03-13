@@ -76,7 +76,7 @@ ahash = "0.8.7"
 anyhow = { version = "1.0.69", default-features = false } # Default features are disabled due to usage in no_std crates
 async-executor = "1.5.0"
 async-global-executor = "2.3.1"
-async-io = "=1.13.0"
+async-io = "1.13.0"
 async-rustls = "0.4.0"
 async-std = { version = "=1.12.0", default-features = false } # Default features are disabled due to some crates' requirements
 async-trait = "0.1.60"
@@ -102,7 +102,7 @@ home = "0.5.4"
 http-types = "2.12.0"
 humantime = "2.1.0"
 json5 = "0.4.1"
-jsonschema = "0.17.1"
+jsonschema = { version = "0.17.1", default-features = false }
 keyed-set = "0.4.4"
 lazy_static = "1.4.0"
 libc = "0.2.139"
@@ -148,7 +148,6 @@ tide = "0.16.0"
 token-cell = { version = "1.4.2", default-features = false }
 tokio = { version = "1.26.0", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-tungstenite = "0.20"
-typenum = "1.16.0"
 uhlc = { version = "0.6.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.3.1"
@@ -160,7 +159,7 @@ validated_struct = "2.1.0"
 vec_map = "0.8.2"
 webpki-roots = "0.26.0"
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
-z-serial = "0.2.1"
+z-serial = "0.2.3"
 zenoh-ext = { version = "0.11.0-dev", path = "zenoh-ext" }
 zenoh-shm = { version = "0.11.0-dev", path = "commons/zenoh-shm" }
 zenoh-result = { version = "0.11.0-dev", path = "commons/zenoh-result", default-features = false }

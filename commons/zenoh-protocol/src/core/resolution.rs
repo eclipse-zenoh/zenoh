@@ -27,10 +27,10 @@ pub enum Bits {
 }
 
 impl Bits {
-    const S8: &str = "8bit";
-    const S16: &str = "16bit";
-    const S32: &str = "32bit";
-    const S64: &str = "64bit";
+    const S8: &'static str = "8bit";
+    const S16: &'static str = "16bit";
+    const S32: &'static str = "32bit";
+    const S64: &'static str = "64bit";
 
     pub const fn bits(&self) -> u32 {
         match self {

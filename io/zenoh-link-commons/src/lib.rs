@@ -17,15 +17,16 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-#![no_std]
 extern crate alloc;
 
+mod listener;
 mod multicast;
 mod unicast;
 
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};
 use async_trait::async_trait;
 use core::{cmp::PartialEq, fmt, hash::Hash};
+pub use listener::*;
 pub use multicast::*;
 use serde::Serialize;
 pub use unicast::*;
@@ -35,6 +36,9 @@ use zenoh_result::ZResult;
 /*************************************/
 /*            GENERAL                */
 /*************************************/
+
+pub const BIND_INTERFACE: &str = "iface";
+
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
     pub src: Locator,
