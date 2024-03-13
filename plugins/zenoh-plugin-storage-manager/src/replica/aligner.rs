@@ -142,10 +142,7 @@ impl Aligner {
         for sample in replies {
             result.insert(
                 sample.key_expr().clone().into(),
-                (
-                    sample.timestamp().unwrap().clone(),
-                    Value::from(sample),
-                ),
+                (*sample.timestamp().unwrap(), Value::from(sample)),
             );
         }
         (result, no_err)

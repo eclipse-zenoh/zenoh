@@ -180,10 +180,7 @@ impl AlignQueryable {
                         let entry = entry.unwrap();
                         result.push(AlignData::Data(
                             OwnedKeyExpr::from(entry.key_expr().clone()),
-                            (
-                                Value::from(entry),
-                                each.timestamp,
-                            ),
+                            (Value::from(entry), each.timestamp),
                         ));
                     }
                 }

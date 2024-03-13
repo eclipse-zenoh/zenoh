@@ -276,7 +276,7 @@ impl StorageService {
         }
 
         let matching_keys = if sample.key_expr().is_wild() {
-            self.get_matching_keys(&sample.key_expr()).await
+            self.get_matching_keys(sample.key_expr()).await
         } else {
             vec![sample.key_expr().clone().into()]
         };
@@ -309,20 +309,15 @@ impl StorageService {
                         let Value {
                             payload, encoding, ..
                         } = overriding_update.data.value;
-                        let sample_to_store = Sample::new(KeyExpr::from(k.clone()), payload)
+                        Sample::new(KeyExpr::from(k.clone()), payload)
                             .with_encoding(encoding)
                             .with_timestamp(overriding_update.data.timestamp)
-                            .with_kind(overriding_update.kind);
-                        sample_to_store
+                            .with_kind(overriding_update.kind)
                     }
-                    None => {
-                        let sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), sample.payload().clone())
-                                .with_encoding(sample.encoding().clone())
-                                .with_timestamp(sample.timestamp().unwrap().clone())
-                                .with_kind(sample.kind());
-                        sample_to_store
-                    }
+                    None => Sample::new(KeyExpr::from(k.clone()), sample.payload().clone())
+                        .with_encoding(sample.encoding().clone())
+                        .with_timestamp(*sample.timestamp().unwrap())
+                        .with_kind(sample.kind()),
                 };
 
                 let stripped_key = match self.strip_prefix(sample_to_store.key_expr()) {
@@ -340,16 +335,16 @@ impl StorageService {
                                 stripped_key,
                                 Value::new(sample_to_store.payload().clone())
                                     .with_encoding(sample_to_store.encoding().clone()),
-                                sample_to_store.timestamp().unwrap().clone(),
+                                *sample_to_store.timestamp().unwrap(),
                             )
                             .await
                     }
                     SampleKind::Delete => {
                         // register a tombstone
-                        self.mark_tombstone(&k, sample_to_store.timestamp().unwrap().clone())
+                        self.mark_tombstone(&k, *sample_to_store.timestamp().unwrap())
                             .await;
                         storage
-                            .delete(stripped_key, sample_to_store.timestamp().unwrap().clone())
+                            .delete(stripped_key, *sample_to_store.timestamp().unwrap())
                             .await
                     }
                 };
@@ -363,7 +358,7 @@ impl StorageService {
                         .as_ref()
                         .unwrap()
                         .log_propagation
-                        .send((k.clone(), sample_to_store.timestamp().unwrap().clone()));
+                        .send((k.clone(), *sample_to_store.timestamp().unwrap()));
                     match sending {
                         Ok(_) => (),
                         Err(e) => {
@@ -398,7 +393,7 @@ impl StorageService {
         // @TODO: change into a better store that does incremental writes
         let key = sample.key_expr().clone();
         let mut wildcards = self.wildcard_updates.write().await;
-        let timestamp = sample.timestamp().unwrap().clone();
+        let timestamp = *sample.timestamp().unwrap();
         wildcards.insert(
             &key,
             Update {

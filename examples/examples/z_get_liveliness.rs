@@ -37,7 +37,7 @@ async fn main() {
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
-            Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr.as_str(),),
+            Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr().as_str(),),
             Err(err) => {
                 let payload = err
                     .payload
