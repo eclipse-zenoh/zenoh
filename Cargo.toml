@@ -76,7 +76,7 @@ ahash = "0.8.7"
 anyhow = { version = "1.0.69", default-features = false } # Default features are disabled due to usage in no_std crates
 async-executor = "1.5.0"
 async-global-executor = "2.3.1"
-async-io = "1.13.0"
+async-io = "=1.13.0"
 async-rustls = "0.4.0"
 async-std = { version = "=1.12.0", default-features = false } # Default features are disabled due to some crates' requirements
 async-trait = "0.1.60"
