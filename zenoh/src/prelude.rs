@@ -35,7 +35,7 @@ pub(crate) mod common {
     pub(crate) type Id = usize;
 
     pub use crate::config::{self, Config, ValidatedMap};
-    pub use crate::handlers::IntoCallbackReceiverPair;
+    pub use crate::handlers::IntoHandler;
     pub use crate::selector::{Parameter, Parameters, Selector};
     pub use crate::session::{Session, SessionDeclarations};
 
