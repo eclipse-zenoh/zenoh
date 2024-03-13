@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh_examples::CommonArgs;
@@ -96,9 +95,7 @@ fn main() {
         .unwrap();
 
     println!("Press CTRL-C to quit...");
-    loop {
-        sleep(Duration::from_secs(1));
-    }
+    std::thread::park();
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

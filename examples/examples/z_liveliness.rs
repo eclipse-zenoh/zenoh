@@ -11,9 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
-use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
@@ -39,9 +37,7 @@ async fn main() {
     );
 
     println!("Press CTRL-C to undeclare LivelinessToken and quit...");
-    loop {
-        sleep(Duration::from_secs(1)).await;
-    }
+    std::thread::park();
     // LivelinessTokens are automatically closed when dropped
     // Use the code below to manually undeclare it if needed
     //
