@@ -581,8 +581,3 @@ fn codec_reply() {
 fn codec_err() {
     run!(zenoh::Err, zenoh::Err::rand());
 }
-
-#[test]
-fn codec_pull() {
-    run!(zenoh::Pull, zenoh::Pull::rand());
-}

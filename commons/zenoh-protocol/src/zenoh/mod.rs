@@ -13,7 +13,6 @@
 //
 pub mod del;
 pub mod err;
-pub mod pull;
 pub mod put;
 pub mod query;
 pub mod reply;
@@ -21,7 +20,6 @@ pub mod reply;
 use crate::core::Encoding;
 pub use del::Del;
 pub use err::Err;
-pub use pull::Pull;
 pub use put::Put;
 pub use query::{Consolidation, Query};
 pub use reply::Reply;
@@ -33,7 +31,6 @@ pub mod id {
     pub const QUERY: u8 = 0x03;
     pub const REPLY: u8 = 0x04;
     pub const ERR: u8 = 0x05;
-    pub const PULL: u8 = 0x06;
 }
 
 // DataInfo
@@ -82,7 +79,6 @@ pub enum RequestBody {
     Query(Query),
     Put(Put),
     Del(Del),
-    Pull(Pull),
 }
 
 impl RequestBody {
@@ -92,11 +88,10 @@ impl RequestBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..4) {
+        match rng.gen_range(0..3) {
             0 => RequestBody::Query(Query::rand()),
             1 => RequestBody::Put(Put::rand()),
             2 => RequestBody::Del(Del::rand()),
-            3 => RequestBody::Pull(Pull::rand()),
             _ => unreachable!(),
         }
     }

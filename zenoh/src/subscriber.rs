@@ -113,29 +113,6 @@ pub(crate) struct PullSubscriberInner<'a> {
 }
 
 impl<'a> PullSubscriberInner<'a> {
-    /// Pull available data for a [`CallbackPullSubscriber`].
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
-    ///     .pull_mode()
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// subscriber.pull();
-    /// # })
-    /// ```
-    #[inline]
-    pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
-        self.inner.session.pull(&self.inner.state.key_expr)
-    }
-
     /// Close a [`CallbackPullSubscriber`](CallbackPullSubscriber).
     ///
     /// `CallbackPullSubscribers` are automatically closed when dropped, but you may want to use this function to handle errors or
@@ -245,17 +222,6 @@ impl Drop for SubscriberInner<'_> {
         if self.alive {
             let _ = self.session.unsubscribe(self.state.id);
         }
-    }
-}
-
-/// The mode for pull subscribers.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
-pub struct PullMode;
-
-impl From<PullMode> for Mode {
-    fn from(_: PullMode) -> Self {
-        Mode::Pull
     }
 }
 
@@ -465,27 +431,6 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         self
     }
 
-    /// Change the subscription mode to Pull.
-    #[inline]
-    pub fn pull_mode(self) -> SubscriberBuilder<'a, 'b, PullMode, Handler> {
-        let SubscriberBuilder {
-            session,
-            key_expr,
-            reliability,
-            mode: _,
-            origin,
-            handler,
-        } = self;
-        SubscriberBuilder {
-            session,
-            key_expr,
-            reliability,
-            mode: PullMode,
-            origin,
-            handler,
-        }
-    }
-
     /// Change the subscription mode to Push.
     #[inline]
     pub fn push_mode(self) -> SubscriberBuilder<'a, 'b, PushMode, Handler> {
@@ -549,60 +494,6 @@ where
 }
 
 impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
-{
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
-    }
-}
-
-// Pull mode
-impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, PullMode, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
-{
-    type To = ZResult<PullSubscriber<'a, Handler::Receiver>>;
-}
-
-impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
-{
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        let key_expr = self.key_expr?;
-        let session = self.session;
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
-        session
-            .declare_subscriber_inner(
-                &key_expr,
-                &None,
-                self.origin,
-                callback,
-                &SubscriberInfo {
-                    reliability: self.reliability,
-                    mode: self.mode.into(),
-                },
-            )
-            .map(|sub_state| PullSubscriber {
-                subscriber: PullSubscriberInner {
-                    inner: SubscriberInner {
-                        session,
-                        state: sub_state,
-                        alive: true,
-                    },
-                },
-                receiver,
-            })
-    }
-}
-
-impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
@@ -695,29 +586,6 @@ impl<'a, Receiver> DerefMut for PullSubscriber<'a, Receiver> {
 }
 
 impl<'a, Receiver> PullSubscriber<'a, Receiver> {
-    /// Pull available data for a [`PullSubscriber`].
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .with(flume::bounded(32))
-    ///     .pull_mode()
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// subscriber.pull();
-    /// # })
-    /// ```
-    #[inline]
-    pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
-        self.subscriber.pull()
-    }
-
     /// Close a [`PullSubscriber`].
     ///
     /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or

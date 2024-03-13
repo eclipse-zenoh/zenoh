@@ -81,7 +81,7 @@ use zenoh_protocol::{
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
-        Pull, PushBody, RequestBody, ResponseBody,
+        PushBody, RequestBody, ResponseBody,
     },
 };
 use zenoh_result::ZResult;
@@ -1555,29 +1555,6 @@ impl Session {
         }
     }
 
-    pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Resolve<ZResult<()>> + 'a {
-        ResolveClosure::new(move || {
-            trace!("pull({:?})", key_expr);
-            let state = zread!(self.state);
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.send_request(Request {
-                id: 0, // @TODO compute a proper request ID
-                wire_expr: key_expr.to_wire(self).to_owned(),
-                ext_qos: ext::QoSType::REQUEST,
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                ext_target: request::ext::TargetType::DEFAULT,
-                ext_budget: None,
-                ext_timeout: None,
-                payload: RequestBody::Pull(Pull {
-                    ext_unknown: vec![],
-                }),
-            });
-            Ok(())
-        })
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
         &self,
@@ -2110,7 +2087,6 @@ impl Primitives for Session {
             ),
             RequestBody::Put(_) => (),
             RequestBody::Del(_) => (),
-            RequestBody::Pull(_) => todo!(),
         }
     }
 

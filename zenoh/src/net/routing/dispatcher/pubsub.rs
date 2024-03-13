@@ -18,7 +18,6 @@ use crate::net::routing::hat::HatTrait;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::RwLock;
 use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
@@ -596,69 +595,4 @@ pub fn full_reentrant_route_data(
             log::error!("{} Route data with unknown scope {}!", face, expr.scope);
         }
     }
-}
-
-pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireExpr) {
-    let tables = zread!(tables_ref);
-    match tables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                let res = get_mut_unchecked(&mut res);
-                match res.session_ctxs.get_mut(&face.id) {
-                    Some(ctx) => match &ctx.subs {
-                        Some(_subinfo) => {
-                            // let reliability = subinfo.reliability;
-                            let lock = zlock!(tables.pull_caches_lock);
-                            let route = get_mut_unchecked(ctx)
-                                .last_values
-                                .drain()
-                                .map(|(name, sample)| {
-                                    (
-                                        Resource::get_best_key(&tables.root_res, &name, face.id)
-                                            .to_owned(),
-                                        sample,
-                                    )
-                                })
-                                .collect::<Vec<(WireExpr, PushBody)>>();
-                            drop(lock);
-                            drop(tables);
-                            for (key_expr, payload) in route {
-                                face.primitives.send_push(Push {
-                                    wire_expr: key_expr,
-                                    ext_qos: ext::QoSType::PUSH,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    payload,
-                                });
-                            }
-                        }
-                        None => {
-                            log::error!(
-                                "{} Pull data for unknown subscriber {} (no info)!",
-                                face,
-                                prefix.expr() + expr.suffix.as_ref()
-                            );
-                        }
-                    },
-                    None => {
-                        log::error!(
-                            "{} Pull data for unknown subscriber {} (no context)!",
-                            face,
-                            prefix.expr() + expr.suffix.as_ref()
-                        );
-                    }
-                }
-            }
-            None => {
-                log::error!(
-                    "{} Pull data for unknown subscriber {} (no resource)!",
-                    face,
-                    prefix.expr() + expr.suffix.as_ref()
-                );
-            }
-        },
-        None => {
-            log::error!("{} Pull data with unknown scope {}!", face, expr.scope);
-        }
-    };
 }

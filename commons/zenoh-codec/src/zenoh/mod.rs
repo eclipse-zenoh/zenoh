@@ -13,7 +13,6 @@
 //
 pub mod del;
 pub mod err;
-pub mod pull;
 pub mod put;
 pub mod query;
 pub mod reply;
@@ -83,7 +82,6 @@ where
             RequestBody::Query(b) => self.write(&mut *writer, b),
             RequestBody::Put(b) => self.write(&mut *writer, b),
             RequestBody::Del(b) => self.write(&mut *writer, b),
-            RequestBody::Pull(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -102,7 +100,6 @@ where
             id::QUERY => RequestBody::Query(codec.read(&mut *reader)?),
             id::PUT => RequestBody::Put(codec.read(&mut *reader)?),
             id::DEL => RequestBody::Del(codec.read(&mut *reader)?),
-            id::PULL => RequestBody::Pull(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

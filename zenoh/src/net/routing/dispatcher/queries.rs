@@ -473,7 +473,6 @@ macro_rules! inc_req_stats {
                             q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
                         );
                     }
-                    RequestBody::Pull(_) => (),
                 }
             }
         }
