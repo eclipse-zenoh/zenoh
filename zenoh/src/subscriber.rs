@@ -24,7 +24,7 @@ use std::fmt;
 use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::network::declare::{subscriber::ext::SubscriberInfo, Mode};
@@ -78,67 +78,6 @@ pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) alive: bool,
-}
-
-/// A [`PullMode`] subscriber that provides data through a callback.
-///
-/// CallbackPullSubscribers only provide data when explicitely pulled by the
-/// application with the [`pull`](CallbackPullSubscriber::pull) function.
-/// CallbackPullSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
-/// the [`callback`](SubscriberBuilder::callback) function
-/// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
-/// of the resulting builder.
-///
-/// Subscribers are automatically undeclared when dropped.
-///
-/// # Examples
-/// ```
-/// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let subscriber = session
-///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
-///     .pull_mode()
-///     .res()
-///     .await
-///     .unwrap();
-/// subscriber.pull();
-/// # })
-/// ```
-pub(crate) struct PullSubscriberInner<'a> {
-    inner: SubscriberInner<'a>,
-}
-
-impl<'a> PullSubscriberInner<'a> {
-    /// Close a [`CallbackPullSubscriber`](CallbackPullSubscriber).
-    ///
-    /// `CallbackPullSubscribers` are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the `CallbackPullSubscriber` asynchronously.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .callback(data_handler)
-    ///     .pull_mode()
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        Undeclarable::undeclare_inner(self.inner, ())
-    }
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -247,7 +186,6 @@ impl From<PushMode> for Mode {
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .best_effort()
-///     .pull_mode()
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -536,79 +474,6 @@ where
 pub struct Subscriber<'a, Receiver> {
     pub(crate) subscriber: SubscriberInner<'a>,
     pub receiver: Receiver,
-}
-
-/// A [`PullMode`] subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
-///
-/// PullSubscribers only provide data when explicitely pulled by the
-/// application with the [`pull`](PullSubscriber::pull) function.
-/// PullSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
-/// the [`with`](SubscriberBuilder::with) function
-/// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
-/// of the resulting builder.
-///
-/// Subscribers are automatically undeclared when dropped.
-///
-/// # Examples
-/// ```
-/// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let subscriber = session
-///     .declare_subscriber("key/expression")
-///     .with(flume::bounded(32))
-///     .pull_mode()
-///     .res()
-///     .await
-///     .unwrap();
-/// subscriber.pull();
-/// # })
-/// ```
-#[non_exhaustive]
-pub struct PullSubscriber<'a, Receiver> {
-    pub(crate) subscriber: PullSubscriberInner<'a>,
-    pub receiver: Receiver,
-}
-
-impl<'a, Receiver> Deref for PullSubscriber<'a, Receiver> {
-    type Target = Receiver;
-    fn deref(&self) -> &Self::Target {
-        &self.receiver
-    }
-}
-
-impl<'a, Receiver> DerefMut for PullSubscriber<'a, Receiver> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.receiver
-    }
-}
-
-impl<'a, Receiver> PullSubscriber<'a, Receiver> {
-    /// Close a [`PullSubscriber`].
-    ///
-    /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the Subscriber asynchronously.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .pull_mode()
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        self.subscriber.undeclare()
-    }
 }
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {

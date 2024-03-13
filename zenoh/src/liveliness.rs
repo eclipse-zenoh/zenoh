@@ -398,7 +398,6 @@ impl Drop for LivelinessToken<'_> {
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .best_effort()
-///     .pull_mode()
 ///     .res()
 ///     .await
 ///     .unwrap();
