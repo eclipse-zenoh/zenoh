@@ -52,13 +52,13 @@ fn pubsub() {
         task::sleep(SLEEP).await;
 
         ztimeout!(publisher1.put("qos").res_async()).unwrap();
-        let qos = ztimeout!(subscriber.recv_async()).unwrap().qos;
+        let qos = ztimeout!(subscriber.recv_async()).unwrap().qos().clone();
 
         assert_eq!(qos.priority(), Priority::DataHigh);
         assert_eq!(qos.congestion_control(), CongestionControl::Drop);
 
         ztimeout!(publisher2.put("qos").res_async()).unwrap();
-        let qos = ztimeout!(subscriber.recv_async()).unwrap().qos;
+        let qos = ztimeout!(subscriber.recv_async()).unwrap().qos().clone();
 
         assert_eq!(qos.priority(), Priority::DataLow);
         assert_eq!(qos.congestion_control(), CongestionControl::Block);

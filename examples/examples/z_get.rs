@@ -41,12 +41,12 @@ async fn main() {
         match reply.sample {
             Ok(sample) => {
                 let payload = sample
-                    .payload
+                    .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(
                     ">> Received ('{}': '{}')",
-                    sample.key_expr.as_str(),
+                    sample.key_expr().as_str(),
                     payload,
                 );
             }

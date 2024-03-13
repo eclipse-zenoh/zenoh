@@ -164,9 +164,9 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
             // on sample received by the Subscriber
             sample = sub.recv_async() => {
                 let sample = sample.unwrap();
-                let payload = sample.payload.deserialize::<String>().unwrap_or_else(|e| format!("{}", e));
-                info!("Received data ('{}': '{}')", sample.key_expr, payload);
-                stored.insert(sample.key_expr.to_string(), sample);
+                let payload = sample.payload().deserialize::<String>().unwrap_or_else(|e| format!("{}", e));
+                info!("Received data ('{}': '{}')", sample.key_expr(), payload);
+                stored.insert(sample.key_expr().to_string(), sample);
             },
             // on query received by the Queryable
             query = queryable.recv_async() => {

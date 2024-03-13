@@ -46,7 +46,7 @@ lazy_static::lazy_static! {
 }
 const RAW_KEY: &str = "_raw";
 
-fn payload_to_json(payload: Payload) -> String {
+fn payload_to_json(payload: &Payload) -> String {
     payload
         .deserialize::<String>()
         .unwrap_or_else(|_| format!(r#""{}""#, b64_std_engine.encode(payload.contiguous())))
@@ -55,10 +55,10 @@ fn payload_to_json(payload: Payload) -> String {
 fn sample_to_json(sample: Sample) -> String {
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-        sample.key_expr.as_str(),
-        payload_to_json(sample.payload),
-        sample.encoding,
-        if let Some(ts) = sample.timestamp {
+        sample.key_expr().as_str(),
+        payload_to_json(sample.payload()),
+        sample.encoding(),
+        if let Some(ts) = sample.timestamp() {
             ts.to_string()
         } else {
             "None".to_string()
@@ -72,7 +72,7 @@ fn result_to_json(sample: Result<Sample, Value>) -> String {
         Err(err) => {
             format!(
                 r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
-                payload_to_json(err.payload),
+                payload_to_json(&err.payload),
                 err.encoding,
             )
         }
@@ -100,8 +100,8 @@ async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.key_expr.as_str(),
-        String::from_utf8_lossy(&sample.payload.contiguous())
+        sample.key_expr().as_str(),
+        String::from_utf8_lossy(&sample.payload().contiguous())
     )
 }
 
@@ -136,8 +136,8 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
         Ok(reply) => match reply.sample {
             Ok(sample) => response(
                 StatusCode::Ok,
-                Cow::from(&sample.encoding).as_ref(),
-                String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
+                Cow::from(sample.encoding()).as_ref(),
+                String::from_utf8_lossy(&sample.payload().contiguous()).as_ref(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
@@ -322,7 +322,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                     loop {
                         let sample = sub.recv_async().await.unwrap();
                         match sender
-                            .send(&sample.kind.to_string(), sample_to_json(sample), None)
+                            .send(&sample.kind().to_string(), sample_to_json(sample), None)
                             .timeout(std::time::Duration::new(10, 0))
                             .await
                         {

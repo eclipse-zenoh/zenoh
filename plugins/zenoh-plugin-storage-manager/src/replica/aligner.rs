@@ -141,10 +141,10 @@ impl Aligner {
 
         for sample in replies {
             result.insert(
-                sample.key_expr.into(),
+                sample.key_expr().clone().into(),
                 (
-                    sample.timestamp.unwrap(),
-                    Value::new(sample.payload).with_encoding(sample.encoding),
+                    sample.timestamp().unwrap().clone(),
+                    Value::from(sample),
                 ),
             );
         }
@@ -213,7 +213,7 @@ impl Aligner {
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
             // expecting sample.payload to be a vec of intervals with their checksum
             for each in reply_content {
-                match serde_json::from_str(&StringOrBase64::from(each.payload)) {
+                match serde_json::from_str(&StringOrBase64::from(each.payload())) {
                     Ok((i, c)) => {
                         other_intervals.insert(i, c);
                     }
@@ -259,7 +259,7 @@ impl Aligner {
                 let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
-                    match serde_json::from_str(&StringOrBase64::from(each.payload)) {
+                    match serde_json::from_str(&StringOrBase64::from(each.payload())) {
                         Ok((i, c)) => {
                             other_subintervals.insert(i, c);
                         }
@@ -300,7 +300,7 @@ impl Aligner {
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
-                match serde_json::from_str(&StringOrBase64::from(each.payload)) {
+                match serde_json::from_str(&StringOrBase64::from(each.payload())) {
                     Ok((i, c)) => {
                         other_content.insert(i, c);
                     }
@@ -340,8 +340,8 @@ impl Aligner {
                         Ok(sample) => {
                             log::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",
-                                sample.key_expr.as_str(),
-                                StringOrBase64::from(sample.payload.clone())
+                                sample.key_expr().as_str(),
+                                StringOrBase64::from(sample.payload())
                             );
                             return_val.push(sample);
                         }

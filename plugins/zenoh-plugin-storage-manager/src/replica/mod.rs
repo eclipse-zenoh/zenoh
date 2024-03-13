@@ -220,16 +220,17 @@ impl Replica {
                     continue;
                 }
             };
-            let from = &sample.key_expr.as_str()
+            let from = &sample.key_expr().as_str()
                 [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
             log::trace!(
                 "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
                 from,
-                sample.kind,
-                sample.key_expr.as_str(),
-                StringOrBase64::from(sample.payload.clone())
+                sample.kind(),
+                sample.key_expr().as_str(),
+                StringOrBase64::from(sample.payload())
             );
-            let digest: Digest = match serde_json::from_str(&StringOrBase64::from(sample.payload)) {
+            let digest: Digest = match serde_json::from_str(&StringOrBase64::from(sample.payload()))
+            {
                 Ok(digest) => digest,
                 Err(e) => {
                     log::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);

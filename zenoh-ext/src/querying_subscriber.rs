@@ -304,8 +304,8 @@ impl MergeQueue {
     }
 
     fn push(&mut self, sample: Sample) {
-        if let Some(ts) = sample.timestamp {
-            self.timstamped.entry(ts).or_insert(sample);
+        if let Some(ts) = sample.timestamp() {
+            self.timstamped.entry(ts.clone()).or_insert(sample);
         } else {
             self.untimestamped.push_back(sample);
         }

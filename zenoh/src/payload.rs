@@ -579,8 +579,8 @@ impl std::fmt::Display for StringOrBase64 {
     }
 }
 
-impl From<Payload> for StringOrBase64 {
-    fn from(v: Payload) -> Self {
+impl From<&Payload> for StringOrBase64 {
+    fn from(v: &Payload) -> Self {
         use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
         match v.deserialize::<String>() {
             Ok(s) => StringOrBase64::String(s),
