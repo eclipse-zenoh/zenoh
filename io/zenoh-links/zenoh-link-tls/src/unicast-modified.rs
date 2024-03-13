@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use x509_parser::prelude::*;
+
 use crate::{
     base64_decode, config::*, get_tls_addr, get_tls_host, get_tls_server_name,
     verify::WebPkiVerifierAnyServerName, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,
@@ -28,27 +30,27 @@ use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::FutureExt;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
+use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures::io::AsyncReadExt;
 use futures::io::AsyncWriteExt;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Cursor};
-use std::net::Shutdown;
+use std::net::{IpAddr, Shutdown};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::{cell::UnsafeCell, io};
 use webpki::{
     anchor_from_trusted_cert,
     types::{CertificateDer, TrustAnchor},
 };
-use x509_parser::prelude::*;
-use zenoh_core::zasynclock;
+use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link_commons::{
-    get_ip_interface_names, AuthIdentifier, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    AuthIdentifier, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
@@ -197,7 +199,9 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
-        get_ip_interface_names(&self.src_addr)
+        // @TODO: Not supported for now
+        log::debug!("The get_interface_names for LinkUnicastTls is not supported");
+        vec![]
     }
 
     #[inline(always)]
@@ -235,16 +239,42 @@ impl fmt::Debug for LinkUnicastTls {
     }
 }
 
+/*************************************/
+/*          LISTENER                 */
+/*************************************/
+struct ListenerUnicastTls {
+    endpoint: EndPoint,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    handle: JoinHandle<ZResult<()>>,
+}
+
+impl ListenerUnicastTls {
+    fn new(
+        endpoint: EndPoint,
+        active: Arc<AtomicBool>,
+        signal: Signal,
+        handle: JoinHandle<ZResult<()>>,
+    ) -> ListenerUnicastTls {
+        ListenerUnicastTls {
+            endpoint,
+            active,
+            signal,
+            handle,
+        }
+    }
+}
+
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
-    listeners: ListenersUnicastIP,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastTls>>>,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: ListenersUnicastIP::new(),
+            listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -301,7 +331,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     e
                 )
             })?;
-
         let (_, tls_conn) = tls_stream.get_ref();
 
         let serv_certs = tls_conn.peer_certificates().unwrap();
@@ -322,7 +351,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             println!("auth_identifier: {:?}", auth_identifier);
         }
         let tls_stream = TlsStream::Client(tls_stream);
-
         let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
 
         Ok(LinkUnicast(link))
@@ -355,12 +383,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
 
+        // Spawn the accept loop for the listener
         let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
-
+        let c_listeners = self.listeners.clone();
+        let c_addr = local_addr;
         let handle = task::spawn(async move {
-            accept_task(socket, acceptor, c_active, c_signal, c_manager).await
+            // Wait for the accept loop to terminate
+            let res = accept_task(socket, acceptor, c_active, c_signal, c_manager).await;
+            zwrite!(c_listeners).remove(&c_addr);
+            res
         });
 
         // Update the endpoint locator address
@@ -370,25 +403,69 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             endpoint.metadata(),
         )?;
 
-        self.listeners
-            .add_listener(endpoint, local_addr, active, signal, handle)
-            .await?;
+        let listener = ListenerUnicastTls::new(endpoint, active, signal, handle);
+        // Update the list of active listeners on the manager
+        zwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(locator)
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         let epaddr = endpoint.address();
+
         let addr = get_tls_addr(&epaddr).await?;
-        self.listeners.del_listener(addr).await
+
+        // Stop the listener
+        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+            let e = zerror!(
+                "Can not delete the TLS listener because it has not been found: {}",
+                addr
+            );
+            log::trace!("{}", e);
+            e
+        })?;
+
+        // Send the stop signal
+        listener.active.store(false, Ordering::Release);
+        listener.signal.trigger();
+        listener.handle.await
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        self.listeners.get_endpoints()
+        zread!(self.listeners)
+            .values()
+            .map(|x| x.endpoint.clone())
+            .collect()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        self.listeners.get_locators()
+        let mut locators = vec![];
+
+        let guard = zread!(self.listeners);
+        for (key, value) in guard.iter() {
+            let (kip, kpt) = (key.ip(), key.port());
+
+            // Either ipv4/0.0.0.0 or ipv6/[::]
+            if kip.is_unspecified() {
+                let mut addrs = match kip {
+                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
+                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
+                };
+                let iter = addrs.drain(..).map(|x| {
+                    Locator::new(
+                        value.endpoint.protocol(),
+                        SocketAddr::new(x, kpt).to_string(),
+                        value.endpoint.metadata(),
+                    )
+                    .unwrap()
+                });
+                locators.extend(iter);
+            } else {
+                locators.push(value.endpoint.to_locator());
+            }
+        }
+
+        locators
     }
 }
 
@@ -449,7 +526,6 @@ async fn accept_task(
                 continue;
             }
         };
-
         let (_, tls_conn) = tls_stream.get_ref();
         let auth_identifier = get_tls_cert_name(tls_conn);
         match auth_identifier {
@@ -469,7 +545,6 @@ async fn accept_task(
 
     Ok(())
 }
-
 fn get_tls_cert_name(tls_conn: &rustls::CommonState) -> Option<AuthIdentifier> {
     let serv_certs = tls_conn.peer_certificates()?;
     let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref()).unwrap();
@@ -485,7 +560,6 @@ fn get_tls_cert_name(tls_conn: &rustls::CommonState) -> Option<AuthIdentifier> {
         tls_cert_name: Some(subject_name.to_string()),
     })
 }
-
 struct TlsServerConfig {
     server_config: ServerConfig,
 }

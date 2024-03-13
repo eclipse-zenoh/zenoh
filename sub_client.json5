@@ -21,8 +21,7 @@
   connect: {
     endpoints: [
       // "<proto>/<address>"
-      "quic/127.0.0.1:7447"
-
+      "tls/127.0.0.1:7447"
     ],
   },
   /// Which endpoints to listen on. E.g. tcp/localhost:7447.

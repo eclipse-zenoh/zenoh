@@ -114,3 +114,9 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct AuthIdentifier {
+    pub username: Option<String>,
+    pub tls_cert_name: Option<String>,
+}

@@ -43,3 +43,4 @@ zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 base64 = { workspace = true }
 secrecy = { workspace = true }
+x509-parser = "0.16.0"
