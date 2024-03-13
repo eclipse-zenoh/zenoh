@@ -520,10 +520,12 @@ impl Sample {
         self
     }
 
-    #[inline]
     /// Ensure that an associated Timestamp is present in this Sample.
     /// If not, a new one is created with the current system time and 0x00 as id.
     /// Get the timestamp of this sample (either existing one or newly created)
+    #[inline]
+    #[doc(hidden)]
+    #[zenoh_macros::unstable]
     pub fn ensure_timestamp(&mut self) -> &Timestamp {
         if let Some(ref timestamp) = self.timestamp {
             timestamp
@@ -542,8 +544,9 @@ impl Sample {
     }
 
     /// Gets the mutable sample attachment: a map of key-value pairs, where each key and value are byte-slices.
-    #[zenoh_macros::unstable]
     #[inline]
+    #[doc(hidden)]
+    #[zenoh_macros::unstable]
     pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
         &mut self.attachment
     }
