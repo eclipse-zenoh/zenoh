@@ -25,7 +25,6 @@ use core::{
     ops::{Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
     option,
 };
-use zenoh_core::zcondfeat;
 
 /*************************************/
 /*           ZSLICE BUFFER           */
@@ -59,11 +58,11 @@ pub trait ZSliceBuffer: Send + Sync + fmt::Debug {
 /// on "shared-memory" feature
 #[inline]
 pub unsafe fn as_mut_slice_featureless<T: ZSliceBuffer + ?Sized>(slice: &mut T) -> &mut [u8] {
-    zcondfeat!(
-        "shared-memory",
-        slice.as_mut_slice_unchecked(),
-        slice.as_mut_slice()
-    )
+    #[cfg(feature = "shared-memory")]
+    return slice.as_mut_slice_unchecked();
+
+    #[cfg(not(feature = "shared-memory"))]
+    slice.as_mut_slice()
 }
 
 impl ZSliceBuffer for Vec<u8> {
@@ -527,11 +526,11 @@ mod tests {
         let range = zslice.range();
         let mbuf = Arc::get_mut(&mut zslice.buf).unwrap();
 
-        let mut_slice = zcondfeat!(
-            "shared-memory",
-            mbuf.as_mut_slice().unwrap(),
-            mbuf.as_mut_slice()
-        );
+        #[cfg(feature = "shared-memory")]
+        let mut_slice = mbuf.as_mut_slice().unwrap();
+        #[cfg(not(feature = "shared-memory"))]
+        let mut_slice = mbuf.as_mut_slice();
+
         mut_slice[range][..buf.len()].clone_from_slice(&buf[..]);
 
         assert_eq!(buf.as_slice(), zslice.as_slice());

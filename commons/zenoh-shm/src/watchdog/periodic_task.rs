@@ -23,8 +23,11 @@ use std::{
 #[cfg(not(feature = "test"))]
 use log::error;
 use log::warn;
+
+use thread_priority::ThreadBuilder;
+#[cfg(unix)]
 use thread_priority::{
-    set_current_thread_priority, RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority, ThreadPriorityValue, ThreadSchedulePolicy::Realtime
+    set_current_thread_priority, RealtimeThreadSchedulePolicy, ThreadPriority, ThreadPriorityValue, ThreadSchedulePolicy::Realtime
 };
 
 pub struct PeriodicTask {
@@ -45,11 +48,18 @@ impl PeriodicTask {
         let running = Arc::new(AtomicBool::new(true));
 
         let c_running = running.clone();
-        let _ = ThreadBuilder::default()
+        
+        #[cfg(unix)]
+        let builder = ThreadBuilder::default()
             .name(name)
             .policy(Realtime(RealtimeThreadSchedulePolicy::Fifo))
-            .priority(ThreadPriority::Min)
-            .spawn(move |result| {
+            .priority(ThreadPriority::Min);
+
+        #[cfg(windows)]
+        let builder = ThreadBuilder::default().name(name);
+                
+        let _ = builder.spawn(move |result| {
+                #[cfg(unix)]
                 if let Err(e) = result {
                     warn!("{:?}: error setting realtime FIFO scheduling policy for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
                 
