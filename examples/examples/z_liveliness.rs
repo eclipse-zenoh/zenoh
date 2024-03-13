@@ -27,7 +27,7 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring LivelinessToken on '{}'...", &key_expr);
-    let _token = Some(
+    let mut token = Some(
         session
             .liveliness()
             .declare_token(&key_expr)
@@ -40,11 +40,10 @@ async fn main() {
     std::thread::park();
     // LivelinessTokens are automatically closed when dropped
     // Use the code below to manually undeclare it if needed
-    //
-    // if let Some(token) = token.take() {
-    //     println!("Undeclaring LivelinessToken...");
-    //     token.undeclare().res().await.unwrap();
-    // }
+    if let Some(token) = token.take() {
+        println!("Undeclaring LivelinessToken...");
+        token.undeclare().res().await.unwrap();
+    };
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
