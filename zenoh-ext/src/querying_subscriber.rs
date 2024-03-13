@@ -26,6 +26,8 @@ use zenoh::Result as ZResult;
 use zenoh::SessionRef;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
 
+use crate::ExtractSample;
+
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
@@ -350,8 +352,7 @@ pub struct FetchingSubscriberBuilder<
     Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
     TryIntoSample,
 > where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
@@ -372,8 +373,7 @@ impl<
         TryIntoSample,
     > FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample>
 where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     fn with_static_keys(
         self,
@@ -399,8 +399,7 @@ impl<
         TryIntoSample,
     > FetchingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandler, Fetch, TryIntoSample>
 where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     /// Add callback to [`FetchingSubscriber`].
     #[inline]
@@ -496,8 +495,7 @@ impl<
         TryIntoSample,
     > FetchingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler, Fetch, TryIntoSample>
 where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     /// Change the subscription reliability.
     #[inline]
@@ -540,8 +538,7 @@ impl<
 where
     Handler: IntoHandler<'static, Sample>,
     Handler::Handler: Send,
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     type To = ZResult<FetchingSubscriber<'a, Handler::Handler>>;
 }
@@ -556,8 +553,7 @@ where
     KeySpace: Into<crate::KeySpace>,
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
-    TryIntoSample: TryInto<Sample> + Send + Sync,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample + Send + Sync,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         FetchingSubscriber::new(self.with_static_keys())
@@ -575,8 +571,7 @@ where
     KeySpace: Into<crate::KeySpace>,
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
-    TryIntoSample: TryInto<Sample> + Send + Sync,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample + Send + Sync,
 {
     type Future = Ready<Self::To>;
 
@@ -649,8 +644,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
     where
         KeySpace: Into<crate::KeySpace>,
         Handler: IntoHandler<'static, Sample, Handler = Receiver> + Send,
-        TryIntoSample: TryInto<Sample> + Send + Sync,
-        <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+        TryIntoSample: ExtractSample + Send + Sync,
     {
         let state = Arc::new(Mutex::new(InnerState {
             pending_fetches: 0,
@@ -769,8 +763,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
         fetch: Fetch,
     ) -> impl Resolve<ZResult<()>>
     where
-        TryIntoSample: TryInto<Sample> + Send + Sync,
-        <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+        TryIntoSample: ExtractSample + Send + Sync,
     {
         FetchBuilder {
             fetch,
@@ -846,8 +839,7 @@ pub struct FetchBuilder<
     Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
     TryIntoSample,
 > where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     fetch: Fetch,
     phantom: std::marker::PhantomData<TryIntoSample>,
@@ -858,8 +850,7 @@ pub struct FetchBuilder<
 impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
     Resolvable for FetchBuilder<Fetch, TryIntoSample>
 where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     type To = ZResult<()>;
 }
@@ -867,8 +858,7 @@ where
 impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
     SyncResolve for FetchBuilder<Fetch, TryIntoSample>
 where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let handler = register_handler(self.state, self.callback);
@@ -879,8 +869,7 @@ where
 impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
     AsyncResolve for FetchBuilder<Fetch, TryIntoSample>
 where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     type Future = Ready<Self::To>;
 
@@ -906,16 +895,15 @@ fn run_fetch<
     handler: RepliesHandler,
 ) -> ZResult<()>
 where
-    TryIntoSample: TryInto<Sample>,
-    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    TryIntoSample: ExtractSample,
 {
     log::debug!("Fetch data for FetchingSubscriber");
-    (fetch)(Box::new(move |s: TryIntoSample| match s.try_into() {
+    (fetch)(Box::new(move |s: TryIntoSample| match s.extract() {
         Ok(s) => {
             let mut state = zlock!(handler.state);
             log::trace!("Fetched sample received: push it to merge_queue");
             state.merge_queue.push(s);
         }
-        Err(e) => log::debug!("Received error fetching data: {}", e.into()),
+        Err(e) => log::debug!("Received error fetching data: {}", e),
     }))
 }

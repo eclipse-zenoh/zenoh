@@ -23,14 +23,14 @@ fn main() {
     env_logger::init();
     let args = Args::parse();
 
-    let mut prio = Priority::default();
+    let mut prio = Priority::DEFAULT;
     if let Some(p) = args.priority {
         prio = p.try_into().unwrap();
     }
 
     let payload_size = args.payload_size;
 
-    let data: Value = (0..payload_size)
+    let data: Payload = (0..payload_size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();

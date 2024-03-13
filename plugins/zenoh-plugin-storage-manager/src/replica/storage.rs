@@ -180,7 +180,7 @@ impl StorageService {
                         // log error if the sample is not timestamped
                         // This is to reduce down the line inconsistencies of having duplicate samples stored
                         if sample.get_timestamp().is_none() {
-                            log::error!("Sample {} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
+                            log::error!("Sample {:?} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
                         }
                         else {
                             self.process_sample(sample).await;
@@ -262,7 +262,7 @@ impl StorageService {
     // The storage should only simply save the key, sample pair while put and retrieve the same during get
     // the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
-        log::trace!("[STORAGE] Processing sample: {}", sample);
+        log::trace!("[STORAGE] Processing sample: {:?}", sample);
         // Call incoming data interceptor (if any)
         let sample = if let Some(ref interceptor) = self.in_interceptor {
             interceptor(sample)
@@ -295,7 +295,7 @@ impl StorageService {
                         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
                 log::trace!(
-                    "Sample `{}` identified as neded processing for key {}",
+                    "Sample `{:?}` identified as neded processing for key {}",
                     sample,
                     k
                 );
@@ -306,15 +306,19 @@ impl StorageService {
                     .await
                 {
                     Some(overriding_update) => {
-                        let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), overriding_update.data.value)
-                                .with_timestamp(overriding_update.data.timestamp);
+                        let Value {
+                            payload, encoding, ..
+                        } = overriding_update.data.value;
+                        let mut sample_to_store = Sample::new(KeyExpr::from(k.clone()), payload)
+                            .with_encoding(encoding)
+                            .with_timestamp(overriding_update.data.timestamp);
                         sample_to_store.kind = overriding_update.kind;
                         sample_to_store
                     }
                     None => {
                         let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), sample.value.clone())
+                            Sample::new(KeyExpr::from(k.clone()), sample.payload.clone())
+                                .with_encoding(sample.encoding.clone())
                                 .with_timestamp(sample.timestamp.unwrap());
                         sample_to_store.kind = sample.kind;
                         sample_to_store
@@ -333,7 +337,8 @@ impl StorageService {
                     storage
                         .put(
                             stripped_key,
-                            sample_to_store.value.clone(),
+                            Value::new(sample_to_store.payload.clone())
+                                .with_encoding(sample_to_store.encoding.clone()),
                             sample_to_store.timestamp.unwrap(),
                         )
                         .await
@@ -397,7 +402,7 @@ impl StorageService {
             Update {
                 kind: sample.kind,
                 data: StoredData {
-                    value: sample.value,
+                    value: Value::new(sample.payload).with_encoding(sample.encoding),
                     timestamp: sample.timestamp.unwrap(),
                 },
             },
@@ -515,7 +520,11 @@ impl StorageService {
                 match storage.get(stripped_key, q.parameters()).await {
                     Ok(stored_data) => {
                         for entry in stored_data {
-                            let sample = Sample::new(key.clone(), entry.value)
+                            let Value {
+                                payload, encoding, ..
+                            } = entry.value;
+                            let sample = Sample::new(key.clone(), payload)
+                                .with_encoding(encoding)
                                 .with_timestamp(entry.timestamp);
                             // apply outgoing interceptor on results
                             let sample = if let Some(ref interceptor) = self.out_interceptor {
@@ -523,7 +532,7 @@ impl StorageService {
                             } else {
                                 sample
                             };
-                            if let Err(e) = q.reply(Ok(sample)).res().await {
+                            if let Err(e) = q.reply_sample(sample).res().await {
                                 log::warn!(
                                     "Storage '{}' raised an error replying a query: {}",
                                     self.name,
@@ -549,7 +558,11 @@ impl StorageService {
             match storage.get(stripped_key, q.parameters()).await {
                 Ok(stored_data) => {
                     for entry in stored_data {
-                        let sample = Sample::new(q.key_expr().clone(), entry.value)
+                        let Value {
+                            payload, encoding, ..
+                        } = entry.value;
+                        let sample = Sample::new(q.key_expr().clone(), payload)
+                            .with_encoding(encoding)
                             .with_timestamp(entry.timestamp);
                         // apply outgoing interceptor on results
                         let sample = if let Some(ref interceptor) = self.out_interceptor {
@@ -557,7 +570,7 @@ impl StorageService {
                         } else {
                             sample
                         };
-                        if let Err(e) = q.reply(Ok(sample)).res().await {
+                        if let Err(e) = q.reply_sample(sample).res().await {
                             log::warn!(
                                 "Storage '{}' raised an error replying a query: {}",
                                 self.name,
@@ -570,7 +583,7 @@ impl StorageService {
                     let err_message =
                         format!("Storage '{}' raised an error on query: {}", self.name, e);
                     log::warn!("{}", err_message);
-                    if let Err(e) = q.reply(Err(err_message.into())).res().await {
+                    if let Err(e) = q.reply_err(err_message).res().await {
                         log::warn!(
                             "Storage '{}' raised an error replying a query: {}",
                             self.name,
@@ -667,7 +680,7 @@ impl StorageService {
                         self.process_sample(sample).await;
                     }
                     Err(e) => log::warn!(
-                        "Storage '{}' received an error to align query: {}",
+                        "Storage '{}' received an error to align query: {:?}",
                         self.name,
                         e
                     ),
@@ -688,15 +701,15 @@ fn serialize_update(update: &Update) -> String {
 }
 
 fn construct_update(data: String) -> Update {
-    let result: (String, String, String, Vec<&[u8]>) = serde_json::from_str(&data).unwrap();
+    let result: (String, String, String, Vec<&[u8]>) = serde_json::from_str(&data).unwrap(); // @TODO: remove the unwrap()
     let mut payload = ZBuf::default();
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).encoding(Encoding::from(result.2));
+    let value = Value::new(payload).with_encoding(result.2);
     let data = StoredData {
         value,
-        timestamp: Timestamp::from_str(&result.1).unwrap(),
+        timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()
     };
     let kind = if result.0.eq(&(SampleKind::Put).to_string()) {
         SampleKind::Put

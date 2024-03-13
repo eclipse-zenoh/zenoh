@@ -75,19 +75,19 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        reliability: Reliability::default(),
+        reliability: Reliability::DEFAULT,
         sn: TransportSn::MIN,
-        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::DEFAULT,
     };
 
     let data = Push {
         wire_expr: WireExpr::empty(),
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -121,19 +121,19 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        reliability: Reliability::default(),
+        reliability: Reliability::DEFAULT,
         sn: TransportSn::MIN,
-        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::DEFAULT,
     };
 
     let data = Push {
         wire_expr: WireExpr::empty(),
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -162,19 +162,19 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        reliability: Reliability::default(),
+        reliability: Reliability::DEFAULT,
         sn: TransportSn::MIN,
-        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::DEFAULT,
     };
 
     let data = Push {
         wire_expr: WireExpr::empty(),
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -210,12 +210,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let data = Push {
         wire_expr: WireExpr::empty(),
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -238,12 +238,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let data = Push {
         wire_expr: WireExpr::empty(),
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -277,12 +277,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let data = Push {
         wire_expr: WireExpr::empty(),
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -305,7 +305,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             let mut idx = 0;
             while idx < zslice.len() {
                 let len = (zslice.len() - idx).min(chunk);
-                zbuf.push_zslice(ZSlice::make(buff.clone(), idx, idx + len).unwrap());
+                zbuf.push_zslice(ZSlice::new(buff.clone(), idx, idx + len).unwrap());
                 idx += len;
             }
 

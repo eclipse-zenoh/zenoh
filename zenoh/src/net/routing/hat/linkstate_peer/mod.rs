@@ -47,12 +47,16 @@ use async_std::task::JoinHandle;
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{atomic::AtomicU32, Arc},
 };
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
-    network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE, Oam},
+    network::{
+        declare::{queryable::ext::QueryableInfo, QueryableId, SubscriberId},
+        oam::id::OAM_LINKSTATE,
+        Oam,
+    },
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
@@ -126,7 +130,6 @@ impl HatTables {
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        log::trace!("Schedule computations");
         if self.peers_trees_task.is_none() {
             let task = Some(async_std::task::spawn(async move {
                 async_std::task::sleep(std::time::Duration::from_millis(
@@ -142,7 +145,6 @@ impl HatTables {
                 pubsub::pubsub_tree_change(&mut tables, &new_childs);
                 queries::queries_tree_change(&mut tables, &new_childs);
 
-                log::trace!("Computations completed");
                 hat_mut!(tables).peers_trees_task = None;
             }));
             self.peers_trees_task = task;
@@ -248,7 +250,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for mut res in face
+        for (_id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -276,7 +278,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for mut res in face
+        for (_, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -471,20 +473,22 @@ impl HatContext {
 
 struct HatFace {
     link_id: usize,
-    local_subs: HashSet<Arc<Resource>>,
-    remote_subs: HashSet<Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
-    remote_qabls: HashSet<Arc<Resource>>,
+    next_id: AtomicU32, // @TODO: manage rollover and uniqueness
+    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    remote_subs: HashMap<SubscriberId, Arc<Resource>>,
+    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfo)>,
+    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
 
 impl HatFace {
     fn new() -> Self {
         Self {
             link_id: 0,
-            local_subs: HashSet::new(),
-            remote_subs: HashSet::new(),
+            next_id: AtomicU32::new(0),
+            local_subs: HashMap::new(),
+            remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),
-            remote_qabls: HashSet::new(),
+            remote_qabls: HashMap::new(),
         }
     }
 }

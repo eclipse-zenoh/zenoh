@@ -18,6 +18,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
+use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
@@ -94,29 +95,43 @@ impl AlignQueryable {
                 for value in values {
                     match value {
                         AlignData::Interval(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .res()
+                                .await
+                                .unwrap();
                         }
                         AlignData::Subinterval(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .res()
+                                .await
+                                .unwrap();
                         }
                         AlignData::Content(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .res()
+                                .await
+                                .unwrap();
                         }
                         AlignData::Data(k, (v, ts)) => {
-                            let sample = Sample::new(k, v).with_timestamp(ts);
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(k, v.payload)
+                                .with_encoding(v.encoding)
+                                .with_timestamp(ts)
+                                .res()
+                                .await
+                                .unwrap();
                         }
                     }
                 }
@@ -165,7 +180,10 @@ impl AlignQueryable {
                         let entry = entry.unwrap();
                         result.push(AlignData::Data(
                             OwnedKeyExpr::from(entry.key_expr),
-                            (entry.value, each.timestamp),
+                            (
+                                Value::new(entry.payload).with_encoding(entry.encoding),
+                                each.timestamp,
+                            ),
                         ));
                     }
                 }
@@ -221,7 +239,7 @@ impl AlignQueryable {
                     log::trace!(
                         "[ALIGN QUERYABLE] Received ('{}': '{}')",
                         sample.key_expr.as_str(),
-                        sample.value
+                        StringOrBase64::from(sample.payload.clone())
                     );
                     if let Some(timestamp) = sample.timestamp {
                         match timestamp.cmp(&logentry.timestamp) {

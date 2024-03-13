@@ -34,8 +34,10 @@ pub struct ZBuf {
 
 impl ZBuf {
     #[must_use]
-    pub fn empty() -> Self {
-        Self::default()
+    pub const fn empty() -> Self {
+        Self {
+            slices: SingleOrVec::empty(),
+        }
     }
 
     pub fn clear(&mut self) {
@@ -72,6 +74,7 @@ impl ZBuf {
         }
         self.insert(start, replacement);
     }
+
     fn remove(&mut self, mut start: usize, mut end: usize) {
         assert!(start <= end);
         assert!(end <= self.len());
@@ -100,6 +103,7 @@ impl ZBuf {
         let drain_end = end_slice_idx + (end_slice.start >= end_slice.end) as usize;
         self.slices.drain(drain_start..drain_end);
     }
+
     fn insert(&mut self, mut at: usize, slice: &[u8]) {
         if slice.is_empty() {
             return;
@@ -206,6 +210,7 @@ where
         zbuf
     }
 }
+
 // Reader
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ZBufPos {
