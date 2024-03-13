@@ -73,11 +73,11 @@ fn queries() {
                 attachment.insert(&k, &k);
             }
             query
-                .reply(Ok(Sample::new(
+                .reply(
                     query.key_expr().clone(),
                     query.value().unwrap().payload.clone(),
                 )
-                .with_attachment(attachment)))
+                .with_attachment(attachment)
                 .res()
                 .unwrap();
         })

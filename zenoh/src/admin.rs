@@ -17,7 +17,7 @@ use crate::{
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
     sample::DataInfo,
-    Payload, Sample, Session, ZResult,
+    Payload, Session, ZResult,
 };
 use async_std::task;
 use std::{
@@ -71,7 +71,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
                     match Payload::try_from(value) {
                         Ok(zbuf) => {
-                            let _ = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync();
+                            let _ = query.reply(key_expr, zbuf).res_sync();
                         }
                         Err(e) => log::debug!("Admin query error: {}", e),
                     }
@@ -88,7 +88,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         if let Ok(value) = serde_json::value::to_value(link) {
                             match Payload::try_from(value) {
                                 Ok(zbuf) => {
-                                    let _ = query.reply(Ok(Sample::new(key_expr, zbuf))).res_sync();
+                                    let _ = query.reply(key_expr, zbuf).res_sync();
                                 }
                                 Err(e) => log::debug!("Admin query error: {}", e),
                             }

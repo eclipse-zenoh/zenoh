@@ -157,23 +157,28 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
                 c_msgs.fetch_add(1, Ordering::Relaxed);
                 match query.parameters() {
                     "ok_put" => {
-                        let mut rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                        rep.kind = SampleKind::Put;
                         task::block_on(async {
-                            ztimeout!(query.reply(Ok(rep)).res_async()).unwrap()
+                            ztimeout!(query
+                                .reply(
+                                    KeyExpr::try_from(key_expr).unwrap(),
+                                    vec![0u8; size].to_vec()
+                                )
+                                .res_async())
+                            .unwrap()
                         });
                     }
                     "ok_del" => {
-                        let mut rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                        rep.kind = SampleKind::Delete;
                         task::block_on(async {
-                            ztimeout!(query.reply(Ok(rep)).res_async()).unwrap()
+                            ztimeout!(query
+                                .reply_del(KeyExpr::try_from(key_expr).unwrap())
+                                .res_async())
+                            .unwrap()
                         });
                     }
                     "err" => {
                         let rep = Value::from(vec![0u8; size]);
                         task::block_on(async {
-                            ztimeout!(query.reply(Err(rep)).res_async()).unwrap()
+                            ztimeout!(query.reply_err(rep).res_async()).unwrap()
                         });
                     }
                     _ => panic!("Unknown query parameter"),

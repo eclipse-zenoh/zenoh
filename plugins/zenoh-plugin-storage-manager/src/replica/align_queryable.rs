@@ -95,34 +95,43 @@ impl AlignQueryable {
                 for value in values {
                     match value {
                         AlignData::Interval(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .res()
+                                .await
+                                .unwrap();
                         }
                         AlignData::Subinterval(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .res()
+                                .await
+                                .unwrap();
                         }
                         AlignData::Content(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .res()
+                                .await
+                                .unwrap();
                         }
                         AlignData::Data(k, (v, ts)) => {
-                            let Value {
-                                payload, encoding, ..
-                            } = v;
-                            let sample = Sample::new(k, payload)
-                                .with_encoding(encoding)
-                                .with_timestamp(ts);
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(k, v.payload)
+                                .with_encoding(v.encoding)
+                                .with_timestamp(ts)
+                                .res()
+                                .await
+                                .unwrap();
                         }
                     }
                 }

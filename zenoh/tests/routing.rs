@@ -115,12 +115,12 @@ impl Task {
             // The Queryable task keeps replying to requested messages until all checkpoints are finished.
             Self::Queryable(ke, payload_size) => {
                 let queryable = session.declare_queryable(ke).res_async().await?;
-                let sample = Sample::try_from(ke.clone(), vec![0u8; *payload_size])?;
+                let payload = vec![0u8; *payload_size];
 
                 loop {
                     futures::select! {
                         query = queryable.recv_async() => {
-                            query?.reply(Ok(sample.clone())).res_async().await?;
+                            query?.reply(KeyExpr::try_from(ke.to_owned())?, payload.clone()).res_async().await?;
                         },
 
                         _ = async_std::task::sleep(Duration::from_millis(100)).fuse() => {

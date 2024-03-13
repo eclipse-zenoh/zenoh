@@ -54,25 +54,28 @@ async fn main() {
                         println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), payload);
                     },
                 }
-                let reply = if send_errors.swap(false, Relaxed) {
+                if send_errors.swap(false, Relaxed) {
                     println!(
                         ">> [Queryable ] Replying (ERROR: '{}')",
                         value,
                     );
-                    Err(value.clone().into())
+                    query
+                        .reply_err(value.clone())
+                        .res()
+                        .await
+                        .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
                 } else {
                     println!(
                         ">> [Queryable ] Responding ('{}': '{}')",
                         key_expr.as_str(),
                         value,
                     );
-                    Ok(Sample::new(key_expr.clone(), value.clone()))
+                    query
+                        .reply(key_expr.clone(), value.clone())
+                        .res()
+                        .await
+                        .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
                 };
-                query
-                    .reply(reply)
-                    .res()
-                    .await
-                    .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
