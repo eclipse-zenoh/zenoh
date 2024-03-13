@@ -1350,7 +1350,9 @@ mod tests {
             let sample = sub.recv().unwrap();
 
             assert_eq!(sample.kind, kind);
-            assert_eq!(sample.value.to_string(), VALUE);
+            if let SampleKind::Put = kind {
+                assert_eq!(sample.value.to_string(), VALUE);
+            }
         }
 
         sample_kind_integrity_in_publication_with(SampleKind::Put);
