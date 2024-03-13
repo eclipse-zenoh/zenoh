@@ -22,7 +22,7 @@ use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_buffers::ZBuf;
@@ -133,7 +133,6 @@ fn register_client_queryable(
                 remote_expr_id: None,
                 subs: None,
                 qabl: None,
-                last_values: HashMap::new(),
                 in_interceptor_cache: None,
                 e_interceptor_cache: None,
             })

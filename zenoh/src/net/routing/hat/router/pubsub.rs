@@ -279,7 +279,6 @@ fn register_client_subscription(
                         remote_expr_id: None,
                         subs: Some(*sub_info),
                         qabl: None,
-                        last_values: HashMap::new(),
                         in_interceptor_cache: None,
                         e_interceptor_cache: None,
                     }),
