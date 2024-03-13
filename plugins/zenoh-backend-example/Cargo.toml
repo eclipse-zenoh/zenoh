@@ -20,7 +20,7 @@ edition = { workspace = true }
 publish = false
 
 [features]
-default = ["no_mangle"]
+default = ["no_mangle", "zenoh/default"]
 no_mangle = []
 
 [lib]

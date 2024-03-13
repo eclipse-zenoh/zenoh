@@ -41,9 +41,9 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-unix-named-pipe = "=0.2.0"
+unix-named-pipe = "0.2.0"
 nix = { workspace = true }
-filepath = "=0.1.2"
+filepath = "0.1.2"
 
 [target.'cfg(all(not(target_os="macos"), unix))'.dependencies]
-advisory-lock = "=0.3.0"
+advisory-lock = "0.3.0"

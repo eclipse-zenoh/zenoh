@@ -12,13 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use alloc::{vec, vec::Vec};
+use alloc::vec;
 use core::{
     cmp::PartialEq,
     fmt, iter,
     ops::{Index, IndexMut, RangeBounds},
     ptr, slice,
 };
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 #[derive(Clone, Eq)]
 enum SingleOrVecInner<T> {

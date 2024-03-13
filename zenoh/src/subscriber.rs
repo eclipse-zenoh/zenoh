@@ -51,7 +51,7 @@ impl fmt::Debug for SubscriberState {
 /// A subscriber that provides data through a callback.
 ///
 /// CallbackSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function
+/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
 /// and the [`callback`](SubscriberBuilder::callback) function
 /// of the resulting builder.
 ///
@@ -83,7 +83,7 @@ pub(crate) struct SubscriberInner<'a> {
 /// CallbackPullSubscribers only provide data when explicitely pulled by the
 /// application with the [`pull`](CallbackPullSubscriber::pull) function.
 /// CallbackPullSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function,
+/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
 /// the [`callback`](SubscriberBuilder::callback) function
 /// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
 /// of the resulting builder.
@@ -644,7 +644,7 @@ where
 /// A subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
 ///
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function
+/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
 /// and the [`with`](SubscriberBuilder::with) function
 /// of the resulting builder.
 ///
@@ -680,7 +680,7 @@ pub struct Subscriber<'a, Receiver> {
 /// PullSubscribers only provide data when explicitely pulled by the
 /// application with the [`pull`](PullSubscriber::pull) function.
 /// PullSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function,
+/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
 /// the [`with`](SubscriberBuilder::with) function
 /// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
 /// of the resulting builder.
