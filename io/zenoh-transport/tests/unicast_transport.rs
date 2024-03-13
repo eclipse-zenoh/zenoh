@@ -468,11 +468,11 @@ async fn test_transport(
         wire_expr: "test".into(),
         ext_qos: QoSType::new(channel.priority, cctrl, false),
         ext_tstamp: None,
-        ext_nodeid: NodeIdType::default(),
+        ext_nodeid: NodeIdType::DEFAULT,
         payload: Put {
             payload: vec![0u8; msg_size].into(),
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -614,7 +614,7 @@ fn transport_unicast_tcp_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
@@ -644,7 +644,7 @@ fn transport_unicast_tcp_only_with_lowlatency_transport() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
@@ -677,7 +677,7 @@ fn transport_unicast_udp_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -707,7 +707,7 @@ fn transport_unicast_udp_only_with_lowlatency_transport() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -739,7 +739,7 @@ fn transport_unicast_unix_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -773,7 +773,7 @@ fn transport_unicast_unix_only_with_lowlatency_transport() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -808,11 +808,11 @@ fn transport_unicast_ws_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -846,11 +846,11 @@ fn transport_unicast_ws_only_with_lowlatency_transport() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -887,7 +887,7 @@ fn transport_unicast_unixpipe_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
@@ -921,7 +921,7 @@ fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
@@ -956,7 +956,7 @@ fn transport_unicast_tcp_udp() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -996,7 +996,7 @@ fn transport_unicast_tcp_unix() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -1038,7 +1038,7 @@ fn transport_unicast_udp_unix() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -1083,7 +1083,7 @@ fn transport_unicast_tcp_udp_unix() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -1130,11 +1130,11 @@ fn transport_unicast_tls_only_server() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -1184,11 +1184,11 @@ fn transport_unicast_quic_only_server() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -1256,11 +1256,11 @@ fn transport_unicast_tls_only_mutual_success() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -1323,11 +1323,11 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -1403,11 +1403,11 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {

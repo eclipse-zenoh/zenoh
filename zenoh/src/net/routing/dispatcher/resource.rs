@@ -471,9 +471,9 @@ impl Resource {
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            ext_qos: ext::QoSType::declare_default(),
+                            ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                                 id: expr_id,
                                 wire_expr: nonwild_prefix.expr().into(),
@@ -667,7 +667,11 @@ pub fn register_expr(
                 let mut fullexpr = prefix.expr();
                 fullexpr.push_str(expr.suffix.as_ref());
                 if res.expr() != fullexpr {
-                    log::error!("Resource {} remapped. Remapping unsupported!", expr_id);
+                    log::error!(
+                        "{} Resource {} remapped. Remapping unsupported!",
+                        face,
+                        expr_id
+                    );
                 }
             }
             None => {
@@ -718,7 +722,11 @@ pub fn register_expr(
                 drop(wtables);
             }
         },
-        None => log::error!("Declare resource with unknown scope {}!", expr.scope),
+        None => log::error!(
+            "{} Declare resource with unknown scope {}!",
+            face,
+            expr.scope
+        ),
     }
 }
 
@@ -726,7 +734,7 @@ pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: 
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
-        None => log::error!("Undeclare unknown resource!"),
+        None => log::error!("{} Undeclare unknown resource!", face),
     }
     drop(wtables);
 }

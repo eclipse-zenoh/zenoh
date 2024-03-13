@@ -116,7 +116,7 @@ impl RoutingContext<NetworkMessage> {
                 DeclareBody::UndeclareQueryable(m) => Some(&m.ext_wire_expr.wire_expr),
                 DeclareBody::DeclareToken(m) => Some(&m.wire_expr),
                 DeclareBody::UndeclareToken(m) => Some(&m.ext_wire_expr.wire_expr),
-                DeclareBody::DeclareInterest(m) => Some(&m.wire_expr),
+                DeclareBody::DeclareInterest(m) => m.wire_expr.as_ref(),
                 DeclareBody::FinalInterest(_) => None,
                 DeclareBody::UndeclareInterest(m) => Some(&m.ext_wire_expr.wire_expr),
             },

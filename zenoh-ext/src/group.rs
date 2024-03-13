@@ -237,11 +237,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 
     while let Ok(query) = queryable.recv_async().await {
         log::trace!("Serving query for: {}", &qres);
-        query
-            .reply(Ok(Sample::new(qres.clone(), buf.clone())))
-            .res()
-            .await
-            .unwrap();
+        query.reply(qres.clone(), buf.clone()).res().await.unwrap();
     }
 }
 
@@ -252,7 +248,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
         .await
         .unwrap();
     while let Ok(s) = sub.recv_async().await {
-        match bincode::deserialize::<GroupNetEvent>(&(s.value.payload.contiguous())) {
+        match bincode::deserialize::<GroupNetEvent>(&(s.payload.contiguous())) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
                     log::debug!("Member join: {:?}", &je.member);
@@ -342,7 +338,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                             }
                                         }
                                         Err(e) => {
-                                            log::warn!("Error received: {}", e);
+                                            log::warn!("Error received: {:?}", e);
                                         }
                                     }
                                 }

@@ -53,8 +53,8 @@ async fn main() {
         select!(
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
-                println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), sample.value);
+                let payload = sample.payload.deserialize::<String>().unwrap_or_else(|e| format!("{}", e));
+                println!(">> [Subscriber] Received {} ('{}': '{}')", sample.kind, sample.key_expr.as_str(),payload);
                 if sample.kind == SampleKind::Delete {
                     stored.remove(&sample.key_expr.to_string());
                 } else {
@@ -67,7 +67,7 @@ async fn main() {
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
                     if query.selector().key_expr.intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
-                        query.reply(Ok(sample.clone())).res().await.unwrap();
+                        query.reply(sample.key_expr.clone(), sample.payload.clone()).res().await.unwrap();
                     }
                 }
             },

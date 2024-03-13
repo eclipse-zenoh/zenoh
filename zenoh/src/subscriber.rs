@@ -13,9 +13,11 @@
 //
 
 //! Subscribing primitives.
-use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::handlers::{locked, Callback, DefaultHandler, IntoCallbackReceiverPair};
+use crate::key_expr::KeyExpr;
 use crate::prelude::Locality;
-use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
+use crate::sample::Sample;
+use crate::Id;
 use crate::Undeclarable;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
@@ -23,16 +25,16 @@ use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::network::declare::{subscriber::ext::SubscriberInfo, Mode};
-
-/// The subscription mode.
-pub use zenoh_protocol::core::SubMode;
 
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
+    pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,
@@ -65,7 +67,7 @@ impl fmt::Debug for SubscriberState {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload) })
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -98,7 +100,7 @@ pub(crate) struct SubscriberInner<'a> {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
 ///     .pull_mode()
 ///     .res()
 ///     .await
@@ -117,12 +119,11 @@ impl<'a> PullSubscriberInner<'a> {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::r#async::*;
-    /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
     ///     .pull_mode()
     ///     .res()
     ///     .await
@@ -252,12 +253,6 @@ impl Drop for SubscriberInner<'_> {
 #[derive(Debug, Clone, Copy)]
 pub struct PullMode;
 
-impl From<PullMode> for SubMode {
-    fn from(_: PullMode) -> Self {
-        SubMode::Pull
-    }
-}
-
 impl From<PullMode> for Mode {
     fn from(_: PullMode) -> Self {
         Mode::Pull
@@ -268,12 +263,6 @@ impl From<PullMode> for Mode {
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct PushMode;
-
-impl From<PushMode> for SubMode {
-    fn from(_: PushMode) -> Self {
-        SubMode::Push
-    }
-}
 
 impl From<PushMode> for Mode {
     fn from(_: PushMode) -> Self {
@@ -343,7 +332,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -418,7 +407,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {}", sample.key_expr, sample.value);
+    ///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
     /// }
     /// # })
     /// ```
@@ -647,7 +636,7 @@ where
 ///     .await
 ///     .unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
-///     println!("Received: {} {}", sample.key_expr, sample.value);
+///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
 /// }
 /// # })
 /// ```
@@ -712,7 +701,6 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::r#async::*;
-    /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
@@ -756,6 +744,29 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
 }
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {
+    /// Returns the [`EntityGlobalId`] of this Subscriber.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let subscriber_id = subscriber.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.subscriber.session.zid(),
+            eid: self.subscriber.state.id,
+        }
+    }
+
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.subscriber.state.key_expr

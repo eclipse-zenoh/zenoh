@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// use super::properties::EstablishmentProperties;
 use crate::unicast::establishment::ext;
 use std::convert::TryFrom;
 use zenoh_buffers::{

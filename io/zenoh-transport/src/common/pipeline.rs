@@ -517,7 +517,7 @@ impl TransmissionPipeline {
         let mut stage_in = vec![];
         let mut stage_out = vec![];
 
-        let default_queue_size = [config.queue_size[Priority::default() as usize]];
+        let default_queue_size = [config.queue_size[Priority::DEFAULT as usize]];
         let size_iter = if priority.len() == 1 {
             default_queue_size.iter()
         } else {
@@ -606,7 +606,7 @@ impl TransmissionPipelineProducer {
             let priority = msg.priority();
             (priority as usize, priority)
         } else {
-            (0, Priority::default())
+            (0, Priority::DEFAULT)
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
@@ -755,10 +755,10 @@ mod tests {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
+                ext_nodeid: ext::NodeIdType::DEFAULT,
                 payload: PushBody::Put(Put {
                     timestamp: None,
-                    encoding: Encoding::default(),
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -885,10 +885,10 @@ mod tests {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
+                ext_nodeid: ext::NodeIdType::DEFAULT,
                 payload: PushBody::Put(Put {
                     timestamp: None,
-                    encoding: Encoding::default(),
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -997,10 +997,10 @@ mod tests {
                             false,
                         ),
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
                         payload: PushBody::Put(Put {
                             timestamp: None,
-                            encoding: Encoding::default(),
+                            encoding: Encoding::empty(),
                             ext_sinfo: None,
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,

@@ -239,7 +239,7 @@ async fn rx_task_stream(
         transport.stats.inc_rx_bytes(2 + bytes); // Account for the batch len encoding (16 bits)
 
         // Deserialize all the messages from the current ZBuf
-        let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
+        let zslice = ZSlice::new(Arc::new(buffer), 0, bytes).unwrap();
         transport.read_messages(zslice, &link.link).await?;
     }
 }
@@ -274,7 +274,7 @@ async fn rx_task_dgram(
         transport.stats.inc_rx_bytes(bytes);
 
         // Deserialize all the messages from the current ZBuf
-        let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
+        let zslice = ZSlice::new(Arc::new(buffer), 0, bytes).unwrap();
         transport.read_messages(zslice, &link.link).await?;
     }
 }

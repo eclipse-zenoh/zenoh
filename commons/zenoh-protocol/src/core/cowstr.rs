@@ -21,7 +21,7 @@ enum CowStrInner<'a> {
 }
 pub struct CowStr<'a>(CowStrInner<'a>);
 impl<'a> CowStr<'a> {
-    pub(crate) fn borrowed(s: &'a str) -> Self {
+    pub(crate) const fn borrowed(s: &'a str) -> Self {
         Self(CowStrInner::Borrowed(s))
     }
     pub fn as_str(&self) -> &str {

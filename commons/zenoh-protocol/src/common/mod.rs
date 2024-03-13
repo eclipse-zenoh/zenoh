@@ -19,21 +19,6 @@ pub use extension::*;
 /*************************************/
 // Inner Message IDs
 pub mod imsg {
-    pub mod id {
-        // Zenoh Messages
-        pub const DECLARE: u8 = 0x0b;
-        pub const DATA: u8 = 0x0c;
-        pub const QUERY: u8 = 0x0d;
-        pub const PULL: u8 = 0x0e;
-        pub const UNIT: u8 = 0x0f;
-        pub const LINK_STATE_LIST: u8 = 0x10;
-
-        // Message decorators
-        pub const PRIORITY: u8 = 0x1c;
-        pub const ROUTING_CONTEXT: u8 = 0x1d;
-        pub const REPLY_CONTEXT: u8 = 0x1e;
-    }
-
     // Header mask
     pub const HEADER_BITS: u8 = 5;
     pub const HEADER_MASK: u8 = !(0xff << HEADER_BITS);

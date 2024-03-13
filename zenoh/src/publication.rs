@@ -13,24 +13,25 @@
 //
 
 //! Publishing primitives.
-#[zenoh_macros::unstable]
-use crate::handlers::Callback;
-#[zenoh_macros::unstable]
-use crate::handlers::DefaultHandler;
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
-use crate::sample::DataInfo;
-use crate::sample::QoS;
-use crate::Encoding;
+use crate::sample::{DataInfo, QoS, Sample, SampleKind};
 use crate::SessionRef;
 use crate::Undeclarable;
+#[cfg(feature = "unstable")]
+use crate::{
+    handlers::{Callback, DefaultHandler, IntoCallbackReceiverPair},
+    Id,
+};
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
+#[zenoh_macros::unstable]
+use zenoh_protocol::zenoh::ext::SourceInfoType;
 use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::zenoh::Put;
@@ -67,8 +68,8 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
-///     .put("key/expression", "value")
-///     .encoding(KnownEncoding::TextPlain)
+///     .put("key/expression", "payload")
+///     .with_encoding(Encoding::TEXT_PLAIN)
 ///     .congestion_control(CongestionControl::Block)
 ///     .res()
 ///     .await
@@ -79,22 +80,14 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 #[derive(Debug, Clone)]
 pub struct PutBuilder<'a, 'b> {
     pub(crate) publisher: PublisherBuilder<'a, 'b>,
-    pub(crate) value: Value,
+    pub(crate) payload: Payload,
     pub(crate) kind: SampleKind,
+    pub(crate) encoding: Encoding,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
 
 impl PutBuilder<'_, '_> {
-    /// Change the encoding of the written data.
-    #[inline]
-    pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
-    where
-        IntoEncoding: Into<Encoding>,
-    {
-        self.value.encoding = encoding.into();
-        self
-    }
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
@@ -118,12 +111,18 @@ impl PutBuilder<'_, '_> {
         self
     }
 
-    pub fn kind(mut self, kind: SampleKind) -> Self {
-        self.kind = kind;
+    /// Set the [`Encoding`] of the written data.
+    #[inline]
+    pub fn with_encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
+    where
+        IntoEncoding: Into<Encoding>,
+    {
+        self.encoding = encoding.into();
         self
     }
 
     #[zenoh_macros::unstable]
+    /// Attach user-provided data to the written data.
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self
@@ -147,6 +146,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
 
         let publisher = Publisher {
             session,
+            #[cfg(feature = "unstable")]
+            eid: 0, // This is a one shot Publisher
             key_expr: key_expr?,
             congestion_control,
             priority,
@@ -155,8 +156,11 @@ impl SyncResolve for PutBuilder<'_, '_> {
 
         resolve_put(
             &publisher,
-            self.value,
+            self.payload,
             self.kind,
+            self.encoding,
+            #[cfg(feature = "unstable")]
+            None,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
@@ -239,6 +243,8 @@ impl std::fmt::Debug for PublisherRef<'_> {
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
+    #[cfg(feature = "unstable")]
+    pub(crate) eid: EntityId,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
@@ -246,6 +252,29 @@ pub struct Publisher<'a> {
 }
 
 impl<'a> Publisher<'a> {
+    /// Returns the [`EntityGlobalId`] of this Publisher.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let publisher_id = publisher.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.session.zid(),
+            eid: self.eid,
+        }
+    }
+
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
@@ -308,11 +337,14 @@ impl<'a> Publisher<'a> {
         std::sync::Arc::new(self)
     }
 
-    fn _write(&self, kind: SampleKind, value: Value) -> Publication {
+    fn _write(&self, kind: SampleKind, payload: Payload) -> Publication {
         Publication {
             publisher: self,
-            value,
+            payload,
             kind,
+            encoding: Encoding::ZENOH_BYTES,
+            #[cfg(feature = "unstable")]
+            source_info: None,
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -331,11 +363,11 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     #[inline]
-    pub fn put<IntoValue>(&self, value: IntoValue) -> Publication
+    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> Publication
     where
-        IntoValue: Into<Value>,
+        IntoPayload: Into<Payload>,
     {
-        self._write(SampleKind::Put, value.into())
+        self._write(SampleKind::Put, payload.into())
     }
 
     /// Delete data.
@@ -351,7 +383,7 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     pub fn delete(&self) -> Publication {
-        self._write(SampleKind::Delete, Value::empty())
+        self._write(SampleKind::Delete, Payload::empty())
     }
 
     /// Return the [`MatchingStatus`] of the publisher.
@@ -578,16 +610,45 @@ impl Drop for Publisher<'_> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
-    value: Value,
+    payload: Payload,
     kind: SampleKind,
+    encoding: Encoding,
+    #[cfg(feature = "unstable")]
+    pub(crate) source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
 
 impl<'a> Publication<'a> {
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
+    }
+
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
+        self
+    }
+
+    /// Send data with the given [`SourceInfo`].
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("Value").with_source_info(SourceInfo {
+    ///     source_id: Some(publisher.id()),
+    ///     source_sn: Some(0),
+    /// }).res().await.unwrap();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.source_info = Some(source_info);
         self
     }
 }
@@ -600,8 +661,11 @@ impl SyncResolve for Publication<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         resolve_put(
             self.publisher,
-            self.value,
+            self.payload,
             self.kind,
+            self.encoding,
+            #[cfg(feature = "unstable")]
+            self.source_info,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
@@ -616,10 +680,7 @@ impl AsyncResolve for Publication<'_> {
     }
 }
 
-impl<'a, IntoValue> Sink<IntoValue> for Publisher<'a>
-where
-    IntoValue: Into<Value>,
-{
+impl<'a> Sink<Sample> for Publisher<'a> {
     type Error = Error;
 
     #[inline]
@@ -628,8 +689,18 @@ where
     }
 
     #[inline]
-    fn start_send(self: Pin<&mut Self>, item: IntoValue) -> Result<(), Self::Error> {
-        self.put(item.into()).res_sync()
+    fn start_send(self: Pin<&mut Self>, item: Sample) -> Result<(), Self::Error> {
+        Publication {
+            publisher: &self,
+            payload: item.payload,
+            kind: item.kind,
+            encoding: item.encoding,
+            #[cfg(feature = "unstable")]
+            source_info: None,
+            #[cfg(feature = "unstable")]
+            attachment: item.attachment,
+        }
+        .res_sync()
     }
 
     #[inline]
@@ -750,8 +821,12 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
         self.session
             .declare_publication_intent(key_expr.clone())
             .res_sync()?;
+        #[cfg(feature = "unstable")]
+        let eid = self.session.runtime.next_id();
         let publisher = Publisher {
             session: self.session,
+            #[cfg(feature = "unstable")]
+            eid,
             key_expr,
             congestion_control: self.congestion_control,
             priority: self.priority,
@@ -772,8 +847,10 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
 
 fn resolve_put(
     publisher: &Publisher<'_>,
-    value: Value,
+    payload: Payload,
     kind: SampleKind,
+    encoding: Encoding,
+    #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")] attachment: Option<Attachment>,
 ) -> ZResult<()> {
     log::trace!("write({:?}, [...])", &publisher.key_expr);
@@ -793,7 +870,7 @@ fn resolve_put(
                 false,
             ),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: match kind {
                 SampleKind::Put => {
                     #[allow(unused_mut)]
@@ -806,13 +883,19 @@ fn resolve_put(
                     }
                     PushBody::Put(Put {
                         timestamp,
-                        encoding: value.encoding.clone(),
+                        encoding: encoding.clone().into(),
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.map(|s| SourceInfoType {
+                            id: s.source_id.unwrap_or_default(),
+                            sn: s.source_sn.unwrap_or_default() as u32,
+                        }),
+                        #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
                         ext_attachment,
                         ext_unknown: vec![],
-                        payload: value.payload.clone(),
+                        payload: payload.clone().into(),
                     })
                 }
                 SampleKind::Delete => {
@@ -826,6 +909,12 @@ fn resolve_put(
                     }
                     PushBody::Del(Del {
                         timestamp,
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.map(|s| SourceInfoType {
+                            id: s.source_id.unwrap_or_default(),
+                            sn: s.source_sn.unwrap_or_default() as u32,
+                        }),
+                        #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         ext_attachment,
                         ext_unknown: vec![],
@@ -837,7 +926,7 @@ fn resolve_put(
     if publisher.destination != Locality::Remote {
         let data_info = DataInfo {
             kind,
-            encoding: Some(value.encoding),
+            encoding: Some(encoding),
             timestamp,
             source_id: None,
             source_sn: None,
@@ -852,7 +941,7 @@ fn resolve_put(
             true,
             &publisher.key_expr.to_wire(&publisher.session),
             Some(data_info),
-            value.payload,
+            payload.into(),
             #[cfg(feature = "unstable")]
             attachment,
         );
@@ -875,6 +964,8 @@ pub enum Priority {
 }
 
 impl Priority {
+    /// Default
+    pub const DEFAULT: Self = Self::Data;
     /// The lowest Priority
     pub const MIN: Self = Self::Background;
     /// The highest Priority
@@ -1333,7 +1424,6 @@ mod tests {
     #[test]
     fn sample_kind_integrity_in_publication() {
         use crate::{open, prelude::sync::*};
-        use zenoh_protocol::core::SampleKind;
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/publication";
         const VALUE: &str = "zenoh";
@@ -1351,7 +1441,7 @@ mod tests {
 
             assert_eq!(sample.kind, kind);
             if let SampleKind::Put = kind {
-                assert_eq!(sample.value.to_string(), VALUE);
+                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
             }
         }
 
@@ -1362,7 +1452,6 @@ mod tests {
     #[test]
     fn sample_kind_integrity_in_put_builder() {
         use crate::{open, prelude::sync::*};
-        use zenoh_protocol::core::SampleKind;
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/put_builder";
         const VALUE: &str = "zenoh";
@@ -1379,7 +1468,7 @@ mod tests {
 
             assert_eq!(sample.kind, kind);
             if let SampleKind::Put = kind {
-                assert_eq!(sample.value.to_string(), VALUE);
+                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
             }
         }
 

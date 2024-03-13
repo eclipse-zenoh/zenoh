@@ -297,13 +297,13 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         // Create the message to send
         let message: NetworkMessage = Push {
             wire_expr: "test".into(),
-            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: NodeIdType::default(),
+            ext_nodeid: NodeIdType::DEFAULT,
             payload: Put {
                 payload: vec![0u8; MSG_SIZE].into(),
                 timestamp: None,
-                encoding: Encoding::default(),
+                encoding: Encoding::empty(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
