@@ -27,7 +27,7 @@ use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::network::declare::{subscriber::ext::SubscriberInfo, Mode};
+use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
 
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;
@@ -168,12 +168,6 @@ impl Drop for SubscriberInner<'_> {
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct PushMode;
-
-impl From<PushMode> for Mode {
-    fn from(_: PushMode) -> Self {
-        Mode::Push
-    }
-}
 
 /// A builder for initializing a [`FlumeSubscriber`].
 ///
@@ -417,7 +411,6 @@ where
                 callback,
                 &SubscriberInfo {
                     reliability: self.reliability,
-                    mode: self.mode.into(),
                 },
             )
             .map(|sub_state| Subscriber {

@@ -26,7 +26,6 @@ use zenoh_protocol::core::{
     key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::declare::Mode;
 use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareKeyExpr};
 use zenoh_protocol::zenoh::{PushBody, Put};
 
@@ -59,7 +58,6 @@ fn base_test() {
 
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable,
-        mode: Mode::Push,
     };
 
     declare_subscription(
@@ -186,7 +184,6 @@ fn multisub_test() {
     // --------------
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable,
-        mode: Mode::Push,
     };
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
@@ -305,7 +302,6 @@ fn clean_test() {
 
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable,
-        mode: Mode::Push,
     };
 
     declare_subscription(
@@ -570,7 +566,6 @@ fn client_test() {
 
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable,
-        mode: Mode::Push,
     };
 
     let primitives0 = Arc::new(ClientPrimitives::new());
