@@ -11,12 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
-use futures::prelude::*;
-use futures::select;
-use std::sync::atomic::Ordering::Relaxed;
-use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
@@ -27,7 +22,6 @@ async fn main() {
     env_logger::init();
 
     let (config, key_expr, value, complete) = parse_args();
-    let send_errors = std::sync::atomic::AtomicBool::new(false);
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
@@ -40,47 +34,27 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("Enter 'q' to quit, 'e' to reply an error to next query...");
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
-    loop {
-        select!(
-            query = queryable.recv_async() => {
-                let query = query.unwrap();
-                match query.value() {
-                    None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-                    Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), value),
-                }
-                let reply = if send_errors.swap(false, Relaxed) {
-                    println!(
-                        ">> [Queryable ] Replying (ERROR: '{}')",
-                        value,
-                    );
-                    Err(value.clone().into())
-                } else {
-                    println!(
-                        ">> [Queryable ] Responding ('{}': '{}')",
-                        key_expr.as_str(),
-                        value,
-                    );
-                    Ok(Sample::new(key_expr.clone(), value.clone()))
-                };
-                query
-                    .reply(reply)
-                    .res()
-                    .await
-                    .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
-            },
-
-            _ = stdin.read_exact(&mut input).fuse() => {
-                match input[0] {
-                    b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
-                    b'e' => send_errors.store(true, Relaxed),
-                    _ => (),
-                }
-            }
+    println!("Press CTRL-C to quit...");
+    while let Ok(query) = queryable.recv_async().await {
+        match query.value() {
+            None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
+            Some(value) => println!(
+                ">> [Queryable ] Received Query '{}' with value '{}'",
+                query.selector(),
+                value
+            ),
+        }
+        println!(
+            ">> [Queryable ] Responding ('{}': '{}')",
+            key_expr.as_str(),
+            value,
         );
+        let reply = Ok(Sample::new(key_expr.clone(), value.clone()));
+        query
+            .reply(reply)
+            .res()
+            .await
+            .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
     }
 }
 
