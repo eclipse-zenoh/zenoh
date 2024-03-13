@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use futures::select;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
@@ -37,13 +36,12 @@ async fn main() {
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Press CTRL-C to quit...");
-    loop {
-        select!(
-            sample = subscriber.recv_async() => {
-                let sample = sample.unwrap();
-                println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), sample.value);
-            }
+    while let Ok(sample) = subscriber.recv_async().await {
+        println!(
+            ">> [Subscriber] Received {} ('{}': '{}')",
+            sample.kind,
+            sample.key_expr.as_str(),
+            sample.value
         );
     }
 }

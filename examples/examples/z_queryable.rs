@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use futures::select;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
@@ -36,27 +35,26 @@ async fn main() {
         .unwrap();
 
     println!("Press CTRL-C to quit...");
-    loop {
-        select!(
-            query = queryable.recv_async() => {
-                let query = query.unwrap();
-                match query.value() {
-                    None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-                    Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), value),
-                }
-                println!(
-                    ">> [Queryable ] Responding ('{}': '{}')",
-                    key_expr.as_str(),
-                    value,
-                );
-                let reply = Ok(Sample::new(key_expr.clone(), value.clone()));
-                query
-                    .reply(reply)
-                    .res()
-                    .await
-                    .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
-            }
+    while let Ok(query) = queryable.recv_async().await {
+        match query.value() {
+            None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
+            Some(value) => println!(
+                ">> [Queryable ] Received Query '{}' with value '{}'",
+                query.selector(),
+                value
+            ),
+        }
+        println!(
+            ">> [Queryable ] Responding ('{}': '{}')",
+            key_expr.as_str(),
+            value,
         );
+        let reply = Ok(Sample::new(key_expr.clone(), value.clone()));
+        query
+            .reply(reply)
+            .res()
+            .await
+            .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
     }
 }
 

@@ -13,7 +13,6 @@
 //
 use clap::arg;
 use clap::Command;
-use futures::select;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::query::ReplyKeyExpr;
@@ -53,13 +52,12 @@ async fn main() {
     };
 
     println!("Press CTRL-C to quit...");
-    loop {
-        select!(
-            sample = subscriber.recv_async() => {
-                let sample = sample.unwrap();
-                println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), sample.value);
-            },
+    while let Ok(sample) = subscriber.recv_async().await {
+        println!(
+            ">> [Subscriber] Received {} ('{}': '{}')",
+            sample.kind,
+            sample.key_expr.as_str(),
+            sample.value
         );
     }
 }

@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use futures::select;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
@@ -37,20 +36,17 @@ async fn main() {
         .unwrap();
 
     println!("Press CTRL-C to quit...");
-    loop {
-        select!(
-            sample = subscriber.recv_async() => {
-                let sample = sample.unwrap();
-                match sample.kind {
-                    SampleKind::Put => println!(
-                        ">> [LivelinessSubscriber] New alive token ('{}')",
-                        sample.key_expr.as_str()),
-                    SampleKind::Delete => println!(
-                        ">> [LivelinessSubscriber] Dropped token ('{}')",
-                        sample.key_expr.as_str()),
-                }
-            }
-        );
+    while let Ok(sample) = subscriber.recv_async().await {
+        match sample.kind {
+            SampleKind::Put => println!(
+                ">> [LivelinessSubscriber] New alive token ('{}')",
+                sample.key_expr.as_str()
+            ),
+            SampleKind::Delete => println!(
+                ">> [LivelinessSubscriber] Dropped token ('{}')",
+                sample.key_expr.as_str()
+            ),
+        }
     }
 }
 
