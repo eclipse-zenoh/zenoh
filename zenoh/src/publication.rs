@@ -350,25 +350,6 @@ impl<'a> Publisher<'a> {
         }
     }
 
-    /// Send data with [`kind`](SampleKind) (Put or Delete).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.write(SampleKind::Put, "payload").res().await.unwrap();
-    /// # })
-    /// ```
-    pub fn write<IntoPayload>(&self, kind: SampleKind, value: IntoPayload) -> Publication
-    where
-        IntoPayload: Into<Payload>,
-    {
-        self._write(kind, value.into())
-    }
-
     /// Put data.
     ///
     /// # Examples
@@ -1451,11 +1432,17 @@ mod tests {
             let session = open(Config::default()).res().unwrap();
             let sub = session.declare_subscriber(KEY_EXPR).res().unwrap();
             let pub_ = session.declare_publisher(KEY_EXPR).res().unwrap();
-            pub_.write(kind, VALUE).res().unwrap();
+
+            match kind {
+                SampleKind::Put => pub_.put(VALUE).res().unwrap(),
+                SampleKind::Delete => pub_.delete().res().unwrap(),
+            }
             let sample = sub.recv().unwrap();
 
             assert_eq!(sample.kind, kind);
-            assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
+            if let SampleKind::Put = kind {
+                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
+            }
         }
 
         sample_kind_integrity_in_publication_with(SampleKind::Put);
