@@ -21,7 +21,7 @@ use zenoh::shm::provider::shared_memory_provider::{Deallocate, Defragment};
 use zenoh::shm::provider::types::{AllocAlignment, MemoryLayout};
 use zenoh::Result;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let _ = env_logger::try_init();
     run().await.unwrap()
