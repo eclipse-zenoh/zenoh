@@ -1,145 +1,145 @@
 This file contains api tags mapping for core API namespace
 See https://github.com/ZettaScaleLabs/zenoh-tests/tree/tagging/api_matrix for details.
 
-tags{api.attachment,_core.attachment}
-tags{api.attachment.create, _core.attachment.create}
-tags{api.attachment.create.from_map, _core.attachment.create.from_map}
-tags{api.attachment.get, _core.attachment.get}
-tags{api.attachment.insert, _core.attachment.insert}
-tags{api.attachment.iter, _core.attachment.iter}
+tags{api.attachment(), _core.attachment()}
+tags{api.attachment.create(), _core.attachment.create()}
+tags{api.attachment.create.from_map(), _core.attachment.create.from_map()}
+tags{api.attachment.get(), _core.attachment.get()}
+tags{api.attachment.insert(), _core.attachment.insert()}
+tags{api.attachment.iter(), _core.attachment.iter()}
 
-// to be rewiewed, look at Pierre's request of own sample/payload and attachment
-tags{api.buffer,_core.buffer}
-tags{api.buffer.contiguous,_core.buffer.contiguous}
-tags{api.buffer.len,_core.buffer.len}
-tags{api.buffer.rcinc,_core.buffer.rcinc}
-tags{api.buffer.slices,_core.buffer.slices}
+// to be rewiewed(), look at Pierre's request of own sample/payload and attachment
+tags{api.buffer(), core.buffer()}
+tags{api.buffer.contiguous(), core.buffer.contiguous()}
+tags{api.buffer.len(), core.buffer.len()}
+tags{api.buffer.rcinc(), core.buffer.rcinc()}
+tags{api.buffer.slices(), core.buffer.slices()}
 
 // add constansts
-tags{api.encoding, _core.encoding}
+tags{api.encoding(), _core.encoding()}
 
-tags{api.keyexpr, _core.keyexpr}
-tags{api.keyexpr.create.checked, _core.keyexpr.create.checked}
-tags{api.keyexpr.create.unchecked, _core.keyexpr.create.unchecked}
-tags{api.keyexpr.equals, _core.keyexpr.equals}
-tags{api.keyexpr.includes, _core.keyexpr.includes}
-tags{api.keyexpr.intersects, _core.keyexpr.intersects}
-tags{api.keyexpr.to_string, _core.keyexpr.to_string}
-tags{api.keyexpr.undeclare, _core.keyexpr.undeclare}
+tags{api.keyexpr(), _core.keyexpr()}
+tags{api.keyexpr.create.checked(), _core.keyexpr.create.checked()}
+tags{api.keyexpr.create.unchecked(), _core.keyexpr.create.unchecked()}
+tags{api.keyexpr.equals(), _core.keyexpr.equals()}
+tags{api.keyexpr.includes(), _core.keyexpr.includes()}
+tags{api.keyexpr.intersects(), _core.keyexpr.intersects()}
+tags{api.keyexpr.to_string(), _core.keyexpr.to_string()}
+tags{api.keyexpr.undeclare(), _core.keyexpr.undeclare()}
 
-tags{api.options.congestion_control, _core.options.congestion_control}
-tags{api.options.congestion_control.block, _core.options.congestion_control.block}
-tags{api.options.congestion_control.drop, _core.options.congestion_control.drop}
+tags{api.options.congestion_control(), _core.options.congestion_control()}
+tags{api.options.congestion_control.block(), _core.options.congestion_control.block()}
+tags{api.options.congestion_control.drop(), _core.options.congestion_control.drop()}
 
 // after merging Luca's pc#738, rewrite tags
-tags{api.options.consolidation_mode.auto, _core.options.consolidation_mode.auto}
-tags{api.options.consolidation_mode.manual.latest, _core.options.consolidation_mode.latest}
-tags{api.options.consolidation_mode.manual.monotonic, _core.options.consolidation_mode.monotonic}
-tags{api.options.consolidation_mode.manual.none, _core.options.consolidation_mode.none}
+tags{api.options.consolidation_mode.auto(), _core.options.consolidation_mode.auto()}
+tags{api.options.consolidation_mode.manual.latest(), _core.options.consolidation_mode.latest()}
+tags{api.options.consolidation_mode.manual.monotonic(), _core.options.consolidation_mode.monotonic()}
+tags{api.options.consolidation_mode.manual.none(), _core.options.consolidation_mode.none()}
 
-tags{api.options.priority, _core.options.priority}
-tags{api.options.priority.background, _core.options.priority.background}
-tags{api.options.priority.control, _core.options.priority.control} // not expose to API, remove
-tags{api.options.priority.data, _core.options.priority.data}
-tags{api.options.priority.data_high, _core.options.priority.data_high}
-tags{api.options.priority.data_low, _core.options.priority.data_low}
-tags{api.options.priority.interactive_high, _core.options.priority.interactive_high}
-tags{api.options.priority.interactive_low, _core.options.priority.interactive_low}
-tags{api.options.priority.real_time, _core.options.priority.real_time}
+tags{api.options.priority(), _core.options.priority()}
+tags{api.options.priority.background(), _core.options.priority.background()}
+tags{api.options.priority.control(), _core.options.priority.control()} // not expose to API, remove
+tags{api.options.priority.data(), _core.options.priority.data()}
+tags{api.options.priority.data_high(), _core.options.priority.data_high()}
+tags{api.options.priority.data_low(), _core.options.priority.data_low()}
+tags{api.options.priority.interactive_high(), _core.options.priority.interactive_high()}
+tags{api.options.priority.interactive_low(), _core.options.priority.interactive_low()}
+tags{api.options.priority.real_time(), _core.options.priority.real_time()}
 
-tags{api.options.query_target, _core.options.query_target}
-tags{api.options.query_target.all, _core.options.query_target.all}
-tags{api.options.query_target.all_complete, _core.options.query_target.all_complete}
-tags{api.options.query_target.best_matching, _core.options.query_target.best_matching}
+tags{api.options.query_target(), _core.options.query_target()}
+tags{api.options.query_target.all(), _core.options.query_target.all()}
+tags{api.options.query_target.all_complete(), _core.options.query_target.all_complete()}
+tags{api.options.query_target.best_matching(), _core.options.query_target.best_matching()}
 
-tags{api.options.reliability, _core.options.reliability}
-tags{api.options.reliability.best_effort, _core.options.reliability.best_effort}
-tags{api.options.reliability.reliable, _core.options.reliability.reliable}
+tags{api.options.reliability(), _core.options.reliability()}
+tags{api.options.reliability.best_effort(), _core.options.reliability.best_effort()}
+tags{api.options.reliability.reliable(), _core.options.reliability.reliable()}
 
-tags{api.options.sample.kind, _core.options.sample.kind}
-tags{api.options.sample.kind.delete, _core.options.sample.kind.delete}
-tags{api.options.sample.kind.put, _core.options.sample.kind.put}
+tags{api.options.sample.kind(), _core.options.sample.kind()}
+tags{api.options.sample.kind.delete(), _core.options.sample.kind.delete()}
+tags{api.options.sample.kind.put(), _core.options.sample.kind.put()}
 
 // update tags afrer merging https://github.com/eclipse-zenoh/zenoh/pull/774
-tags{api.options.source_info, _core.options.source_info}
-tags{api.options.source_info.source_id, _core.options.source_info.source_id}
-tags{api.options.source_info.source_sn, _core.options.source_info.source_sn}
+tags{api.options.source_info(), _core.options.source_info()}
+tags{api.options.source_info.source_id(), _core.options.source_info.source_id()}
+tags{api.options.source_info.source_sn(), _core.options.source_info.source_sn()}
 
-tags{api.publisher, _core.publisher}
-tags{api.publisher.congestion_control.set, _core.publisher.congestion_control.set}
-tags{api.publisher.delete, _core.publisher.delete}
-tags{api.publisher.delete.attachment.set, _core.publisher.delete.attachment.set}
-tags{api.publisher.delete.congestion_control.set, _core.publisher.delete.congestion_control.set}
-tags{api.publisher.delete.priority.set, _core.publisher.delete.priority.set}
-tags{api.publisher.priority.set, _core.publisher.priority.set}
-tags{api.publisher.put, _core.publisher.put}
-tags{api.publisher.put.attachment.set, _core.publisher.put.attachment.set}
-tags{api.publisher.put.congestion_control.set, _core.publisher.put.congestion_control.set}
-tags{api.publisher.put.encoding.set, _core.publisher.put.encoding.set}
-tags{api.publisher.put.priority.set, _core.publisher.put.priority.set}
-tags{api.publisher.undeclare, _core.publisher.undeclare}
+tags{api.publisher(), _core.publisher()}
+tags{api.publisher.congestion_control.set(), _core.publisher.congestion_control.set()}
+tags{api.publisher.delete(), _core.publisher.delete()}
+tags{api.publisher.delete.attachment.set(), _core.publisher.delete.attachment.set()}
+tags{api.publisher.delete.congestion_control.set(), _core.publisher.delete.congestion_control.set()}
+tags{api.publisher.delete.priority.set(), _core.publisher.delete.priority.set()}
+tags{api.publisher.priority.set(), _core.publisher.priority.set()}
+tags{api.publisher.put(), _core.publisher.put()}
+tags{api.publisher.put.attachment.set(), _core.publisher.put.attachment.set()}
+tags{api.publisher.put.congestion_control.set(), _core.publisher.put.congestion_control.set()}
+tags{api.publisher.put.encoding.set(), _core.publisher.put.encoding.set()}
+tags{api.publisher.put.priority.set(), _core.publisher.put.priority.set()}
+tags{api.publisher.undeclare(), _core.publisher.undeclare()}
 
 // review afrer https://github.com/eclipse-zenoh/zenoh/pull/774
 // pub filelds are going to be replaced to accessors
-tags{api.query, _core.query}
-tags{api.query.attachment.get, _core.query.attachment.get}
-tags{api.query.reply, _core.query.reply}
-tags{api.query.reply.attachment.set, _core.query.reply.attachment.set}
-tags{api.query.reply.encoding.set, _core.query.reply.encoding.set}
-tags{api.query.value.get, _core.query.value.get}
+tags{api.query(), _core.query()}
+tags{api.query.attachment.get(), _core.query.attachment.get()}
+tags{api.query.reply(), _core.query.reply()}
+tags{api.query.reply.attachment.set(), _core.query.reply.attachment.set()}
+tags{api.query.reply.encoding.set(), _core.query.reply.encoding.set()}
+tags{api.query.value.get(), _core.query.value.get()}
 
-tags{api.queryable, _core.queryable}
-tags{api.queryable.callback, _core.queryable.callback}
-tags{api.queryable.complete.set, _core.queryable.complete.set}
-tags{api.queryable.undeclare, _core.queryable.undeclare}
-
-// pub filelds are going to be replaced to accessors
-tags{api.reply, _core.reply}
-tags{api.reply.get_error, _core.reply.get_error}
-tags{api.reply.get_sample, _core.reply.get_sample}
-tags{api.reply.is_ok, _core.reply.is_ok}
-tags{api.reply.replier_id.get, _core.reply.replier_id.get}
-
-tags{api.request.attachment.set, _core.request.attachment.set}
-tags{api.request.callback, _core.request.callback}
-tags{api.request.consolidation.set, _core.request.consolidation.set}
-tags{api.request.target.set, _core.request.target.set}
-tags{api.request.timeout.set, _core.request.timeout.set}
-tags{api.request.value.set, _core.request.value.set}
+tags{api.queryable(), _core.queryable()}
+tags{api.queryable.callback(), _core.queryable.callback()}
+tags{api.queryable.complete.set(), _core.queryable.complete.set()}
+tags{api.queryable.undeclare(), _core.queryable.undeclare()}
 
 // pub filelds are going to be replaced to accessors
-tags{api.sample, _core.sample}
-tags{api.sample.attachment.get, _core.sample.attachment.get}
-tags{api.sample.encoding.get, _core.sample.encoding.get}
-tags{api.sample.key_expr.get, _core.sample.key_expr.get}
-tags{api.sample.kind.get, _core.sample.kind.get}
-tags{api.sample.payload.get, _core.sample.payload.get}
-tags{api.sample.qos.get, _core.sample.qos.get}
-tags{api.sample.source_info.get, _core.sample.source_info.get}
-tags{api.sample.timestamp.get, _core.sample.timestamp.get}
+tags{api.reply(), _core.reply()}
+tags{api.reply.get_error(), _core.reply.get_error()}
+tags{api.reply.get_sample(), _core.reply.get_sample()}
+tags{api.reply.is_ok(), _core.reply.is_ok()}
+tags{api.reply.replier_id.get(), _core.reply.replier_id.get()}
 
-tags{api.session, _core.session}
-tags{api.session.close, _core.session.close}
-tags{api.session.create, _core.session.create}
-tags{api.session.declare_keyexpr, _core.session.declare_keyexpr}
-tags{api.session.declare_publisher, _core.session.declare_publisher}
-tags{api.session.declare_queryable, _core.session.declare_queryable}
-tags{api.session.declare_subscriber, _core.session.declare_subscriber}
-tags{api.session.put, _core.session.put}
-tags{api.session.send_request, _core.session.send_request}
-tags{api.session.zid.get, _core.session.zid.get}
+tags{api.request.attachment.set(), _core.request.attachment.set()}
+tags{api.request.callback(), _core.request.callback()}
+tags{api.request.consolidation.set(), _core.request.consolidation.set()}
+tags{api.request.target.set(), _core.request.target.set()}
+tags{api.request.timeout.set(), _core.request.timeout.set()}
+tags{api.request.value.set(), _core.request.value.set()}
 
-tags{api.subscriber, _core.subscriber}
-tags{api.subscriber.callback, _core.subscriber.callback}
-tags{api.subscriber.reliability.set, _core.subscriber.reliability.set}
-tags{api.subscriber.undeclare, _core.subscriber.undeclare}
+// pub filelds are going to be replaced to accessors
+tags{api.sample(), _core.sample()}
+tags{api.sample.attachment.get(), _core.sample.attachment.get()}
+tags{api.sample.encoding.get(), _core.sample.encoding.get()}
+tags{api.sample.key_expr.get(), _core.sample.key_expr.get()}
+tags{api.sample.kind.get(), _core.sample.kind.get()}
+tags{api.sample.payload.get(), _core.sample.payload.get()}
+tags{api.sample.qos.get(), _core.sample.qos.get()}
+tags{api.sample.source_info.get(), _core.sample.source_info.get()}
+tags{api.sample.timestamp.get(), _core.sample.timestamp.get()}
 
-tags{api.timestamp, _core.timestamp}
+tags{api.session(), _core.session()}
+tags{api.session.close(), _core.session.close()}
+tags{api.session.create(), _core.session.create()}
+tags{api.session.declare_keyexpr(), _core.session.declare_keyexpr()}
+tags{api.session.declare_publisher(), _core.session.declare_publisher()}
+tags{api.session.declare_queryable(), _core.session.declare_queryable()}
+tags{api.session.declare_subscriber(), _core.session.declare_subscriber()}
+tags{api.session.put(), _core.session.put()}
+tags{api.session.send_request(), _core.session.send_request()}
+tags{api.session.zid.get(), _core.session.zid.get()}
 
-tags{api.value, _core.value}
-tags{api.value.encoding.get, _core.value.encoding.get}
-tags{api.value.encoding.set, _core.value.encoding.set}
-tags{api.value.payload.get, _core.value.payload.get}
-tags{api.value.payload.set, _core.value.payload.set}
+tags{api.subscriber(), _core.subscriber()}
+tags{api.subscriber.callback(), _core.subscriber.callback()}
+tags{api.subscriber.reliability.set(), _core.subscriber.reliability.set()}
+tags{api.subscriber.undeclare(), _core.subscriber.undeclare()}
 
-tags{api.zid, _core.zid}
+tags{api.timestamp(), _core.timestamp()}
+
+tags{api.value(), _core.value()}
+tags{api.value.encoding.get(), _core.value.encoding.get()}
+tags{api.value.encoding.set(), _core.value.encoding.set()}
+tags{api.value.payload.get(), _core.value.payload.get()}
+tags{api.value.payload.set(), _core.value.payload.set()}
+
+tags{api.zid(), _core.zid()}
