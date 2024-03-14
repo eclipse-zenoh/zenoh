@@ -29,6 +29,7 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
+use zenoh::payload::StringOrBase64;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
@@ -60,9 +61,9 @@ pub fn base64_encode(data: &[u8]) -> String {
     general_purpose::STANDARD.encode(data)
 }
 
-fn payload_to_string(payload: &Payload) -> String {
-    String::from_utf8(payload.contiguous().to_vec()).unwrap_or(base64_encode(&payload.contiguous()))
-}
+// fn payload_to_string(payload: &Payload) -> String {
+//     String::from_utf8(payload.contiguous().to_vec()).unwrap_or(base64_encode(&payload.contiguous()))
+// }
 
 fn payload_to_json(payload: Payload, encoding: &Encoding) -> serde_json::Value {
     match payload.len() {
@@ -73,11 +74,12 @@ fn payload_to_json(payload: Payload, encoding: &Encoding) -> serde_json::Value {
             match encoding {
                 // If it is a JSON try to deserialize as json, if it fails fallback to base64
                 &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
-                    serde_json::from_slice::<serde_json::Value>(&payload.contiguous())
-                        .unwrap_or(serde_json::Value::String(payload_to_string(&payload)))
+                    serde_json::from_slice::<serde_json::Value>(&payload.contiguous()).unwrap_or(
+                        serde_json::Value::String((*StringOrBase64::from(payload)).clone()),
+                    )
                 }
                 // otherwise convert to JSON string
-                _ => serde_json::Value::String(payload_to_string(&payload)),
+                _ => serde_json::Value::String((*StringOrBase64::from(payload)).clone()),
             }
         }
     }
