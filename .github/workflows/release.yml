@@ -56,7 +56,6 @@ jobs:
       repo: ${{ github.repository }}
       version: ${{ needs.tag.outputs.version }}
       branch: ${{ needs.tag.outputs.branch }}
-      exclude-builds: '[{ build: { target: "x86_64-pc-windows-gnu", os: "windows-2019" } }]'
       artifact-patterns: |
         ^zenohd(\.exe)?$
         ^libzenoh_plugin_(rest|storage_manager)\.(dylib|so)$

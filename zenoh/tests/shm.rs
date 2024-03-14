@@ -13,13 +13,11 @@
 //
 #[cfg(feature = "shared-memory")]
 mod tests {
-    use async_std::prelude::FutureExt;
-    use async_std::task;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::prelude::r#async::*;
-    use zenoh_core::zasync_executor_init;
+    use zenoh_core::ztimeout;
     use zenoh_shm::api::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
     use zenoh_shm::api::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
     use zenoh_shm::api::provider::shared_memory_provider::{
@@ -31,12 +29,6 @@ mod tests {
 
     const MSG_COUNT: usize = 1_00;
     const MSG_SIZE: [usize; 2] = [1_024, 100_000];
-
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         // Open the sessions
@@ -114,7 +106,7 @@ mod tests {
             .unwrap();
 
             // Wait for the declaration to propagate
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
 
             // create SHM backend...
             let backend = PosixSharedMemoryProviderBackend::builder()
@@ -160,7 +152,7 @@ mod tests {
                     let cnt = msgs.load(Ordering::Relaxed);
                     println!("[PS][03b] Received {cnt}/{msg_count}.");
                     if cnt != msg_count {
-                        task::sleep(SLEEP).await;
+                        tokio::time::sleep(SLEEP).await;
                     } else {
                         break;
                     }
@@ -174,7 +166,7 @@ mod tests {
                     let available = shm01.available();
                     println!("[PS][03b] SHM available {available}/{shm_segment_size}");
                     if available != shm_segment_size {
-                        task::sleep(SLEEP).await;
+                        tokio::time::sleep(SLEEP).await;
                     } else {
                         break;
                     }
@@ -186,8 +178,7 @@ mod tests {
     #[cfg(feature = "shared-memory")]
     #[test]
     fn zenoh_shm_unicast() {
-        task::block_on(async {
-            zasync_executor_init!();
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
             let _ = env_logger::try_init();
 
             let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
@@ -199,8 +190,7 @@ mod tests {
     #[cfg(feature = "shared-memory")]
     #[test]
     fn zenoh_shm_multicast() {
-        task::block_on(async {
-            zasync_executor_init!();
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
             let _ = env_logger::try_init();
 
             let (peer01, peer02) =

@@ -27,7 +27,7 @@ use zenoh_examples::CommonArgs;
 const N: usize = 10;
 const K: u32 = 3;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), zenoh::Error> {
     // Initiate logging
     env_logger::init();

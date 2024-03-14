@@ -26,13 +26,12 @@ use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
-use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
 use std::sync::Arc;
-use stop_token::future::FutureExt;
-use stop_token::{StopSource, TimedOutError};
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -86,7 +85,7 @@ struct RuntimeState {
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
-    stop_source: std::sync::RwLock<Option<StopSource>>,
+    token: CancellationToken,
 }
 
 #[derive(Clone)]
@@ -161,7 +160,7 @@ impl Runtime {
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
-                stop_source: std::sync::RwLock::new(Some(StopSource::new())),
+                token: CancellationToken::new(),
             }),
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
@@ -196,7 +195,8 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        drop(self.state.stop_source.write().unwrap().take());
+        // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
+        self.state.token.cancel();
         self.manager().close().await;
         Ok(())
     }
@@ -209,17 +209,18 @@ impl Runtime {
         self.state.locators.read().unwrap().clone()
     }
 
-    pub(crate) fn spawn<F, T>(&self, future: F) -> Option<JoinHandle<Result<T, TimedOutError>>>
+    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        self.state
-            .stop_source
-            .read()
-            .unwrap()
-            .as_ref()
-            .map(|source| async_std::task::spawn(future.timeout_at(source.token())))
+        let token = self.state.token.clone();
+        zenoh_runtime::ZRuntime::Net.spawn(async move {
+            tokio::select! {
+                _ = token.cancelled() => {}
+                _ = future => {}
+            }
+        })
     }
 
     pub(crate) fn router(&self) -> Arc<Router> {

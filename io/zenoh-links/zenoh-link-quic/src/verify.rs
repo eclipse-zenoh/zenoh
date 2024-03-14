@@ -1,10 +1,10 @@
-use async_rustls::rustls::{
-    client::{ServerCertVerified, ServerCertVerifier},
-    Certificate, RootCertStore, ServerName,
-};
 use rustls::client::verify_server_cert_signed_by_trust_anchor;
 use rustls::server::ParsedCertificate;
 use std::time::SystemTime;
+use tokio_rustls::rustls::{
+    client::{ServerCertVerified, ServerCertVerifier},
+    Certificate, RootCertStore, ServerName,
+};
 
 impl ServerCertVerifier for WebPkiVerifierAnyServerName {
     /// Will verify the certificate is valid in the following ways:
@@ -18,7 +18,7 @@ impl ServerCertVerifier for WebPkiVerifierAnyServerName {
         _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
         now: SystemTime,
-    ) -> Result<ServerCertVerified, async_rustls::rustls::Error> {
+    ) -> Result<ServerCertVerified, tokio_rustls::rustls::Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
         verify_server_cert_signed_by_trust_anchor(&cert, &self.roots, intermediates, now)?;
         Ok(ServerCertVerified::assertion())

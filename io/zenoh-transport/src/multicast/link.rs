@@ -23,12 +23,6 @@ use crate::{
         priority::TransportPriorityTx,
     },
     multicast::transport::TransportMulticastInner,
-    TransportExecutor,
-};
-use async_executor::Task;
-use async_std::{
-    prelude::FutureExt,
-    task::{self, JoinHandle},
 };
 use std::{
     convert::TryInto,
@@ -36,6 +30,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use tokio::task::JoinHandle;
 use zenoh_buffers::{as_mut_slice_featureless, BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::{zcondfeat, zlock};
 use zenoh_link::{Link, LinkMulticast, Locator};
@@ -266,6 +261,7 @@ pub(super) struct TransportLinkMulticastConfigUniversal {
     pub(super) batch_size: BatchSize,
 }
 
+// TODO(yuyuan): Introduce TaskTracker or JoinSet and retire handle_tx, handle_rx, and signal_rx.
 #[derive(Clone)]
 pub(super) struct TransportLinkMulticastUniversal {
     // The underlying link
@@ -275,7 +271,7 @@ pub(super) struct TransportLinkMulticastUniversal {
     // The transport this link is associated to
     transport: TransportMulticastInner,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<Task<()>>>,
+    handle_tx: Option<Arc<JoinHandle<()>>>,
     signal_rx: Signal,
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
@@ -301,7 +297,6 @@ impl TransportLinkMulticastUniversal {
         &mut self,
         config: TransportLinkMulticastConfigUniversal,
         priority_tx: Arc<[TransportPriorityTx]>,
-        executor: &TransportExecutor,
     ) {
         let initial_sns: Vec<PrioritySn> = priority_tx
             .iter()
@@ -337,22 +332,23 @@ impl TransportLinkMulticastUniversal {
 
             // Spawn the TX task
             let c_link = self.link.clone();
-            let ctransport = self.transport.clone();
-            let handle = executor.spawn(async move {
+            let c_transport = self.transport.clone();
+
+            let handle = zenoh_runtime::ZRuntime::TX.spawn(async move {
                 let res = tx_task(
                     consumer,
                     c_link.tx(),
                     config,
                     initial_sns,
                     #[cfg(feature = "stats")]
-                    ctransport.stats.clone(),
+                    c_transport.stats.clone(),
                 )
                 .await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { ctransport.delete().await });
+                    zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -369,15 +365,15 @@ impl TransportLinkMulticastUniversal {
         if self.handle_rx.is_none() {
             // Spawn the RX task
             let c_link = self.link.clone();
-            let ctransport = self.transport.clone();
+            let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
-            let handle = task::spawn(async move {
+            let handle = zenoh_runtime::ZRuntime::RX.spawn(async move {
                 // Start the consume task
                 let res = rx_task(
                     c_link.rx(),
-                    ctransport.clone(),
+                    c_transport.clone(),
                     c_signal.clone(),
                     c_rx_buffer_size,
                     batch_size,
@@ -388,7 +384,7 @@ impl TransportLinkMulticastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { ctransport.delete().await });
+                    zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));
@@ -405,14 +401,14 @@ impl TransportLinkMulticastUniversal {
         if let Some(handle) = self.handle_rx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_rx = Arc::try_unwrap(handle).unwrap();
-            handle_rx.await;
+            handle_rx.await?;
         }
 
         self.stop_tx();
         if let Some(handle) = self.handle_tx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_tx = Arc::try_unwrap(handle).unwrap();
-            handle_tx.await;
+            handle_tx.await?;
         }
 
         self.link.close(None).await
@@ -429,54 +425,65 @@ async fn tx_task(
     mut last_sns: Vec<PrioritySn>,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
-    enum Action {
-        Pull((WBatch, usize)),
-        Join,
-        Stop,
-    }
-
-    async fn pull(pipeline: &mut TransmissionPipelineConsumer) -> Action {
-        match pipeline.pull().await {
-            Some(sb) => Action::Pull(sb),
-            None => Action::Stop,
-        }
-    }
-
-    async fn join(last_join: Instant, join_interval: Duration) -> Action {
+    async fn join(last_join: Instant, join_interval: Duration) {
         let now = Instant::now();
         let target = last_join + join_interval;
         if now < target {
             let left = target - now;
-            task::sleep(left).await;
+            tokio::time::sleep(left).await;
         }
-        Action::Join
     }
 
     let mut last_join = Instant::now().checked_sub(config.join_interval).unwrap();
     loop {
-        match pull(&mut pipeline)
-            .race(join(last_join, config.join_interval))
-            .await
-        {
-            Action::Pull((mut batch, priority)) => {
-                // Send the buffer on the link
-                link.send_batch(&mut batch).await?;
-                // Keep track of next SNs
-                if let Some(sn) = batch.codec.latest_sn.reliable {
-                    last_sns[priority].reliable = sn;
+        tokio::select! {
+            res = pipeline.pull() => {
+                match res {
+                    Some((mut batch, priority)) => {
+                        // Send the buffer on the link
+                        link.send_batch(&mut batch).await?;
+                        // Keep track of next SNs
+                        if let Some(sn) = batch.codec.latest_sn.reliable {
+                            last_sns[priority].reliable = sn;
+                        }
+                        if let Some(sn) = batch.codec.latest_sn.best_effort {
+                            last_sns[priority].best_effort = sn;
+                        }
+                        #[cfg(feature = "stats")]
+                        {
+                            stats.inc_tx_t_msgs(batch.stats.t_msgs);
+                            stats.inc_tx_bytes(batch.len() as usize);
+                        }
+                        // Reinsert the batch into the queue
+                        pipeline.refill(batch, priority);
+                    }
+                    None => {
+                        // Drain the transmission pipeline and write remaining bytes on the wire
+                        let mut batches = pipeline.drain();
+                        for (mut b, _) in batches.drain(..) {
+                            tokio::time::timeout(config.join_interval, link.send_batch(&mut b))
+                                .await
+                                .map_err(|_| {
+                                    zerror!(
+                                        "{}: flush failed after {} ms",
+                                        link,
+                                        config.join_interval.as_millis()
+                                    )
+                                })??;
+
+                            #[cfg(feature = "stats")]
+                            {
+                                stats.inc_tx_t_msgs(b.stats.t_msgs);
+                                stats.inc_tx_bytes(b.len() as usize);
+                            }
+                        }
+                        break;
+                    }
+
                 }
-                if let Some(sn) = batch.codec.latest_sn.best_effort {
-                    last_sns[priority].best_effort = sn;
-                }
-                #[cfg(feature = "stats")]
-                {
-                    stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                    stats.inc_tx_bytes(batch.len() as usize);
-                }
-                // Reinsert the batch into the queue
-                pipeline.refill(batch, priority);
             }
-            Action::Join => {
+
+            _ = join(last_join, config.join_interval) => {
                 let next_sns = last_sns
                     .iter()
                     .map(|c| PrioritySn {
@@ -513,29 +520,7 @@ async fn tx_task(
                 }
 
                 last_join = Instant::now();
-            }
-            Action::Stop => {
-                // Drain the transmission pipeline and write remaining bytes on the wire
-                let mut batches = pipeline.drain();
-                for (mut b, _) in batches.drain(..) {
-                    link.send_batch(&mut b)
-                        .timeout(config.join_interval)
-                        .await
-                        .map_err(|_| {
-                            zerror!(
-                                "{}: flush failed after {} ms",
-                                link,
-                                config.join_interval.as_millis()
-                            )
-                        })??;
 
-                    #[cfg(feature = "stats")]
-                    {
-                        stats.inc_tx_t_msgs(b.stats.t_msgs);
-                        stats.inc_tx_bytes(b.len() as usize);
-                    }
-                }
-                break;
             }
         }
     }
@@ -550,15 +535,10 @@ async fn rx_task(
     rx_buffer_size: usize,
     batch_size: BatchSize,
 ) -> ZResult<()> {
-    enum Action {
-        Read((RBatch, Locator)),
-        Stop,
-    }
-
     async fn read<T, F>(
         link: &mut TransportLinkMulticastRx,
         pool: &RecyclingObjectPool<T, F>,
-    ) -> ZResult<Action>
+    ) -> ZResult<(RBatch, Locator)>
     where
         T: ZSliceBuffer + 'static,
         F: Fn() -> T,
@@ -567,12 +547,7 @@ async fn rx_task(
         let (rbatch, locator) = link
             .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
             .await?;
-        Ok(Action::Read((rbatch, locator)))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok((rbatch, locator))
     }
 
     // The pool of buffers
@@ -583,11 +558,12 @@ async fn rx_task(
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
-    while !signal.is_triggered() {
-        // Async read from the underlying link
-        let action = read(&mut link, &pool).race(stop(signal.clone())).await?;
-        match action {
-            Action::Read((batch, locator)) => {
+    loop {
+        tokio::select! {
+            _ = signal.wait() => break,
+            res = read(&mut link, &pool) => {
+                let (batch, locator) = res?;
+
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(batch.len());
 
@@ -600,7 +576,6 @@ async fn rx_task(
                     &transport,
                 )?;
             }
-            Action::Stop => break,
         }
     }
     Ok(())

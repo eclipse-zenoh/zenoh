@@ -25,7 +25,7 @@ use zenoh::shm::provider::types::AllocAlignment;
 use zenoh::shm::provider::types::MemoryLayout;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();

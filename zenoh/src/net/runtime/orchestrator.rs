@@ -12,12 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{Runtime, RuntimeSession};
-use async_std::net::UdpSocket;
-use async_std::prelude::FutureExt;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
+use tokio::net::UdpSocket;
 use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
@@ -90,18 +89,22 @@ impl Runtime {
             }
             _ => {
                 for locator in &peers {
-                    match self
-                        .manager()
-                        .open_transport_unicast(locator.clone())
-                        .timeout(CONNECTION_TIMEOUT)
-                        .await
+                    match tokio::time::timeout(
+                        CONNECTION_TIMEOUT,
+                        self.manager().open_transport_unicast(locator.clone()),
+                    )
+                    .await
                     {
                         Ok(Ok(_)) => return Ok(()),
                         Ok(Err(e)) => log::warn!("Unable to connect to {}! {}", locator, e),
                         Err(e) => log::warn!("Unable to connect to {}! {}", locator, e),
                     }
                 }
-                let e = zerror!("Unable to connect to any of {:?}! ", peers);
+                let e = zerror!(
+                    "{:?} Unable to connect to any of {:?}! ",
+                    self.manager().get_locators(),
+                    peers
+                );
                 log::error!("{}", &e);
                 Err(e.into())
             }
@@ -150,7 +153,7 @@ impl Runtime {
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
-        async_std::task::sleep(delay).await;
+        tokio::time::sleep(delay).await;
         Ok(())
     }
 
@@ -218,11 +221,10 @@ impl Runtime {
                 match (listen, autoconnect.is_empty()) {
                     (true, false) => {
                         self.spawn(async move {
-                            async_std::prelude::FutureExt::race(
-                                this.responder(&mcast_socket, &sockets),
-                                this.connect_all(&sockets, autoconnect, &addr),
-                            )
-                            .await;
+                            tokio::select! {
+                                _ = this.responder(&mcast_socket, &sockets) => {},
+                                _ = this.connect_all(&sockets, autoconnect, &addr) => {},
+                            }
                         });
                     }
                     (true, true) => {
@@ -417,7 +419,15 @@ impl Runtime {
             }
         }
         log::info!("zenohd listening scout messages on {}", sockaddr);
-        Ok(std::net::UdpSocket::from(socket).into())
+
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
+        socket.set_nonblocking(true)?;
+
+        // UdpSocket::from_std requires a runtime even though it's a sync function
+        let udp_socket = zenoh_runtime::ZRuntime::Net
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
+        Ok(udp_socket)
     }
 
     pub fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
@@ -443,7 +453,15 @@ impl Runtime {
                 bail!(err => "Unable to bind udp port {}:0", addr);
             }
         }
-        Ok(std::net::UdpSocket::from(socket).into())
+
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
+        socket.set_nonblocking(true)?;
+
+        // UdpSocket::from_std requires a runtime even though it's a sync function
+        let udp_socket = zenoh_runtime::ZRuntime::Net
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
+        Ok(udp_socket)
     }
 
     async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {
@@ -464,11 +482,11 @@ impl Runtime {
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            match self
-                .manager()
-                .open_transport_unicast(endpoint)
-                .timeout(CONNECTION_TIMEOUT)
-                .await
+            match tokio::time::timeout(
+                CONNECTION_TIMEOUT,
+                self.manager().open_transport_unicast(endpoint),
+            )
+            .await
             {
                 Ok(Ok(transport)) => {
                     log::debug!("Successfully connected to configured peer {}", peer);
@@ -499,7 +517,7 @@ impl Runtime {
                     );
                 }
             }
-            async_std::task::sleep(delay).await;
+            tokio::time::sleep(delay).await;
             delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
             if delay > CONNECTION_RETRY_MAX_PERIOD {
                 delay = CONNECTION_RETRY_MAX_PERIOD;
@@ -556,7 +574,7 @@ impl Runtime {
                         );
                     }
                 }
-                async_std::task::sleep(delay).await;
+                tokio::time::sleep(delay).await;
                 if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
                     delay *= SCOUT_PERIOD_INCREASE_FACTOR;
                 }
@@ -597,7 +615,10 @@ impl Runtime {
             }
             .boxed()
         }));
-        async_std::prelude::FutureExt::race(send, recvs).await;
+        tokio::select! {
+            _ = send => {},
+            _ = recvs => {},
+        }
     }
 
     #[must_use]
@@ -617,10 +638,11 @@ impl Runtime {
             let endpoint = locator.to_owned().into();
             let manager = self.manager();
             if is_multicast {
-                match manager
-                    .open_transport_multicast(endpoint)
-                    .timeout(CONNECTION_TIMEOUT)
-                    .await
+                match tokio::time::timeout(
+                    CONNECTION_TIMEOUT,
+                    manager.open_transport_multicast(endpoint),
+                )
+                .await
                 {
                     Ok(Ok(transport)) => {
                         log::debug!(
@@ -633,10 +655,11 @@ impl Runtime {
                     Err(e) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                 }
             } else {
-                match manager
-                    .open_transport_unicast(endpoint)
-                    .timeout(CONNECTION_TIMEOUT)
-                    .await
+                match tokio::time::timeout(
+                    CONNECTION_TIMEOUT,
+                    manager.open_transport_unicast(endpoint),
+                )
+                .await
                 {
                     Ok(Ok(transport)) => {
                         log::debug!(
@@ -707,10 +730,13 @@ impl Runtime {
             Ok(())
         };
         let timeout = async {
-            async_std::task::sleep(timeout).await;
+            tokio::time::sleep(timeout).await;
             bail!("timeout")
         };
-        async_std::prelude::FutureExt::race(scout, timeout).await
+        tokio::select! {
+            res = scout => { res },
+            res = timeout => { res }
+        }
     }
 
     async fn connect_all(
@@ -819,7 +845,7 @@ impl Runtime {
                 session.runtime.spawn(async move {
                     let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
                     while runtime.start_client().await.is_err() {
-                        async_std::task::sleep(delay).await;
+                        tokio::time::sleep(delay).await;
                         delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
                         if delay > CONNECTION_RETRY_MAX_PERIOD {
                             delay = CONNECTION_RETRY_MAX_PERIOD;

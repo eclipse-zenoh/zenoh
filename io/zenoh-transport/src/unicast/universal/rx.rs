@@ -20,7 +20,6 @@ use crate::{
     unicast::transport_unicast_inner::TransportUnicastTrait,
     TransportPeerEventHandler,
 };
-use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
@@ -51,15 +50,12 @@ impl TransportUnicastUniversal {
     }
 
     fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {
-        // Stop now rx and tx tasks before doing the proper cleanup
-        let _ = self.stop_rx_tx(link);
-
         // Delete and clean up
         let c_transport = self.clone();
         let c_link = link.clone();
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
-        task::spawn(async move {
+        zenoh_runtime::ZRuntime::Net.spawn(async move {
             if session {
                 let _ = c_transport.delete().await;
             } else {

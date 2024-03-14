@@ -23,7 +23,6 @@ use crate::{
     },
     TransportManager, TransportPeer, TransportPeerEventHandler,
 };
-use async_trait::async_trait;
 use std::{
     collections::HashMap,
     sync::{
@@ -32,6 +31,7 @@ use std::{
     },
     time::Duration,
 };
+use tokio_util::sync::CancellationToken;
 use zenoh_core::{zcondfeat, zread, zwrite};
 use zenoh_link::{Link, Locator};
 use zenoh_protocol::core::Resolution;
@@ -41,7 +41,7 @@ use zenoh_protocol::{
     transport::{close, Join},
 };
 use zenoh_result::{bail, ZResult};
-use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
+// use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 /*************************************/
 /*             TRANSPORT             */
@@ -54,38 +54,19 @@ pub(super) struct TransportMulticastPeer {
     pub(super) whatami: WhatAmI,
     pub(super) resolution: Resolution,
     pub(super) lease: Duration,
-    pub(super) whatchdog: Arc<AtomicBool>,
-    pub(super) handle: TimedHandle,
+    pub(super) is_active: Arc<AtomicBool>,
+    token: CancellationToken,
     pub(super) priority_rx: Box<[TransportPriorityRx]>,
     pub(super) handler: Arc<dyn TransportPeerEventHandler>,
 }
 
 impl TransportMulticastPeer {
-    pub(super) fn active(&self) {
-        self.whatchdog.store(true, Ordering::Release);
+    pub(super) fn set_active(&self) {
+        self.is_active.store(true, Ordering::Release);
     }
 
     pub(super) fn is_qos(&self) -> bool {
         self.priority_rx.len() == Priority::NUM
-    }
-}
-
-#[derive(Clone)]
-pub(super) struct TransportMulticastPeerLeaseTimer {
-    pub(super) whatchdog: Arc<AtomicBool>,
-    locator: Locator,
-    transport: TransportMulticastInner,
-}
-
-#[async_trait]
-impl Timed for TransportMulticastPeerLeaseTimer {
-    async fn run(&mut self) {
-        let is_active = self.whatchdog.swap(false, Ordering::AcqRel);
-        if !is_active {
-            let _ = self
-                .transport
-                .del_peer(&self.locator, close::reason::EXPIRED);
-        }
     }
 }
 
@@ -103,8 +84,8 @@ pub(crate) struct TransportMulticastInner {
     pub(super) link: Arc<RwLock<Option<TransportLinkMulticastUniversal>>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
-    // The timer for peer leases
-    pub(super) timer: Arc<Timer>,
+    // token for safe cancellation
+    token: CancellationToken,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
@@ -144,7 +125,7 @@ impl TransportMulticastInner {
             locator: config.link.link.get_dst().to_owned(),
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
-            timer: Arc::new(Timer::new(false)),
+            token: CancellationToken::new(),
             #[cfg(feature = "stats")]
             stats,
             #[cfg(feature = "shared-memory")]
@@ -214,6 +195,9 @@ impl TransportMulticastInner {
             cb.closed();
         }
 
+        // TODO(yuyuan): use CancellationToken to unify the termination with the above
+        self.token.cancel();
+
         Ok(())
     }
 
@@ -269,7 +253,7 @@ impl TransportMulticastInner {
                     sn_resolution: self.manager.config.resolution.get(Field::FrameSN),
                     batch_size,
                 };
-                l.start_tx(config, self.priority_tx.clone(), &self.manager.tx_executor);
+                l.start_tx(config, self.priority_tx.clone());
                 Ok(())
             }
             None => {
@@ -394,15 +378,33 @@ impl TransportMulticastInner {
             );
 
         // Create lease event
-        let whatchdog = Arc::new(AtomicBool::new(false));
-        let event = TransportMulticastPeerLeaseTimer {
-            whatchdog: whatchdog.clone(),
-            locator: locator.clone(),
-            transport: self.clone(),
+        // TODO(yuyuan): refine the clone behaviors
+        let is_active = Arc::new(AtomicBool::new(false));
+        let c_is_active = is_active.clone();
+        let token = self.token.child_token();
+        let c_token = token.clone();
+        let c_self = self.clone();
+        let c_locator = locator.clone();
+        let task = async move {
+            let mut interval =
+                tokio::time::interval_at(tokio::time::Instant::now() + join.lease, join.lease);
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        if !c_is_active.swap(false, Ordering::AcqRel) {
+                            break
+                        }
+                    }
+                    _ = c_token.cancelled() => break
+                }
+            }
+            let _ = c_self.del_peer(&c_locator, close::reason::EXPIRED);
         };
-        let event = TimedEvent::periodic(join.lease, event);
-        let handle = event.get_handle();
 
+        // TODO(yuyuan): Put it into TaskTracker or store as JoinHandle
+        zenoh_runtime::ZRuntime::Acceptor.spawn(task);
+
+        // TODO(yuyuan): Integrate the above async task into TransportMulticastPeer
         // Store the new peer
         let peer = TransportMulticastPeer {
             version: join.version,
@@ -411,15 +413,12 @@ impl TransportMulticastInner {
             whatami: peer.whatami,
             resolution: join.resolution,
             lease: join.lease,
-            whatchdog,
-            handle,
+            is_active,
+            token,
             priority_rx,
             handler,
         };
         zwrite!(self.peers).insert(locator.clone(), peer);
-
-        // Add the event to the timer
-        self.timer.add(event);
 
         Ok(())
     }
@@ -435,8 +434,9 @@ impl TransportMulticastInner {
                 self.locator,
                 reason
             );
-            peer.handle.clone().defuse();
 
+            // TODO(yuyuan): Unify the termination
+            peer.token.cancel();
             peer.handler.closing();
             drop(guard);
             peer.handler.closed();

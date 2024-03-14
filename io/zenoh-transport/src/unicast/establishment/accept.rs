@@ -28,10 +28,10 @@ use crate::{
     },
     TransportManager,
 };
-use async_std::sync::Mutex;
 use async_trait::async_trait;
 use rand::Rng;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasynclock, zcondfeat, zerror};

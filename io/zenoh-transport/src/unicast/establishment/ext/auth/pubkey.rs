@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
-use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use rand::Rng;
 use rsa::{
@@ -21,6 +20,7 @@ use rsa::{
     BigUint, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
 };
 use std::{collections::HashSet, fmt, ops::Deref, path::Path};
+use tokio::sync::{Mutex, RwLock};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
@@ -76,7 +76,7 @@ impl AuthPubKey {
         Ok(())
     }
 
-    pub async fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
+    pub fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
         const S: &str = "PubKey extension - From config.";
 
         // First, check if PEM keys are provided

@@ -304,9 +304,9 @@ impl syn::parse::Parse for FormatUsage {
 /// Write a set of values into a `Formatter`, stopping as soon as a value doesn't fit the specification for its field.
 /// Contrary to `keformat` doesn't build the Formatter into a Key Expression.
 ///
-/// `kewrite!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.  
-/// `$formatter` must be an expression that dereferences to `&mut Formatter`.  
-/// `$expr` must resolve to a value that implements `core::fmt::Display`.  
+/// `kewrite!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.
+/// `$formatter` must be an expression that dereferences to `&mut Formatter`.
+/// `$expr` must resolve to a value that implements `core::fmt::Display`.
 /// `$expr` defaults to `$ident` if omitted.
 ///
 /// This macro always results in an expression that resolves to `Result<&mut Formatter, FormatSetError>`.
@@ -326,9 +326,9 @@ pub fn kewrite(tokens: TokenStream) -> TokenStream {
 
 /// Write a set of values into a `Formatter` and then builds it into an `OwnedKeyExpr`, stopping as soon as a value doesn't fit the specification for its field.
 ///
-/// `keformat!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.  
-/// `$formatter` must be an expression that dereferences to `&mut Formatter`.  
-/// `$expr` must resolve to a value that implements `core::fmt::Display`.  
+/// `keformat!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.
+/// `$formatter` must be an expression that dereferences to `&mut Formatter`.
+/// `$expr` must resolve to a value that implements `core::fmt::Display`.
 /// `$expr` defaults to `$ident` if omitted.
 ///
 /// This macro always results in an expression that resolves to `ZResult<OwnedKeyExpr>`, and leaves `$formatter` in its written state.

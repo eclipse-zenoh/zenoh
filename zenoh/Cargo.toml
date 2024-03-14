@@ -66,8 +66,8 @@ default = [
 ]
 
 [dependencies]
-async-global-executor = { workspace = true }
-async-std = { workspace = true, features = ["attributes"] }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
+tokio-util = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 const_format = { workspace = true }
@@ -107,6 +107,7 @@ zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }

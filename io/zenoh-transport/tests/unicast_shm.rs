@@ -13,7 +13,6 @@
 //
 #[cfg(feature = "shared-memory")]
 mod tests {
-    use async_std::{prelude::FutureExt, task};
     use std::{
         any::Any,
         convert::TryFrom,
@@ -24,7 +23,7 @@ mod tests {
         time::Duration,
     };
     use zenoh_buffers::buffer::SplitBuffer;
-    use zenoh_core::zasync_executor_init;
+    use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
@@ -57,12 +56,6 @@ mod tests {
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE: usize = 1_024;
-
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     // Transport Handler for the router
     struct SHPeer {
@@ -222,10 +215,7 @@ mod tests {
 
         // Create the listener on the peer
         println!("Transport SHM [1a]");
-        let _ = ztimeout!(peer_shm01_manager
-            .add_listener(endpoint.clone())
-            .timeout(TIMEOUT))
-        .unwrap();
+        let _ = ztimeout!(peer_shm01_manager.add_listener(endpoint.clone())).unwrap();
 
         // Create a transport with the peer
         println!("Transport SHM [1b]");
@@ -290,13 +280,13 @@ mod tests {
         }
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         // Wait for the messages to arrive to the other side
         println!("Transport SHM [3b]");
         ztimeout!(async {
             while peer_shm02_handler.get_count() != MSG_COUNT {
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
@@ -334,18 +324,18 @@ mod tests {
         }
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         // Wait for the messages to arrive to the other side
         println!("Transport SHM [4b]");
         ztimeout!(async {
             while peer_net01_handler.get_count() != MSG_COUNT {
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         // Close the transports
         println!("Transport SHM [5a]");
@@ -356,7 +346,7 @@ mod tests {
 
         ztimeout!(async {
             while !peer_shm01_manager.get_transports_unicast().await.is_empty() {
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
@@ -366,91 +356,67 @@ mod tests {
 
         // Wait a little bit
         ztimeout!(async {
-            while !peer_shm01_manager.get_listeners().is_empty() {
-                task::sleep(SLEEP).await;
+            while !peer_shm01_manager.get_listeners().await.is_empty() {
+                tokio::time::sleep(SLEEP).await;
             }
         });
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         ztimeout!(peer_net01_manager.close());
         ztimeout!(peer_shm01_manager.close());
         ztimeout!(peer_shm02_manager.close());
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 
     #[cfg(feature = "transport_tcp")]
-    #[test]
-    fn transport_tcp_shm() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_tcp_shm() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
-
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
-        task::block_on(run(&endpoint, false));
+        run(&endpoint, false).await;
     }
 
     #[cfg(feature = "transport_tcp")]
-    #[test]
-    fn transport_tcp_shm_with_lowlatency_transport() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_tcp_shm_with_lowlatency_transport() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
-
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14001).parse().unwrap();
-        task::block_on(run(&endpoint, true));
+        run(&endpoint, true).await;
     }
 
     #[cfg(feature = "transport_ws")]
-    #[test]
-    fn transport_ws_shm() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_ws_shm() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
-
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
-        task::block_on(run(&endpoint, false));
+        run(&endpoint, false).await;
     }
 
     #[cfg(feature = "transport_ws")]
-    #[test]
-    fn transport_ws_shm_with_lowlatency_transport() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_ws_shm_with_lowlatency_transport() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
-
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14011).parse().unwrap();
-        task::block_on(run(&endpoint, true));
+        run(&endpoint, true).await;
     }
 
     #[cfg(feature = "transport_unixpipe")]
-    #[test]
-    fn transport_unixpipe_shm() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unixpipe_shm() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
-
         let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm".parse().unwrap();
-        task::block_on(run(&endpoint, false));
+        run(&endpoint, false).await;
     }
 
     #[cfg(feature = "transport_unixpipe")]
-    #[test]
-    fn transport_unixpipe_shm_with_lowlatency_transport() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unixpipe_shm_with_lowlatency_transport() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
-
         let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm_with_lowlatency_transport"
             .parse()
             .unwrap();
-        task::block_on(run(&endpoint, true));
+        run(&endpoint, true).await;
     }
 }
