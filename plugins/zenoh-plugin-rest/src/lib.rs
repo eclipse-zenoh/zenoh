@@ -62,11 +62,11 @@ pub fn base64_encode(data: &[u8]) -> String {
 }
 
 fn payload_to_json(payload: Payload, encoding: &Encoding) -> serde_json::Value {
-    match payload.len() {
+    match payload.is_empty() {
         // If the value is empty return a JSON null
-        0 => serde_json::Value::Null,
+        true => serde_json::Value::Null,
         // if it is not check the encoding
-        _ => {
+        false => {
             match encoding {
                 // If it is a JSON try to deserialize as json, if it fails fallback to base64
                 &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
