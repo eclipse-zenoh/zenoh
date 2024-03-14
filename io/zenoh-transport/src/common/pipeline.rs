@@ -161,12 +161,18 @@ impl StageIn {
         }
 
         macro_rules! zretok {
-            ($batch:expr) => {{
-                let bytes = $batch.len();
-                *c_guard = Some($batch);
-                drop(c_guard);
-                self.s_out.notify(bytes);
-                return true;
+            ($batch:expr, $msg:expr) => {{
+                if $msg.is_express() {
+                    // Move out existing batch
+                    self.s_out.move_batch($batch);
+                    return true;
+                } else {
+                    let bytes = $batch.len();
+                    *c_guard = Some($batch);
+                    drop(c_guard);
+                    self.s_out.notify(bytes);
+                    return true;
+                }
             }};
         }
 
@@ -174,7 +180,7 @@ impl StageIn {
         let mut batch = zgetbatch_rets!(false);
         // Attempt the serialization on the current batch
         let e = match batch.encode(&*msg) {
-            Ok(_) => zretok!(batch),
+            Ok(_) => zretok!(batch, msg),
             Err(e) => e,
         };
 
@@ -194,7 +200,7 @@ impl StageIn {
         if let BatchError::NewFrame = e {
             // Attempt a serialization with a new frame
             if batch.encode((&*msg, &frame)).is_ok() {
-                zretok!(batch);
+                zretok!(batch, msg);
             }
         }
 
@@ -206,7 +212,7 @@ impl StageIn {
 
         // Attempt a second serialization on fully empty batch
         if batch.encode((&*msg, &frame)).is_ok() {
-            zretok!(batch);
+            zretok!(batch, msg);
         }
 
         // The second serialization attempt has failed. This means that the message is
