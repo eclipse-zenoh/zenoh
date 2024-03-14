@@ -81,6 +81,7 @@ fn segment_u64_id() {
 }
 
 #[test]
+#[ignore] // on MacOS runner it generates too long shm id, so not recommended
 fn segment_u128_id() {
     test_segment::<u128>()
 }
