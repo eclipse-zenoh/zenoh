@@ -459,14 +459,15 @@ impl<'a> HasWriteWithSampleKind for Publisher<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::publication::HasWriteWithSampleKind;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
     /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Self::WriteOutput<'_>
     where
