@@ -84,6 +84,7 @@ async fn main() {
     // Make sure to not drop messages because of congestion control
     .congestion_control(CongestionControl::Block).res().await.unwrap();
 
+    println!("Press CTRL-C to quit...");
     loop {
         publisher.put(buf.clone()).res().await.unwrap();
     }

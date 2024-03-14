@@ -74,13 +74,13 @@ async fn main() -> Result<(), zenoh::Error> {
     let publisher = session.declare_publisher(&path).res().await.unwrap();
 
     println!("Allocating Shared Memory Buffer...");
-
     let layout = shared_memory_provider
         .alloc_layout()
         .size(1024)
         .res()
         .unwrap();
 
+    println!("Press CTRL-C to quit...");
     for idx in 0..(K * N as u32) {
         let mut sbuf = layout
             .alloc()

@@ -1,5 +1,3 @@
-use std::io::{stdin, Read};
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -49,7 +47,7 @@ fn main() {
         .callback(move |sample| publisher.put(sample.value).res().unwrap())
         .res()
         .unwrap();
-    for _ in stdin().bytes().take_while(|b| !matches!(b, Ok(b'q'))) {}
+    std::thread::park();
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
