@@ -42,6 +42,7 @@ use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
     shared_memory_provider_backend::SharedMemoryProviderBackend,
     types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
+    zsliceshm::ZSliceShm,
 };
 
 #[derive(Debug)]
@@ -686,7 +687,7 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(wrapped.into())
+        Ok(ZSliceShm::new(wrapped))
     }
 
     fn alloc_resources() -> ZResult<(
@@ -790,6 +791,6 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(wrapped.into())
+        Ok(ZSliceShm::new(wrapped))
     }
 }

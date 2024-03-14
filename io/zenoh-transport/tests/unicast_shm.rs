@@ -266,11 +266,7 @@ mod tests {
                 .with_policy::<BlockOn<GarbageCollect>>()
                 .res_async())
             .unwrap();
-
-            {
-                let mut sbuf_mut = unsafe { sbuf.mutate_unchecked() };
-                sbuf_mut[0..8].copy_from_slice(&msg_count.to_le_bytes());
-            }
+            sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
@@ -314,11 +310,7 @@ mod tests {
                 .with_policy::<BlockOn<GarbageCollect>>()
                 .res_async())
             .unwrap();
-
-            {
-                let mut sbuf_mut = unsafe { sbuf.mutate_unchecked() };
-                sbuf_mut[0..8].copy_from_slice(&msg_count.to_le_bytes());
-            }
+            sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),

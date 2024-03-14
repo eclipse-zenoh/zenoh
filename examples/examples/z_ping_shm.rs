@@ -13,6 +13,7 @@
 //
 use clap::Parser;
 use std::time::{Duration, Instant};
+use zenoh::buffers::ZSlice;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
@@ -88,6 +89,9 @@ fn main() {
         .alloc()
         .res()
         .unwrap();
+
+    // convert ZSliceShm into ZSlice as ZSliceShm does not support Clone
+    let buf: ZSlice = buf.into();
 
     // -- warmup --
     println!("Warming up for {warmup:?}...");

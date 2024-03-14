@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod chunk;
-pub mod shared_memory_provider;
-pub mod shared_memory_provider_backend;
-pub mod types;
-pub mod zsliceshm;
+use crate::{api::provider::zsliceshm::ZSliceShm, SharedMemoryBuf};
+
+pub fn consume_zsliceshm(slice: ZSliceShm) -> SharedMemoryBuf {
+    slice.slice
+}

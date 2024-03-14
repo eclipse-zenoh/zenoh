@@ -14,10 +14,9 @@
 
 use std::fmt::Display;
 
-use zenoh_buffers::ZSlice;
 use zenoh_result::{bail, ZResult};
 
-use super::chunk::AllocatedChunk;
+use super::{chunk::AllocatedChunk, zsliceshm::ZSliceShm};
 
 // Allocation errors
 #[derive(Debug)]
@@ -116,4 +115,4 @@ impl MemoryLayout {
 }
 
 pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
-pub type BufAllocResult = Result<ZSlice, ZAllocError>;
+pub type BufAllocResult = Result<ZSliceShm, ZAllocError>;

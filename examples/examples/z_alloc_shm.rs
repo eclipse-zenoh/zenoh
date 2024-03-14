@@ -124,22 +124,7 @@ async fn run() -> Result<()> {
     .await;
 
     // Fill recently-allocated buffer with data
-
-    // ZSlice supports implicit sharing of underlying data, moreover, the underlying data may
-    // have it's own additional level of indirection that might support sharing (ex. shared memory).
-    // There are some options how to get mutable acces to the slice's data
-    {
-        // Fail if the data reference is not unique
-        let fail = sbuf.try_mutate();
-        drop(fail);
-
-        // Unsafe, does not imply any checks, intended mostly for recently-allocated buffers.
-        // The concurrent access to the same slice is OK for Zenoh itself, so this method can
-        // also be used in combination with Sync data (ex. Atomics) for user-defined IPC
-        let mut unchecked = unsafe { sbuf.mutate_unchecked() };
-        // here we use as_mut_unchecked() as we know that buffer reference is unique
-        unchecked[0..8].fill(0);
-    }
+    sbuf[0..8].fill(0);
 
     // Declare Session and Publisher (common code)
     let session = zenoh::open(Config::default()).res_async().await?;

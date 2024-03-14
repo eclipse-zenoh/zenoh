@@ -18,6 +18,8 @@ use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use zenoh_buffers::ZSlice;
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::api::provider::zsliceshm::ZSliceShm;
 
 use zenoh_collections::Properties;
 use zenoh_result::ZError;
@@ -85,6 +87,17 @@ impl std::fmt::Display for Value {
 impl std::error::Error for Value {}
 
 // Shared memory conversion
+#[cfg(feature = "shared-memory")]
+impl From<ZSliceShm> for Value {
+    fn from(slice: ZSliceShm) -> Self {
+        Value {
+            payload: slice.into(),
+            encoding: KnownEncoding::AppOctetStream.into(),
+        }
+    }
+}
+
+// ZSlice conversion
 impl From<ZSlice> for Value {
     fn from(slice: ZSlice) -> Self {
         Value {

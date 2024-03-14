@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    mem::size_of,
+};
 
 use rand::Rng;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
@@ -21,14 +24,20 @@ use zenoh_result::{bail, zerror, ZResult};
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 
 /// Segment of shared memory identified by an ID
-pub struct Segment<ID> {
-    pub shmem: Shmem,
-    pub id: ID,
+pub struct Segment<ID>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: Clone + Display,
+{
+    shmem: Shmem,
+    id: ID,
 }
 
 impl<ID> Debug for Segment<ID>
 where
     ID: Debug,
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: Clone + Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Segment")
@@ -53,14 +62,17 @@ where
             // If creation fails because segment already exists for this id,
             // the creation attempt will be repeated with another id
             match ShmemConf::new()
-                .size(alloc_size)
+                .size(alloc_size + size_of::<usize>())
                 .os_id(Self::os_id(id.clone(), id_prefix))
                 .create()
             {
                 Ok(shmem) => {
-                    log::debug!("Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}");
-                    return Ok(Segment { shmem, id })
-                },
+                    log::debug!(
+                        "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
+                    );
+                    unsafe { *(shmem.as_ptr() as *mut usize) = alloc_size };
+                    return Ok(Segment { shmem, id });
+                }
                 Err(ShmemError::LinkExists) => {}
                 Err(ShmemError::MappingIdExists) => {}
                 Err(e) => bail!("Unable to create POSIX shm segment: {}", e),
@@ -74,14 +86,39 @@ where
         let shmem = ShmemConf::new()
             .os_id(Self::os_id(id.clone(), id_prefix))
             .open()
-            .map_err(|e| zerror!("Error opening POSIX shm segment id {id}, prefix: {id_prefix}: {}", e))?;
+            .map_err(|e| {
+                zerror!(
+                    "Error opening POSIX shm segment id {id}, prefix: {id_prefix}: {}",
+                    e
+                )
+            })?;
+
+        if shmem.len() <= size_of::<usize>() {
+            bail!("SHM segment too small")
+        }
 
         log::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
-    
+
         Ok(Self { shmem, id })
     }
 
     fn os_id(id: ID, id_prefix: &str) -> String {
         format!("{id_prefix}_{id}")
+    }
+
+    pub fn as_ptr(&self) -> *mut u8 {
+        unsafe { self.shmem.as_ptr().add(size_of::<usize>()) }
+    }
+
+    pub fn len(&self) -> usize {
+        unsafe { *(self.shmem.as_ptr() as *mut usize) }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        unsafe { *(self.shmem.as_ptr() as *mut usize) == 0 }
+    }
+
+    pub fn id(&self) -> ID {
+        self.id.clone()
     }
 }

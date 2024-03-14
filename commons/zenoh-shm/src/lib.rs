@@ -13,15 +13,11 @@
 //
 use api::{common::types::ProtocolID, provider::chunk::ChunkDescriptor};
 use header::descriptor::{HeaderDescriptor, OwnedHeaderDescriptor};
-use std::{
-    any::Any,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicPtr, Ordering},
+    Arc,
 };
 use watchdog::{confirmator::ConfirmedDescriptor, descriptor::Descriptor};
-use zenoh_buffers::ZSliceBuffer;
 
 #[macro_export]
 macro_rules! tested_module {
@@ -56,6 +52,7 @@ pub mod header;
 pub mod posix_shm;
 pub mod reader;
 pub mod watchdog;
+pub mod zsliceshm_access;
 
 test_helpers_module!();
 
@@ -216,26 +213,5 @@ impl AsRef<[u8]> for SharedMemoryBuf {
 impl AsMut<[u8]> for SharedMemoryBuf {
     fn as_mut(&mut self) -> &mut [u8] {
         unsafe { self.as_mut_slice_inner() }
-    }
-}
-
-impl ZSliceBuffer for SharedMemoryBuf {
-    fn as_slice(&self) -> &[u8] {
-        self.as_ref()
-    }
-    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
-    fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
-        if self.is_valid() && self.is_unique() {
-            return Some(self.as_mut());
-        }
-        None
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn is_valid(&self) -> bool {
-        self.is_valid()
     }
 }

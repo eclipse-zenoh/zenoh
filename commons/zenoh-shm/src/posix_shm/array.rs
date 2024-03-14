@@ -22,13 +22,27 @@ use super::segment::Segment;
 
 /// An SHM segment that is intended to be an array of elements of some certain type
 #[derive(Debug)]
-pub struct ArrayInSHM<ID, Elem, ElemIndex> {
+pub struct ArrayInSHM<ID, Elem, ElemIndex>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: Clone + Display,
+{
     inner: Segment<ID>,
     _phantom: PhantomData<(Elem, ElemIndex)>,
 }
 
-unsafe impl<ID, Elem: Sync, ElemIndex> Sync for ArrayInSHM<ID, Elem, ElemIndex> {}
-unsafe impl<ID, Elem: Send, ElemIndex> Send for ArrayInSHM<ID, Elem, ElemIndex> {}
+unsafe impl<ID, Elem: Sync, ElemIndex> Sync for ArrayInSHM<ID, Elem, ElemIndex>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: Clone + Display,
+{
+}
+unsafe impl<ID, Elem: Send, ElemIndex> Send for ArrayInSHM<ID, Elem, ElemIndex>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: Clone + Display,
+{
+}
 
 impl<ID, Elem, ElemIndex> ArrayInSHM<ID, Elem, ElemIndex>
 where
@@ -65,11 +79,11 @@ where
     }
 
     pub fn id(&self) -> ID {
-        self.inner.id.clone()
+        self.inner.id()
     }
 
     pub fn elem_count(&self) -> usize {
-        self.inner.shmem.len() / size_of::<Elem>()
+        self.inner.len() / size_of::<Elem>()
     }
 
     /// # Safety
@@ -77,8 +91,8 @@ where
     /// Additional assert to check the index validity is added for "test" feature
     pub unsafe fn elem(&self, index: ElemIndex) -> *const Elem {
         #[cfg(feature = "test")]
-        assert!(self.inner.shmem.len() > index.as_() * size_of::<Elem>());
-        (self.inner.shmem.as_ptr() as *const Elem).add(index.as_())
+        assert!(self.inner.len() > index.as_() * size_of::<Elem>());
+        (self.inner.as_ptr() as *const Elem).add(index.as_())
     }
 
     /// # Safety
@@ -86,19 +100,19 @@ where
     /// Additional assert to check the index validity is added for "test" feature
     pub unsafe fn elem_mut(&self, index: ElemIndex) -> *mut Elem {
         #[cfg(feature = "test")]
-        assert!(self.inner.shmem.len() > index.as_() * size_of::<Elem>());
-        (self.inner.shmem.as_ptr() as *mut Elem).add(index.as_())
+        assert!(self.inner.len() > index.as_() * size_of::<Elem>());
+        (self.inner.as_ptr() as *mut Elem).add(index.as_())
     }
 
     /// # Safety
     /// Calculates element's index. This is safe if the element belongs to underlying array.
     /// Additional assert is added for "test" feature
     pub unsafe fn index(&self, elem: *const Elem) -> ElemIndex {
-        let index = elem.offset_from(self.inner.shmem.as_ptr() as *const Elem);
+        let index = elem.offset_from(self.inner.as_ptr() as *const Elem);
         #[cfg(feature = "test")]
         {
             assert!(index >= 0);
-            assert!(self.inner.shmem.len() > index as usize * size_of::<Elem>());
+            assert!(self.inner.len() > index as usize * size_of::<Elem>());
         }
         index.as_()
     }

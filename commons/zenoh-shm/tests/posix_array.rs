@@ -91,7 +91,7 @@ where
     // and for bigger indexes we use limited index range
     let elem_count = {
         match size_of::<ElemIndex>() > size_of::<u16>() {
-            true => u16::max_value() as usize + 1,
+            true => 100,
             false => ElemIndex::max_value().as_() + 1,
         }
     };

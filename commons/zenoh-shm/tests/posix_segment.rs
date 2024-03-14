@@ -19,14 +19,18 @@ use zenoh_shm::{
     test_helpers::{validate_memory, TEST_SEGMENT_PREFIX},
 };
 
-fn validate_segment<ID>(segment1: &Segment<ID>, segment2: &Segment<ID>) {
-    assert!(segment1.shmem.len() == segment2.shmem.len());
+fn validate_segment<ID>(segment1: &Segment<ID>, segment2: &Segment<ID>)
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: Clone + Display,
+{
+    assert!(segment1.len() == segment2.len());
 
-    let ptr1 = segment1.shmem.as_ptr();
-    let ptr2 = segment2.shmem.as_ptr();
+    let ptr1 = segment1.as_ptr();
+    let ptr2 = segment2.as_ptr();
 
-    let slice1 = unsafe { slice::from_raw_parts_mut(ptr1, segment1.shmem.len()) };
-    let slice2 = unsafe { slice::from_raw_parts(ptr2, segment2.shmem.len()) };
+    let slice1 = unsafe { slice::from_raw_parts_mut(ptr1, segment1.len()) };
+    let slice2 = unsafe { slice::from_raw_parts(ptr2, segment2.len()) };
 
     validate_memory(slice1, slice2);
 }
@@ -39,12 +43,12 @@ where
     let new_segment: Segment<ID> =
         Segment::create(900, TEST_SEGMENT_PREFIX).expect("error creating new segment");
 
-    let opened_segment_instance_1 = Segment::open(new_segment.id, TEST_SEGMENT_PREFIX)
+    let opened_segment_instance_1 = Segment::open(new_segment.id(), TEST_SEGMENT_PREFIX)
         .expect("error opening existing segment!");
 
     validate_segment(&new_segment, &opened_segment_instance_1);
 
-    let opened_segment_instance_2 = Segment::open(new_segment.id, TEST_SEGMENT_PREFIX)
+    let opened_segment_instance_2 = Segment::open(new_segment.id(), TEST_SEGMENT_PREFIX)
         .expect("error opening existing segment!");
 
     validate_segment(&new_segment, &opened_segment_instance_1);
@@ -115,7 +119,7 @@ fn segment_open() {
     let new_segment: Segment<u8> =
         Segment::create(900, TEST_SEGMENT_PREFIX).expect("error creating new segment");
 
-    let _opened_segment = Segment::open(new_segment.id, TEST_SEGMENT_PREFIX)
+    let _opened_segment = Segment::open(new_segment.id(), TEST_SEGMENT_PREFIX)
         .expect("error opening existing segment!");
 }
 
@@ -124,7 +128,7 @@ fn segment_open_error() {
     let id = {
         let new_segment: Segment<u8> =
             Segment::create(900, TEST_SEGMENT_PREFIX).expect("error creating new segment");
-        new_segment.id
+        new_segment.id()
     };
 
     let _opened_segment = Segment::open(id, TEST_SEGMENT_PREFIX)

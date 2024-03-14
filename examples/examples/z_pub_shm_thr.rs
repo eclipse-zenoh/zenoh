@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
+use zenoh::buffers::ZSlice;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
@@ -73,16 +74,15 @@ async fn main() {
         .res()
         .unwrap();
 
-    {
-        let mut buf_mut = unsafe { buf.mutate_unchecked() };
-        for b in buf_mut.as_mut() {
-            *b = rand::random::<u8>();
-        }
+    for b in buf.as_mut() {
+        *b = rand::random::<u8>();
     }
 
     let publisher = z.declare_publisher("test/thr")
     // Make sure to not drop messages because of congestion control
     .congestion_control(CongestionControl::Block).res().await.unwrap();
+
+    let buf: ZSlice = buf.into();
 
     println!("Press CTRL-C to quit...");
     loop {

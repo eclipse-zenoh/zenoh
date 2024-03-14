@@ -95,11 +95,8 @@ async fn main() -> Result<(), zenoh::Error> {
         let prefix_len = prefix.as_bytes().len();
         let slice_len = prefix_len + value.as_bytes().len();
 
-        {
-            let mut buf_mut = unsafe { sbuf.mutate_unchecked() };
-            buf_mut[0..prefix_len].copy_from_slice(prefix.as_bytes());
-            buf_mut[prefix_len..slice_len].copy_from_slice(value.as_bytes());
-        }
+        sbuf[0..prefix_len].copy_from_slice(prefix.as_bytes());
+        sbuf[prefix_len..slice_len].copy_from_slice(value.as_bytes());
 
         // Write the data
         println!(
@@ -107,10 +104,7 @@ async fn main() -> Result<(), zenoh::Error> {
             path,
             String::from_utf8_lossy(&sbuf[0..slice_len])
         );
-        publisher.put(sbuf.clone()).res().await?;
-
-        // Dropping the SharedMemoryBuf means to free it.
-        drop(sbuf);
+        publisher.put(sbuf).res().await?;
     }
 
     Ok(())
