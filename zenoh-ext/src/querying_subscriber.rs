@@ -595,7 +595,8 @@ where
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh_ext::*;
 ///
@@ -615,7 +616,7 @@ where
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     println!("Received: {:?}", sample);
 /// }
-/// # })
+/// # }
 /// ```
 pub struct FetchingSubscriber<'a, Receiver> {
     subscriber: Subscriber<'a, ()>,
@@ -728,7 +729,8 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh_ext::*;
     ///
@@ -758,7 +760,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn fetch<
@@ -810,7 +812,8 @@ impl Drop for RepliesHandler {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// # use zenoh::prelude::r#async::*;
 /// # use zenoh_ext::*;
 /// #
@@ -839,7 +842,7 @@ impl Drop for RepliesHandler {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct FetchBuilder<

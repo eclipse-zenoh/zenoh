@@ -35,7 +35,6 @@ transport_serial = ["zenoh-link-serial"]
 transport_unixpipe = ["zenoh-link-unixpipe", "zenoh-link-unixpipe/transport_unixpipe"]
 
 [dependencies]
-async-std = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true, optional = true }
 zenoh-config = { workspace = true }

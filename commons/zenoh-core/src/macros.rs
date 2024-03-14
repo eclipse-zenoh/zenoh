@@ -56,24 +56,10 @@ macro_rules! zasynclock {
 #[macro_export]
 macro_rules! zasyncread {
     ($var:expr) => {
-        if let Some(g) = $var.try_read() {
+        if let Ok(g) = $var.try_read() {
             g
         } else {
             $var.read().await
-        }
-    };
-}
-
-// This macro performs an async read with upgrade to write option on RwLock<T>
-// For performance reasons, it first performs a try_upgradable_read() and,
-// if it fails, it falls back on upgradable_read().await
-#[macro_export]
-macro_rules! zasyncread_upgradable {
-    ($var:expr) => {
-        if let Some(g) = $var.try_upgradable_read() {
-            g
-        } else {
-            $var.upgradable_read().await
         }
     };
 }
@@ -84,7 +70,7 @@ macro_rules! zasyncread_upgradable {
 #[macro_export]
 macro_rules! zasyncwrite {
     ($var:expr) => {
-        if let Some(g) = $var.try_write() {
+        if let Ok(g) = $var.try_write() {
             g
         } else {
             $var.write().await
@@ -222,4 +208,12 @@ macro_rules! zcondfeat {
             }
         }
     }};
+}
+
+// This macro allows to timeout a feature
+#[macro_export]
+macro_rules! ztimeout {
+    ($f:expr) => {
+        tokio::time::timeout(TIMEOUT, $f).await.unwrap()
+    };
 }

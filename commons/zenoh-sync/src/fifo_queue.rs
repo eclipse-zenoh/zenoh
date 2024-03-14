@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::Condition;
-use async_std::sync::Mutex;
+use tokio::sync::Mutex;
 use zenoh_collections::RingBuffer;
 use zenoh_core::zasynclock;
 
@@ -32,7 +32,7 @@ impl<T> FifoQueue<T> {
     }
 
     pub fn try_push(&self, x: T) -> Option<T> {
-        if let Some(mut guard) = self.buffer.try_lock() {
+        if let Ok(mut guard) = self.buffer.try_lock() {
             let res = guard.push(x);
             if res.is_none() {
                 drop(guard);
@@ -57,7 +57,7 @@ impl<T> FifoQueue<T> {
     }
 
     pub fn try_pull(&self) -> Option<T> {
-        if let Some(mut guard) = self.buffer.try_lock() {
+        if let Ok(mut guard) = self.buffer.try_lock() {
             if let Some(e) = guard.pull() {
                 drop(guard);
                 self.not_full.notify_one();

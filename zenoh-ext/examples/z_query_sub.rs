@@ -18,7 +18,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::query::ReplyKeyExpr;
 use zenoh_ext::*;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
     env_logger::init();
