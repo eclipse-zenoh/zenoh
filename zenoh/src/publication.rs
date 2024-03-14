@@ -102,6 +102,13 @@ impl PutBuilder<'_, '_> {
         self
     }
 
+    /// Change the `congestion_control` to apply when routing the data.
+    #[inline]
+    pub fn express(mut self, is_express: bool) -> Self {
+        self.publisher = self.publisher.express(is_express);
+        self
+    }
+
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
@@ -141,6 +148,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
             key_expr,
             congestion_control,
             priority,
+            is_express,
             destination,
         } = self.publisher;
 
@@ -151,6 +159,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
             key_expr: key_expr?,
             congestion_control,
             priority,
+            is_express,
             destination,
         };
 
@@ -248,6 +257,7 @@ pub struct Publisher<'a> {
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
+    pub(crate) is_express: bool,
     pub(crate) destination: Locality,
 }
 
@@ -738,6 +748,7 @@ pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
+    pub(crate) is_express: bool,
     pub(crate) destination: Locality,
 }
 
@@ -751,6 +762,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
             },
             congestion_control: self.congestion_control,
             priority: self.priority,
+            is_express: self.is_express,
             destination: self.destination,
         }
     }
@@ -768,6 +780,13 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
+        self
+    }
+
+    /// Change the `congestion_control` to apply when routing the data.
+    #[inline]
+    pub fn express(mut self, is_express: bool) -> Self {
+        self.is_express = is_express;
         self
     }
 
@@ -830,6 +849,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             key_expr,
             congestion_control: self.congestion_control,
             priority: self.priority,
+            is_express: self.is_express,
             destination: self.destination,
         };
         log::trace!("publish({:?})", publisher.key_expr);
@@ -867,7 +887,7 @@ fn resolve_put(
             ext_qos: ext::QoSType::new(
                 publisher.priority.into(),
                 publisher.congestion_control,
-                false,
+                publisher.is_express,
             ),
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -933,7 +953,7 @@ fn resolve_put(
             qos: QoS::from(ext::QoSType::new(
                 publisher.priority.into(),
                 publisher.congestion_control,
-                false,
+                publisher.is_express,
             )),
         };
 
