@@ -45,6 +45,7 @@ fn main() {
         .res()
         .unwrap();
 
+    println!("Press CTRL-C to quit...");
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
     loop {
