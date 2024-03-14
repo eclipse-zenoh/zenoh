@@ -493,7 +493,7 @@ impl Sample {
     /// Ensure that an associated Timestamp is present in this Sample.
     /// If not, a new one is created with the current system time and 0x00 as id.
     /// Get the timestamp of this sample (either existing one or newly created)
-    // tags{rust.sample.ensure_timestamp, api.sample.timestamp.ensure}
+    // tags{rust.sample.ensure_timestamp}
     pub fn ensure_timestamp(&mut self) -> &Timestamp {
         if let Some(ref timestamp) = self.timestamp {
             timestamp
