@@ -425,13 +425,17 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
 
 #[cfg(target_os = "linux")]
 pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: Option<&str>) -> ZResult<()> {
-    socket.bind_device(iface.map(|x| x.as_bytes()))?;
+    if let Some(iface) = iface {
+        socket.bind_device(Some(iface.as_bytes()))?;
+    }
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) -> ZResult<()> {
-    socket.bind_device(iface.map(|x| x.as_bytes()))?;
+    if let Some(iface) = iface {
+        socket.bind_device(Some(iface.as_bytes()))?;
+    }
     Ok(())
 }
 
