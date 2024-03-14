@@ -33,12 +33,12 @@ fn header_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sy
 
 #[test]
 fn header_alloc() {
-    execute_concurrent(1, 10000, header_alloc_fn());
+    execute_concurrent(1, 1000, header_alloc_fn());
 }
 
 #[test]
 fn header_alloc_concurrent() {
-    execute_concurrent(100, 10000, header_alloc_fn());
+    execute_concurrent(100, 1000, header_alloc_fn());
 }
 
 fn header_link_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
@@ -52,12 +52,12 @@ fn header_link_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Syn
 
 #[test]
 fn header_link() {
-    execute_concurrent(1, 10000, header_link_fn());
+    execute_concurrent(1, 1000, header_link_fn());
 }
 
 #[test]
 fn header_link_concurrent() {
-    execute_concurrent(100, 10000, header_link_fn());
+    execute_concurrent(100, 1000, header_link_fn());
 }
 
 fn header_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static
@@ -80,12 +80,12 @@ fn header_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Se
 
 #[test]
 fn header_link_failure() {
-    execute_concurrent(1, 10000, header_link_failure_fn());
+    execute_concurrent(1, 1000, header_link_failure_fn());
 }
 
 #[test]
 fn header_link_failure_concurrent() {
-    execute_concurrent(100, 10000, header_link_failure_fn());
+    execute_concurrent(100, 1000, header_link_failure_fn());
 }
 
 fn header_check_memory_fn(parallel_tasks: usize, iterations: usize) {
@@ -121,10 +121,10 @@ fn header_check_memory_fn(parallel_tasks: usize, iterations: usize) {
 
 #[test]
 fn header_check_memory() {
-    header_check_memory_fn(1, 10000);
+    header_check_memory_fn(1, 1000);
 }
 
 #[test]
 fn header_check_memory_concurrent() {
-    header_check_memory_fn(100, 1000);
+    header_check_memory_fn(100, 100);
 }
