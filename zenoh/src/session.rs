@@ -337,6 +337,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::DEFAULT,
             priority: Priority::DEFAULT,
+            is_express: false,
             destination: Locality::default(),
         }
     }
@@ -1886,6 +1887,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::DEFAULT,
             priority: Priority::DEFAULT,
+            is_express: false,
             destination: Locality::default(),
         }
     }
