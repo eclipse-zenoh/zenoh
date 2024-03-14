@@ -399,7 +399,7 @@ where
             match InnerPolicy::alloc(layout, provider) {
                 Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
                     // todo: implement provider's async signalling instead of this!
-                    async_std::task::sleep(Duration::from_millis(1)).await;
+                    tokio::time::sleep(Duration::from_millis(1)).await;
                 }
                 other_result => {
                     return other_result;
