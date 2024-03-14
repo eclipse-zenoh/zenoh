@@ -55,19 +55,23 @@ impl PeriodicTask {
             .policy(Realtime(RealtimeThreadSchedulePolicy::Fifo))
             .priority(ThreadPriority::Min);
 
+        // todo: deal with windows realtime scheduling
         #[cfg(windows)]
         let builder = ThreadBuilder::default().name(name);
                 
         let _ = builder.spawn(move |result| {
-                #[cfg(unix)]
                 if let Err(e) = result {
-                    warn!("{:?}: error setting realtime FIFO scheduling policy for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
-                
-                    for priotity in (ThreadPriorityValue::MIN..ThreadPriorityValue::MAX).rev() {
-                        if let Ok(p) = priotity.try_into() {
-                            if set_current_thread_priority(ThreadPriority::Crossplatform(p)).is_ok() {
-                                warn!("{:?}: will use priority {}", std::thread::current().name(), priotity);
-                                break;
+                    #[cfg(windows)]
+                    warn!("{:?}: error setting scheduling priority for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
+                    #[cfg(unix)]
+                    {
+                        warn!("{:?}: error setting realtime FIFO scheduling policy for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
+                        for priotity in (ThreadPriorityValue::MIN..ThreadPriorityValue::MAX).rev() {
+                            if let Ok(p) = priotity.try_into() {
+                                if set_current_thread_priority(ThreadPriority::Crossplatform(p)).is_ok() {
+                                    warn!("{:?}: will use priority {}", std::thread::current().name(), priotity);
+                                    break;
+                                }
                             }
                         }
                     }
