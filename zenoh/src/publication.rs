@@ -102,7 +102,9 @@ impl PutBuilder<'_, '_> {
         self
     }
 
-    /// Change the `congestion_control` to apply when routing the data.
+    /// Change the `express` policy to apply when routing the data.
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
     pub fn express(mut self, is_express: bool) -> Self {
         self.publisher = self.publisher.express(is_express);
@@ -783,7 +785,9 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         self
     }
 
-    /// Change the `congestion_control` to apply when routing the data.
+    /// Change the `express` policy to apply when routing the data.
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
     pub fn express(mut self, is_express: bool) -> Self {
         self.is_express = is_express;

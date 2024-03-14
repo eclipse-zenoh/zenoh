@@ -41,6 +41,7 @@ fn main() {
         .declare_publisher("test/thr")
         .congestion_control(CongestionControl::Block)
         .priority(prio)
+        .express(true)
         .res()
         .unwrap();
 
