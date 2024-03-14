@@ -60,6 +60,10 @@ pub fn base64_encode(data: &[u8]) -> String {
     general_purpose::STANDARD.encode(data)
 }
 
+fn payload_to_string(payload: &Payload) -> String {
+    String::from_utf8(payload.contiguous().to_vec()).unwrap_or(base64_encode(&payload.contiguous()))
+}
+
 fn payload_to_json(payload: Payload, encoding: &Encoding) -> serde_json::Value {
     match payload.len() {
         // If the value is empty return a JSON null
@@ -69,12 +73,11 @@ fn payload_to_json(payload: Payload, encoding: &Encoding) -> serde_json::Value {
             match encoding {
                 // If it is a JSON try to deserialize as json, if it fails fallback to base64
                 &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
-                    serde_json::from_slice::<serde_json::Value>(&payload.contiguous()).unwrap_or(
-                        serde_json::Value::String(base64_encode(&payload.contiguous())),
-                    )
+                    serde_json::from_slice::<serde_json::Value>(&payload.contiguous())
+                        .unwrap_or(serde_json::Value::String(payload_to_string(&payload)))
                 }
-                // otherwise convert to base64 and JSON String
-                _ => serde_json::Value::String(base64_encode(&payload.contiguous())),
+                // otherwise convert to JSON string
+                _ => serde_json::Value::String(payload_to_string(&payload)),
             }
         }
     }
@@ -343,7 +346,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
-                        let kind = sample.kind.clone();
+                        let kind = sample.kind;
                         let json_sample =
                             serde_json::to_string(&sample_to_json(sample)).unwrap_or("{}".into());
 
