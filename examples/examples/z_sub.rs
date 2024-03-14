@@ -11,11 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
-use futures::prelude::*;
-use futures::select;
-use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
@@ -39,23 +35,17 @@ async fn main() {
 
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
-    println!("Enter 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
-    loop {
-        select!(
-            sample = subscriber.recv_async() => {
-                let sample = sample.unwrap();
-                let payload = sample.payload.deserialize::<String>().unwrap_or_else(|e| format!("{}", e));
-                println!(">> [Subscriber] Received {} ('{}': '{}')", sample.kind, sample.key_expr.as_str(), payload);
-            },
-            _ = stdin.read_exact(&mut input).fuse() => {
-                match input[0] {
-                    b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
-                    _ => (),
-                }
-            }
+    println!("Press CTRL-C to quit...");
+    while let Ok(sample) = subscriber.recv_async().await {
+        let payload = sample
+            .payload
+            .deserialize::<String>()
+            .unwrap_or_else(|e| format!("{}", e));
+        println!(
+            ">> [Subscriber] Received {} ('{}': '{}')",
+            sample.kind,
+            sample.key_expr.as_str(),
+            payload
         );
     }
 }
