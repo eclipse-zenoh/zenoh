@@ -338,26 +338,6 @@ impl<'a> Publisher<'a> {
         }
     }
 
-    /// Send data with [`kind`](SampleKind) (Put or Delete).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
-    /// # })
-    /// ```
-    // tags{rust.publisher.write}
-    pub fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Publication
-    where
-        IntoValue: Into<Value>,
-    {
-        self._write(kind, value.into())
-    }
-
     /// Put data.
     ///
     /// # Examples
@@ -471,6 +451,43 @@ impl<'a> Publisher<'a> {
     // tags{rust.publisher.undeclare, api.publisher.undeclare}
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
+    }
+}
+
+/// Internal function for sending data with specified  [`kind`](SampleKind)  
+pub trait HasWriteWithSampleKind {
+    type WriteOutput<'a>
+    where
+        Self: 'a;
+    fn write<IntoValue: Into<Value>>(
+        &self,
+        kind: SampleKind,
+        value: IntoValue,
+    ) -> Self::WriteOutput<'_>;
+}
+
+impl<'a> HasWriteWithSampleKind for Publisher<'a> {
+    type WriteOutput<'b> = Publication<'b>
+    where
+        'a: 'b;
+    /// Send data with [`kind`](SampleKind) (Put or Delete).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::publication::HasWriteWithSampleKind;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
+    /// # })
+    /// ```
+    fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Self::WriteOutput<'_>
+    where
+        IntoValue: Into<Value>,
+    {
+        self._write(kind, value.into())
     }
 }
 
@@ -1401,6 +1418,7 @@ mod tests {
 
     #[test]
     fn sample_kind_integrity_in_publication() {
+        use crate::publication::HasWriteWithSampleKind;
         use crate::{open, prelude::sync::*};
         use zenoh_protocol::core::SampleKind;
 
