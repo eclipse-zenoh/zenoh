@@ -62,7 +62,6 @@ default = [
     "transport_udp",
     "transport_unixsock-stream",
     "transport_ws",
-    "shared-memory",
 ]
 
 [dependencies]
