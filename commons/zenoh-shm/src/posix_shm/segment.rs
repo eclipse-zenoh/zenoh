@@ -22,6 +22,7 @@ use shared_memory::{Shmem, ShmemConf, ShmemError};
 use zenoh_result::{bail, zerror, ZResult};
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
+const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
 
 /// Segment of shared memory identified by an ID
 pub struct Segment<ID>
@@ -104,8 +105,8 @@ where
 
     fn os_id(id: ID, id_prefix: &str) -> String {
         let os_id_str = format!("{id_prefix}_{id}");
-        let md5_os_id_str = md5::compute(os_id_str);
-        format!("{:x}", md5_os_id_str)
+        let crc_os_id_str = ECMA.checksum(os_id_str.as_bytes());
+        format!("{:x}", crc_os_id_str)
     }
 
     pub fn as_ptr(&self) -> *mut u8 {
