@@ -513,7 +513,7 @@ impl Resource {
                         mapping: Mapping::Sender,
                     }
                 } else {
-                    wildsuffix.into()
+                    res.expr().into()
                 }
             }
             None => wildsuffix.into(),
