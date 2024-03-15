@@ -58,7 +58,7 @@ impl Task {
                 let sub = ztimeout!(session.declare_subscriber(ke).res_async())?;
                 let mut counter = 0;
                 while let Ok(sample) = sub.recv_async().await {
-                    let recv_size = sample.payload.len();
+                    let recv_size = sample.payload().len();
                     if recv_size != *expected_size {
                         bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                     }
@@ -91,7 +91,7 @@ impl Task {
                     while let Ok(reply) = replies.recv_async().await {
                         match reply.sample {
                             Ok(sample) => {
-                                let recv_size = sample.payload.len();
+                                let recv_size = sample.payload().len();
                                 if recv_size != *expected_size {
                                     bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                                 }

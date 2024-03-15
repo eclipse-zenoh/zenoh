@@ -363,38 +363,18 @@ pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Sample {
-    /// The key expression on which this Sample was published.
-    pub key_expr: KeyExpr<'static>,
-    /// The payload of this Sample.
-    pub payload: Payload,
-    /// The kind of this Sample.
-    pub kind: SampleKind,
-    /// The encoding of this sample
-    pub encoding: Encoding,
-    /// The [`Timestamp`] of this Sample.
-    pub timestamp: Option<Timestamp>,
-    /// Quality of service settings this sample was sent with.
-    pub qos: QoS,
+    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) payload: Payload,
+    pub(crate) kind: SampleKind,
+    pub(crate) encoding: Encoding,
+    pub(crate) timestamp: Option<Timestamp>,
+    pub(crate) qos: QoS,
 
     #[cfg(feature = "unstable")]
-    /// <div class="stab unstable">
-    ///   <span class="emoji">🔬</span>
-    ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
-    ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
-    /// </div>
-    ///
-    /// Infos on the source of this Sample.
-    pub source_info: SourceInfo,
+    pub(crate) source_info: SourceInfo,
 
     #[cfg(feature = "unstable")]
-    /// <div class="stab unstable">
-    ///   <span class="emoji">🔬</span>
-    ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
-    ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
-    /// </div>
-    ///
-    /// A map of key-value pairs, where each key and value are byte-slices.
-    pub attachment: Option<Attachment>,
+    pub(crate) attachment: Option<Attachment>,
 }
 
 impl Sample {
@@ -471,17 +451,65 @@ impl Sample {
         self
     }
 
+    /// Gets the key expression on which this Sample was published.
+    #[inline]
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        &self.key_expr
+    }
+
+    /// Gets the payload of this Sample.
+    #[inline]
+    pub fn payload(&self) -> &Payload {
+        &self.payload
+    }
+
+    /// Gets the kind of this Sample.
+    #[inline]
+    pub fn kind(&self) -> SampleKind {
+        self.kind
+    }
+
+    /// Sets the kind of this Sample.
+    #[inline]
+    #[doc(hidden)]
+    #[zenoh_macros::unstable]
+    pub fn with_kind(mut self, kind: SampleKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    /// Gets the encoding of this sample
+    #[inline]
+    pub fn encoding(&self) -> &Encoding {
+        &self.encoding
+    }
+
     /// Gets the timestamp of this Sample.
     #[inline]
-    pub fn get_timestamp(&self) -> Option<&Timestamp> {
+    pub fn timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
     /// Sets the timestamp of this Sample.
     #[inline]
+    #[doc(hidden)]
+    #[zenoh_macros::unstable]
     pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
         self.timestamp = Some(timestamp);
         self
+    }
+
+    /// Gets the quality of service settings this Sample was sent with.
+    #[inline]
+    pub fn qos(&self) -> &QoS {
+        &self.qos
+    }
+
+    /// Gets infos on the source of this Sample.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn source_info(&self) -> &SourceInfo {
+        &self.source_info
     }
 
     /// Sets the source info of this Sample.
@@ -492,10 +520,12 @@ impl Sample {
         self
     }
 
-    #[inline]
     /// Ensure that an associated Timestamp is present in this Sample.
     /// If not, a new one is created with the current system time and 0x00 as id.
     /// Get the timestamp of this sample (either existing one or newly created)
+    #[inline]
+    #[doc(hidden)]
+    #[zenoh_macros::unstable]
     pub fn ensure_timestamp(&mut self) -> &Timestamp {
         if let Some(ref timestamp) = self.timestamp {
             timestamp
@@ -506,17 +536,23 @@ impl Sample {
         }
     }
 
+    /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
     #[zenoh_macros::unstable]
+    #[inline]
     pub fn attachment(&self) -> Option<&Attachment> {
         self.attachment.as_ref()
     }
 
+    /// Gets the mutable sample attachment: a map of key-value pairs, where each key and value are byte-slices.
+    #[inline]
+    #[doc(hidden)]
     #[zenoh_macros::unstable]
     pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
         &mut self.attachment
     }
 
-    #[allow(clippy::result_large_err)]
+    #[inline]
+    #[doc(hidden)]
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);

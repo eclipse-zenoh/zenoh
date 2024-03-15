@@ -83,9 +83,9 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .callback(move |sample| {
             let mut count = zlock!(total_count_clone);
             *count += 1;
-            if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r100" {
+            if sample.key_expr().as_str() == "test/downsamples_by_keyexp/r100" {
                 zlock!(counter_r100).tick();
-            } else if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r50" {
+            } else if sample.key_expr().as_str() == "test/downsamples_by_keyexp/r50" {
                 zlock!(counter_r50).tick();
             }
         })
@@ -191,7 +191,7 @@ fn downsampling_by_interface_impl(egress: bool) {
         .callback(move |sample| {
             let mut count = zlock!(total_count_clone);
             *count += 1;
-            if sample.key_expr.as_str() == "test/downsamples_by_interface/r100" {
+            if sample.key_expr().as_str() == "test/downsamples_by_interface/r100" {
                 zlock!(counter_r100).tick();
             }
         })

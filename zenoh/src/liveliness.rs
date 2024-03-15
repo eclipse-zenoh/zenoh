@@ -131,9 +131,9 @@ impl<'a> Liveliness<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session.liveliness().declare_subscriber("key/expression").res().await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     match sample.kind {
-    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr),
-    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr),
+    ///     match sample.kind() {
+    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr()),
+    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
     ///     }
     /// }
     /// # })
@@ -169,7 +169,7 @@ impl<'a> Liveliness<'a> {
     /// let replies = session.liveliness().get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     if let Ok(sample) = reply.sample {
-    ///         println!(">> Liveliness token {}", sample.key_expr);
+    ///         println!(">> Liveliness token {}", sample.key_expr());
     ///     }
     /// }
     /// # })
@@ -425,7 +425,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -499,7 +499,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
+    ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
     /// }
     /// # })
     /// ```
@@ -593,7 +593,7 @@ where
 ///     .unwrap();
 /// while let Ok(token) = tokens.recv_async().await {
 ///     match token.sample {
-///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr.as_str()),
+///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr().as_str()),
 ///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload),
 ///     }
 /// }

@@ -38,13 +38,13 @@ async fn main() {
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
         let payload = sample
-            .payload
+            .payload()
             .deserialize::<String>()
             .unwrap_or_else(|e| format!("{}", e));
         println!(
             ">> [Subscriber] Received {} ('{}': '{}')",
-            sample.kind,
-            sample.key_expr.as_str(),
+            sample.kind(),
+            sample.key_expr().as_str(),
             payload
         );
     }

@@ -61,7 +61,7 @@ pub fn base64_encode(data: &[u8]) -> String {
     general_purpose::STANDARD.encode(data)
 }
 
-fn payload_to_json(payload: Payload, encoding: &Encoding) -> serde_json::Value {
+fn payload_to_json(payload: &Payload, encoding: &Encoding) -> serde_json::Value {
     match payload.is_empty() {
         // If the value is empty return a JSON null
         true => serde_json::Value::Null,
@@ -81,21 +81,21 @@ fn payload_to_json(payload: Payload, encoding: &Encoding) -> serde_json::Value {
     }
 }
 
-fn sample_to_json(sample: Sample) -> JSONSample {
+fn sample_to_json(sample: &Sample) -> JSONSample {
     JSONSample {
-        key: sample.key_expr.as_str().to_string(),
-        value: payload_to_json(sample.payload, &sample.encoding),
-        encoding: sample.encoding.to_string(),
-        time: sample.timestamp.map(|ts| ts.to_string()),
+        key: sample.key_expr().as_str().to_string(),
+        value: payload_to_json(sample.payload(), sample.encoding()),
+        encoding: sample.encoding().to_string(),
+        time: sample.timestamp().map(|ts| ts.to_string()),
     }
 }
 
 fn result_to_json(sample: Result<Sample, Value>) -> JSONSample {
     match sample {
-        Ok(sample) => sample_to_json(sample),
+        Ok(sample) => sample_to_json(&sample),
         Err(err) => JSONSample {
             key: "ERROR".into(),
-            value: payload_to_json(err.payload, &err.encoding),
+            value: payload_to_json(&err.payload, &err.encoding),
             encoding: err.encoding.to_string(),
             time: None,
         },
@@ -123,8 +123,8 @@ async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.key_expr.as_str(),
-        String::from_utf8_lossy(&sample.payload.contiguous())
+        sample.key_expr().as_str(),
+        String::from_utf8_lossy(&sample.payload().contiguous())
     )
 }
 
@@ -159,8 +159,8 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
         Ok(reply) => match reply.sample {
             Ok(sample) => response(
                 StatusCode::Ok,
-                Cow::from(&sample.encoding).as_ref(),
-                String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
+                Cow::from(sample.encoding()).as_ref(),
+                String::from_utf8_lossy(&sample.payload().contiguous()).as_ref(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
@@ -344,12 +344,11 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
-                        let kind = sample.kind;
                         let json_sample =
-                            serde_json::to_string(&sample_to_json(sample)).unwrap_or("{}".into());
+                            serde_json::to_string(&sample_to_json(&sample)).unwrap_or("{}".into());
 
                         match sender
-                            .send(&kind.to_string(), json_sample, None)
+                            .send(&sample.kind().to_string(), json_sample, None)
                             .timeout(std::time::Duration::new(10, 0))
                             .await
                         {

@@ -40,7 +40,7 @@ fn main() {
 
     let _sub = session
         .declare_subscriber(key_expr_ping)
-        .callback(move |sample| publisher.put(sample.payload).res().unwrap())
+        .callback(move |sample| publisher.put(sample.payload().clone()).res().unwrap())
         .res()
         .unwrap();
     std::thread::park();
