@@ -99,6 +99,7 @@ fn propagate_simple_queryable(
                 .local_qabls
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(res, &mut dst_face);
+            println!("Decled key = {key_expr:?}");
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
@@ -331,6 +332,16 @@ impl HatQueriesTrait for HatCode {
                 return EMPTY_ROUTE.clone();
             }
         };
+
+        if let Some(face) = tables.faces.values().find(|f| f.whatami != WhatAmI::Client) {
+            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+            route.push(QueryTargetQabl {
+                direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                complete: 0,
+                distance: f64::MAX,
+            });
+        }
+
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
             .as_ref()

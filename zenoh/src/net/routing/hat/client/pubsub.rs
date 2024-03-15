@@ -330,6 +330,15 @@ impl HatPubSubTrait for HatCode {
                 return Arc::new(route);
             }
         };
+
+        if let Some(face) = tables.faces.values().find(|f| f.whatami != WhatAmI::Client) {
+            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+            route.insert(
+                face.id,
+                (face.clone(), key_expr.to_owned(), NodeId::default()),
+            );
+        }
+
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
             .as_ref()
