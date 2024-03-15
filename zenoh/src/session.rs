@@ -518,7 +518,7 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # }
     /// ```
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
+    pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
             self.task_controller.terminate_all();
@@ -529,7 +529,7 @@ impl Session {
             // clean up to break cyclic references from self.state to itself
             state.primitives.take();
             state.queryables.clear();
-
+            self.alive = false;
             Ok(())
         })
     }
