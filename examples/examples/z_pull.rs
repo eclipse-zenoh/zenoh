@@ -52,13 +52,13 @@ async fn main() {
         match res.take() {
             Some(sample) => {
                 let payload = sample
-                    .payload
+                    .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(
                     "{} ('{}': '{}')",
-                    sample.kind,
-                    sample.key_expr.as_str(),
+                    sample.kind(),
+                    sample.key_expr().as_str(),
                     payload,
                 );
             }

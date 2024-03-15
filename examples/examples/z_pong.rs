@@ -21,7 +21,7 @@ fn main() {
     // initiate logging
     env_logger::init();
 
-    let config = parse_args();
+    let (config, express) = parse_args();
 
     let session = zenoh::open(config).res().unwrap().into_arc();
 
@@ -34,12 +34,13 @@ fn main() {
     let publisher = session
         .declare_publisher(key_expr_pong)
         .congestion_control(CongestionControl::Block)
+        .express(express)
         .res()
         .unwrap();
 
     let _sub = session
         .declare_subscriber(key_expr_ping)
-        .callback(move |sample| publisher.put(sample.payload).res().unwrap())
+        .callback(move |sample| publisher.put(sample.payload().clone()).res().unwrap())
         .res()
         .unwrap();
     std::thread::park();
@@ -47,11 +48,14 @@ fn main() {
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct Args {
+    /// express for sending data
+    #[arg(long, default_value = "false")]
+    no_express: bool,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> Config {
+fn parse_args() -> (Config, bool) {
     let args = Args::parse();
-    args.common.into()
+    (args.common.into(), !args.no_express)
 }

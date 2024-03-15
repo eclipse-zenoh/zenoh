@@ -101,7 +101,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/a").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "1");
+    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "1");
 
     put_data(
         &session,
@@ -117,7 +117,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "2");
+    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "2");
 
     delete_data(
         &session,
@@ -136,8 +136,8 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "2");
-    assert_eq!(data[0].key_expr.as_str(), "operation/test/b");
+    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "2");
+    assert_eq!(data[0].key_expr().as_str(), "operation/test/b");
 
     drop(storage);
 }
