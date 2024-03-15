@@ -11,10 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
 use async_std::task::sleep;
 use clap::Parser;
-use futures::prelude::*;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
@@ -35,44 +33,28 @@ async fn main() {
     let subscriber = session
         .declare_subscriber(&key_expr)
         .pull_mode()
-        .res()
-        .await
-        .unwrap();
-
-    println!("Press <enter> to pull data...");
-
-    // Define the future to handle incoming samples of the subscription.
-    let subs = async {
-        while let Ok(sample) = subscriber.recv_async().await {
+        .callback(|sample| {
             let payload = sample
-                .payload
+                .payload()
                 .deserialize::<String>()
                 .unwrap_or_else(|e| format!("{}", e));
             println!(
                 ">> [Subscriber] Received {} ('{}': '{}')",
-                sample.kind,
-                sample.key_expr.as_str(),
+                sample.kind(),
+                sample.key_expr().as_str(),
                 payload,
             );
-        }
-    };
+        })
+        .res()
+        .await
+        .unwrap();
 
-    // Define the future to handle keyboard's input.
-    let keyb = async {
-        let mut stdin = async_std::io::stdin();
-        let mut input = [0_u8];
-        loop {
-            stdin.read_exact(&mut input).await.unwrap();
-            match input[0] {
-                b'q' => break,
-                0 => sleep(Duration::from_secs(1)).await,
-                _ => subscriber.pull().res().await.unwrap(),
-            }
-        }
-    };
-
-    // Execute both futures concurrently until one of them returns.
-    subs.race(keyb).await;
+    println!("Press CTRL-C to quit...");
+    for idx in 0..u32::MAX {
+        sleep(Duration::from_secs(1)).await;
+        println!("[{idx:4}] Pulling...");
+        subscriber.pull().res().await.unwrap();
+    }
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

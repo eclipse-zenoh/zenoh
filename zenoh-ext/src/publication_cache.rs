@@ -180,9 +180,9 @@ impl<'a> PublicationCache<'a> {
                     sample = sub_recv.recv_async() => {
                         if let Ok(sample) = sample {
                             let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
-                                prefix.join(&sample.key_expr).unwrap().into()
+                                prefix.join(sample.key_expr()).unwrap().into()
                             } else {
-                                sample.key_expr.clone()
+                                sample.key_expr().clone()
                             };
 
                             if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
@@ -207,7 +207,7 @@ impl<'a> PublicationCache<'a> {
                             if !query.selector().key_expr.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
                                     for sample in queue {
-                                        if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp) {
+                                        if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
                                             if !time_range.contains(timestamp.get_time().to_system_time()){
                                                 continue;
                                             }
@@ -221,7 +221,7 @@ impl<'a> PublicationCache<'a> {
                                 for (key_expr, queue) in cache.iter() {
                                     if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                         for sample in queue {
-                                            if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp) {
+                                            if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
                                                 if !time_range.contains(timestamp.get_time().to_system_time()){
                                                     continue;
                                                 }

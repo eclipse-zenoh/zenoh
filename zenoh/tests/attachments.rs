@@ -9,9 +9,9 @@ fn pubsub() {
         .callback(|sample| {
             println!(
                 "{}",
-                std::str::from_utf8(&sample.payload.contiguous()).unwrap()
+                std::str::from_utf8(&sample.payload().contiguous()).unwrap()
             );
-            for (k, v) in &sample.attachment.unwrap() {
+            for (k, v) in sample.attachment().unwrap() {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
             }
         })

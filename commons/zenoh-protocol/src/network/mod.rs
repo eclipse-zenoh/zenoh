@@ -111,17 +111,29 @@ impl NetworkMessage {
     }
 
     #[inline]
+    pub fn is_express(&self) -> bool {
+        match &self.body {
+            NetworkBody::Push(msg) => msg.ext_qos.is_express(),
+            NetworkBody::Request(msg) => msg.ext_qos.is_express(),
+            NetworkBody::Response(msg) => msg.ext_qos.is_express(),
+            NetworkBody::ResponseFinal(msg) => msg.ext_qos.is_express(),
+            NetworkBody::Declare(msg) => msg.ext_qos.is_express(),
+            NetworkBody::OAM(msg) => msg.ext_qos.is_express(),
+        }
+    }
+
+    #[inline]
     pub fn is_droppable(&self) -> bool {
         if !self.is_reliable() {
             return true;
         }
 
         let cc = match &self.body {
-            NetworkBody::Declare(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::Push(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::Request(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::Response(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::ResponseFinal(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBody::Declare(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::OAM(msg) => msg.ext_qos.get_congestion_control(),
         };
 
@@ -131,11 +143,11 @@ impl NetworkMessage {
     #[inline]
     pub fn priority(&self) -> Priority {
         match &self.body {
-            NetworkBody::Declare(msg) => msg.ext_qos.get_priority(),
             NetworkBody::Push(msg) => msg.ext_qos.get_priority(),
             NetworkBody::Request(msg) => msg.ext_qos.get_priority(),
             NetworkBody::Response(msg) => msg.ext_qos.get_priority(),
             NetworkBody::ResponseFinal(msg) => msg.ext_qos.get_priority(),
+            NetworkBody::Declare(msg) => msg.ext_qos.get_priority(),
             NetworkBody::OAM(msg) => msg.ext_qos.get_priority(),
         }
     }

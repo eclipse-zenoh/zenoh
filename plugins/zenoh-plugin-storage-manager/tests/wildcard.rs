@@ -117,8 +117,8 @@ async fn test_wild_card_in_order() {
     // expected single entry
     let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(data[0].key_expr.as_str(), "wild/test/a");
-    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "2");
+    assert_eq!(data[0].key_expr().as_str(), "wild/test/a");
+    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "2");
 
     put_data(
         &session,
@@ -134,10 +134,10 @@ async fn test_wild_card_in_order() {
     // expected two entries
     let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 2);
-    assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr.as_str()));
-    assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr.as_str()));
-    assert!(["2", "3"].contains(&StringOrBase64::from(data[0].payload.clone()).as_str()));
-    assert!(["2", "3"].contains(&StringOrBase64::from(data[1].payload.clone()).as_str()));
+    assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr().as_str()));
+    assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr().as_str()));
+    assert!(["2", "3"].contains(&StringOrBase64::from(data[0].payload()).as_str()));
+    assert!(["2", "3"].contains(&StringOrBase64::from(data[1].payload()).as_str()));
 
     put_data(
         &session,
@@ -153,10 +153,10 @@ async fn test_wild_card_in_order() {
     // expected two entries
     let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 2);
-    assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr.as_str()));
-    assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr.as_str()));
-    assert_eq!(StringOrBase64::from(data[0].payload.clone()).as_str(), "4");
-    assert_eq!(StringOrBase64::from(data[1].payload.clone()).as_str(), "4");
+    assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr().as_str()));
+    assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr().as_str()));
+    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "4");
+    assert_eq!(StringOrBase64::from(data[1].payload()).as_str(), "4");
 
     delete_data(
         &session,
