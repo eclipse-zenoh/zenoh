@@ -592,7 +592,7 @@ impl QoS {
         self.inner.get_congestion_control()
     }
 
-    /// Gets express flag value. If true, the message is not batched during transmission, in order to reduce latency.
+    /// Gets express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
     pub fn express(&self) -> bool {
         self.inner.is_express()
     }

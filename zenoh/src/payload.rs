@@ -563,6 +563,14 @@ pub enum StringOrBase64 {
     Base64(String),
 }
 
+impl StringOrBase64 {
+    pub fn into_string(self) -> String {
+        match self {
+            StringOrBase64::String(s) | StringOrBase64::Base64(s) => s,
+        }
+    }
+}
+
 impl Deref for StringOrBase64 {
     type Target = String;
 
