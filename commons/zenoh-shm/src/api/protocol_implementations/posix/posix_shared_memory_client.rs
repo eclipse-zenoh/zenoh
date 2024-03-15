@@ -25,12 +25,12 @@ use crate::api::{
 
 use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 
+/// Client factory implementation for particular shared memory protocol
 #[derive(Debug)]
 pub struct PosixSharedMemoryClient;
 
-// SharedMemoryClient - client factory implementation for particular shared memory protocol
 impl SharedMemoryClient for PosixSharedMemoryClient {
-    // Attach to particular shared memory segment
+    /// Attach to particular shared memory segment
     fn attach(&self, segment: SegmentID) -> ZResult<Arc<dyn SharedMemorySegment>> {
         Ok(Arc::new(PosixSharedMemorySegment::open(segment)?))
     }

@@ -92,6 +92,10 @@ jobs:
         run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM
+        if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
+        run: cargo nextest run -F shared-memory -p zenoh-transport
+
+      - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
 

@@ -83,14 +83,6 @@ where
             size,
         }
     }
-
-    /*
-    pub fn for_type<T: IStable<ContainsIndirections = stabby::abi::B0>>(
-        self,
-    ) -> AllocLayout<'a, Backend> {
-        todo: return AllocLayout for type
-    }
-    */
 }
 
 pub struct AllocLayoutSizedBuilder<'a, const ID: ProtocolID, Backend>
@@ -116,6 +108,7 @@ where
         }
     }
 
+    /// try to build an allocation layout
     pub fn res(self) -> ZResult<AllocLayout<'a, ID, Backend>> {
         AllocLayout::new(self.size, AllocAlignment::default(), self.provider)
     }
@@ -133,7 +126,7 @@ impl<'a, const ID: ProtocolID, Backend> AllocLayoutAlignedBuilder<'a, ID, Backen
 where
     Backend: SharedMemoryProviderBackend,
 {
-    /// Try to build layout with specified args for parent SharedMemoryProvider
+    /// Try to build layout with specified args
     pub fn res(self) -> ZResult<AllocLayout<'a, ID, Backend>> {
         AllocLayout::new(self.size, self.alignment, self.provider)
     }
@@ -141,6 +134,7 @@ where
 
 /// A layout for allocations.
 /// This is a pre-calculated layout suitable for making series of similar allocations
+/// adopted for particular SharedMemoryProvider
 #[derive(Debug)]
 pub struct AllocLayout<'a, const ID: ProtocolID, Backend>
 where
@@ -185,6 +179,7 @@ where
     }
 }
 
+/// Trait for deallocation policies.
 pub trait ForceDeallocPolicy {
     fn dealloc<const ID: ProtocolID, Backend: SharedMemoryProviderBackend>(
         provider: &SharedMemoryProvider<ID, Backend>,
@@ -244,6 +239,7 @@ impl ForceDeallocPolicy for DeallocEldest {
     }
 }
 
+/// Trait for allocation policies
 pub trait AllocPolicy {
     fn alloc<const ID: ProtocolID, Backend: SharedMemoryProviderBackend>(
         layout: &MemoryLayout,
@@ -537,7 +533,7 @@ where
 
 pub struct SharedMemoryProviderBuilder;
 impl SharedMemoryProviderBuilder {
-    /// Builder
+    /// Get the builder to construct SharedMemoryProvider
     pub fn builder() -> Self {
         Self
     }
@@ -569,6 +565,7 @@ impl<const ID: ProtocolID, Backend> SharedMemoryProviderBuilderBackendID<ID, Bac
 where
     Backend: SharedMemoryProviderBackend,
 {
+    /// build SharedMemoryProvider
     pub fn res(self) -> SharedMemoryProvider<ID, Backend> {
         SharedMemoryProvider::<ID, Backend>::new(self.backend)
     }

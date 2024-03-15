@@ -37,10 +37,9 @@ use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 
 // todo: MIN_FREE_CHUNK_SIZE limitation is made to reduce memory fragmentation and lower
 // the CPU time needed to defragment() - that's reasonable, and there is additional thing here:
-// our SHM\zerocopy functionality outperforms common buffer transmission only starting from some
-// buffer size (I guess it is 2K on x86_64). In other words, there should be some minimal size
-// threshold reasonable to use with SHM - and it would be good to synchronize this threshold with
-// MIN_FREE_CHUNK_SIZE limitation!
+// our SHM\zerocopy functionality outperforms common buffer transmission only starting from 1K
+// buffer size. In other words, there should be some minimal size threshold reasonable to use with
+// SHM - and it would be good to synchronize this threshold with MIN_FREE_CHUNK_SIZE limitation!
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 
 #[derive(Eq, Copy, Clone, Debug)]
@@ -70,6 +69,7 @@ impl PartialEq for Chunk {
 pub struct PosixSharedMemoryProviderBackendBuilder;
 
 impl PosixSharedMemoryProviderBackendBuilder {
+    /// Use existing layout
     pub fn with_layout<Layout: Borrow<MemoryLayout>>(
         self,
         layout: Layout,
@@ -77,6 +77,7 @@ impl PosixSharedMemoryProviderBackendBuilder {
         LayoutedPosixSharedMemoryProviderBackendBuilder { layout }
     }
 
+    /// Construct layout in-place using arguments
     pub fn with_layout_args(
         self,
         size: usize,
@@ -86,6 +87,7 @@ impl PosixSharedMemoryProviderBackendBuilder {
         Ok(LayoutedPosixSharedMemoryProviderBackendBuilder { layout })
     }
 
+    /// Construct layout in-place from size (default alignment will be used)
     pub fn with_size(
         self,
         size: usize,
@@ -100,11 +102,14 @@ pub struct LayoutedPosixSharedMemoryProviderBackendBuilder<Layout: Borrow<Memory
 }
 
 impl<Layout: Borrow<MemoryLayout>> LayoutedPosixSharedMemoryProviderBackendBuilder<Layout> {
+    /// try to create PosixSharedMemoryProviderBackend
     pub fn res(self) -> ZResult<PosixSharedMemoryProviderBackend> {
         PosixSharedMemoryProviderBackend::new(self.layout.borrow())
     }
 }
 
+/// A backend for SharedMemoryProvider based on POSIX shared memory.
+/// This is the default general-purpose backed shipped with Zenoh.
 pub struct PosixSharedMemoryProviderBackend {
     available: AtomicUsize,
     segment: PosixSharedMemorySegment,
@@ -113,11 +118,11 @@ pub struct PosixSharedMemoryProviderBackend {
 }
 
 impl PosixSharedMemoryProviderBackend {
+    /// Get the builder to construct a new instance
     pub fn builder() -> PosixSharedMemoryProviderBackendBuilder {
         PosixSharedMemoryProviderBackendBuilder
     }
 
-    // The implementation might allocate a little bit bigger size due to alignment requirements
     fn new(layout: &MemoryLayout) -> ZResult<Self> {
         let segment = PosixSharedMemorySegment::create(layout.size())?;
 
