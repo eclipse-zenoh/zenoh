@@ -29,7 +29,7 @@ pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -55,6 +55,16 @@ struct RuntimeState {
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
     token: CancellationToken,
+}
+
+pub struct WeakRuntime {
+    state: Weak<RuntimeState>,
+}
+
+impl WeakRuntime {
+    pub fn upgrade(&self) -> Option<Runtime> {
+        self.state.upgrade().map(|state| Runtime { state })
+    }
 }
 
 #[derive(Clone)]
@@ -97,7 +107,7 @@ impl Runtime {
         let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config)?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
-            runtime: std::sync::RwLock::new(None),
+            runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
         });
 
         let transport_manager = TransportManager::builder()
@@ -123,7 +133,7 @@ impl Runtime {
                 token: CancellationToken::new(),
             }),
         };
-        *handler.runtime.write().unwrap() = Some(runtime.clone());
+        *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
         let receiver = config.subscribe();
@@ -158,6 +168,8 @@ impl Runtime {
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.state.token.cancel();
         self.manager().close().await;
+        // clean up to break cyclic reference of self.state to itself
+        self.state.transport_handlers.write().unwrap().clear();
         Ok(())
     }
 
@@ -202,10 +214,16 @@ impl Runtime {
     pub fn whatami(&self) -> WhatAmI {
         self.state.whatami
     }
+
+    pub fn downgrade(this: &Runtime) -> WeakRuntime {
+        WeakRuntime {
+            state: Arc::downgrade(&this.state),
+        }
+    }
 }
 
 struct RuntimeTransportEventHandler {
-    runtime: std::sync::RwLock<Option<Runtime>>,
+    runtime: std::sync::RwLock<WeakRuntime>,
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
@@ -214,7 +232,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         peer: TransportPeer,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        match zread!(self.runtime).as_ref() {
+        match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
                     zread!(runtime.state.transport_handlers)
@@ -242,7 +260,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         &self,
         transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        match zread!(self.runtime).as_ref() {
+        match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
                 let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
                     zread!(runtime.state.transport_handlers)

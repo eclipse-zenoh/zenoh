@@ -20,7 +20,7 @@ use crate::KeyExpr;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
@@ -151,9 +151,33 @@ impl fmt::Display for FaceState {
 }
 
 #[derive(Clone)]
+pub struct WeakFace {
+    pub(crate) tables: Weak<TablesLock>,
+    pub(crate) state: Weak<FaceState>,
+}
+
+impl WeakFace {
+    pub fn upgrade(&self) -> Option<Face> {
+        Some(Face {
+            tables: self.tables.upgrade()?,
+            state: self.state.upgrade()?
+        })
+    }
+}
+
+#[derive(Clone)]
 pub struct Face {
     pub(crate) tables: Arc<TablesLock>,
     pub(crate) state: Arc<FaceState>,
+}
+
+impl Face {
+    pub fn downgrade(&self) -> WeakFace {
+        WeakFace {
+            tables: Arc::downgrade(&self.tables),
+            state: Arc::downgrade(&self.state)
+        }
+    }
 }
 
 impl Primitives for Face {
