@@ -103,7 +103,9 @@ where
     }
 
     fn os_id(id: ID, id_prefix: &str) -> String {
-        format!("{id_prefix}_{id}")
+        let os_id_str = format!("{id_prefix}_{id}");
+        let md5_os_id_str = md5::compute(os_id_str);
+        format!("{:x}", md5_os_id_str)
     }
 
     pub fn as_ptr(&self) -> *mut u8 {

@@ -36,6 +36,7 @@ async-trait = { workspace = true }
 allocator-api2 = "*"
 bincode = { workspace = true }
 log = { workspace = true }
+md5 = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 shared_memory = { workspace = true }
 tokio = { workspace = true }

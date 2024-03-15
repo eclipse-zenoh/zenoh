@@ -109,6 +109,7 @@ libc = "0.2.139"
 libloading = "0.8"
 log = "0.4.17"
 lz4_flex = "0.11"
+md5 = "0.7"
 nix = { version = "0.27", features = ["fs"] }
 num_cpus = "1.15.0"
 num-traits = { version = "0.2.17", default-features = false }
