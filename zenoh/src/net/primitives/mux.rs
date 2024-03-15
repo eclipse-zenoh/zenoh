@@ -48,7 +48,7 @@ impl Primitives for Mux {
         };
         if self.interceptor.interceptors.is_empty() {
             let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade())  {
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
             let ctx = RoutingContext::new_out(msg, face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -72,7 +72,7 @@ impl Primitives for Mux {
         };
         if self.interceptor.interceptors.is_empty() {
             let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade())  {
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
             let ctx = RoutingContext::new_out(msg, face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -96,7 +96,7 @@ impl Primitives for Mux {
         };
         if self.interceptor.interceptors.is_empty() {
             let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade())  {
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
             let ctx = RoutingContext::new_out(msg, face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -120,7 +120,7 @@ impl Primitives for Mux {
         };
         if self.interceptor.interceptors.is_empty() {
             let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade())  {
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
             let ctx = RoutingContext::new_out(msg, face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -144,7 +144,7 @@ impl Primitives for Mux {
         };
         if self.interceptor.interceptors.is_empty() {
             let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade())  {
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
             let ctx = RoutingContext::new_out(msg, face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -199,7 +199,7 @@ impl EPrimitives for Mux {
         };
         if self.interceptor.interceptors.is_empty() {
             let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade())  {
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
             let ctx = RoutingContext::new_out(msg, face.clone());
             let prefix = ctx
                 .wire_expr()

@@ -24,7 +24,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
-use tokio_util::sync::CancellationToken;
 use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
@@ -34,6 +33,7 @@ use zenoh_protocol::{
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
+use zenoh_task::TaskController;
 
 /// # Examples
 /// ```
@@ -321,7 +321,7 @@ pub struct TransportManager {
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
-    pub(crate) token: CancellationToken,
+    task_controller: TaskController,
 }
 
 impl TransportManager {
@@ -343,32 +343,21 @@ impl TransportManager {
             new_unicast_link_sender,
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
-            token: CancellationToken::new(),
+            task_controller: TaskController::default(),
         };
 
         // @TODO: this should be moved into the unicast module
-        zenoh_runtime::ZRuntime::Net.spawn({
-            let this = this.clone();
-            let token = this.token.clone();
-            async move {
-                // while let Ok(link) = new_unicast_link_receiver.recv_async().await {
-                //     this.handle_new_link_unicast(link).await;
-                // }
-                loop {
-                    tokio::select! {
-                        res = new_unicast_link_receiver.recv_async() => {
-                            if let Ok(link) = res {
-                                this.handle_new_link_unicast(link).await;
-                            }
-                        }
-
-                        _ = token.cancelled() => {
-                            break;
+        this.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                let this = this.clone();
+                async move {
+                    loop {
+                        if let Ok(link) = new_unicast_link_receiver.recv_async().await {
+                            this.handle_new_link_unicast(link).await;
                         }
                     }
                 }
-            }
-        });
+            });
 
         this
     }
@@ -388,10 +377,7 @@ impl TransportManager {
 
     pub async fn close(&self) {
         self.close_unicast().await;
-        // TODO: Check this
-        self.token.cancel();
-        // WARN: depends on the auto-close of tokio runtime after dropped
-        // self.tx_executor.runtime.shutdown_background();
+        self.task_controller.terminate_all();
     }
 
     /*************************************/

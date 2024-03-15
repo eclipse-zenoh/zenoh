@@ -160,7 +160,7 @@ impl WeakFace {
     pub fn upgrade(&self) -> Option<Face> {
         Some(Face {
             tables: self.tables.upgrade()?,
-            state: self.state.upgrade()?
+            state: self.state.upgrade()?,
         })
     }
 }
@@ -175,7 +175,7 @@ impl Face {
     pub fn downgrade(&self) -> WeakFace {
         WeakFace {
             tables: Arc::downgrade(&self.tables),
-            state: Arc::downgrade(&self.state)
+            state: Arc::downgrade(&self.state),
         }
     }
 }

@@ -82,6 +82,7 @@ zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
+zenoh-task = { workspace = true }
 
 
 
