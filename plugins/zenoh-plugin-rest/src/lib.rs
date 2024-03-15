@@ -344,7 +344,6 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
-                        let kind = sample.kind();
                         let json_sample =
                             serde_json::to_string(&sample_to_json(&sample)).unwrap_or("{}".into());
 
