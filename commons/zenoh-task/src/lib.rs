@@ -28,17 +28,37 @@ use std::sync::Mutex;
 use tokio::task::{self, JoinHandle};
 use zenoh_runtime::ZRuntime;
 
+
+
+struct TaskControllerInner (Mutex<HashMap<u64, Option<JoinHandle<()>>>>);
+
+impl TaskControllerInner {
+    fn terminate_all(&self) {
+        let mut tasks_lock = self.0.lock().unwrap();
+
+        let tasks: Vec<(u64, Option<JoinHandle<()>>)> = tasks_lock.drain().collect();
+        for (_id, jh) in tasks {
+            jh.unwrap().abort();
+        }
+    }
+}
+
+impl Drop for TaskControllerInner {
+    fn drop(&mut self) {
+        self.terminate_all()
+    }
+}
 #[derive(Clone)]
 pub struct TaskController {
-    running_task_id_to_handle: Arc<Mutex<HashMap<u64, Option<JoinHandle<()>>>>>,
+    running_task_id_to_handle: Arc<TaskControllerInner>,
 }
 
 impl Default for TaskController {
     fn default() -> Self {
         TaskController {
-            running_task_id_to_handle: Arc::new(Mutex::new(
+            running_task_id_to_handle: Arc::new(TaskControllerInner(Mutex::new(
                 HashMap::<u64, Option<JoinHandle<()>>>::new(),
-            )),
+            ))),
         }
     }
 }
@@ -51,11 +71,11 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let mut tasks = self.running_task_id_to_handle.lock().unwrap();
+        let mut tasks = self.running_task_id_to_handle.0.lock().unwrap();
         let id = TaskController::get_next_task_id(tasks.deref_mut());
         let tasks_mutex = self.running_task_id_to_handle.clone();
         let jh = task::spawn(futures::FutureExt::map(future, move |_| {
-            tasks_mutex.lock().unwrap().remove(&id);
+            tasks_mutex.0.lock().unwrap().remove(&id);
         }));
         tasks.insert(id, Some(jh));
     }
@@ -67,11 +87,11 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let mut tasks = self.running_task_id_to_handle.lock().unwrap();
+        let mut tasks = self.running_task_id_to_handle.0.lock().unwrap();
         let id = TaskController::get_next_task_id(tasks.deref_mut());
         let tasks_mutex = self.running_task_id_to_handle.clone();
         let jh = rt.spawn(futures::FutureExt::map(future, move |_| {
-            tasks_mutex.lock().unwrap().remove(&id);
+            tasks_mutex.0.lock().unwrap().remove(&id);
         }));
         tasks.insert(id, Some(jh));
     }
@@ -93,11 +113,6 @@ impl TaskController {
 
     /// Terminates all prevously spawned tasks
     pub fn terminate_all(&self) {
-        let mut tasks_lock = self.running_task_id_to_handle.lock().unwrap();
-
-        let tasks: Vec<(u64, Option<JoinHandle<()>>)> = tasks_lock.drain().collect();
-        for (_id, jh) in tasks {
-            jh.unwrap().abort();
-        }
+        self.running_task_id_to_handle.terminate_all();
     }
 }
