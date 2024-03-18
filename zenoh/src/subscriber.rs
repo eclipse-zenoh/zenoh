@@ -13,7 +13,7 @@
 //
 
 //! Subscribing primitives.
-use crate::handlers::{locked, Callback, DefaultHandler, IntoCallbackReceiverPair};
+use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::key_expr::KeyExpr;
 use crate::prelude::Locality;
 use crate::sample::Sample;
@@ -392,7 +392,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -414,7 +414,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Mode, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
+        Handler: crate::prelude::IntoHandler<'static, Sample>,
     {
         let SubscriberBuilder {
             session,
@@ -511,21 +511,21 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 // Push mode
 impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<Subscriber<'a, Handler::Receiver>>;
+    type To = ZResult<Subscriber<'a, Handler::Handler>>;
 }
 
 impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         session
             .declare_subscriber_inner(
                 &key_expr,
@@ -550,8 +550,8 @@ where
 
 impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 
@@ -563,21 +563,21 @@ where
 // Pull mode
 impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, PullMode, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<PullSubscriber<'a, Handler::Receiver>>;
+    type To = ZResult<PullSubscriber<'a, Handler::Handler>>;
 }
 
 impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         session
             .declare_subscriber_inner(
                 &key_expr,
@@ -604,8 +604,8 @@ where
 
 impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 
@@ -614,7 +614,7 @@ where
     }
 }
 
-/// A subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+/// A subscriber that provides data through a [`Handler`](crate::prelude::IntoHandler).
 ///
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
@@ -647,7 +647,7 @@ pub struct Subscriber<'a, Receiver> {
     pub receiver: Receiver,
 }
 
-/// A [`PullMode`] subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+/// A [`PullMode`] subscriber that provides data through a [`Handler`](crate::prelude::IntoHandler).
 ///
 /// PullSubscribers only provide data when explicitely pulled by the
 /// application with the [`pull`](PullSubscriber::pull) function.

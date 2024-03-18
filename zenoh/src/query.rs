@@ -209,7 +209,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```
@@ -231,7 +231,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> GetBuilder<'a, 'b, Handler>
     where
-        Handler: IntoCallbackReceiverPair<'static, Reply>,
+        Handler: IntoHandler<'static, Reply>,
     {
         let GetBuilder {
             session,
@@ -362,19 +362,19 @@ impl Default for ReplyKeyExpr {
 
 impl<Handler> Resolvable for GetBuilder<'_, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Reply> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<Handler::Receiver>;
+    type To = ZResult<Handler::Handler>;
 }
 
 impl<Handler> SyncResolve for GetBuilder<'_, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Reply> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
 
         self.session
             .query(
@@ -395,8 +395,8 @@ where
 
 impl<Handler> AsyncResolve for GetBuilder<'_, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Reply> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 

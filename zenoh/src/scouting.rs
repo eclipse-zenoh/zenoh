@@ -115,7 +115,7 @@ impl ScoutBuilder<DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -136,7 +136,7 @@ impl ScoutBuilder<DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello>,
+        Handler: crate::prelude::IntoHandler<'static, Hello>,
     {
         let ScoutBuilder {
             what,
@@ -153,27 +153,27 @@ impl ScoutBuilder<DefaultHandler> {
 
 impl<Handler> Resolvable for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
-    Handler::Receiver: Send,
+    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<Scout<Handler::Receiver>>;
+    type To = ZResult<Scout<Handler::Handler>>;
 }
 
 impl<Handler> SyncResolve for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
-    Handler::Receiver: Send,
+    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
     }
 }
 
 impl<Handler> AsyncResolve for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
-    Handler::Receiver: Send,
+    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 
@@ -231,7 +231,7 @@ impl fmt::Debug for ScoutInner {
     }
 }
 
-/// A scout that returns [`Hello`] messages through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+/// A scout that returns [`Hello`] messages through a [`Handler`](crate::prelude::IntoHandler).
 ///
 /// # Examples
 /// ```no_run
