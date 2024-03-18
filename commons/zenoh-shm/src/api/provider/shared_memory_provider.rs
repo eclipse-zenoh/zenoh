@@ -555,18 +555,28 @@ impl SharedMemoryProviderBuilder {
         Self
     }
 
-    /// Set the protocol ID
+    /// Set compile-time-evaluated protocol ID (preferred)
     pub fn protocol_id<const ID: ProtocolID>(
         self,
     ) -> SharedMemoryProviderBuilderID<StaticProtocolID<ID>> {
         SharedMemoryProviderBuilderID::<StaticProtocolID<ID>> {
-            _phantom: PhantomData,
+            id: StaticProtocolID,
+        }
+    }
+
+    /// Set runtime-evaluated protocol ID
+    pub fn dynamic_protocol_id(
+        self,
+        id: ProtocolID,
+    ) -> SharedMemoryProviderBuilderID<DynamicProtocolID> {
+        SharedMemoryProviderBuilderID::<DynamicProtocolID> {
+            id: DynamicProtocolID::new(id),
         }
     }
 }
 
 pub struct SharedMemoryProviderBuilderID<IDSource: ProtocolIDSource> {
-    _phantom: PhantomData<IDSource>,
+    id: IDSource,
 }
 impl<IDSource: ProtocolIDSource> SharedMemoryProviderBuilderID<IDSource> {
     /// Set the backend
@@ -576,7 +586,7 @@ impl<IDSource: ProtocolIDSource> SharedMemoryProviderBuilderID<IDSource> {
     ) -> SharedMemoryProviderBuilderBackendID<IDSource, Backend> {
         SharedMemoryProviderBuilderBackendID {
             backend,
-            _phantpom: PhantomData,
+            id: self.id,
         }
     }
 }
@@ -587,7 +597,7 @@ where
     Backend: SharedMemoryProviderBackend,
 {
     backend: Backend,
-    _phantpom: PhantomData<IDSource>,
+    id: IDSource,
 }
 impl<IDSource, Backend> SharedMemoryProviderBuilderBackendID<IDSource, Backend>
 where
@@ -596,20 +606,37 @@ where
 {
     /// build SharedMemoryProvider
     pub fn res(self) -> SharedMemoryProvider<IDSource, Backend> {
-        SharedMemoryProvider::<IDSource, Backend>::new(self.backend)
+        SharedMemoryProvider::new(self.backend, self.id)
     }
 }
 
 pub trait ProtocolIDSource {
-    fn id() -> ProtocolID;
+    fn id(&self) -> ProtocolID;
 }
 
+#[derive(Default)]
 pub struct StaticProtocolID<const ID: ProtocolID>;
 impl<const ID: ProtocolID> ProtocolIDSource for StaticProtocolID<ID> {
-    fn id() -> ProtocolID {
+    fn id(&self) -> ProtocolID {
         ID
     }
 }
+
+pub struct DynamicProtocolID {
+    id: ProtocolID,
+}
+impl DynamicProtocolID {
+    pub fn new(id: ProtocolID) -> Self {
+        Self { id }
+    }
+}
+impl ProtocolIDSource for DynamicProtocolID {
+    fn id(&self) -> ProtocolID {
+        self.id
+    }
+}
+unsafe impl Send for DynamicProtocolID {}
+unsafe impl Sync for DynamicProtocolID {}
 
 /// A generalized interface for shared memory data sources
 #[derive(Debug)]
@@ -620,7 +647,7 @@ where
 {
     backend: Backend,
     busy_list: Mutex<VecDeque<BusyChunk>>,
-    _phantom: PhantomData<IDSource>,
+    id: IDSource,
 }
 
 impl<IDSource, Backend> SharedMemoryProvider<IDSource, Backend>
@@ -698,11 +725,11 @@ where
     IDSource: ProtocolIDSource,
     Backend: SharedMemoryProviderBackend,
 {
-    fn new(backend: Backend) -> Self {
+    fn new(backend: Backend, id: IDSource) -> Self {
         Self {
             backend,
             busy_list: Mutex::new(VecDeque::default()),
-            _phantom: PhantomData,
+            id,
         }
     }
 
@@ -775,7 +802,7 @@ where
         // Create buffer's info
         let info = SharedMemoryBufInfo::new(
             chunk.descriptor.clone(),
-            IDSource::id(),
+            self.id.id(),
             len,
             descriptor,
             HeaderDescriptor::from(&header),
