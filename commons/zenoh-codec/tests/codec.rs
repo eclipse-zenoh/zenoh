@@ -121,10 +121,28 @@ macro_rules! run {
 // Core
 #[test]
 fn codec_zint() {
+    run!(u8, { u8::MIN });
+    run!(u8, { u8::MAX });
     run!(u8, { thread_rng().gen::<u8>() });
+
+    run!(u16, { u16::MIN });
+    run!(u16, { u16::MAX });
     run!(u16, { thread_rng().gen::<u16>() });
+
+    run!(u32, { u32::MIN });
+    run!(u32, { u32::MAX });
     run!(u32, { thread_rng().gen::<u32>() });
+
+    run!(u64, { u64::MIN });
+    run!(u64, { u64::MAX });
+    let codec = Zenoh080::new();
+    for i in 1..=codec.w_len(u64::MAX) {
+        run!(u64, { 1 << (7 * i) });
+    }
     run!(u64, { thread_rng().gen::<u64>() });
+
+    run!(usize, { usize::MIN });
+    run!(usize, { usize::MAX });
     run!(usize, thread_rng().gen::<usize>());
 }
 
@@ -138,11 +156,12 @@ fn codec_zint_len() {
     codec.write(&mut writer, n).unwrap();
     assert_eq!(codec.w_len(n), buff.len());
 
-    for i in 1..=9 {
+    for i in 1..=codec.w_len(u64::MAX) {
         let mut buff = vec![];
         let mut writer = buff.writer();
         let n: u64 = 1 << (7 * i);
         codec.write(&mut writer, n).unwrap();
+        println!("ZInt len: {} {:02x?}", n, buff);
         assert_eq!(codec.w_len(n), buff.len());
     }
 
