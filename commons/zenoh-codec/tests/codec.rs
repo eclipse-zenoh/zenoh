@@ -575,7 +575,7 @@ fn codec_network() {
     run!(NetworkMessage, NetworkMessage::rand());
 }
 
-// Zenoh new
+// Zenoh
 #[test]
 fn codec_put() {
     run!(zenoh::Put, zenoh::Put::rand());
@@ -599,11 +599,6 @@ fn codec_reply() {
 #[test]
 fn codec_err() {
     run!(zenoh::Err, zenoh::Err::rand());
-}
-
-#[test]
-fn codec_ack() {
-    run!(zenoh::Ack, zenoh::Ack::rand());
 }
 
 #[test]
