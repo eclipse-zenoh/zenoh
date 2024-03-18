@@ -22,7 +22,7 @@ use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
-    handlers::{Callback, DefaultHandler, IntoCallbackReceiverPair},
+    handlers::{Callback, DefaultHandler, IntoHandler},
     Id,
 };
 use std::future::Ready;
@@ -1180,7 +1180,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
         self.callback(crate::handlers::locked(callback))
     }
 
-    /// Receive the MatchingStatuses for this listener with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the MatchingStatuses for this listener with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -1208,7 +1208,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, MatchingStatus>,
+        Handler: crate::prelude::IntoHandler<'static, MatchingStatus>,
     {
         let MatchingListenerBuilder {
             publisher,
@@ -1221,21 +1221,21 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
 #[zenoh_macros::unstable]
 impl<'a, Handler> Resolvable for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<MatchingListener<'a, Handler::Receiver>>;
+    type To = ZResult<MatchingListener<'a, Handler::Handler>>;
 }
 
 #[zenoh_macros::unstable]
 impl<'a, Handler> SyncResolve for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler::Handler: Send,
 {
     #[zenoh_macros::unstable]
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         self.publisher
             .session
             .declare_matches_listener_inner(&self.publisher, callback)
@@ -1253,8 +1253,8 @@ where
 #[zenoh_macros::unstable]
 impl<'a, Handler> AsyncResolve for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 

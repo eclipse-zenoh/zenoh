@@ -105,7 +105,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
         handler: Handler,
     ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler>
     where
-        Handler: zenoh::prelude::IntoCallbackReceiverPair<'static, Sample>,
+        Handler: zenoh::prelude::IntoHandler<'static, Sample>,
     {
         let QueryingSubscriberBuilder {
             session,
@@ -214,17 +214,17 @@ impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Hand
 
 impl<'a, KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample>,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample>,
+    Handler::Handler: Send,
 {
-    type To = ZResult<FetchingSubscriber<'a, Handler::Receiver>>;
+    type To = ZResult<FetchingSubscriber<'a, Handler::Handler>>;
 }
 
 impl<KeySpace, Handler> SyncResolve for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let session = self.session.clone();
@@ -272,8 +272,8 @@ where
 impl<'a, KeySpace, Handler> AsyncResolve for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 
@@ -462,7 +462,7 @@ where
         handler: Handler,
     ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample>
     where
-        Handler: zenoh::prelude::IntoCallbackReceiverPair<'static, Sample>,
+        Handler: zenoh::prelude::IntoHandler<'static, Sample>,
     {
         let FetchingSubscriberBuilder {
             session,
@@ -536,11 +536,11 @@ impl<
         TryIntoSample,
     > Resolvable for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample>,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample>,
+    Handler::Handler: Send,
     TryIntoSample: ExtractSample,
 {
-    type To = ZResult<FetchingSubscriber<'a, Handler::Receiver>>;
+    type To = ZResult<FetchingSubscriber<'a, Handler::Handler>>;
 }
 
 impl<
@@ -551,8 +551,8 @@ impl<
     > SyncResolve for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
@@ -569,8 +569,8 @@ impl<
     > AsyncResolve for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
     type Future = Ready<Self::To>;
@@ -643,14 +643,14 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
     ) -> ZResult<Self>
     where
         KeySpace: Into<crate::KeySpace>,
-        Handler: IntoCallbackReceiverPair<'static, Sample, Receiver = Receiver> + Send,
+        Handler: IntoHandler<'static, Sample, Handler = Receiver> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
         let state = Arc::new(Mutex::new(InnerState {
             pending_fetches: 0,
             merge_queue: MergeQueue::new(),
         }));
-        let (callback, receiver) = conf.handler.into_cb_receiver_pair();
+        let (callback, receiver) = conf.handler.into_handler();
 
         let sub_callback = {
             let state = state.clone();

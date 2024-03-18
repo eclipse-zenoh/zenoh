@@ -599,7 +599,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -621,7 +621,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
+        Handler: crate::prelude::IntoHandler<'static, Query>,
     {
         let QueryableBuilder {
             session,
@@ -657,7 +657,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
     }
 }
 
-/// A queryable that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+/// A queryable that provides data through a [`Handler`](crate::prelude::IntoHandler).
 ///
 /// Queryables can be created from a zenoh [`Session`]
 /// with the [`declare_queryable`](crate::Session::declare_queryable) function
@@ -740,20 +740,20 @@ impl<Receiver> Deref for Queryable<'_, Receiver> {
 
 impl<'a, Handler> Resolvable for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Query> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<Queryable<'a, Handler::Receiver>>;
+    type To = ZResult<Queryable<'a, Handler::Handler>>;
 }
 
 impl<'a, Handler> SyncResolve for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Query> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let session = self.session;
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         session
             .declare_queryable_inner(
                 &self.key_expr?.to_wire(&session),
@@ -774,8 +774,8 @@ where
 
 impl<'a, Handler> AsyncResolve for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Query> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 
