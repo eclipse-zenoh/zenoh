@@ -244,9 +244,6 @@ impl Primitives for Face {
                     msg.ext_nodeid.node_id,
                 );
             }
-            _ => {
-                log::error!("{} Unsupported request!", self);
-            }
         }
     }
 

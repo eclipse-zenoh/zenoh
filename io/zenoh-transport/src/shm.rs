@@ -140,12 +140,9 @@ pub fn map_zmsg_to_shminfo(msg: &mut NetworkMessage) -> ZResult<bool> {
         },
         NetworkBody::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_shminfo(),
-            RequestBody::Put(b) => b.map_to_shminfo(),
-            RequestBody::Del(_) => Ok(false),
         },
         NetworkBody::Response(Response { payload, .. }) => match payload {
             ResponseBody::Reply(b) => b.map_to_shminfo(),
-            ResponseBody::Put(b) => b.map_to_shminfo(),
             ResponseBody::Err(b) => b.map_to_shminfo(),
         },
         NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
@@ -194,13 +191,10 @@ pub fn map_zmsg_to_shmbuf(
         },
         NetworkBody::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_shmbuf(shmr),
-            RequestBody::Put(b) => b.map_to_shmbuf(shmr),
-            RequestBody::Del(_) => Ok(false),
         },
         NetworkBody::Response(Response { payload, .. }) => match payload {
-            ResponseBody::Put(b) => b.map_to_shmbuf(shmr),
-            ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
+            ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
         },
         NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
     }
