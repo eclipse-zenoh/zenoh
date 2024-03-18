@@ -164,11 +164,6 @@ impl Drop for SubscriberInner<'_> {
     }
 }
 
-/// The mode for push subscribers.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
-pub struct PushMode;
-
 /// A builder for initializing a [`FlumeSubscriber`].
 ///
 /// # Examples
@@ -187,7 +182,7 @@ pub struct PushMode;
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
+pub struct SubscriberBuilder<'a, 'b, Handler> {
     #[cfg(feature = "unstable")]
     pub session: SessionRef<'a>,
     #[cfg(not(feature = "unstable"))]
@@ -203,8 +198,6 @@ pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     #[cfg(not(feature = "unstable"))]
     pub(crate) reliability: Reliability,
 
-    #[cfg(feature = "unstable")]
-    pub mode: Mode,
     #[cfg(not(feature = "unstable"))]
     pub(crate) mode: Mode,
 
@@ -219,7 +212,7 @@ pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     pub(crate) handler: Handler,
 }
 
-impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
+impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this subscription with a callback.
     ///
     /// # Examples
@@ -237,7 +230,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Mode, Callback>
+    pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Callback>
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
@@ -245,7 +238,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             session,
             key_expr,
             reliability,
-            mode,
+
             origin,
             handler: _,
         } = self;
@@ -253,7 +246,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             session,
             key_expr,
             reliability,
-            mode,
+
             origin,
             handler: callback,
         }
@@ -283,7 +276,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> SubscriberBuilder<'a, 'b, Mode, impl Fn(Sample) + Send + Sync + 'static>
+    ) -> SubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(Sample) + Send + Sync + 'static,
     {
@@ -310,7 +303,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Mode, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
     where
         Handler: crate::prelude::IntoHandler<'static, Sample>,
     {
@@ -318,7 +311,6 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             session,
             key_expr,
             reliability,
-            mode,
             origin,
             handler: _,
         } = self;
@@ -326,13 +318,13 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             session,
             key_expr,
             reliability,
-            mode,
             origin,
             handler,
         }
     }
 }
-impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
+
+impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
@@ -362,31 +354,10 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         self.origin = origin;
         self
     }
-
-    /// Change the subscription mode to Push.
-    #[inline]
-    pub fn push_mode(self) -> SubscriberBuilder<'a, 'b, PushMode, Handler> {
-        let SubscriberBuilder {
-            session,
-            key_expr,
-            reliability,
-            mode: _,
-            origin,
-            handler,
-        } = self;
-        SubscriberBuilder {
-            session,
-            key_expr,
-            reliability,
-            mode: PushMode,
-            origin,
-            handler,
-        }
-    }
 }
 
 // Push mode
-impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -394,7 +365,7 @@ where
     type To = ZResult<Subscriber<'a, Handler::Handler>>;
 }
 
-impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -424,7 +395,7 @@ where
     }
 }
 
-impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,

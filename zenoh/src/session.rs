@@ -294,7 +294,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -303,7 +303,6 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             session: self.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::DEFAULT,
-            mode: PushMode,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -578,7 +577,7 @@ impl<'a> SessionDeclarations<'a, 'a> for Session {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -1796,7 +1795,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'static, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'static, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -1805,7 +1804,6 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::DEFAULT,
-            mode: PushMode,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -2422,7 +2420,7 @@ pub trait SessionDeclarations<'s, 'a> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;

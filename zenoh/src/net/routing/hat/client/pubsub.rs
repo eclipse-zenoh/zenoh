@@ -126,9 +126,8 @@ fn declare_client_subscription(
     sub_info: &SubscriberInfo,
 ) {
     register_client_subscription(tables, face, id, res, sub_info);
-    let propa_sub_info = *sub_info;
 
-    propagate_simple_subscription(tables, res, &propa_sub_info, face);
+    propagate_simple_subscription(tables, res, sub_info, face);
     // This introduced a buffer overflow on windows
     // @TODO: Let's deactivate this on windows until Fixed
     #[cfg(not(windows))]

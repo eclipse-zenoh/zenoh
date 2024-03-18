@@ -291,9 +291,8 @@ fn declare_client_subscription(
     sub_info: &SubscriberInfo,
 ) {
     register_client_subscription(tables, face, id, res, sub_info);
-    let propa_sub_info = *sub_info;
     let zid = tables.zid;
-    register_router_subscription(tables, face, res, &propa_sub_info, zid);
+    register_router_subscription(tables, face, res, sub_info, zid);
 }
 
 #[inline]

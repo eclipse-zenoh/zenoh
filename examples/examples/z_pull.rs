@@ -78,7 +78,7 @@ struct SubArgs {
     /// The size of the cache.
     #[arg(long, default_value = "3")]
     cache: usize,
-    /// The size of the cache.
+    /// The interval for pulling the cache.
     #[arg(long, default_value = "5.0")]
     interval: f32,
     #[command(flatten)]
