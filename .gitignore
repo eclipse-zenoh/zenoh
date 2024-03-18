@@ -20,3 +20,10 @@
 .vscode
 
 cargo-timing*.html
+
+# remove secret files
+
+*.pem
+*.crt
+*.key
+*.json5

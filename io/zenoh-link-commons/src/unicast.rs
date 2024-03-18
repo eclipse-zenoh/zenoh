@@ -19,6 +19,7 @@ use core::{
     hash::{Hash, Hasher},
     ops::Deref,
 };
+use serde::Serialize;
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::ZResult;
 
@@ -47,6 +48,7 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
+    fn get_auth_identifier(&self) -> AuthIdentifier;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
@@ -115,7 +117,8 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
+
 pub struct AuthIdentifier {
     pub username: Option<String>,
     pub tls_cert_name: Option<String>,

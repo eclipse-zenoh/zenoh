@@ -1,0 +1,56 @@
+{
+  mode: "peer",
+  /// Configure the scouting mechanisms and their behaviours
+  scouting: {
+    /// In client mode, the period dedicated to scouting for a router before failing
+    timeout: 0,
+    /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
+    delay: 0,
+    /// The multicast scouting configuration.
+    multicast: {
+      /// Whether multicast scouting is enabled or not
+      enabled: false,
+      /// The socket which should be used for multicast scouting
+      address: "224.0.0.224:7446",
+      /// The network interface which should be used for multicast scouting
+      interface: "auto", // If not set or set to "auto" the interface if picked automatically
+      /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
+      /// Accepts a single value or different values for router, peer and client.
+      /// Each value is bit-or-like combinations of "peer", "router" and "client".
+      autoconnect: { router: "", peer: "router|peer"
+      },
+      /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+      listen: false,
+    },
+    /// The gossip scouting configuration.
+    gossip: {
+      /// Whether gossip scouting is enabled or not
+      enabled: false,
+      /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
+      /// When false, gossip scouting informations are only propagated to the next hop.
+      /// Activating multihop gossip implies more scouting traffic and a lower scalability.
+      /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
+      /// direct connectivity with each other.
+      multihop: false,
+      /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
+      /// Accepts a single value or different values for router, peer and client.
+      /// Each value is bit-or-like combinations of "peer", "router" and "client".
+      autoconnect: { router: "", peer: "router|peer"
+      },
+    },
+  },
+  "transport": {
+    "link": {
+      "protocols": [
+        "quic",
+        //"tls"
+      ],
+      "tls": {
+        "root_ca_certificate": "server_ca.pem",
+        "client_auth": false,
+        "client_private_key": "client_key.pem",
+        "client_certificate": "client_cert.pem"
+      }
+    }
+  }
+}

@@ -32,6 +32,7 @@ use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use zenoh_core::{zasynclock, zread, zwrite};
+use zenoh_link_commons::AuthIdentifier;
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -222,6 +223,12 @@ impl LinkUnicastTrait for LinkUnicastWs {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         false
+    }
+    fn get_auth_identifier(&self) -> AuthIdentifier {
+        AuthIdentifier {
+            username: None,
+            tls_cert_name: None,
+        }
     }
 }
 

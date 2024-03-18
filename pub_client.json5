@@ -173,7 +173,10 @@
       /// If not configured, all the supported protocols are automatically whitelisted.
       /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
       /// For example, to only enable "tls" and "quic":
-      //   protocols: ["tls", "quic"],
+      protocols: [
+        "tls",
+        "quic"
+      ],
       /// Configure the zenoh TX parameters of a link
       tx: {
         /// The resolution in bits to be used for the message sequence numbers.

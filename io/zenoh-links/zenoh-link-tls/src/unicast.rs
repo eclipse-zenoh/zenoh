@@ -74,6 +74,7 @@ pub struct LinkUnicastTls {
     // Make sure there are no concurrent read or writes
     write_mtx: AsyncMutex<()>,
     read_mtx: AsyncMutex<()>,
+    auth_identifier: Option<AuthIdentifier>,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -84,6 +85,7 @@ impl LinkUnicastTls {
         socket: TlsStream<TcpStream>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
+        auth_identifier: Option<AuthIdentifier>,
     ) -> LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
@@ -120,6 +122,7 @@ impl LinkUnicastTls {
             dst_locator: Locator::new(TLS_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
             write_mtx: AsyncMutex::new(()),
             read_mtx: AsyncMutex::new(()),
+            auth_identifier,
         }
     }
 
@@ -208,6 +211,16 @@ impl LinkUnicastTrait for LinkUnicastTls {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
+    }
+    #[inline(always)]
+    fn get_auth_identifier(&self) -> AuthIdentifier {
+        match &self.auth_identifier {
+            Some(identifier) => identifier.clone(),
+            None => AuthIdentifier {
+                username: None,
+                tls_cert_name: None,
+            },
+        }
     }
 }
 
@@ -305,6 +318,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let (_, tls_conn) = tls_stream.get_ref();
 
         let serv_certs = tls_conn.peer_certificates().unwrap();
+        let mut test_auth_id: Option<AuthIdentifier> = None;
 
         for item in serv_certs {
             let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
@@ -319,11 +333,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                 tls_cert_name: Some(subject_name.to_string()),
             };
 
-            println!("auth_identifier: {:?}", auth_identifier);
+            println!("server side tls auth_identifier: {:?}", auth_identifier);
+            test_auth_id = Some(auth_identifier);
         }
         let tls_stream = TlsStream::Client(tls_stream);
 
-        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTls::new(
+            tls_stream,
+            src_addr,
+            dst_addr,
+            test_auth_id,
+        ));
 
         Ok(LinkUnicast(link))
     }
@@ -451,15 +471,22 @@ async fn accept_task(
         };
 
         let (_, tls_conn) = tls_stream.get_ref();
+        //let mut test_auth_id: Option<AuthIdentifier> = None;
         let auth_identifier = get_tls_cert_name(tls_conn);
-        match auth_identifier {
-            Some(auth_id) => println!("client's ID: {:?}", auth_id),
-            None => println!("no client ID found"),
-        }
+        println!("client side tls auth_identifier: {:?}", auth_identifier);
+        // match auth_identifier {
+        //     Some(auth_id) => println!("client's ID: {:?}", auth_id),
+        //     None => println!("no client ID found"),
+        // }
 
         log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
         // Create the new link object
-        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTls::new(
+            tls_stream,
+            src_addr,
+            dst_addr,
+            auth_identifier,
+        ));
 
         // Communicate the new link to the initial transport manager
         if let Err(e) = manager.send_async(LinkUnicast(link)).await {

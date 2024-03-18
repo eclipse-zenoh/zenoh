@@ -173,7 +173,9 @@
       /// If not configured, all the supported protocols are automatically whitelisted.
       /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
       /// For example, to only enable "tls" and "quic":
-      //   protocols: ["tls", "quic"],
+      protocols: [
+        "tls"
+      ],
       /// Configure the zenoh TX parameters of a link
       tx: {
         /// The resolution in bits to be used for the message sequence numbers.
@@ -235,7 +237,8 @@
       },
       /// Configure TLS specific parameters
       // tls: {
-      //   root_ca_certificate: "ca.crt"
+      //   server_private_key: "myserver.key",
+      //   server_certificate: "myserver.crt"
       // }
       tls: {
         /// Path to the certificate of the certificate authority used to validate either the server
@@ -247,11 +250,11 @@
         /// Path to the TLS server public certificate
         server_certificate: null,
         /// Client authentication, if true enables mTLS (mutual authentication)
-        client_auth: false,
+        client_auth: true,
         /// Path to the TLS client private key
-        client_private_key: null,
+        client_private_key: "newmyserver.key",
         /// Path to the TLS client public certificate
-        client_certificate: null,
+        client_certificate: "newmyserver.crt",
         // Whether or not to use server name verification, if set to false zenoh will disregard the common names of the certificates when verifying servers.
         // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
         // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
@@ -264,7 +267,7 @@
     },
     /// Access control configuration
     auth: {
-      /// The configuration of authentification.
+      /// The configuration of authentication.
       /// A password implies a username is required.
       usrpwd: {
         user: null,

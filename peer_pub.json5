@@ -1,0 +1,12 @@
+{
+  "mode": "peer",
+  "transport": {
+    "link": {
+      "tls": {
+        "root_ca_certificate": "ca.crt",
+        "server_private_key": "mypub2.key",
+        "server_certificate": "mypub2.crt"
+      }
+    }
+  }
+}

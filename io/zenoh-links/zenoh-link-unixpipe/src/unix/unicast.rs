@@ -35,8 +35,8 @@ use zenoh_protocol::core::{EndPoint, Locator};
 use unix_named_pipe::{create, open_write};
 
 use zenoh_link_commons::{
-    ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    NewLinkChannelSender,
+    AuthIdentifier, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_result::{bail, ZResult};
 
@@ -507,6 +507,12 @@ impl LinkUnicastTrait for UnicastPipe {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
+    }
+    fn get_auth_identifier(&self) -> AuthIdentifier {
+        AuthIdentifier {
+            username: None,
+            tls_cert_name: None,
+        }
     }
 }
 
