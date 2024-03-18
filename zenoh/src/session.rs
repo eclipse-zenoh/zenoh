@@ -2087,19 +2087,12 @@ impl Primitives for Session {
                 #[cfg(feature = "unstable")]
                 m.ext_attachment.map(Into::into),
             ),
-            RequestBody::Put(_) => (),
-            RequestBody::Del(_) => (),
         }
     }
 
     fn send_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
         match msg.payload {
-            ResponseBody::Put(_) => {
-                log::warn!(
-                    "Received a ResponseBody::Put, but this isn't supported yet. Dropping message."
-                )
-            }
             ResponseBody::Err(e) => {
                 let mut state = zwrite!(self.state);
                 match state.queries.get_mut(&msg.rid) {

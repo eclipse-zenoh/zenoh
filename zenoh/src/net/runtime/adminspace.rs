@@ -388,58 +388,60 @@ impl Primitives for AdminSpace {
 
     fn send_request(&self, msg: Request) {
         trace!("recv Request {:?}", msg);
-        if let RequestBody::Query(query) = msg.payload {
-            let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
-            {
-                let conf = self.context.runtime.state.config.lock();
-                if !conf.adminspace.permissions().read {
-                    log::error!(
+        match msg.payload {
+            RequestBody::Query(query) => {
+                let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
+                {
+                    let conf = self.context.runtime.state.config.lock();
+                    if !conf.adminspace.permissions().read {
+                        log::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
                         msg.wire_expr
                     );
-                    primitives.send_response_final(ResponseFinal {
-                        rid: msg.id,
-                        ext_qos: ext::QoSType::RESPONSE_FINAL,
-                        ext_tstamp: None,
-                    });
-                    return;
+                        primitives.send_response_final(ResponseFinal {
+                            rid: msg.id,
+                            ext_qos: ext::QoSType::RESPONSE_FINAL,
+                            ext_tstamp: None,
+                        });
+                        return;
+                    }
                 }
-            }
 
-            let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
-                Ok(key_expr) => key_expr.into_owned(),
-                Err(e) => {
-                    log::error!("Unknown KeyExpr: {}", e);
-                    primitives.send_response_final(ResponseFinal {
-                        rid: msg.id,
-                        ext_qos: ext::QoSType::RESPONSE_FINAL,
-                        ext_tstamp: None,
-                    });
-                    return;
-                }
-            };
+                let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
+                    Ok(key_expr) => key_expr.into_owned(),
+                    Err(e) => {
+                        log::error!("Unknown KeyExpr: {}", e);
+                        primitives.send_response_final(ResponseFinal {
+                            rid: msg.id,
+                            ext_qos: ext::QoSType::RESPONSE_FINAL,
+                            ext_tstamp: None,
+                        });
+                        return;
+                    }
+                };
 
-            let zid = self.zid;
-            let parameters = query.parameters.to_owned();
-            let query = Query {
-                inner: Arc::new(QueryInner {
-                    key_expr: key_expr.clone(),
-                    parameters,
-                    value: query
-                        .ext_body
-                        .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
-                    qid: msg.id,
-                    zid,
-                    primitives,
-                    #[cfg(feature = "unstable")]
-                    attachment: query.ext_attachment.map(Into::into),
-                }),
-                eid: self.queryable_id,
-            };
+                let zid = self.zid;
+                let parameters = query.parameters.to_owned();
+                let query = Query {
+                    inner: Arc::new(QueryInner {
+                        key_expr: key_expr.clone(),
+                        parameters,
+                        value: query
+                            .ext_body
+                            .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
+                        qid: msg.id,
+                        zid,
+                        primitives,
+                        #[cfg(feature = "unstable")]
+                        attachment: query.ext_attachment.map(Into::into),
+                    }),
+                    eid: self.queryable_id,
+                };
 
-            for (key, handler) in &self.handlers {
-                if key_expr.intersects(key) {
-                    handler(&self.context, query.clone());
+                for (key, handler) in &self.handlers {
+                    if key_expr.intersects(key) {
+                        handler(&self.context, query.clone());
+                    }
                 }
             }
         }
