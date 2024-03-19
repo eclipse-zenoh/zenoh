@@ -825,3 +825,11 @@ async fn openclose_udp_only_listen_with_interface_restriction() {
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
+
+#[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_vsock() {
+    let _ = env_logger::try_init();
+    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+    openclose_lowlatency_transport(&endpoint).await;
+}
