@@ -31,7 +31,6 @@ use async_std::task;
 use async_trait::async_trait;
 use futures::io::AsyncReadExt;
 use futures::io::AsyncWriteExt;
-use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Cursor};
@@ -39,6 +38,7 @@ use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use std::{any::Any, convert::TryInto};
 use std::{cell::UnsafeCell, io};
 use webpki::{
     anchor_from_trusted_cert,
@@ -46,15 +46,20 @@ use webpki::{
 };
 use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
+
 use zenoh_link_commons::{
-    get_ip_interface_names, AuthIdentifier, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names, AuthIdBuilder, AuthIdType, AuthIdentifier, LinkManagerUnicastTrait,
+    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZError, ZResult};
 use zenoh_sync::Signal;
 
+#[derive(Default, Debug, PartialEq, Eq, Hash)]
+pub struct TlsCommonName(String);
+
+//impl
 pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library
     // NOTE: TlsStream requires &mut for read and write operations. This means
@@ -317,32 +322,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         let (_, tls_conn) = tls_stream.get_ref();
 
-        let serv_certs = tls_conn.peer_certificates().unwrap();
-        let mut test_auth_id: Option<AuthIdentifier> = None;
+        let auth_identifier = get_serverside_id(tls_conn);
+        let subject_name = auth_identifier.unwrap().clone().tls_cert_name.unwrap();
+        let auth_val: Box<dyn Any> = Box::new(TlsCommonName(subject_name));
+        let authID = AuthIdBuilder::new()
+            .auth_type(AuthIdType::TlsCommonName)
+            .auth_value(Some(auth_val))
+            .build();
 
-        for item in serv_certs {
-            let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
-            let subject_name = &cert
-                .subject
-                .iter_common_name()
-                .next()
-                .and_then(|cn| cn.as_str().ok())
-                .unwrap();
-            let auth_identifier = AuthIdentifier {
-                username: None,
-                tls_cert_name: Some(subject_name.to_string()),
-            };
-
-            println!("server side tls auth_identifier: {:?}", auth_identifier);
-            test_auth_id = Some(auth_identifier);
-        }
         let tls_stream = TlsStream::Client(tls_stream);
 
         let link = Arc::new(LinkUnicastTls::new(
             tls_stream,
             src_addr,
             dst_addr,
-            test_auth_id,
+            auth_identifier,
         ));
 
         Ok(LinkUnicast(link))
@@ -511,6 +505,31 @@ fn get_tls_cert_name(tls_conn: &rustls::CommonState) -> Option<AuthIdentifier> {
         username: None,
         tls_cert_name: Some(subject_name.to_string()),
     })
+}
+
+fn get_serverside_id(tls_conn: &rustls::ClientConnection) -> Option<AuthIdentifier> {
+    let serv_certs = tls_conn.peer_certificates().unwrap();
+    let mut test_auth_id: Option<AuthIdentifier> = None;
+
+    //need the first certificate in the chain
+    if let Some(item) = serv_certs.iter().next() {
+        // for item in serv_certs {
+        let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
+        let subject_name = &cert
+            .subject
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+            .unwrap();
+        let auth_identifier = AuthIdentifier {
+            username: None,
+            tls_cert_name: Some(subject_name.to_string()),
+        };
+
+        println!("server side tls auth_identifier: {:?}", auth_identifier);
+        test_auth_id = Some(auth_identifier);
+    }
+    test_auth_id
 }
 
 struct TlsServerConfig {

@@ -20,7 +20,7 @@ use core::{
     ops::Deref,
 };
 use serde::Serialize;
-use std::any::{Any, TypeId};
+use std::any::Any;
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::ZResult;
 
@@ -125,26 +125,36 @@ pub struct AuthIdentifier {
     pub tls_cert_name: Option<String>,
 }
 
+//#[derive(Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Serialize, Eq, Hash, PartialEq)]
 pub enum AuthIdType {
     None,
-    Tls,
+    TlsCommonName,
     Username,
 }
 
-pub struct AuthId<'a> {
-    pub auth_type: &'a Option<AuthIdType>,
-    pub auth_value: &'a Option<Box<dyn Any>>, //downcast in interceptor by auth_id_type
+#[derive(Default, Debug, PartialEq, Eq, Hash)]
+pub struct Username(String);
+// /* need to put restrictions on auth_id values as well */
+// pub enum AuthIdValue {
+//     Tls(String),
+//     Username(String),
+// }
+
+pub struct AuthId {
+    pub auth_type: AuthIdType,
+    pub auth_value: Option<Box<dyn Any>>, //downcast in interceptor by auth_id_type
 }
 
-impl AuthId<'_> {
+impl AuthId {
     pub fn builder() -> AuthIdBuilder {
-        AuthIdBuilder::default()
+        AuthIdBuilder::new()
     }
     pub fn get_type() {} //gets the authId type
 
     pub fn get_value() {} //get the authId value to be used in ACL
 }
-#[derive(Default)]
+#[derive(Debug)]
 pub struct AuthIdBuilder {
     pub auth_type: Option<AuthIdType>,
     pub auth_value: Option<Box<dyn Any>>, //downcast in interceptor by auth_id_type
@@ -152,30 +162,37 @@ pub struct AuthIdBuilder {
                                              possible values for auth_value: Vec<String> and String (as of now)
                                           */
 }
+impl Default for AuthIdBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl AuthIdBuilder {
-    pub fn new(&self) -> Self {
-        AuthIdBuilder::default()
+    pub fn new() -> AuthIdBuilder {
+        AuthIdBuilder {
+            auth_type: Some(AuthIdType::None),
+            auth_value: None,
+        }
     }
 
-    pub fn id_type(&mut self, auth_id_type: impl Into<AuthIdType>) -> &mut Self {
-        //adds type
-        let _ = self.auth_type.insert(auth_id_type.into());
+    pub fn auth_type(&mut self, auth_type: AuthIdType) -> &mut Self {
+        self.auth_type(auth_type);
         self
     }
-    pub fn value(&mut self, auth_id_value: impl Into<Box<dyn Any>>) -> &mut Self {
-        let _ = auth_id_value;
-        //adds type
+    pub fn auth_value(&mut self, auth_value: Option<Box<dyn Any>>) -> &mut Self {
+        // let _ = self.auth_value.insert(auth_value.into());
+        self.auth_value(auth_value);
         self
     }
 
-    pub fn build(&mut self) -> ZResult<AuthId> {
-        let auth_type = &self.auth_type;
+    pub fn build(&self) -> AuthId {
+        let auth_type = self.auth_type.clone().unwrap();
         let auth_value = &self.auth_value;
-        Ok(AuthId {
+        AuthId {
             auth_type,
             auth_value,
-        })
+        }
     }
 }
 

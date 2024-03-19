@@ -490,10 +490,13 @@ async fn accept_task(
     }
 
     async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<Action> {
-        let qc = acceptor
+        let mut qc = acceptor
             .await
             .ok_or_else(|| zerror!("Can not accept QUIC connections: acceptor closed"))?;
-
+        {
+            let nqc = qc.handshake_data();
+            println!("handshake in accept function is {:?}", nqc.await);
+        }
         let conn = qc.await.map_err(|e| {
             let e = zerror!("QUIC acceptor failed: {:?}", e);
             log::warn!("{}", e);
@@ -546,46 +549,66 @@ async fn accept_task(
         let mut test_auth_id: Option<AuthIdentifier> = None;
         {
             let new_conn = quic_conn.clone();
+            let server_name = new_conn
+                .handshake_data()
+                .unwrap()
+                .downcast_ref::<quinn::crypto::rustls::HandshakeData>()
+                .unwrap()
+                .server_name
+                .as_ref()
+                .unwrap()
+                .clone();
+            let protocol_deets = new_conn
+                .handshake_data()
+                .unwrap()
+                .downcast_ref::<quinn::crypto::rustls::HandshakeData>()
+                .unwrap()
+                .protocol
+                .as_ref()
+                .unwrap()
+                .clone();
+            let auth_identifier = AuthIdentifier {
+                username: None,
+                tls_cert_name: Some(server_name.to_string()),
+            };
+
             println!(
-                "handshake information: {:?}",
-                new_conn
-                    .handshake_data()
-                    .unwrap()
-                    .downcast_ref::<quinn::crypto::rustls::HandshakeData>()
-                    .unwrap()
-                    .server_name
+                "From conncetion, server_name {:?} and protocol_deets {:?}",
+                server_name, protocol_deets
             );
-            //println!("connection info: {:?}", new_conn);
-            if let Some(cert_info) = new_conn.peer_identity() {
-                //use cert info
+            println!("client side quic auth_identifier: {:?}", auth_identifier);
+            test_auth_id = Some(auth_identifier);
 
-                match cert_info.downcast_ref::<Vec<rustls::Certificate>>() {
-                    Some(serv_certs) => {
-                        println!("the client certs were found");
-                        for item in serv_certs {
-                            let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
-                            let subject_name = &cert
-                                .subject
-                                .iter_common_name()
-                                .next()
-                                .and_then(|cn| cn.as_str().ok())
-                                .unwrap();
-                            let auth_identifier = AuthIdentifier {
-                                username: None,
-                                tls_cert_name: Some(subject_name.to_string()),
-                            };
+            // if let Some(cert_info) = new_conn.peer_identity() {
+            //     //use cert info
 
-                            println!("client side quic auth_identifier: {:?}", auth_identifier);
-                            test_auth_id = Some(auth_identifier);
-                        }
-                    }
-                    None => {
-                        println!("no client certs found");
-                    }
-                }
-            } else {
-                println!("no certs were found");
-            }
+            //     match cert_info.downcast_ref::<Vec<rustls::Certificate>>() {
+            //         Some(serv_certs) => {
+            //             println!("the client certs were found");
+            //             for item in serv_certs {
+            //                 let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
+            //                 let subject_name = &cert
+            //                     .subject
+            //                     .iter_common_name()
+            //                     .next()
+            //                     .and_then(|cn| cn.as_str().ok())
+            //                     .unwrap();
+            //                 let auth_identifier = AuthIdentifier {
+            //                     username: None,
+            //                     tls_cert_name: Some(subject_name.to_string()),
+            //                 };
+
+            //                 println!("client side quic auth_identifier: {:?}", auth_identifier);
+            //                 test_auth_id = Some(auth_identifier);
+            //             }
+            //         }
+            //         None => {
+            //             println!("no client certs found");
+            //         }
+            //     }
+            // } else {
+            //     println!("no certs were found");
+            // }
         }
 
         let dst_addr = quic_conn.remote_address();
