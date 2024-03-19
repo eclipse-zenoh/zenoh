@@ -321,7 +321,7 @@ pub struct TransportManager {
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
-    task_controller: TaskController,
+    pub(crate) task_controller: TaskController,
 }
 
 impl TransportManager {

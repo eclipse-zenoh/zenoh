@@ -143,7 +143,7 @@ impl ZRuntimePool {
 }
 
 /// Force drops ZRUNTIME_POOL.
-/// 
+///
 /// Rust does not drop static variables. They are always reported by valgrind for exampler.
 /// This function can be used force drop ZRUNTIME_POOL, to prevent valgrind reporting memory leaks related to it.
 #[doc(hidden)]
@@ -159,6 +159,17 @@ pub unsafe fn zruntime_pool_free() {
         }
     }
     std::mem::drop(hm.read());
+}
+
+#[doc(hidden)]
+pub struct ZRuntimeGuard;
+
+impl Drop for ZRuntimeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            zruntime_pool_free();
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

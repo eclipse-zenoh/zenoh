@@ -39,6 +39,7 @@ use zenoh_protocol::{
     transport::{close, Join},
 };
 use zenoh_result::{bail, ZResult};
+use zenoh_task::TaskController;
 // use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 /*************************************/
@@ -82,8 +83,8 @@ pub(crate) struct TransportMulticastInner {
     pub(super) link: Arc<RwLock<Option<TransportLinkMulticastUniversal>>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
-    // token for safe cancellation
-    token: CancellationToken,
+    // Task controller for safe task cancellation
+    task_controller: TaskController,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
@@ -115,7 +116,7 @@ impl TransportMulticastInner {
             locator: config.link.link.get_dst().to_owned(),
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
-            token: CancellationToken::new(),
+            task_controller: TaskController::default(),
             #[cfg(feature = "stats")]
             stats,
         };
@@ -183,8 +184,7 @@ impl TransportMulticastInner {
             cb.closed();
         }
 
-        // TODO(yuyuan): use CancellationToken to unify the termination with the above
-        self.token.cancel();
+        self.task_controller.terminate_all_async().await;
 
         Ok(())
     }
@@ -369,7 +369,7 @@ impl TransportMulticastInner {
         // TODO(yuyuan): refine the clone behaviors
         let is_active = Arc::new(AtomicBool::new(false));
         let c_is_active = is_active.clone();
-        let token = self.token.child_token();
+        let token = self.task_controller.get_cancellation_token();
         let c_token = token.clone();
         let c_self = self.clone();
         let c_locator = locator.clone();
@@ -389,8 +389,7 @@ impl TransportMulticastInner {
             let _ = c_self.del_peer(&c_locator, close::reason::EXPIRED);
         };
 
-        // TODO(yuyuan): Put it into TaskTracker or store as JoinHandle
-        zenoh_runtime::ZRuntime::Acceptor.spawn(task);
+        self.task_controller.spawn_cancellable_with_rt(zenoh_runtime::ZRuntime::Acceptor, task);
 
         // TODO(yuyuan): Integrate the above async task into TransportMulticastPeer
         // Store the new peer

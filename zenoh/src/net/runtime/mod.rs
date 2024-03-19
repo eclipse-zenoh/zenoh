@@ -31,7 +31,6 @@ use futures::Future;
 use std::any::Any;
 use std::sync::{Arc, Weak};
 use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -39,6 +38,7 @@ use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TaskController;
 use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -54,7 +54,7 @@ struct RuntimeState {
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
-    token: CancellationToken,
+    task_controller: TaskController,
 }
 
 pub struct WeakRuntime {
@@ -130,7 +130,7 @@ impl Runtime {
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
-                token: CancellationToken::new(),
+                task_controller: TaskController::default(),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
@@ -166,7 +166,7 @@ impl Runtime {
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
-        self.state.token.cancel();
+        self.state.task_controller.terminate_all();
         self.manager().close().await;
         // clean up to break cyclic reference of self.state to itself
         self.state.transport_handlers.write().unwrap().clear();
@@ -186,13 +186,9 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let token = self.state.token.clone();
-        zenoh_runtime::ZRuntime::Net.spawn(async move {
-            tokio::select! {
-                _ = token.cancelled() => {}
-                _ = future => {}
-            }
-        })
+        self.state
+            .task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, future)
     }
 
     pub(crate) fn router(&self) -> Arc<Router> {
