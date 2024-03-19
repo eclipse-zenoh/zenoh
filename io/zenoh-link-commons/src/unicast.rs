@@ -20,6 +20,7 @@ use core::{
     ops::Deref,
 };
 use serde::Serialize;
+use std::any::{Any, TypeId};
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::ZResult;
 
@@ -122,4 +123,58 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
 pub struct AuthIdentifier {
     pub username: Option<String>,
     pub tls_cert_name: Option<String>,
+}
+
+pub enum AuthIdType {
+    None,
+    Tls,
+    Username,
+}
+
+pub struct AuthId<'a> {
+    pub auth_type: &'a Option<AuthIdType>,
+    pub auth_value: &'a Option<Box<dyn Any>>, //downcast in interceptor by auth_id_type
+}
+
+impl AuthId<'_> {
+    pub fn builder() -> AuthIdBuilder {
+        AuthIdBuilder::default()
+    }
+    pub fn get_type() {} //gets the authId type
+
+    pub fn get_value() {} //get the authId value to be used in ACL
+}
+#[derive(Default)]
+pub struct AuthIdBuilder {
+    pub auth_type: Option<AuthIdType>,
+    pub auth_value: Option<Box<dyn Any>>, //downcast in interceptor by auth_id_type
+                                          /*
+                                             possible values for auth_value: Vec<String> and String (as of now)
+                                          */
+}
+
+impl AuthIdBuilder {
+    fn new(&self) -> Self {
+        AuthIdBuilder::default()
+    }
+
+    pub fn id_type(&mut self, auth_id_type: impl Into<AuthIdType>) -> &mut Self {
+        //adds type
+        self.auth_type.insert(auth_id_type.into());
+        self
+    }
+    pub fn value(&mut self, auth_id_value: impl Into<Box<dyn Any>>) -> &mut Self {
+        //adds type
+        //needs to be downcast
+        self
+    }
+
+    pub fn build(&mut self) -> ZResult<AuthId> {
+        let auth_type = &self.auth_type;
+        let auth_value = &self.auth_value;
+        Ok(AuthId {
+            auth_type,
+            auth_value,
+        })
+    }
 }
