@@ -210,14 +210,6 @@ pub trait Volume: Send + Sync {
 
     /// Creates a storage configured with some properties.
     async fn create_storage(&self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
-
-    /// Returns an interceptor that will be called before pushing any data
-    /// into a storage created by this backend. `None` can be returned for no interception point.
-    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
-
-    /// Returns an interceptor that will be called before sending any reply
-    /// to a query from a storage created by this backend. `None` can be returned for no interception point.
-    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
 }
 
 pub type VolumeInstance = Box<dyn Volume + 'static>;
