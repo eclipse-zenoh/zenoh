@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use core::panic;
 use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
@@ -22,7 +23,7 @@ use std::{
         OnceLock,
     },
 };
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 use zenoh_collections::Properties;
 use zenoh_result::ZResult as Result;
 
@@ -44,7 +45,6 @@ impl ZRuntime {
     }
 
     fn init(&self) -> Result<Runtime> {
-        // dbg!(*ZRUNTIME_CONFIG);
         let config = &ZRUNTIME_CONFIG;
 
         let thread_name = format!("{self:?}");
@@ -110,6 +110,9 @@ impl ZRuntime {
     where
         F: Future<Output = R>,
     {
+        if Handle::current().runtime_flavor() == RuntimeFlavor::CurrentThread {
+            panic!("Zenoh runtime doesn't support Tokio's current thread scheduler. Please use multi thread scheduler instead, e.g. a multi thread scheduler with one worker thread: `#[tokio::main(flavor = \"multi_thread\", worker_threads = 1)]`");
+        }
         tokio::task::block_in_place(move || self.block_on(f))
     }
 }
@@ -199,4 +202,11 @@ impl Default for ZRuntimeConfig {
             net_threads: 2,
         }
     }
+}
+
+#[should_panic(expected = "Zenoh runtime doesn't support")]
+#[tokio::test]
+async fn block_in_place_fail_test() {
+    use crate::ZRuntime;
+    ZRuntime::TX.block_in_place(async { println!("Done") });
 }
