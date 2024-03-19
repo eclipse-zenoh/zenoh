@@ -153,8 +153,6 @@ pub struct StorageService {
     capability: Capability,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
-    in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     replication: Option<ReplicationService>,
 }
 
@@ -178,8 +176,6 @@ impl StorageService {
             capability: store_intercept.capability,
             tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
             wildcard_updates: Arc::new(RwLock::new(KeBoxTree::default())),
-            in_interceptor: store_intercept.in_interceptor,
-            out_interceptor: store_intercept.out_interceptor,
             replication,
         };
         if storage_service
@@ -356,12 +352,6 @@ impl StorageService {
     // the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
         log::trace!("[STORAGE] Processing sample: {:?}", sample);
-        // Call incoming data interceptor (if any)
-        let sample = if let Some(ref interceptor) = self.in_interceptor {
-            interceptor(sample)
-        } else {
-            sample
-        };
         let sample_timestamp = *sample.timestamp().unwrap_or(&new_reception_timestamp());
 
         // if wildcard, update wildcard_updates
@@ -590,12 +580,6 @@ impl StorageService {
                     Ok(stored_data) => {
                         for entry in stored_data {
                             let sample = entry.into_sample(key.clone());
-                            // apply outgoing interceptor on results
-                            let sample = if let Some(ref interceptor) = self.out_interceptor {
-                                interceptor(sample)
-                            } else {
-                                sample
-                            };
                             if let Err(e) = q.reply_sample(sample).res().await {
                                 log::warn!(
                                     "Storage '{}' raised an error replying a query: {}",
@@ -628,12 +612,6 @@ impl StorageService {
                         let sample = Sample::put(q.key_expr().clone(), payload)
                             .with_encoding(encoding)
                             .with_timestamp(entry.timestamp);
-                        // apply outgoing interceptor on results
-                        let sample = if let Some(ref interceptor) = self.out_interceptor {
-                            interceptor(sample)
-                        } else {
-                            sample
-                        };
                         if let Err(e) = q.reply_sample(sample).res().await {
                             log::warn!(
                                 "Storage '{}' raised an error replying a query: {}",
