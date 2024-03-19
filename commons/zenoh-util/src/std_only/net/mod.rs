@@ -423,7 +423,7 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
         .collect()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: Option<&str>) -> ZResult<()> {
     if let Some(iface) = iface {
         socket.bind_device(Some(iface.as_bytes()))?;
@@ -431,7 +431,7 @@ pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: Option<&str>) ->
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) -> ZResult<()> {
     if let Some(iface) = iface {
         socket.bind_device(Some(iface.as_bytes()))?;
