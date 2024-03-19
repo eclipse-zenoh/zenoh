@@ -457,9 +457,13 @@ impl RBatch {
     where
         T: ZSliceBuffer + 'static,
     {
+        use zenoh_buffers::as_mut_slice_featureless;
+
         let mut into = (buff)();
-        let n = lz4_flex::block::decompress_into(payload, into.as_mut_slice())
-            .map_err(|_| zerror!("Decompression error"))?;
+        let n = lz4_flex::block::decompress_into(payload, unsafe {
+            as_mut_slice_featureless(&mut into)
+        })
+        .map_err(|_| zerror!("Decompression error"))?;
         let zslice = ZSlice::make(Arc::new(into), 0, n)
             .map_err(|_| zerror!("Invalid decompression buffer length"))?;
         Ok(zslice)

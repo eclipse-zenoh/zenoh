@@ -44,6 +44,7 @@ where
             resolution,
             batch_size,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,
@@ -57,11 +58,16 @@ where
             header |= flag::S;
         }
         let mut n_exts = (ext_qos.is_some() as u8)
-            + (ext_shm.is_some() as u8)
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8);
+
+        #[cfg(feature = "shared-memory")]
+        {
+            n_exts += ext_shm.is_some() as u8;
+        }
+
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -91,6 +97,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (qos, n_exts != 0))?;
         }
+        #[cfg(feature = "shared-memory")]
         if let Some(shm) = ext_shm.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (shm, n_exts != 0))?;
@@ -165,6 +172,7 @@ where
 
         // Extensions
         let mut ext_qos = None;
+        #[cfg(feature = "shared-memory")]
         let mut ext_shm = None;
         let mut ext_auth = None;
         let mut ext_mlink = None;
@@ -181,6 +189,7 @@ where
                     ext_qos = Some(q);
                     has_ext = ext;
                 }
+                #[cfg(feature = "shared-memory")]
                 ext::Shm::ID => {
                     let (s, ext): (ext::Shm, bool) = eodec.read(&mut *reader)?;
                     ext_shm = Some(s);
@@ -219,6 +228,7 @@ where
             resolution,
             batch_size,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,
@@ -244,6 +254,7 @@ where
             batch_size,
             cookie,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,
@@ -257,11 +268,16 @@ where
             header |= flag::S;
         }
         let mut n_exts = (ext_qos.is_some() as u8)
-            + (ext_shm.is_some() as u8)
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8);
+
+        #[cfg(feature = "shared-memory")]
+        {
+            n_exts += ext_shm.is_some() as u8;
+        }
+
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -294,6 +310,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (qos, n_exts != 0))?;
         }
+        #[cfg(feature = "shared-memory")]
         if let Some(shm) = ext_shm.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (shm, n_exts != 0))?;
@@ -371,6 +388,7 @@ where
 
         // Extensions
         let mut ext_qos = None;
+        #[cfg(feature = "shared-memory")]
         let mut ext_shm = None;
         let mut ext_auth = None;
         let mut ext_mlink = None;
@@ -387,6 +405,7 @@ where
                     ext_qos = Some(q);
                     has_ext = ext;
                 }
+                #[cfg(feature = "shared-memory")]
                 ext::Shm::ID => {
                     let (s, ext): (ext::Shm, bool) = eodec.read(&mut *reader)?;
                     ext_shm = Some(s);
@@ -426,6 +445,7 @@ where
             batch_size,
             cookie,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,

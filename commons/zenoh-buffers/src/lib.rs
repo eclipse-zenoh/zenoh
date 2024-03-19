@@ -23,14 +23,18 @@
 extern crate alloc;
 
 mod bbuf;
+#[cfg(feature = "shared-memory")]
+mod shm;
 mod slice;
 pub mod vec;
 mod zbuf;
 mod zslice;
+mod zslicemut;
 
 pub use bbuf::*;
 pub use zbuf::*;
 pub use zslice::*;
+pub use zslicemut::*;
 
 // SAFETY: this crate operates on eventually initialized slices for read and write. Because of that, internal buffers
 //         implementation keeps track of various slices indexes. Boundaries checks are performed by individual

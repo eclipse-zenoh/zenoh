@@ -34,6 +34,10 @@ use zenoh_protocol::{
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::api::client_storage::GLOBAL_CLIENT_STORAGE;
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::reader::SharedMemoryReader;
 
 /// # Examples
 /// ```
@@ -131,9 +135,17 @@ pub struct TransportManagerBuilder {
     endpoints: HashMap<String, String>, // (protocol, config)
     tx_threads: usize,
     protocols: Option<Vec<String>>,
+    #[cfg(feature = "shared-memory")]
+    shm_reader: Option<SharedMemoryReader>,
 }
 
 impl TransportManagerBuilder {
+    #[cfg(feature = "shared-memory")]
+    pub fn shm_reader(mut self, shm_reader: Option<SharedMemoryReader>) -> Self {
+        self.shm_reader = shm_reader;
+        self
+    }
+
     pub fn zid(mut self, zid: ZenohId) -> Self {
         self.zid = zid;
         self
@@ -240,7 +252,16 @@ impl TransportManagerBuilder {
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
 
-        let unicast = self.unicast.build(&mut prng)?;
+        #[cfg(feature = "shared-memory")]
+        let shm_reader = self
+            .shm_reader
+            .unwrap_or_else(|| SharedMemoryReader::new(GLOBAL_CLIENT_STORAGE.clone()));
+
+        let unicast = self.unicast.build(
+            &mut prng,
+            #[cfg(feature = "shared-memory")]
+            &shm_reader,
+        )?;
         let multicast = self.multicast.build()?;
 
         let mut queue_size = [0; Priority::NUM];
@@ -283,7 +304,12 @@ impl TransportManagerBuilder {
 
         let params = TransportManagerParams { config, state };
 
-        Ok(TransportManager::new(params, prng))
+        Ok(TransportManager::new(
+            params,
+            prng,
+            #[cfg(feature = "shared-memory")]
+            shm_reader,
+        ))
     }
 }
 
@@ -307,6 +333,8 @@ impl Default for TransportManagerBuilder {
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             protocols: None,
+            #[cfg(feature = "shared-memory")]
+            shm_reader: None,
         }
     }
 }
@@ -319,13 +347,19 @@ pub struct TransportManager {
     pub(crate) cipher: Arc<BlockCipher>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) shmr: SharedMemoryReader,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
     pub(crate) token: CancellationToken,
 }
 
 impl TransportManager {
-    pub fn new(params: TransportManagerParams, mut prng: PseudoRng) -> TransportManager {
+    pub fn new(
+        params: TransportManagerParams,
+        mut prng: PseudoRng,
+        #[cfg(feature = "shared-memory")] shmr: SharedMemoryReader,
+    ) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
@@ -343,6 +377,8 @@ impl TransportManager {
             new_unicast_link_sender,
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
+            #[cfg(feature = "shared-memory")]
+            shmr,
             token: CancellationToken::new(),
         };
 

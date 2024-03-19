@@ -60,16 +60,25 @@ pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn unstable_doc(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item = proc_macro2::TokenStream::from(item);
     TokenStream::from(quote! {
-        #[cfg(feature = "unstable")]
         /// <div class="stab unstable">
         ///   <span class="emoji">🔬</span>
         ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
         ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
         /// </div>
         ///
+        #item
+    })
+}
+
+#[proc_macro_attribute]
+pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item = proc_macro2::TokenStream::from(item);
+    TokenStream::from(quote! {
+        #[cfg(feature = "unstable")]
+        #[zenoh_macros::unstable_doc]
         #item
     })
 }

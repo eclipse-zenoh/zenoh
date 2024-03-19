@@ -14,6 +14,7 @@
 use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::{BacktrackableReader, DidntRead, HasReader, Reader},
+    ZSliceMut,
 };
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
@@ -30,17 +31,59 @@ use core::{
 /*************************************/
 pub trait ZSliceBuffer: Send + Sync + fmt::Debug {
     fn as_slice(&self) -> &[u8];
+
+    #[cfg(feature = "shared-memory")]
+    /// # Safety
+    /// Get mutable access to underlying data. This is safe if
+    /// there is no sharing of underlying data.
+    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8];
+    #[cfg(feature = "shared-memory")]
+    fn as_mut_slice(&mut self) -> Option<&mut [u8]>;
+
+    #[cfg(not(feature = "shared-memory"))]
     fn as_mut_slice(&mut self) -> &mut [u8];
+
     fn as_any(&self) -> &dyn Any;
+    #[cfg(feature = "shared-memory")]
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
+
+/// # Safety
+/// Get mutable access to underlying data. For "shared-memory" feature
+/// this is safe if there is no sharing of underlying data for SHM buffers,
+/// for not "shared-memory" operation this is always safe. This function is
+/// intended to make ZSlice's interface more homogenious as it differs depending
+/// on "shared-memory" feature
+#[inline]
+pub unsafe fn as_mut_slice_featureless<T: ZSliceBuffer + ?Sized>(slice: &mut T) -> &mut [u8] {
+    #[cfg(feature = "shared-memory")]
+    return slice.as_mut_slice_unchecked();
+
+    #[cfg(not(feature = "shared-memory"))]
+    slice.as_mut_slice()
 }
 
 impl ZSliceBuffer for Vec<u8> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
+
+    #[cfg(feature = "shared-memory")]
+    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8] {
+        self.as_mut()
+    }
+    #[cfg(feature = "shared-memory")]
+    fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
+        Some(self.as_mut())
+    }
+
+    #[cfg(not(feature = "shared-memory"))]
     fn as_mut_slice(&mut self) -> &mut [u8] {
         self.as_mut()
     }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -50,9 +93,21 @@ impl ZSliceBuffer for Box<[u8]> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
+
+    #[cfg(feature = "shared-memory")]
+    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8] {
+        self.as_mut()
+    }
+    #[cfg(feature = "shared-memory")]
+    fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
+        Some(self.as_mut())
+    }
+
+    #[cfg(not(feature = "shared-memory"))]
     fn as_mut_slice(&mut self) -> &mut [u8] {
         self.as_mut()
     }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -62,9 +117,21 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
+
+    #[cfg(feature = "shared-memory")]
+    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8] {
+        self.as_mut()
+    }
+    #[cfg(feature = "shared-memory")]
+    fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
+        Some(self.as_mut())
+    }
+
+    #[cfg(not(feature = "shared-memory"))]
     fn as_mut_slice(&mut self) -> &mut [u8] {
         self.as_mut()
     }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -137,11 +204,65 @@ impl ZSlice {
         self.len() == 0
     }
 
+    /// Checks if the underlying data is valid.
+    /// For shared memory buffers the underlying data may be forcibly deallocated, and
+    /// this method provides and interface to check it. For other underlying buffer types
+    /// this method always returns true
+    #[cfg(feature = "shared-memory")]
+    #[inline]
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.buf.is_valid()
+    }
+
     #[inline]
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
         crate::unsafe_slice!(self.buf.as_slice(), self.range())
+    }
+
+    /// Borrows ZSlice as mut performing reference sharing checks.
+    /// Will return None if ZSlice data is shared and thus cannot be safely mutably accessed.
+    #[inline]
+    #[must_use]
+    pub fn try_mutate(&mut self) -> Option<ZSliceMut<'_>> {
+        if let Some(mutable) = Arc::get_mut(&mut self.buf) {
+            #[cfg(not(feature = "shared-memory"))]
+            return Some(ZSliceMut::new(
+                mutable.as_mut_slice(),
+                &mut self.start,
+                &mut self.end,
+            ));
+
+            #[cfg(feature = "shared-memory")]
+            if let Some(mut_slice) = mutable.as_mut_slice() {
+                return Some(ZSliceMut::new(mut_slice, &mut self.start, &mut self.end));
+            }
+        }
+        None
+    }
+
+    /// # Safety
+    /// Borrows ZSlice contents as mut without reference sharing checks.
+    /// This is safe if ZSlice data is not shared or it is used in a Sync way,
+    /// ex. as Atomics.
+    /// NOTE: as long as Arc's get_mut_unchecked method is unstable, we use
+    /// get_mut(...).unwrap() combination that may panic. We'll switch to
+    /// get_mut_unchecked once available.
+    #[inline]
+    #[must_use]
+    pub unsafe fn mutate_unchecked(&mut self) -> ZSliceMut<'_> {
+        // todo: switch to Arc::get_mut_unchecked when it gets stable
+        return Arc::get_mut(&mut self.buf)
+            .map(|val_mut| {
+                ZSliceMut::new(
+                    as_mut_slice_featureless(val_mut),
+                    &mut self.start,
+                    &mut self.end,
+                )
+            })
+            .unwrap();
     }
 
     #[must_use]
@@ -404,7 +525,13 @@ mod tests {
 
         let range = zslice.range();
         let mbuf = Arc::get_mut(&mut zslice.buf).unwrap();
-        mbuf.as_mut_slice()[range][..buf.len()].clone_from_slice(&buf[..]);
+
+        #[cfg(feature = "shared-memory")]
+        let mut_slice = mbuf.as_mut_slice().unwrap();
+        #[cfg(not(feature = "shared-memory"))]
+        let mut_slice = mbuf.as_mut_slice();
+
+        mut_slice[range][..buf.len()].clone_from_slice(&buf[..]);
 
         assert_eq!(buf.as_slice(), zslice.as_slice());
     }
