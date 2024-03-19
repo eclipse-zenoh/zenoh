@@ -288,12 +288,9 @@ struct UnicastPipeListener {
 }
 impl UnicastPipeListener {
     async fn listen(endpoint: EndPoint, manager: Arc<NewLinkChannelSender>) -> ZResult<Self> {
-        let (path_uplink, path_downlink, access_mode) = parse_pipe_endpoint(&endpoint);
-        let local = Locator::new(
-            endpoint.protocol(),
-            path_uplink.as_str(),
-            endpoint.metadata(),
-        )?;
+        let (path, access_mode) = endpoint_to_pipe_path(&endpoint);
+        let (path_uplink, path_downlink) = split_pipe_path(&path);
+        let local = Locator::new(endpoint.protocol(), path, endpoint.metadata())?;
 
         // create request channel
         let mut request_channel = PipeR::new(&path_uplink, access_mode).await?;
@@ -381,7 +378,8 @@ async fn dedicate_pipe(
 struct UnicastPipeClient;
 impl UnicastPipeClient {
     async fn connect_to(endpoint: EndPoint) -> ZResult<UnicastPipe> {
-        let (path_uplink, path_downlink, access_mode) = parse_pipe_endpoint(&endpoint);
+        let (path, access_mode) = endpoint_to_pipe_path(&endpoint);
+        let (path_uplink, path_downlink) = split_pipe_path(&path);
 
         // open the request channel
         // this channel would be used to invite listener to the dedicated channel
@@ -594,16 +592,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
     }
 }
 
-fn parse_pipe_endpoint(endpoint: &EndPoint) -> (String, String, u32) {
-    let address = endpoint.address();
-    let path = address.as_str();
-    let path_uplink = path.to_string() + "_uplink";
-    let path_downlink = path.to_string() + "_downlink";
+fn endpoint_to_pipe_path(endpoint: &EndPoint) -> (String, u32) {
+    let path = endpoint.address().to_string();
     let access_mode = endpoint
         .config()
         .get(config::FILE_ACCESS_MASK)
         .map_or(*FILE_ACCESS_MASK, |val| {
             val.parse().unwrap_or(*FILE_ACCESS_MASK)
         });
-    (path_uplink, path_downlink, access_mode)
+    (path, access_mode)
+}
+
+fn split_pipe_path(path: &str) -> (String, String) {
+    let path_uplink = format!("{path}_uplink");
+    let path_downlink = format!("{path}_downlink");
+    (path_uplink, path_downlink)
 }
