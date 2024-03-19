@@ -21,7 +21,7 @@ use zenoh::{
     liveliness::LivelinessSubscriberBuilder,
     prelude::Sample,
     query::{QueryConsolidation, QueryTarget},
-    subscriber::{PushMode, Reliability, Subscriber, SubscriberBuilder},
+    subscriber::{Reliability, Subscriber, SubscriberBuilder},
 };
 
 use crate::ExtractSample;
@@ -122,9 +122,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler>;
 }
 
-impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
-    for SubscriberBuilder<'a, 'b, PushMode, Handler>
-{
+impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilder<'a, 'b, Handler> {
     type KeySpace = crate::UserSpace;
 
     /// Create a [`FetchingSubscriber`](super::FetchingSubscriber).

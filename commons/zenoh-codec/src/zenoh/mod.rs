@@ -13,7 +13,6 @@
 //
 pub mod del;
 pub mod err;
-pub mod pull;
 pub mod put;
 pub mod query;
 pub mod reply;
@@ -81,9 +80,6 @@ where
     fn write(self, writer: &mut W, x: &RequestBody) -> Self::Output {
         match x {
             RequestBody::Query(b) => self.write(&mut *writer, b),
-            RequestBody::Put(b) => self.write(&mut *writer, b),
-            RequestBody::Del(b) => self.write(&mut *writer, b),
-            RequestBody::Pull(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -100,9 +96,6 @@ where
         let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
             id::QUERY => RequestBody::Query(codec.read(&mut *reader)?),
-            id::PUT => RequestBody::Put(codec.read(&mut *reader)?),
-            id::DEL => RequestBody::Del(codec.read(&mut *reader)?),
-            id::PULL => RequestBody::Pull(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
@@ -121,7 +114,6 @@ where
         match x {
             ResponseBody::Reply(b) => self.write(&mut *writer, b),
             ResponseBody::Err(b) => self.write(&mut *writer, b),
-            ResponseBody::Put(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -139,7 +131,6 @@ where
         let body = match imsg::mid(codec.header) {
             id::REPLY => ResponseBody::Reply(codec.read(&mut *reader)?),
             id::ERR => ResponseBody::Err(codec.read(&mut *reader)?),
-            id::PUT => ResponseBody::Put(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
