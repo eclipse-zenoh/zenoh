@@ -378,9 +378,9 @@ pub struct Sample {
 }
 
 impl Sample {
-    /// Creates a new Sample.
+    /// Creates a "put" Sample.
     #[inline]
-    pub fn new<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
+    pub fn put<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoPayload: Into<Payload>,
@@ -389,7 +389,7 @@ impl Sample {
             key_expr: key_expr.into(),
             payload: payload.into(),
             encoding: Encoding::default(),
-            kind: SampleKind::default(),
+            kind: SampleKind::Put,
             timestamp: None,
             qos: QoS::default(),
             #[cfg(feature = "unstable")]
@@ -398,29 +398,55 @@ impl Sample {
             attachment: None,
         }
     }
-    /// Creates a new Sample.
+
+    /// Creates a "delete" Sample.
     #[inline]
-    pub fn try_from<TryIntoKeyExpr, IntoPayload>(
-        key_expr: TryIntoKeyExpr,
-        payload: IntoPayload,
-    ) -> Result<Self, zenoh_result::Error>
+    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> Self
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<Payload>,
+        IntoKeyExpr: Into<KeyExpr<'static>>,
     {
-        Ok(Sample {
-            key_expr: key_expr.try_into().map_err(Into::into)?,
-            payload: payload.into(),
+        Sample {
+            key_expr: key_expr.into(),
+            payload: Payload::empty(),
             encoding: Encoding::default(),
-            kind: SampleKind::default(),
+            kind: SampleKind::Delete,
             timestamp: None,
             qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
             attachment: None,
-        })
+        }
+    }
+ 
+    /// Attempts to create a "put" Sample
+    #[inline]
+    pub fn try_put<TryIntoKeyExpr, TryIntoPayload>(
+        key_expr: TryIntoKeyExpr,
+        payload: TryIntoPayload,
+    ) -> Result<Self, zenoh_result::Error>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
+        TryIntoPayload: TryInto<Payload>,
+        <TryIntoPayload as TryInto<Payload>>::Error: Into<zenoh_result::Error>,
+    {
+        let key_expr: KeyExpr<'static> = key_expr.try_into().map_err(Into::into)?;
+        let payload: Payload = payload.try_into().map_err(Into::into)?;
+        Ok(Self::put(key_expr, payload))
+    }
+
+    /// Attempts to create a "delete" Sample
+    #[inline]
+    pub fn try_delete<TryIntoKeyExpr>(
+        key_expr: TryIntoKeyExpr,
+    ) -> Result<Self, zenoh_result::Error>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
+    {
+        let key_expr: KeyExpr<'static> = key_expr.try_into().map_err(Into::into)?;
+        Ok(Self::delete(key_expr))
     }
 
     /// Creates a new Sample with optional data info.
@@ -444,9 +470,10 @@ impl Sample {
         self
     }
 
-    /// Sets the encoding of this Sample.
+    /// Sets the encoding of this Sample
     #[inline]
     pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        assert!(self.kind == SampleKind::Put, "Cannot set encoding on a delete sample");
         self.encoding = encoding;
         self
     }
@@ -467,15 +494,6 @@ impl Sample {
     #[inline]
     pub fn kind(&self) -> SampleKind {
         self.kind
-    }
-
-    /// Sets the kind of this Sample.
-    #[inline]
-    #[doc(hidden)]
-    #[zenoh_macros::unstable]
-    pub fn with_kind(mut self, kind: SampleKind) -> Self {
-        self.kind = kind;
-        self
     }
 
     /// Gets the encoding of this sample
