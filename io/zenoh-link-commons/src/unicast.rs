@@ -154,18 +154,18 @@ pub struct AuthIdBuilder {
 }
 
 impl AuthIdBuilder {
-    fn new(&self) -> Self {
+    pub fn new(&self) -> Self {
         AuthIdBuilder::default()
     }
 
     pub fn id_type(&mut self, auth_id_type: impl Into<AuthIdType>) -> &mut Self {
         //adds type
-        self.auth_type.insert(auth_id_type.into());
+        let _ = self.auth_type.insert(auth_id_type.into());
         self
     }
     pub fn value(&mut self, auth_id_value: impl Into<Box<dyn Any>>) -> &mut Self {
+        let _ = auth_id_value;
         //adds type
-        //needs to be downcast
         self
     }
 
@@ -178,3 +178,17 @@ impl AuthIdBuilder {
         })
     }
 }
+
+// pub trait AuthIdTrait<Id, Builder> {
+//     fn builder() -> Builder {
+//         Builder::default()
+//     }
+//     fn get_type() {} //gets the authId type
+
+//     fn get_value() {} //get the authId value to be used in ACL
+// }
+
+//
+// pub trait AuthIdValue {
+//     //define features to restrict auth_value behaviour
+// }
