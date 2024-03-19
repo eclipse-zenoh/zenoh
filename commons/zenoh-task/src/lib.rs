@@ -18,47 +18,23 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use rand::random;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use std::future::Future;
-use std::ops::DerefMut;
-use std::sync::Arc;
-use std::sync::Mutex;
-use tokio::task::{self, JoinHandle};
 use zenoh_runtime::ZRuntime;
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 
-
-struct TaskControllerInner (Mutex<HashMap<u64, Option<JoinHandle<()>>>>);
-
-impl TaskControllerInner {
-    fn terminate_all(&self) {
-        let mut tasks_lock = self.0.lock().unwrap();
-
-        let tasks: Vec<(u64, Option<JoinHandle<()>>)> = tasks_lock.drain().collect();
-        for (_id, jh) in tasks {
-            jh.unwrap().abort();
-        }
-    }
-}
-
-impl Drop for TaskControllerInner {
-    fn drop(&mut self) {
-        self.terminate_all()
-    }
-}
 #[derive(Clone)]
 pub struct TaskController {
-    running_task_id_to_handle: Arc<TaskControllerInner>,
+    tracker: TaskTracker,
+    token: CancellationToken,
 }
 
 impl Default for TaskController {
     fn default() -> Self {
         TaskController {
-            running_task_id_to_handle: Arc::new(TaskControllerInner(Mutex::new(
-                HashMap::<u64, Option<JoinHandle<()>>>::new(),
-            ))),
+            tracker: TaskTracker::new(),
+            token: CancellationToken::new(),
         }
     }
 }
@@ -71,48 +47,64 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let mut tasks = self.running_task_id_to_handle.0.lock().unwrap();
-        let id = TaskController::get_next_task_id(tasks.deref_mut());
-        let tasks_mutex = self.running_task_id_to_handle.clone();
-        let jh = task::spawn(futures::FutureExt::map(future, move |_| {
-            tasks_mutex.0.lock().unwrap().remove(&id);
-        }));
-        tasks.insert(id, Some(jh));
+        let token = self.token.child_token();
+        let task = async move {
+            tokio::select! {
+                _ = token.cancelled() => {},
+                _ = future => {}
+            }
+        };
+        self.tracker.spawn(task);
     }
 
-    /// Spawns a task using a specified runtime (similarly to Runtime::spawn) that can be later terminated by call to terminate_all()
-    /// Task output is ignored
+    /// Spawns a task using a specified runtime (similarly to Runtime::spawn) that can be later terminated by call to terminate_all().
+    /// Task output is ignored.
     pub fn spawn_with_rt<F, T>(&self, rt: ZRuntime, future: F)
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let mut tasks = self.running_task_id_to_handle.0.lock().unwrap();
-        let id = TaskController::get_next_task_id(tasks.deref_mut());
-        let tasks_mutex = self.running_task_id_to_handle.clone();
-        let jh = rt.spawn(futures::FutureExt::map(future, move |_| {
-            tasks_mutex.0.lock().unwrap().remove(&id);
-        }));
-        tasks.insert(id, Some(jh));
+        let token = self.token.child_token();
+        let task = async move {
+            tokio::select! {
+                _ = token.cancelled() => {},
+                _ = future => {}
+            }
+        };
+        self.tracker.spawn_on(task, &rt);
     }
 
-    fn get_next_task_id(hm: &mut HashMap<u64, Option<JoinHandle<()>>>) -> u64 {
-        loop {
-            let id = random::<u64>();
-            match hm.entry(id) {
-                Entry::Occupied(_) => {
-                    continue;
-                }
-                Entry::Vacant(v) => {
-                    v.insert(None);
-                    return id;
-                }
-            }
-        }
+    pub fn get_cancellation_token(&self) -> CancellationToken {
+        self.token.child_token()
+    }
+
+    /// Spawns a task that can be cancelled via cancelling a token obtained by get_cancellation_token().
+    /// It can be later terminated by call to terminate_all().
+    /// Task output is ignored.
+    pub fn spawn_cancellable<F, T>(&self, future: F)
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.tracker.spawn(future);
+    }
+
+    /// Spawns a task that can be cancelled via cancelling a token obtained by get_cancellation_token() using a specified runtime.
+    /// It can be later terminated by call to terminate_all().
+    /// Task output is ignored.
+    pub fn spawn_cancellable_with_rt<F, T>(&self, rt: ZRuntime, future: F)
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.tracker.spawn_on(future, &rt);
     }
 
     /// Terminates all prevously spawned tasks
     pub fn terminate_all(&self) {
-        self.running_task_id_to_handle.terminate_all();
+        self.tracker.close();
+        self.token.cancel();
+        let tracker = self.tracker.clone();
+        futures::executor::block_on( async move { tracker.wait().await } );
     }
 }
