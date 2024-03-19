@@ -81,7 +81,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_util::core::AsyncResolve;
 
@@ -811,7 +811,9 @@ impl Session {
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
         config: Config,
-        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
+            Arc<SharedMemoryClientStorage>,
+        >,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             log::debug!("Config: {:?}", &config);
@@ -819,7 +821,7 @@ impl Session {
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::init(
                 config,
-                #[cfg(feature = "shared-memory")]
+                #[cfg(all(feature = "unstable", feature = "shared-memory"))]
                 shm_clients,
             )
             .await

@@ -38,9 +38,9 @@ use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::{bail, ZResult};
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use zenoh_shm::reader::SharedMemoryReader;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
@@ -50,12 +50,12 @@ use zenoh_transport::{
 
 #[derive(Default)]
 pub struct RuntimeBuilder {
-    #[cfg(feature = "shared-memory")]
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
     shm_clients: Option<Arc<SharedMemoryClientStorage>>,
 }
 
 impl RuntimeBuilder {
-    #[cfg(feature = "shared-memory")]
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
     pub fn shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
         self.shm_clients = Some(shm_clients);
         self
@@ -64,7 +64,7 @@ impl RuntimeBuilder {
     pub async fn build(self, config: Config) -> ZResult<Runtime> {
         let mut runtime = Runtime::init(
             config,
-            #[cfg(feature = "shared-memory")]
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
             self.shm_clients,
         )
         .await?;
@@ -115,7 +115,9 @@ impl Runtime {
 
     pub(crate) async fn init(
         config: Config,
-        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
+            Arc<SharedMemoryClientStorage>,
+        >,
     ) -> ZResult<Runtime> {
         log::debug!("Zenoh Rust API {}", GIT_VERSION);
 
@@ -140,12 +142,16 @@ impl Runtime {
             .whatami(whatami)
             .zid(zid);
 
+        #[cfg(feature = "unstable")]
         let transport_manager = zcondfeat!(
             "shared-memory",
             transport_manager.shm_reader(shm_clients.map(SharedMemoryReader::new)),
             transport_manager
         )
         .build(handler.clone())?;
+
+        #[cfg(not(feature = "unstable"))]
+        let transport_manager = transport_manager.build(handler.clone())?;
 
         let config = Notifier::new(config);
 

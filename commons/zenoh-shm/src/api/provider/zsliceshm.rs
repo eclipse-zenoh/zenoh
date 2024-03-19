@@ -16,9 +16,9 @@ use core::ops::{Deref, DerefMut};
 
 use crate::SharedMemoryBuf;
 
-/*************************************/
-/*             ZSLICESHM             */
-/*************************************/
+/// An SHM ZSlice in an exceptional state when it is recently allocated and thus
+/// is known to be unique, so it can be safely mutated without any checks.
+#[zenoh_macros::unstable_doc]
 pub struct ZSliceShm {
     pub(crate) slice: SharedMemoryBuf,
 }

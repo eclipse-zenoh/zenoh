@@ -33,6 +33,10 @@ use crate::api::{
 use crate::reader::{ClientStorage, GlobalDataSegmentID};
 
 lazy_static! {
+    /// A global lazily-initialized SHM client storage.
+    /// When initialized, contains default client set,
+    /// see SharedMemoryClientStorage::with_default_client_set
+    #[zenoh_macros::unstable_doc]
     pub static ref GLOBAL_CLIENT_STORAGE: Arc<SharedMemoryClientStorage> = Arc::new(
         SharedMemoryClientStorage::builder()
             .with_default_client_set()
@@ -40,14 +44,27 @@ lazy_static! {
     );
 }
 
+/// Builder to create new client storages
+#[zenoh_macros::unstable_doc]
 pub struct SharedMemoryClientSetBuilder;
 
 impl SharedMemoryClientSetBuilder {
-    pub fn empty(self) -> SharedMemoryClientStorageBuilder {
-        let clients = HashMap::default();
+    /// Add client to the storage (without including the default client set)
+    #[zenoh_macros::unstable_doc]
+    pub fn with_client<Tclient>(
+        self,
+        id: ProtocolID,
+        client: Box<Tclient>,
+    ) -> SharedMemoryClientStorageBuilder
+    where
+        Tclient: SharedMemoryClient + 'static,
+    {
+        let clients = HashMap::from([(id, client as Box<dyn SharedMemoryClient>)]);
         SharedMemoryClientStorageBuilder::new(clients)
     }
 
+    /// Include default clients
+    #[zenoh_macros::unstable_doc]
     pub fn with_default_client_set(self) -> SharedMemoryClientStorageBuilder {
         let clients = HashMap::from([(
             POSIX_PROTOCOL_ID,
@@ -66,6 +83,8 @@ impl SharedMemoryClientStorageBuilder {
         Self { clients }
     }
 
+    /// Add client to the storage
+    #[zenoh_macros::unstable_doc]
     pub fn with_client<Tclient>(mut self, id: ProtocolID, client: Box<Tclient>) -> ZResult<Self>
     where
         Tclient: SharedMemoryClient + 'static,
@@ -81,11 +100,17 @@ impl SharedMemoryClientStorageBuilder {
         }
     }
 
+    /// Build the storage with parameters specified on previous step
+    #[zenoh_macros::unstable_doc]
     pub fn build(self) -> SharedMemoryClientStorage {
         SharedMemoryClientStorage::new(self.clients)
     }
 }
 
+/// A storage for SHM clients.
+/// Runtime or Session constructed with instance of this type gets capabilities to read
+/// SHM buffers for Protocols added to this instance.
+#[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct SharedMemoryClientStorage {
     pub(crate) clients: ClientStorage<Box<dyn SharedMemoryClient>>,
@@ -101,10 +126,14 @@ impl PartialEq for SharedMemoryClientStorage {
 }
 
 impl SharedMemoryClientStorage {
+    /// Get the builder to construct a new storage
+    #[zenoh_macros::unstable_doc]
     pub fn builder() -> SharedMemoryClientSetBuilder {
         SharedMemoryClientSetBuilder
     }
 
+    /// Get the list of supported SHM protocols.
+    #[zenoh_macros::unstable_doc]
     pub fn supported_protocols(&self) -> Vec<ProtocolID> {
         self.clients.get_clients().keys().copied().collect()
     }

@@ -21,20 +21,25 @@ use super::{
 
 /// The provider backend trait
 /// Implemet this interface to create a Zenoh-compatible shared memory provider
+#[zenoh_macros::unstable_doc]
 pub trait SharedMemoryProviderBackend {
     /// Allocate the chunk of desired size.
     /// If successful, the result's chunk size will be >= len
+    #[zenoh_macros::unstable_doc]
     fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult;
 
     /// Deallocate the chunk.
     /// It is guaranteed that chunk's descriptor will correspond to the one returned from alloc(...)
+    #[zenoh_macros::unstable_doc]
     fn free(&self, chunk: &ChunkDescriptor);
 
     /// Defragment the memory.
     /// Should return the size of largest defragmented chunk
+    #[zenoh_macros::unstable_doc]
     fn defragment(&self) -> usize;
 
     /// Bytes available for use
+    #[zenoh_macros::unstable_doc]
     fn available(&self) -> usize;
 
     /// Check and calculate suitable layout for layout.
@@ -42,5 +47,6 @@ pub trait SharedMemoryProviderBackend {
     /// This method is used to:
     /// - validate, if the provided layout can be used with this backend
     /// - adopt the layout for backend capabilities
+    #[zenoh_macros::unstable_doc]
     fn layout_for(&self, layout: MemoryLayout) -> ZResult<MemoryLayout>;
 }

@@ -86,15 +86,15 @@ use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::Ready;
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub use zenoh_shm::api as shm;
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_util::concat_enabled_features;
 
@@ -271,7 +271,7 @@ where
 {
     OpenBuilder {
         config,
-        #[cfg(feature = "shared-memory")]
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))]
         shm_clients: None,
     }
 }
@@ -294,11 +294,11 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     config: TryIntoConfig,
-    #[cfg(feature = "shared-memory")]
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
     shm_clients: Option<Arc<SharedMemoryClientStorage>>,
 }
 
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
 impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -330,7 +330,7 @@ where
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
         Session::new(
             config,
-            #[cfg(feature = "shared-memory")]
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
             self.shm_clients,
         )
         .res_sync()

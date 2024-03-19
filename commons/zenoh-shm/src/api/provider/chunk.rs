@@ -17,6 +17,7 @@ use std::sync::atomic::AtomicPtr;
 use crate::api::common::types::{ChunkID, SegmentID};
 
 /// Uniquely identifies the particular chunk within particular segment
+#[zenoh_macros::unstable_doc]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChunkDescriptor {
     pub segment: SegmentID,
@@ -35,6 +36,7 @@ impl ChunkDescriptor {
 }
 
 /// A recently-allocated chunk.
+#[zenoh_macros::unstable_doc]
 pub struct AllocatedChunk {
     pub descriptor: ChunkDescriptor,
     pub data: AtomicPtr<u8>,

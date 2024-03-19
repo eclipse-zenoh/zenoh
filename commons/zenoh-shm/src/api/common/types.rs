@@ -15,10 +15,13 @@
 /// Unique protocol identifier.
 /// Here is a contract: it is up to user to make sure that incompatible SharedMemoryClient
 /// and SharedMemoryProviderBackend implementations will never use the same ProtocolID
+#[zenoh_macros::unstable_doc]
 pub type ProtocolID = u32;
 
 /// Unique segment identifier
+#[zenoh_macros::unstable_doc]
 pub type SegmentID = u32;
 
 /// Chunk id within it's segment
+#[zenoh_macros::unstable_doc]
 pub type ChunkID = u32;

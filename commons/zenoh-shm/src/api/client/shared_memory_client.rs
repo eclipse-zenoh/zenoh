@@ -23,7 +23,9 @@ use crate::api::common::types::SegmentID;
 use super::shared_memory_segment::SharedMemorySegment;
 
 /// SharedMemoryClient - client factory implementation for particular shared memory protocol
+#[zenoh_macros::unstable_doc]
 pub trait SharedMemoryClient: Debug + Send + Sync {
     /// Attach to particular shared memory segment
+    #[zenoh_macros::unstable_doc]
     fn attach(&self, segment: SegmentID) -> ZResult<Arc<dyn SharedMemorySegment>>;
 }

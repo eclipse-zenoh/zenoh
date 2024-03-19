@@ -66,10 +66,13 @@ impl PartialEq for Chunk {
     }
 }
 
+/// Builder to create posix SHM provider
+#[zenoh_macros::unstable_doc]
 pub struct PosixSharedMemoryProviderBackendBuilder;
 
 impl PosixSharedMemoryProviderBackendBuilder {
     /// Use existing layout
+    #[zenoh_macros::unstable_doc]
     pub fn with_layout<Layout: Borrow<MemoryLayout>>(
         self,
         layout: Layout,
@@ -78,6 +81,7 @@ impl PosixSharedMemoryProviderBackendBuilder {
     }
 
     /// Construct layout in-place using arguments
+    #[zenoh_macros::unstable_doc]
     pub fn with_layout_args(
         self,
         size: usize,
@@ -88,6 +92,7 @@ impl PosixSharedMemoryProviderBackendBuilder {
     }
 
     /// Construct layout in-place from size (default alignment will be used)
+    #[zenoh_macros::unstable_doc]
     pub fn with_size(
         self,
         size: usize,
@@ -103,6 +108,7 @@ pub struct LayoutedPosixSharedMemoryProviderBackendBuilder<Layout: Borrow<Memory
 
 impl<Layout: Borrow<MemoryLayout>> LayoutedPosixSharedMemoryProviderBackendBuilder<Layout> {
     /// try to create PosixSharedMemoryProviderBackend
+    #[zenoh_macros::unstable_doc]
     pub fn res(self) -> ZResult<PosixSharedMemoryProviderBackend> {
         PosixSharedMemoryProviderBackend::new(self.layout.borrow())
     }
@@ -110,6 +116,7 @@ impl<Layout: Borrow<MemoryLayout>> LayoutedPosixSharedMemoryProviderBackendBuild
 
 /// A backend for SharedMemoryProvider based on POSIX shared memory.
 /// This is the default general-purpose backed shipped with Zenoh.
+#[zenoh_macros::unstable_doc]
 pub struct PosixSharedMemoryProviderBackend {
     available: AtomicUsize,
     segment: PosixSharedMemorySegment,
@@ -119,6 +126,7 @@ pub struct PosixSharedMemoryProviderBackend {
 
 impl PosixSharedMemoryProviderBackend {
     /// Get the builder to construct a new instance
+    #[zenoh_macros::unstable_doc]
     pub fn builder() -> PosixSharedMemoryProviderBackendBuilder {
         PosixSharedMemoryProviderBackendBuilder
     }

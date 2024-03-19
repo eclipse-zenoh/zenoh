@@ -89,7 +89,7 @@ path = "examples/z_pub.rs"
 [[example]]
 name = "z_pub_shm"
 path = "examples/z_pub_shm.rs"
-required-features = ["shared-memory"]
+required-features = ["unstable", "shared-memory"]
 
 [[example]]
 name = "z_sub"
@@ -141,7 +141,7 @@ path = "examples/z_sub_thr.rs"
 [[example]]
 name = "z_pub_shm_thr"
 path = "examples/z_pub_shm_thr.rs"
-required-features = ["shared-memory"]
+required-features = ["unstable", "shared-memory"]
 
 [[example]]
 name = "z_ping"
@@ -150,7 +150,7 @@ path = "examples/z_ping.rs"
 [[example]]
 name = "z_ping_shm"
 path = "examples/z_ping_shm.rs"
-required-features = ["shared-memory"]
+required-features = ["unstable", "shared-memory"]
 
 [[example]]
 name = "z_pong"
@@ -159,4 +159,4 @@ path = "examples/z_pong.rs"
 [[example]]
 name = "z_alloc_shm"
 path = "examples/z_alloc_shm.rs"
-required-features = ["shared-memory"]
+required-features = ["unstable", "shared-memory"]

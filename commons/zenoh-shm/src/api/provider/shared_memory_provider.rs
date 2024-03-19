@@ -66,6 +66,8 @@ impl BusyChunk {
     }
 }
 
+/// Builder to create AllocLayout
+#[zenoh_macros::unstable_doc]
 pub struct AllocLayoutBuilder<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
@@ -79,6 +81,7 @@ where
     Backend: SharedMemoryProviderBackend,
 {
     /// Set size for layout
+    #[zenoh_macros::unstable_doc]
     pub fn size(self, size: usize) -> AllocLayoutSizedBuilder<'a, IDSource, Backend> {
         AllocLayoutSizedBuilder {
             provider: self.provider,
@@ -101,6 +104,7 @@ where
     Backend: SharedMemoryProviderBackend,
 {
     /// Set alignment for layout
+    #[zenoh_macros::unstable_doc]
     pub fn alignment(
         self,
         alignment: AllocAlignment,
@@ -113,6 +117,7 @@ where
     }
 
     /// try to build an allocation layout
+    #[zenoh_macros::unstable_doc]
     pub fn res(self) -> ZResult<AllocLayout<'a, IDSource, Backend>> {
         AllocLayout::new(self.size, AllocAlignment::default(), self.provider)
     }
@@ -133,6 +138,7 @@ where
     Backend: SharedMemoryProviderBackend,
 {
     /// Try to build layout with specified args
+    #[zenoh_macros::unstable_doc]
     pub fn res(self) -> ZResult<AllocLayout<'a, IDSource, Backend>> {
         AllocLayout::new(self.size, self.alignment, self.provider)
     }
@@ -141,6 +147,7 @@ where
 /// A layout for allocations.
 /// This is a pre-calculated layout suitable for making series of similar allocations
 /// adopted for particular SharedMemoryProvider
+#[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct AllocLayout<'a, IDSource, Backend>
 where
@@ -158,6 +165,7 @@ where
     Backend: SharedMemoryProviderBackend,
 {
     /// Allocate the new buffer with this layout
+    #[zenoh_macros::unstable_doc]
     pub fn alloc(&'a self) -> AllocBuilder<'a, IDSource, Backend> {
         AllocBuilder {
             layout: self,
@@ -188,6 +196,7 @@ where
 }
 
 /// Trait for deallocation policies.
+#[zenoh_macros::unstable_doc]
 pub trait ForceDeallocPolicy {
     fn dealloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
         provider: &SharedMemoryProvider<IDSource, Backend>,
@@ -195,6 +204,7 @@ pub trait ForceDeallocPolicy {
 }
 
 /// Try to dealloc optimal (currently eldest+1) chunk
+#[zenoh_macros::unstable_doc]
 pub struct DeallocOptimal;
 impl ForceDeallocPolicy for DeallocOptimal {
     fn dealloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
@@ -216,6 +226,7 @@ impl ForceDeallocPolicy for DeallocOptimal {
 }
 
 /// Try to dealloc youngest chunk
+#[zenoh_macros::unstable_doc]
 pub struct DeallocYoungest;
 impl ForceDeallocPolicy for DeallocYoungest {
     fn dealloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
@@ -232,6 +243,7 @@ impl ForceDeallocPolicy for DeallocYoungest {
 }
 
 /// Try to dealloc eldest chunk
+#[zenoh_macros::unstable_doc]
 pub struct DeallocEldest;
 impl ForceDeallocPolicy for DeallocEldest {
     fn dealloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
@@ -248,6 +260,7 @@ impl ForceDeallocPolicy for DeallocEldest {
 }
 
 /// Trait for allocation policies
+#[zenoh_macros::unstable_doc]
 pub trait AllocPolicy {
     fn alloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
         layout: &MemoryLayout,
@@ -255,6 +268,8 @@ pub trait AllocPolicy {
     ) -> ChunkAllocResult;
 }
 
+/// Trait for async allocation policies
+#[zenoh_macros::unstable_doc]
 #[async_trait]
 pub trait AsyncAllocPolicy {
     async fn alloc_async<
@@ -267,6 +282,7 @@ pub trait AsyncAllocPolicy {
 }
 
 /// Just try to allocate
+#[zenoh_macros::unstable_doc]
 pub struct JustAlloc;
 impl AllocPolicy for JustAlloc {
     fn alloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
@@ -280,6 +296,7 @@ impl AllocPolicy for JustAlloc {
 /// Garbage collection policy.
 /// Try to reclaim old buffers if allocation failed and allocate again
 /// if the largest reclaimed chuk is not smaller than the one required
+#[zenoh_macros::unstable_doc]
 pub struct GarbageCollect<InnerPolicy = JustAlloc, AltPolicy = JustAlloc>
 where
     InnerPolicy: AllocPolicy,
@@ -311,6 +328,7 @@ where
 /// Defragmenting policy.
 /// Try to defragment if allocation failed and allocate again
 /// if the largest defragmented chuk is not smaller than the one required
+#[zenoh_macros::unstable_doc]
 pub struct Defragment<InnerPolicy = JustAlloc, AltPolicy = JustAlloc>
 where
     InnerPolicy: AllocPolicy,
@@ -341,6 +359,7 @@ where
 
 /// Deallocating policy.
 /// Forcely deallocate up to N buffers until allocation succeeds.
+#[zenoh_macros::unstable_doc]
 pub struct Deallocate<
     const N: usize,
     InnerPolicy = JustAlloc,
@@ -387,6 +406,7 @@ where
 /// Blocking allocation policy.
 /// This policy will block until the allocation succeeds.
 /// Both sync and async modes available.
+#[zenoh_macros::unstable_doc]
 pub struct BlockOn<InnerPolicy = JustAlloc>
 where
     InnerPolicy: AllocPolicy,
@@ -492,6 +512,7 @@ unsafe impl<'a, Policy: AllocPolicy, IDSource, Backend: SharedMemoryProviderBack
 }*/
 
 /// Builder for allocations
+#[zenoh_macros::unstable_doc]
 pub struct AllocBuilder<
     'a,
     IDSource: ProtocolIDSource,
@@ -509,6 +530,7 @@ where
     Backend: SharedMemoryProviderBackend,
 {
     /// Set the allocation policy
+    #[zenoh_macros::unstable_doc]
     pub fn with_policy<OtherPolicy>(self) -> AllocBuilder<'a, IDSource, Backend, OtherPolicy> {
         AllocBuilder {
             layout: self.layout,
@@ -525,6 +547,7 @@ where
     Policy: AllocPolicy,
 {
     /// Get the result
+    #[zenoh_macros::unstable_doc]
     pub fn res(self) -> BufAllocResult {
         self.layout
             .provider
@@ -540,6 +563,7 @@ where
     Policy: AsyncAllocPolicy,
 {
     /// Get the async result
+    #[zenoh_macros::unstable_doc]
     pub async fn res_async(self) -> BufAllocResult {
         self.layout
             .provider
@@ -551,11 +575,13 @@ where
 pub struct SharedMemoryProviderBuilder;
 impl SharedMemoryProviderBuilder {
     /// Get the builder to construct SharedMemoryProvider
+    #[zenoh_macros::unstable_doc]
     pub fn builder() -> Self {
         Self
     }
 
     /// Set compile-time-evaluated protocol ID (preferred)
+    #[zenoh_macros::unstable_doc]
     pub fn protocol_id<const ID: ProtocolID>(
         self,
     ) -> SharedMemoryProviderBuilderID<StaticProtocolID<ID>> {
@@ -565,6 +591,7 @@ impl SharedMemoryProviderBuilder {
     }
 
     /// Set runtime-evaluated protocol ID
+    #[zenoh_macros::unstable_doc]
     pub fn dynamic_protocol_id(
         self,
         id: ProtocolID,
@@ -580,6 +607,7 @@ pub struct SharedMemoryProviderBuilderID<IDSource: ProtocolIDSource> {
 }
 impl<IDSource: ProtocolIDSource> SharedMemoryProviderBuilderID<IDSource> {
     /// Set the backend
+    #[zenoh_macros::unstable_doc]
     pub fn backend<Backend: SharedMemoryProviderBackend>(
         self,
         backend: Backend,
@@ -605,15 +633,22 @@ where
     Backend: SharedMemoryProviderBackend,
 {
     /// build SharedMemoryProvider
+    #[zenoh_macros::unstable_doc]
     pub fn res(self) -> SharedMemoryProvider<IDSource, Backend> {
         SharedMemoryProvider::new(self.backend, self.id)
     }
 }
 
+/// Trait to create ProtocolID sources for SharedMemoryProvider
+#[zenoh_macros::unstable_doc]
 pub trait ProtocolIDSource {
     fn id(&self) -> ProtocolID;
 }
 
+/// Static ProtocolID source. This is a recommended API to set ProtocolID
+/// when creating SharedMemoryProvider as the ID value is statically evaluated
+/// at compile-time and can be optimized.
+#[zenoh_macros::unstable_doc]
 #[derive(Default)]
 pub struct StaticProtocolID<const ID: ProtocolID>;
 impl<const ID: ProtocolID> ProtocolIDSource for StaticProtocolID<ID> {
@@ -622,6 +657,10 @@ impl<const ID: ProtocolID> ProtocolIDSource for StaticProtocolID<ID> {
     }
 }
 
+/// Dynamic ProtocolID source. This is an alternative API to set ProtocolID
+/// when creating SharedMemoryProvider for cases where ProtocolID is unknown
+/// at compile-time.
+#[zenoh_macros::unstable_doc]
 pub struct DynamicProtocolID {
     id: ProtocolID,
 }
@@ -639,6 +678,7 @@ unsafe impl Send for DynamicProtocolID {}
 unsafe impl Sync for DynamicProtocolID {}
 
 /// A generalized interface for shared memory data sources
+#[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct SharedMemoryProvider<IDSource, Backend>
 where
@@ -657,11 +697,13 @@ where
 {
     /// Create layout builder associated with particular SharedMemoryProvider.
     /// Layout is a rich interface to make allocations
+    #[zenoh_macros::unstable_doc]
     pub fn alloc_layout(&self) -> AllocLayoutBuilder<IDSource, Backend> {
         AllocLayoutBuilder { provider: self }
     }
 
     /// Defragment memory
+    #[zenoh_macros::unstable_doc]
     pub fn defragment(&self) -> usize {
         self.backend.defragment()
     }
@@ -669,6 +711,7 @@ where
     /// Map externally-allocated chunk into SharedMemoryBuf.
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
+    #[zenoh_macros::unstable_doc]
     pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<SharedMemoryBuf> {
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
@@ -686,6 +729,7 @@ where
 
     /// Try to collect free chunks.
     /// Returns the size of largest collected chunk
+    #[zenoh_macros::unstable_doc]
     pub fn garbage_collect(&self) -> usize {
         fn is_free_chunk(chunk: &BusyChunk) -> bool {
             let header = chunk.header.descriptor.header();
@@ -714,6 +758,7 @@ where
     }
 
     /// Bytes available for use
+    #[zenoh_macros::unstable_doc]
     pub fn available(&self) -> usize {
         self.backend.available()
     }

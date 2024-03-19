@@ -19,6 +19,7 @@ use zenoh_result::{bail, ZResult};
 use super::{chunk::AllocatedChunk, zsliceshm::ZSliceShm};
 
 // Allocation errors
+#[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZAllocError {
     NeedDefragment,             // defragmentation needed
@@ -33,6 +34,7 @@ impl From<zenoh_result::Error> for ZAllocError {
 }
 
 // alignemnt in powers of 2: 0 == 1-byte alignment, 1 == 2byte, 2 == 4byte, 3 == 8byte etc
+#[zenoh_macros::unstable_doc]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AllocAlignment {
     pow: u32,
@@ -57,10 +59,25 @@ impl AllocAlignment {
         Self { pow }
     }
 
+    /// Get alignment in normal units (bytes)
+    #[zenoh_macros::unstable_doc]
     pub fn get_alignment_value(&self) -> usize {
         1usize << self.pow
     }
 
+    /// Align size according to inner alignment.
+    /// This call may extend the size (see the example)
+    /// # Examples
+    ///
+    /// ```
+    /// use zenoh_shm::api::provider::types::AllocAlignment;
+    ///
+    /// let alignment = AllocAlignment::new(2); // 4-byte alignment
+    /// let initial_size: usize = 7;
+    /// let aligned_size = alignment.align_size(initial_size);
+    /// assert_eq!(aligned_size, 8);
+    /// ```
+    #[zenoh_macros::unstable_doc]
     pub fn align_size(&self, size: usize) -> usize {
         let alignment = self.get_alignment_value();
         match size % alignment {
@@ -70,6 +87,8 @@ impl AllocAlignment {
     }
 }
 
+/// Memory layout representation: alignemnt and size aligned for this alignment
+#[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct MemoryLayout {
     size: usize,
@@ -86,6 +105,8 @@ impl Display for MemoryLayout {
 }
 
 impl MemoryLayout {
+    /// Try to create a new memory layout
+    #[zenoh_macros::unstable_doc]
     pub fn new(size: usize, alignment: AllocAlignment) -> ZResult<Self> {
         // size of an allocation must be a miltiple of it's alignment!
         match size % alignment.get_alignment_value() {
@@ -94,13 +115,35 @@ impl MemoryLayout {
         }
     }
 
+    #[zenoh_macros::unstable_doc]
     pub fn size(&self) -> usize {
         self.size
     }
+
+    #[zenoh_macros::unstable_doc]
     pub fn alignment(&self) -> AllocAlignment {
         self.alignment
     }
 
+    /// Realign the layout for new alignment. The alignment must be >= of the existing one.
+    /// # Examples
+    ///
+    /// ```
+    /// use zenoh_shm::api::provider::types::AllocAlignment;
+    /// use zenoh_shm::api::provider::types::MemoryLayout;
+    ///
+    /// // 8 bytes with 4-byte alignment
+    /// let layout4b = MemoryLayout::new(8, AllocAlignment::new(2)).unwrap();
+    ///
+    /// // Try to realign with 2-byte alignment
+    /// let layout2b = layout4b.extend(AllocAlignment::new(1));
+    /// assert!(layout2b.is_err()); // fails because new alignment must be >= old
+    ///
+    /// // Try to realign with 8-byte alignment
+    /// let layout8b = layout4b.extend(AllocAlignment::new(3));
+    /// assert!(layout8b.is_ok()); // ok
+    /// ```
+    #[zenoh_macros::unstable_doc]
     pub fn extend(&self, new_alignment: AllocAlignment) -> ZResult<MemoryLayout> {
         if self.alignment <= new_alignment {
             let new_size = new_alignment.align_size(self.size);
@@ -114,5 +157,10 @@ impl MemoryLayout {
     }
 }
 
+/// SHM chunk allocation result
+#[zenoh_macros::unstable_doc]
 pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
+
+/// SHM buffer allocation result
+#[zenoh_macros::unstable_doc]
 pub type BufAllocResult = Result<ZSliceShm, ZAllocError>;
