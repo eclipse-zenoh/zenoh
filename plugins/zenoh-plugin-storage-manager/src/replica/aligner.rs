@@ -12,6 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crate::replica::storage::StorageSampleKind;
+
+use super::storage::StorageSample;
 use super::{Digest, EraType, LogEntry, Snapshotter};
 use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
 use async_std::sync::{Arc, RwLock};
@@ -29,7 +32,7 @@ pub struct Aligner {
     digest_key: OwnedKeyExpr,
     snapshotter: Arc<Snapshotter>,
     rx_digest: Receiver<(String, Digest)>,
-    tx_sample: Sender<Sample>,
+    tx_sample: Sender<StorageSample>,
     digests_processed: RwLock<HashSet<u64>>,
 }
 
@@ -38,7 +41,7 @@ impl Aligner {
         session: Arc<Session>,
         digest_key: OwnedKeyExpr,
         rx_digest: Receiver<(String, Digest)>,
-        tx_sample: Sender<Sample>,
+        tx_sample: Sender<StorageSample>,
         snapshotter: Arc<Snapshotter>,
     ) {
         let aligner = Aligner {
@@ -105,12 +108,11 @@ impl Aligner {
             log::trace!("[ALIGNER] Received queried samples: {missing_data:?}");
 
             for (key, (ts, value)) in missing_data {
-                let Value {
-                    payload, encoding, ..
-                } = value;
-                let sample = Sample::put(key, payload)
-                    .with_encoding(encoding)
-                    .with_timestamp(ts);
+                let sample = StorageSample {
+                    key_expr: key.into(),
+                    timestamp: ts,
+                    kind: StorageSampleKind::Put(value),
+                };
                 log::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
                     log::error!("[ALIGNER] Error adding sample to storage: {}", e)

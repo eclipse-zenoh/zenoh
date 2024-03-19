@@ -39,13 +39,13 @@ pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
 
 #[derive(Clone, Debug)]
-enum StorageSampleKind {
+pub enum StorageSampleKind {
     Put(Value),
     Delete,
 }
 
 #[derive(Clone, Debug)]
-struct StorageSample {
+pub struct StorageSample {
     pub key_expr: KeyExpr<'static>,
     pub timestamp: Timestamp,
     pub kind: StorageSampleKind,
@@ -179,7 +179,7 @@ impl IntoStorageSample for Update {
 
 pub struct ReplicationService {
     pub empty_start: bool,
-    pub aligner_updates: Receiver<Sample>,
+    pub aligner_updates: Receiver<StorageSample>,
     pub log_propagation: Sender<(OwnedKeyExpr, Timestamp)>,
 }
 
@@ -361,7 +361,7 @@ impl StorageService {
                             }
                         };
                         sample.ensure_timestamp();
-                        self.process_sample(sample).await;
+                        self.process_sample(sample.into()).await;
                     },
                     // on query on key_expr
                     query = storage_queryable.recv_async() => {
@@ -429,7 +429,7 @@ impl StorageService {
                     match self.ovderriding_wild_update(&k, &sample.timestamp).await {
                         Some(overriding_update) => overriding_update.into_sample(k.clone()),
 
-                        None => sample.into(),
+                        None => sample.clone().into(),
                     };
 
                 let stripped_key = match self.strip_prefix(&sample_to_store.key_expr) {
