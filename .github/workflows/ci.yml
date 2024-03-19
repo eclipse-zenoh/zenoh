@@ -96,11 +96,11 @@ jobs:
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
-        run: cargo nextest run -F shared-memory -F unstable --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F shared-memory -F unstable -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F shared-memory -F unstable -F transport_unixpipe --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
