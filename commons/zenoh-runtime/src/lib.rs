@@ -162,9 +162,9 @@ pub unsafe fn zruntime_pool_free() {
 }
 
 #[doc(hidden)]
-pub struct ZRuntimeGuard;
+pub struct ZRuntimePoolGuard;
 
-impl Drop for ZRuntimeGuard {
+impl Drop for ZRuntimePoolGuard {
     fn drop(&mut self) {
         unsafe {
             zruntime_pool_free();
