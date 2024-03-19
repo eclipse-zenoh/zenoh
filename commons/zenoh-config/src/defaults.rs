@@ -170,6 +170,7 @@ impl Default for QueueConf {
     fn default() -> Self {
         Self {
             size: QueueSizeConf::default(),
+            congestion_control: CongestionControlConf::default(),
             backoff: 100,
         }
     }
@@ -191,6 +192,14 @@ impl Default for QueueSizeConf {
             data: 4,
             data_low: 2,
             background: 1,
+        }
+    }
+}
+
+impl Default for CongestionControlConf {
+    fn default() -> Self {
+        Self {
+            wait_before_drop: 1000000,
         }
     }
 }

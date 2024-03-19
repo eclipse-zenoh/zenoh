@@ -352,6 +352,13 @@ validated_struct::validator! {
                             data_low: usize,
                             background: usize,
                         } where (queue_size_validator),
+                        /// Congestion occurs when the queue is empty (no available batch).
+                        /// Using CongestionControl::Block the caller is blocked until a batch is available and re-insterted into the queue.
+                        /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
+                        pub congestion_control: CongestionControlConf {
+                            /// The maximum time in nanosecond to wait for an available batch before dropping the message if still no batch is available.
+                            pub wait_before_drop: u64,
+                        },
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
                         backoff: u64,
