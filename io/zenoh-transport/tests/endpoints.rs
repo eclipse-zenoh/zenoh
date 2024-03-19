@@ -408,3 +408,17 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
     let endpoints = vec![endpoint];
     run(&endpoints).await;
 }
+
+#[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn endpoint_vsock() {
+    let _ = env_logger::try_init();
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![
+        "vsock/-1:1234".parse().unwrap(),
+        "vsock/VMADDR_CID_ANY:VMADDR_PORT_ANY".parse().unwrap(),
+        "vsock/VMADDR_CID_LOCAL:2345".parse().unwrap(),
+        "vsock/VMADDR_CID_LOCAL:VMADDR_PORT_ANY".parse().unwrap(),
+    ];
+    run(&endpoints).await;
+}

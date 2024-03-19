@@ -464,3 +464,11 @@ async fn transport_unixpipe_intermittent_for_lowlatency_transport() {
         .unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
+
+#[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_vsock_intermittent() {
+    let _ = env_logger::try_init();
+    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+    universal_transport_intermittent(&endpoint).await;
+}

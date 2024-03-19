@@ -221,7 +221,7 @@
     link: {
       /// An optional whitelist of protocols to be used for accepting and opening sessions.
       /// If not configured, all the supported protocols are automatically whitelisted.
-      /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
+      /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock"]
       /// For example, to only enable "tls" and "quic":
       //   protocols: ["tls", "quic"],
       /// Configure the zenoh TX parameters of a link

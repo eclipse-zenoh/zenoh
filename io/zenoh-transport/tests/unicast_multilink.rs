@@ -722,4 +722,13 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 
         multilink_transport(&endpoint).await;
     }
+
+    #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn multilink_vsock_only() {
+        let _ = env_logger::try_init();
+
+        let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+        multilink_transport(&endpoint).await;
+    }
 }

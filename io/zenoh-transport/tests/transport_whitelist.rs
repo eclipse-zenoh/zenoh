@@ -142,3 +142,17 @@ async fn transport_whitelist_unixpipe() {
     // Run
     run(&endpoints).await;
 }
+
+#[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_whitelist_vsock() {
+    let _ = env_logger::try_init();
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![
+        "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap(),
+        "vsock/1:17001".parse().unwrap(),
+    ];
+    // Run
+    run(&endpoints).await;
+}
