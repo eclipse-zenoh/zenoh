@@ -467,6 +467,13 @@ fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
+fn remote_client_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+    res.session_ctxs
+        .values()
+        .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
+}
+
+#[inline]
 fn send_forget_sourced_queryable_to_net_childs(
     tables: &Tables,
     net: &Network,
@@ -505,8 +512,8 @@ fn send_forget_sourced_queryable_to_net_childs(
 }
 
 fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
-    for face in tables.faces.values_mut() {
-        if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+    for mut face in tables.faces.values().cloned() {
+        if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
             // Still send WireExpr in UndeclareQueryable to clients for pico
             let ext_wire_expr = if face.whatami == WhatAmI::Client {
                 WireExprType {
@@ -525,19 +532,21 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                 res.expr(),
             ));
         }
-        for res in face_hat!(face)
+        for res in face_hat!(&mut face)
             .local_qabls
             .keys()
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
             if !res.context().matches.iter().any(|m| {
-                res_hat!(m.upgrade().unwrap())
-                    .router_qabls
-                    .keys()
-                    .any(|zid| zid == &tables.zid)
+                m.upgrade().is_some_and(|m| {
+                    m.context.is_some()
+                        && (remote_client_qabls(&m, &face)
+                            || remote_peer_qabls(tables, &m)
+                            || remote_router_qabls(tables, &m))
+                })
             }) {
-                if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(&res) {
+                if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                     // Still send WireExpr in UndeclareQueryable to clients for pico
                     let ext_wire_expr = if face.whatami == WhatAmI::Client {
                         WireExprType {
@@ -754,7 +763,7 @@ pub(super) fn undeclare_client_queryable(
         }
 
         if client_qabls.len() == 1 && !router_qabls && !peer_qabls {
-            let face = &mut client_qabls[0];
+            let mut face = &mut client_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 // Still send WireExpr in UndeclareQueryable to clients for pico
                 let ext_wire_expr = if face.whatami == WhatAmI::Client {
@@ -776,6 +785,44 @@ pub(super) fn undeclare_client_queryable(
                     },
                     res.expr(),
                 ));
+            }
+            for res in face_hat!(face)
+                .local_qabls
+                .keys()
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>()
+            {
+                if !res.context().matches.iter().any(|m| {
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some()
+                            && (remote_client_qabls(&m, face)
+                                || remote_peer_qabls(tables, &m)
+                                || remote_router_qabls(tables, &m))
+                    })
+                }) {
+                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                        // Still send WireExpr in UndeclareQueryable to clients for pico
+                        let ext_wire_expr = if face.whatami == WhatAmI::Client {
+                            WireExprType {
+                                wire_expr: Resource::get_best_key(&res, "", face.id),
+                            }
+                        } else {
+                            WireExprType::null()
+                        };
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id,
+                                    ext_wire_expr,
+                                }),
+                            },
+                            res.expr(),
+                        ));
+                    }
+                }
             }
         }
     }
@@ -1065,11 +1112,13 @@ impl HatQueriesTrait for HatCode {
         if current && face.whatami == WhatAmI::Client {
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if hat!(tables)
-                        .router_qabls
-                        .iter()
-                        .any(|qabl| qabl.context.is_some() && qabl.matches(res))
-                    {
+                    if hat!(tables).router_qabls.iter().any(|qabl| {
+                        qabl.context.is_some()
+                            && qabl.matches(res)
+                            && (remote_client_qabls(qabl, face)
+                                || remote_peer_qabls(tables, qabl)
+                                || remote_router_qabls(tables, qabl))
+                    }) {
                         let info = local_qabl_info(tables, res, face);
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face).local_subs.insert((*res).clone(), id);
@@ -1090,7 +1139,12 @@ impl HatQueriesTrait for HatCode {
                     }
                 } else {
                     for qabl in hat!(tables).router_qabls.iter() {
-                        if qabl.context.is_some() && qabl.matches(res) {
+                        if qabl.context.is_some()
+                            && qabl.matches(res)
+                            && (remote_client_qabls(qabl, face)
+                                || remote_peer_qabls(tables, qabl)
+                                || remote_router_qabls(tables, qabl))
+                        {
                             let info = local_qabl_info(tables, qabl, face);
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                             face_hat_mut!(face)
@@ -1115,7 +1169,11 @@ impl HatQueriesTrait for HatCode {
                 }
             } else {
                 for qabl in hat!(tables).router_qabls.iter() {
-                    if qabl.context.is_some() {
+                    if qabl.context.is_some()
+                        && (remote_client_qabls(qabl, face)
+                            || remote_peer_qabls(tables, qabl)
+                            || remote_router_qabls(tables, qabl))
+                    {
                         let info = local_qabl_info(tables, qabl, face);
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face)

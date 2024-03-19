@@ -364,6 +364,13 @@ fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
+fn remote_client_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+    res.session_ctxs
+        .values()
+        .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
+}
+
+#[inline]
 fn send_forget_sourced_subscription_to_net_childs(
     tables: &Tables,
     net: &Network,
@@ -402,8 +409,8 @@ fn send_forget_sourced_subscription_to_net_childs(
 }
 
 fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
-    for face in tables.faces.values_mut() {
-        if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+    for mut face in tables.faces.values().cloned() {
+        if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
             // Still send WireExpr in UndeclareSubscriber to clients for pico
             let ext_wire_expr = if face.whatami == WhatAmI::Client {
                 WireExprType {
@@ -425,18 +432,21 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                 res.expr(),
             ));
         }
-        for res in face_hat!(face)
+        for res in face_hat!(&mut face)
             .local_subs
             .keys()
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
             if !res.context().matches.iter().any(|m| {
-                res_hat!(m.upgrade().unwrap())
-                    .router_subs
-                    .contains(&tables.zid)
+                m.upgrade().is_some_and(|m| {
+                    m.context.is_some()
+                        && (remote_client_subs(&m, &face)
+                            || remote_peer_subs(tables, &m)
+                            || remote_router_subs(tables, &m))
+                })
             }) {
-                if let Some(id) = face_hat_mut!(face).local_subs.remove(&res) {
+                if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     // Still send WireExpr in UndeclareSubscriber to clients for pico
                     let ext_wire_expr = if face.whatami == WhatAmI::Client {
                         WireExprType {
@@ -640,8 +650,9 @@ pub(super) fn undeclare_client_subscription(
         } else {
             propagate_forget_simple_subscription_to_peers(tables, res);
         }
+
         if client_subs.len() == 1 && !router_subs && !peer_subs {
-            let face = &mut client_subs[0];
+            let mut face = &mut client_subs[0];
             if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                     // Still send WireExpr in UndeclareSubscriber to clients for pico
@@ -664,6 +675,44 @@ pub(super) fn undeclare_client_subscription(
                         },
                         res.expr(),
                     ));
+                }
+                for res in face_hat!(face)
+                    .local_subs
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<Arc<Resource>>>()
+                {
+                    if !res.context().matches.iter().any(|m| {
+                        m.upgrade().is_some_and(|m| {
+                            m.context.is_some()
+                                && (remote_client_subs(&m, face)
+                                    || remote_peer_subs(tables, &m)
+                                    || remote_router_subs(tables, &m))
+                        })
+                    }) {
+                        if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                            // Still send WireExpr in UndeclareSubscriber to clients for pico
+                            let ext_wire_expr = if face.whatami == WhatAmI::Client {
+                                WireExprType {
+                                    wire_expr: Resource::get_best_key(&res, "", face.id),
+                                }
+                            } else {
+                                WireExprType::null()
+                            };
+                            face.primitives.send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                        id,
+                                        ext_wire_expr,
+                                    }),
+                                },
+                                res.expr(),
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -946,11 +995,13 @@ impl HatPubSubTrait for HatCode {
             };
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if hat!(tables)
-                        .router_subs
-                        .iter()
-                        .any(|sub| sub.context.is_some() && sub.matches(res))
-                    {
+                    if hat!(tables).router_subs.iter().any(|sub| {
+                        sub.context.is_some()
+                            && sub.matches(res)
+                            && (remote_client_subs(sub, face)
+                                || remote_peer_subs(tables, sub)
+                                || remote_router_subs(tables, sub))
+                    }) {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face).local_subs.insert((*res).clone(), id);
                         let wire_expr = Resource::decl_key(res, face);
@@ -970,7 +1021,12 @@ impl HatPubSubTrait for HatCode {
                     }
                 } else {
                     for sub in &hat!(tables).router_subs {
-                        if sub.context.is_some() && sub.matches(res) {
+                        if sub.context.is_some()
+                            && sub.matches(res)
+                            && (remote_client_subs(sub, face)
+                                || remote_peer_subs(tables, sub)
+                                || remote_router_subs(tables, sub))
+                        {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                             face_hat_mut!(face).local_subs.insert(sub.clone(), id);
                             let wire_expr = Resource::decl_key(sub, face);
@@ -992,7 +1048,11 @@ impl HatPubSubTrait for HatCode {
                 }
             } else {
                 for sub in &hat!(tables).router_subs {
-                    if sub.context.is_some() {
+                    if sub.context.is_some()
+                        && (remote_client_subs(sub, face)
+                            || remote_peer_subs(tables, sub)
+                            || remote_router_subs(tables, sub))
+                    {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face).local_subs.insert(sub.clone(), id);
                         let wire_expr = Resource::decl_key(sub, face);
