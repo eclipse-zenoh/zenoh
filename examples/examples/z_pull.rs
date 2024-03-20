@@ -13,12 +13,9 @@
 //
 use async_std::task::sleep;
 use clap::Parser;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::time::Duration;
+use zenoh::handlers::RingQueue;
 use zenoh::{config::Config, prelude::r#async::*};
-use zenoh_collections::RingBuffer;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -31,26 +28,19 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Creating a local queue keeping the last {cache} elements...");
-    let arb = Arc::new(Mutex::new(RingBuffer::new(cache)));
-    let arb_c = arb.clone();
-
     println!("Declaring Subscriber on '{key_expr}'...");
-    let _subscriber = session
+    let subscriber = session
         .declare_subscriber(&key_expr)
-        .callback(move |sample| {
-            arb_c.lock().unwrap().push_force(sample);
-        })
+        .with(RingQueue::new(cache))
         .res()
         .await
         .unwrap();
 
     println!("Pulling data every {:#?} seconds", interval);
     loop {
-        let mut res = arb.lock().unwrap().pull();
         print!(">> [Subscriber] Pulling ");
-        match res.take() {
-            Some(sample) => {
+        match subscriber.recv() {
+            Ok(Some(sample)) => {
                 let payload = sample
                     .payload()
                     .deserialize::<String>()
@@ -62,9 +52,12 @@ async fn main() {
                     payload,
                 );
             }
-            None => {
-                println!("nothing... sleep for {:#?}", interval);
+            Ok(None) => {
+                println!(">> [Subscriber] nothing... sleep for {:#?}", interval);
                 sleep(interval).await;
+            }
+            Err(e) => {
+                println!(">> [Subscriber] Pull error: {e}")
             }
         }
     }

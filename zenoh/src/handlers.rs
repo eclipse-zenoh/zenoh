@@ -15,6 +15,10 @@
 //! Callback handler trait.
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 
+use std::sync::{Arc, Mutex, Weak};
+use zenoh_collections::RingBuffer;
+use zenoh_result::ZResult;
+
 /// An alias for `Arc<T>`.
 pub type Dyn<T> = std::sync::Arc<T>;
 
@@ -82,6 +86,52 @@ impl<T: Send + Sync + 'static> IntoHandler<'static, T>
                 if let Err(e) = sender.send(t) {
                     log::error!("{}", e)
                 }
+            }),
+            receiver,
+        )
+    }
+}
+
+pub struct RingQueue<T> {
+    cache: Arc<Mutex<RingBuffer<T>>>,
+}
+
+impl<T> RingQueue<T> {
+    pub fn new(capacity: usize) -> Self {
+        RingQueue {
+            cache: Arc::new(Mutex::new(RingBuffer::new(capacity))),
+        }
+    }
+}
+
+pub struct RingHandler<T> {
+    cache: Weak<Mutex<RingBuffer<T>>>,
+}
+
+impl<T> RingHandler<T> {
+    pub fn recv(&self) -> ZResult<Option<T>> {
+        let Some(cache) = self.cache.upgrade() else {
+            bail!("The cache has been deleted.");
+        };
+        let mut guard = cache.lock().map_err(|e| zerror!("{}", e))?;
+        Ok(guard.pull())
+    }
+}
+
+impl<T: Send + 'static> IntoHandler<'static, T> for RingQueue<T> {
+    type Handler = RingHandler<T>;
+
+    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+        let receiver = RingHandler {
+            cache: Arc::downgrade(&self.cache),
+        };
+        (
+            Dyn::new(move |t| match self.cache.lock() {
+                Ok(mut g) => {
+                    // Eventually drop the oldest element.
+                    g.push_force(t);
+                }
+                Err(e) => log::error!("{}", e),
             }),
             receiver,
         )
