@@ -218,7 +218,9 @@ impl LinkManagerUnicastTcp {
             SocketAddr::V6(_) => TcpSocket::new_v6(),
         }?;
 
-        zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+        if let Some(iface) = iface {
+            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+        }
 
         // Build a TcpStream from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
@@ -248,7 +250,9 @@ impl LinkManagerUnicastTcp {
             SocketAddr::V6(_) => TcpSocket::new_v6(),
         }?;
 
-        zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+        if let Some(iface) = iface {
+            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+        }
 
         // Build a TcpListener from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
