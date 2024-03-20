@@ -24,10 +24,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::ZBuf;
 use zenoh::prelude::r#async::*;
 use zenoh::query::ConsolidationMode;
+use zenoh::sample::SampleBuilder;
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
-use zenoh_backend_traits::{Capability, History, Persistence, Storage, StorageInsertionResult, StoredData};
+use zenoh_backend_traits::{
+    Capability, History, Persistence, Storage, StorageInsertionResult, StoredData,
+};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
 use zenoh_keyexpr::keyexpr_tree::{support::NonWild, support::UnknownWildness, KeBoxTree};
@@ -353,14 +356,20 @@ impl StorageService {
                 select!(
                     // on sample for key_expr
                     sample = storage_sub.recv_async() => {
-                        let mut sample = match sample {
+                        let sample = match sample {
                             Ok(sample) => sample,
                             Err(e) => {
                                 log::error!("Error in sample: {}", e);
                                 continue;
                             }
                         };
-                        sample.ensure_timestamp();
+                        let sample = if sample.timestamp().is_none() {
+                            SampleBuilder::new(sample).with_current_timestamp().res_sync()
+
+
+                        } else {
+                            sample
+                        };
                         self.process_sample(sample.into()).await;
                     },
                     // on query on key_expr
@@ -411,9 +420,7 @@ impl StorageService {
         );
 
         for k in matching_keys {
-            if !self
-                .is_deleted(&k.clone(), &sample.timestamp)
-                .await
+            if !self.is_deleted(&k.clone(), &sample.timestamp).await
                 && (self.capability.history.eq(&History::All)
                     || (self.capability.history.eq(&History::Latest)
                         && self.is_latest(&k, &sample.timestamp).await))
@@ -443,18 +450,16 @@ impl StorageService {
                 let result = match sample_to_store.kind {
                     StorageSampleKind::Put(data) => {
                         storage
-                            .put(
-                                stripped_key,
-                                data,
-                                sample_to_store.timestamp,
-                            )
+                            .put(stripped_key, data, sample_to_store.timestamp)
                             .await
-                    },
+                    }
                     StorageSampleKind::Delete => {
                         // register a tombstone
                         self.mark_tombstone(&k, sample_to_store.timestamp).await;
-                        storage.delete(stripped_key, sample_to_store.timestamp).await
-                    },
+                        storage
+                            .delete(stripped_key, sample_to_store.timestamp)
+                            .await
+                    }
                 };
                 drop(storage);
                 if self.replication.is_some()

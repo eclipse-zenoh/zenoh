@@ -32,6 +32,7 @@ use crate::queryable::*;
 #[cfg(feature = "unstable")]
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::sample::DataInfoIntoSample;
 use crate::sample::QoS;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
@@ -1537,21 +1538,21 @@ impl Session {
         drop(state);
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
-            #[allow(unused_mut)]
-            let mut sample = Sample::put(key_expr, payload.clone()).with_info(info.clone());
-            #[cfg(feature = "unstable")]
-            {
-                sample.attachment = attachment.clone();
-            }
+            let sample = info.clone().into_sample(
+                key_expr,
+                payload.clone(),
+                #[cfg(feature = "unstable")]
+                attachment.clone(),
+            );
             cb(sample);
         }
         if let Some((cb, key_expr)) = last {
-            #[allow(unused_mut)]
-            let mut sample = Sample::put(key_expr, payload).with_info(info);
-            #[cfg(feature = "unstable")]
-            {
-                sample.attachment = attachment;
-            }
+            let sample = info.into_sample(
+                key_expr,
+                payload,
+                #[cfg(feature = "unstable")]
+                attachment.clone(),
+            );
             cb(sample);
         }
     }
@@ -2254,14 +2255,12 @@ impl Primitives for Session {
                                 attachment: _attachment.map(Into::into),
                             },
                         };
-
-                        #[allow(unused_mut)]
-                        let mut sample =
-                            Sample::put(key_expr.into_owned(), payload).with_info(Some(info));
-                        #[cfg(feature = "unstable")]
-                        {
-                            sample.attachment = attachment;
-                        }
+                        let sample = info.into_sample(
+                            key_expr.into_owned(),
+                            payload,
+                            #[cfg(feature = "unstable")]
+                            attachment,
+                        );
                         let new_reply = Reply {
                             sample: Ok(sample),
                             replier_id: ZenohId::rand(), // TODO

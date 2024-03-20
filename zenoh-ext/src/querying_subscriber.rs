@@ -20,6 +20,7 @@ use std::time::Duration;
 use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
+use zenoh::sample::SampleBuilder;
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
@@ -655,7 +656,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
         let sub_callback = {
             let state = state.clone();
             let callback = callback.clone();
-            move |mut s| {
+            move |s| {
                 let state = &mut zlock!(state);
                 if state.pending_fetches == 0 {
                     callback(s);
@@ -663,7 +664,11 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
                     log::trace!("Sample received while fetch in progress: push it to merge_queue");
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
-                    s.ensure_timestamp();
+                    let s = if s.timestamp().is_none() {
+                        SampleBuilder::new(s).with_current_timestamp().res_sync()
+                    } else {
+                        s
+                    };
                     state.merge_queue.push(s);
                 }
             }

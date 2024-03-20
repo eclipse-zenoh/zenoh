@@ -20,10 +20,8 @@ use crate::time::{new_reception_timestamp, Timestamp};
 use crate::Priority;
 #[zenoh_macros::unstable]
 use serde::Serialize;
-use std::{
-    convert::{TryFrom, TryInto},
-    fmt,
-};
+use std::{convert::TryFrom, fmt};
+use zenoh_core::{zresult, AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::{core::CongestionControl, network::push::ext::QoSType};
 
@@ -55,6 +53,83 @@ pub(crate) struct DataInfo {
     pub source_id: Option<EntityGlobalId>,
     pub source_sn: Option<SourceSn>,
     pub qos: QoS,
+}
+
+pub(crate) trait DataInfoIntoSample {
+    fn into_sample<IntoKeyExpr, IntoPayload>(
+        self,
+        key_expr: IntoKeyExpr,
+        payload: IntoPayload,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+    ) -> Sample
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+        IntoPayload: Into<Payload>;
+}
+
+impl DataInfoIntoSample for DataInfo {
+    // TODO: this is internal function.
+    // Technically it may create invalid sample (e.g. a delete sample with a payload and encoding)
+    // The test for it is intentionally not added to avoid inserting extra "if" into hot path.
+    // This need to be additionally investigated and measured.
+    #[inline]
+    fn into_sample<IntoKeyExpr, IntoPayload>(
+        self,
+        key_expr: IntoKeyExpr,
+        payload: IntoPayload,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+    ) -> Sample
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+        IntoPayload: Into<Payload>,
+    {
+        Sample {
+            key_expr: key_expr.into(),
+            payload: payload.into(),
+            kind: self.kind,
+            encoding: self.encoding.unwrap_or_default(),
+            timestamp: self.timestamp,
+            qos: self.qos,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo {
+                source_id: self.source_id,
+                source_sn: self.source_sn,
+            },
+            #[cfg(feature = "unstable")]
+            attachment,
+        }
+    }
+}
+
+impl DataInfoIntoSample for Option<DataInfo> {
+    #[inline]
+    fn into_sample<IntoKeyExpr, IntoPayload>(
+        self,
+        key_expr: IntoKeyExpr,
+        payload: IntoPayload,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+    ) -> Sample
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+        IntoPayload: Into<Payload>,
+    {
+        if let Some(data_info) = self {
+            data_info.into_sample(key_expr, payload, attachment)
+        } else {
+            Sample {
+                key_expr: key_expr.into(),
+                payload: payload.into(),
+                kind: SampleKind::Put,
+                encoding: Encoding::default(),
+                timestamp: None,
+                qos: QoS::default(),
+                #[cfg(feature = "unstable")]
+                source_info: SourceInfo::empty(),
+                #[cfg(feature = "unstable")]
+                attachment,
+            }
+        }
+    }
 }
 
 /// Informations on the source of a zenoh [`Sample`].
@@ -359,6 +434,256 @@ impl TryFrom<u64> for SampleKind {
 #[zenoh_macros::unstable]
 pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 
+pub struct SampleBuilder(Sample);
+
+impl SampleBuilder {
+    pub fn new(sample: Sample) -> Self {
+        Self(sample)
+    }
+
+    pub fn with_keyexpr<IntoKeyExpr>(mut self, key_expr: IntoKeyExpr) -> Self
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+    {
+        self.0.key_expr = key_expr.into();
+        self
+    }
+
+    // pub(crate) fn with_kind(mut self, kind: SampleKind) -> Self {
+    //     self.0.kind = kind;
+    //     self
+    // }
+
+    pub(crate) fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.0.encoding = encoding;
+        self
+    }
+
+    pub(crate) fn with_payload<IntoPayload>(mut self, payload: IntoPayload) -> Self
+    where
+        IntoPayload: Into<Payload>,
+    {
+        self.0.payload = payload.into();
+        self
+    }
+
+    pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
+        self.0.timestamp = Some(timestamp);
+        self
+    }
+
+    pub fn with_current_timestamp(mut self) -> Self {
+        self.0.timestamp = Some(new_reception_timestamp());
+        self
+    }
+
+    pub fn with_qos(mut self, qos: QoS) -> Self {
+        self.0.qos = qos;
+        self
+    }
+
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.0.source_info = source_info;
+        self
+    }
+
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.0.attachment = Some(attachment);
+        self
+    }
+}
+
+pub struct PutSampleBuilder(SampleBuilder);
+
+impl PutSampleBuilder {
+    pub fn new<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+        IntoPayload: Into<Payload>,
+    {
+        Self(SampleBuilder::new(Sample {
+            key_expr: key_expr.into(),
+            payload: payload.into(),
+            kind: SampleKind::Put,
+            encoding: Encoding::default(),
+            timestamp: None,
+            qos: QoS::default(),
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
+        }))
+    }
+
+    pub fn with_payload<IntoPayload>(mut self, payload: IntoPayload) -> Self
+    where
+        IntoPayload: Into<Payload>,
+    {
+        self.0 = self.0.with_payload(payload);
+        self
+    }
+
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.0 = self.0.with_encoding(encoding);
+        self
+    }
+
+    pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
+        self.0 = self.0.with_timestamp(timestamp);
+        self
+    }
+
+    pub fn with_current_timestamp(mut self) -> Self {
+        self.0 = self.0.with_current_timestamp();
+        self
+    }
+
+    pub fn with_qos(mut self, qos: QoS) -> Self {
+        self.0 = self.0.with_qos(qos);
+        self
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.0 = self.0.with_source_info(source_info);
+        self
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.0 = self.0.with_attachment(attachment);
+        self
+    }
+}
+
+pub struct DeleteSampleBuilder(SampleBuilder);
+
+impl DeleteSampleBuilder {
+    pub fn new<IntoKeyExpr>(key_expr: IntoKeyExpr) -> Self
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+    {
+        Self(SampleBuilder::new(Sample {
+            key_expr: key_expr.into(),
+            payload: Payload::empty(),
+            kind: SampleKind::Delete,
+            encoding: Encoding::default(),
+            timestamp: None,
+            qos: QoS::default(),
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
+        }))
+    }
+    pub fn with_keyexpr<IntoKeyExpr>(mut self, key_expr: IntoKeyExpr) -> Self
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+    {
+        self.0 = self.0.with_keyexpr(key_expr);
+        self
+    }
+    pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
+        self.0 = self.0.with_timestamp(timestamp);
+        self
+    }
+    pub fn with_current_timestamp(mut self) -> Self {
+        self.0 = self.0.with_current_timestamp();
+        self
+    }
+    pub fn with_qos(mut self, qos: QoS) -> Self {
+        self.0 = self.0.with_qos(qos);
+        self
+    }
+    #[zenoh_macros::unstable]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.0 = self.0.with_source_info(source_info);
+        self
+    }
+    #[zenoh_macros::unstable]
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.0 = self.0.with_attachment(attachment);
+        self
+    }
+}
+
+impl From<Sample> for SampleBuilder {
+    fn from(sample: Sample) -> Self {
+        SampleBuilder(sample)
+    }
+}
+
+impl TryFrom<Sample> for PutSampleBuilder {
+    type Error = zresult::Error;
+    fn try_from(sample: Sample) -> Result<Self, Self::Error> {
+        if sample.kind != SampleKind::Put {
+            bail!("Sample is not a put sample")
+        }
+        Ok(Self(SampleBuilder(sample)))
+    }
+}
+
+impl TryFrom<Sample> for DeleteSampleBuilder {
+    type Error = zresult::Error;
+    fn try_from(sample: Sample) -> Result<Self, Self::Error> {
+        if sample.kind != SampleKind::Delete {
+            bail!("Sample is not a delete sample")
+        }
+        Ok(Self(SampleBuilder(sample)))
+    }
+}
+
+impl Resolvable for SampleBuilder {
+    type To = Sample;
+}
+
+impl Resolvable for PutSampleBuilder {
+    type To = Sample;
+}
+
+impl Resolvable for DeleteSampleBuilder {
+    type To = Sample;
+}
+
+impl SyncResolve for SampleBuilder {
+    fn res_sync(self) -> Self::To {
+        self.0
+    }
+}
+
+impl SyncResolve for PutSampleBuilder {
+    fn res_sync(self) -> Self::To {
+        self.0.res_sync()
+    }
+}
+
+impl SyncResolve for DeleteSampleBuilder {
+    fn res_sync(self) -> Self::To {
+        self.0.res_sync()
+    }
+}
+
+impl AsyncResolve for SampleBuilder {
+    type Future = futures::future::Ready<Self::To>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.0)
+    }
+}
+
+impl AsyncResolve for PutSampleBuilder {
+    type Future = futures::future::Ready<Self::To>;
+    fn res_async(self) -> Self::Future {
+        self.0.res_async()
+    }
+}
+
+impl AsyncResolve for DeleteSampleBuilder {
+    type Future = futures::future::Ready<Self::To>;
+    fn res_async(self) -> Self::Future {
+        self.0.res_async()
+    }
+}
+
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
@@ -378,106 +703,6 @@ pub struct Sample {
 }
 
 impl Sample {
-    /// Creates a "put" Sample.
-    #[inline]
-    pub fn put<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<Payload>,
-    {
-        Sample {
-            key_expr: key_expr.into(),
-            payload: payload.into(),
-            encoding: Encoding::default(),
-            kind: SampleKind::Put,
-            timestamp: None,
-            qos: QoS::default(),
-            #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
-            attachment: None,
-        }
-    }
-
-    /// Creates a "delete" Sample.
-    #[inline]
-    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Sample {
-            key_expr: key_expr.into(),
-            payload: Payload::empty(),
-            encoding: Encoding::default(),
-            kind: SampleKind::Delete,
-            timestamp: None,
-            qos: QoS::default(),
-            #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
-            attachment: None,
-        }
-    }
- 
-    /// Attempts to create a "put" Sample
-    #[inline]
-    pub fn try_put<TryIntoKeyExpr, TryIntoPayload>(
-        key_expr: TryIntoKeyExpr,
-        payload: TryIntoPayload,
-    ) -> Result<Self, zenoh_result::Error>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
-        TryIntoPayload: TryInto<Payload>,
-        <TryIntoPayload as TryInto<Payload>>::Error: Into<zenoh_result::Error>,
-    {
-        let key_expr: KeyExpr<'static> = key_expr.try_into().map_err(Into::into)?;
-        let payload: Payload = payload.try_into().map_err(Into::into)?;
-        Ok(Self::put(key_expr, payload))
-    }
-
-    /// Attempts to create a "delete" Sample
-    #[inline]
-    pub fn try_delete<TryIntoKeyExpr>(
-        key_expr: TryIntoKeyExpr,
-    ) -> Result<Self, zenoh_result::Error>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
-    {
-        let key_expr: KeyExpr<'static> = key_expr.try_into().map_err(Into::into)?;
-        Ok(Self::delete(key_expr))
-    }
-
-    /// Creates a new Sample with optional data info.
-    #[inline]
-    pub(crate) fn with_info(mut self, mut data_info: Option<DataInfo>) -> Self {
-        if let Some(mut data_info) = data_info.take() {
-            self.kind = data_info.kind;
-            if let Some(encoding) = data_info.encoding.take() {
-                self.encoding = encoding;
-            }
-            self.qos = data_info.qos;
-            self.timestamp = data_info.timestamp;
-            #[cfg(feature = "unstable")]
-            {
-                self.source_info = SourceInfo {
-                    source_id: data_info.source_id,
-                    source_sn: data_info.source_sn,
-                };
-            }
-        }
-        self
-    }
-
-    /// Sets the encoding of this Sample
-    #[inline]
-    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
-        assert!(self.kind == SampleKind::Put, "Cannot set encoding on a delete sample");
-        self.encoding = encoding;
-        self
-    }
-
     /// Gets the key expression on which this Sample was published.
     #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
@@ -508,15 +733,6 @@ impl Sample {
         self.timestamp.as_ref()
     }
 
-    /// Sets the timestamp of this Sample.
-    #[inline]
-    #[doc(hidden)]
-    #[zenoh_macros::unstable]
-    pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
-        self.timestamp = Some(timestamp);
-        self
-    }
-
     /// Gets the quality of service settings this Sample was sent with.
     #[inline]
     pub fn qos(&self) -> &QoS {
@@ -530,51 +746,11 @@ impl Sample {
         &self.source_info
     }
 
-    /// Sets the source info of this Sample.
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
-        self.source_info = source_info;
-        self
-    }
-
-    /// Ensure that an associated Timestamp is present in this Sample.
-    /// If not, a new one is created with the current system time and 0x00 as id.
-    /// Get the timestamp of this sample (either existing one or newly created)
-    #[inline]
-    #[doc(hidden)]
-    #[zenoh_macros::unstable]
-    pub fn ensure_timestamp(&mut self) -> &Timestamp {
-        if let Some(ref timestamp) = self.timestamp {
-            timestamp
-        } else {
-            let timestamp = new_reception_timestamp();
-            self.timestamp = Some(timestamp);
-            self.timestamp.as_ref().unwrap()
-        }
-    }
-
     /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn attachment(&self) -> Option<&Attachment> {
         self.attachment.as_ref()
-    }
-
-    /// Gets the mutable sample attachment: a map of key-value pairs, where each key and value are byte-slices.
-    #[inline]
-    #[doc(hidden)]
-    #[zenoh_macros::unstable]
-    pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
-        &mut self.attachment
-    }
-
-    #[inline]
-    #[doc(hidden)]
-    #[zenoh_macros::unstable]
-    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
-        self.attachment = Some(attachment);
-        self
     }
 }
 
