@@ -684,6 +684,19 @@ impl AsyncResolve for DeleteSampleBuilder {
     }
 }
 
+pub struct SampleDecomposed {
+    pub key_expr: KeyExpr<'static>,
+    pub payload: Payload,
+    pub kind: SampleKind,
+    pub encoding: Encoding,
+    pub timestamp: Option<Timestamp>,
+    pub qos: QoS,
+    #[cfg(feature = "unstable")]
+    pub source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub attachment: Option<Attachment>,
+}
+
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
@@ -751,6 +764,22 @@ impl Sample {
     #[inline]
     pub fn attachment(&self) -> Option<&Attachment> {
         self.attachment.as_ref()
+    }
+
+    /// Decomposes the Sample into its components
+    pub fn decompose(self) -> SampleDecomposed {
+        SampleDecomposed {
+            key_expr: self.key_expr,
+            payload: self.payload,
+            kind: self.kind,
+            encoding: self.encoding,
+            timestamp: self.timestamp,
+            qos: self.qos,
+            #[cfg(feature = "unstable")]
+            source_info: self.source_info,
+            #[cfg(feature = "unstable")]
+            attachment: self.attachment,
+        }
     }
 }
 

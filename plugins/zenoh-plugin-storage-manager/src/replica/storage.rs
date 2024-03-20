@@ -28,9 +28,8 @@ use zenoh::sample::SampleBuilder;
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
-use zenoh_backend_traits::{
-    Capability, History, Persistence, Storage, StorageInsertionResult, StoredData,
-};
+use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
+use zenoh_core::SyncResolve;
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
 use zenoh_keyexpr::keyexpr_tree::{support::NonWild, support::UnknownWildness, KeBoxTree};
@@ -274,7 +273,12 @@ impl StorageService {
         t.add_async(gc).await;
 
         // subscribe on key_expr
-        let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
+        let storage_sub = match self
+            .session
+            .declare_subscriber(&self.key_expr)
+            .res_async()
+            .await
+        {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 log::error!("Error starting storage '{}': {}", self.name, e);
@@ -287,7 +291,7 @@ impl StorageService {
             .session
             .declare_queryable(&self.key_expr)
             .complete(self.complete)
-            .res()
+            .res_async()
             .await
         {
             Ok(storage_queryable) => storage_queryable,
@@ -365,8 +369,6 @@ impl StorageService {
                         };
                         let sample = if sample.timestamp().is_none() {
                             SampleBuilder::new(sample).with_current_timestamp().res_sync()
-
-
                         } else {
                             sample
                         };
@@ -622,8 +624,12 @@ impl StorageService {
                 match storage.get(stripped_key, q.parameters()).await {
                     Ok(stored_data) => {
                         for entry in stored_data {
-                            let sample = entry.into_sample(key.clone());
-                            if let Err(e) = q.reply_sample(sample).res().await {
+                            if let Err(e) = q
+                                .reply(key.clone(), entry.value.payload)
+                                .with_timestamp(entry.timestamp)
+                                .res_async()
+                                .await
+                            {
                                 log::warn!(
                                     "Storage '{}' raised an error replying a query: {}",
                                     self.name,
@@ -652,10 +658,13 @@ impl StorageService {
                         let Value {
                             payload, encoding, ..
                         } = entry.value;
-                        let sample = Sample::put(q.key_expr().clone(), payload)
+                        if let Err(e) = q
+                            .reply(q.key_expr().clone(), payload)
                             .with_encoding(encoding)
-                            .with_timestamp(entry.timestamp);
-                        if let Err(e) = q.reply_sample(sample).res().await {
+                            .with_timestamp(entry.timestamp)
+                            .res_async()
+                            .await
+                        {
                             log::warn!(
                                 "Storage '{}' raised an error replying a query: {}",
                                 self.name,
@@ -668,7 +677,7 @@ impl StorageService {
                     let err_message =
                         format!("Storage '{}' raised an error on query: {}", self.name, e);
                     log::warn!("{}", err_message);
-                    if let Err(e) = q.reply_err(err_message).res().await {
+                    if let Err(e) = q.reply_err(err_message).res_async().await {
                         log::warn!(
                             "Storage '{}' raised an error replying a query: {}",
                             self.name,
@@ -750,7 +759,7 @@ impl StorageService {
                 .get(KeyExpr::from(&self.key_expr).with_parameters("_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
-                .res()
+                .res_async()
                 .await
             {
                 Ok(replies) => replies,
