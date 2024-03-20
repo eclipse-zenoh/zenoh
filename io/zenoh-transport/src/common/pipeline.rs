@@ -150,19 +150,20 @@ impl StageIn {
                                 drop(c_guard);
                                 match deadline_before_drop {
                                     Some(deadline) if !$fragment => {
-                                        // Restore the sequence number
-                                        $restore_sn;
                                         // We are in the congestion scenario and message is droppable
                                         // Wait for an available batch until deadline
                                         if !self.s_ref.wait_deadline(deadline) {
-                                            // Still no available batch - Drop message
+                                            // Still no available batch.
+                                            // Restore the sequence number and drop the message
+                                            $restore_sn;
                                             return false
                                         }
                                     }
                                     _ => {
                                         // Block waiting for an available batch
                                         if !self.s_ref.wait() {
-                                            // Restore the sequence number
+                                            // Some error prevented the queue to wait and give back an available batch
+                                            // Restore the sequence number and drop the message
                                             $restore_sn;
                                             return false;
                                         }
