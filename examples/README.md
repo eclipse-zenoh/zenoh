@@ -179,6 +179,8 @@
    The pong application waits for samples on the first key expression and replies by
    writing back the received data on the second key expression.
 
+  :warning: z_pong needs to start first to avoid missing the kickoff from z_ping.
+
    Typical Pong usage:
    ```bash
    z_pong
