@@ -219,7 +219,7 @@ impl TransportManagerBuilder {
         self = self.batch_size(*link.tx().batch_size());
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
-        self = self.wait_before_drop(Duration::from_nanos(
+        self = self.wait_before_drop(Duration::from_micros(
             *link.tx().queue().congestion_control().wait_before_drop(),
         ));
         self = self.queue_size(link.tx().queue().size().clone());
@@ -311,7 +311,7 @@ impl Default for TransportManagerBuilder {
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
-            wait_before_drop: Duration::from_nanos(wait_before_drop),
+            wait_before_drop: Duration::from_micros(wait_before_drop),
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),
             defrag_buff_size: *link_rx.max_message_size(),

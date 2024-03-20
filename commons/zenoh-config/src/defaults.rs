@@ -199,7 +199,7 @@ impl Default for QueueSizeConf {
 impl Default for CongestionControlConf {
     fn default() -> Self {
         Self {
-            wait_before_drop: 1000000,
+            wait_before_drop: 1000,
         }
     }
 }
