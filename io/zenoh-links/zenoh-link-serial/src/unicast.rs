@@ -25,7 +25,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link_commons::{
-    AuthIdentifier, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
+    AuthId, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
     LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
@@ -206,11 +206,8 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     fn is_streamed(&self) -> bool {
         false
     }
-    fn get_auth_identifier(&self) -> AuthIdentifier {
-        AuthIdentifier {
-            username: None,
-            tls_cert_name: None,
-        }
+    fn get_auth_identifier(&self) -> AuthId {
+        AuthId::None
     }
 }
 

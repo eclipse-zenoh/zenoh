@@ -1,7 +1,7 @@
 use crate::KeyExpr;
 use std::any::Any;
 
-use zenoh_link::AuthIdentifier;
+use zenoh_link::AuthId;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
@@ -16,10 +16,10 @@ use super::{
 pub(crate) struct TestInterceptor {}
 
 struct EgressTestInterceptor {
-    _auth_id: Option<AuthIdentifier>,
+    _auth_id: Option<AuthId>,
 }
 struct IngressTestInterceptor {
-    _auth_id: Option<AuthIdentifier>,
+    _auth_id: Option<AuthId>,
 }
 
 pub(crate) fn new_test_interceptor() -> ZResult<Vec<InterceptorFactory>> {

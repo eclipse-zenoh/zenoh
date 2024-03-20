@@ -27,9 +27,8 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    get_ip_interface_names, AuthIdentifier, ConstructibleLinkManagerUnicast,
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender, BIND_INTERFACE,
+    get_ip_interface_names, AuthId, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait,
+    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -221,11 +220,8 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     fn is_streamed(&self) -> bool {
         false
     }
-    fn get_auth_identifier(&self) -> AuthIdentifier {
-        AuthIdentifier {
-            username: None,
-            tls_cert_name: None,
-        }
+    fn get_auth_identifier(&self) -> AuthId {
+        AuthId::None
     }
 }
 

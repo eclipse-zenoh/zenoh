@@ -1,3 +1,4 @@
+use async_rustls::server;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -33,8 +34,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, AuthIdentifier, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names, AuthId, AuthIdBuilder, AuthIdType, LinkManagerUnicastTrait,
+    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZError, ZResult};
@@ -47,7 +48,7 @@ pub struct LinkUnicastQuic {
     dst_locator: Locator,
     send: AsyncMutex<quinn::SendStream>,
     recv: AsyncMutex<quinn::RecvStream>,
-    auth_identifier: Option<AuthIdentifier>,
+    auth_identifier: AuthId,
 }
 
 impl LinkUnicastQuic {
@@ -57,7 +58,7 @@ impl LinkUnicastQuic {
         dst_locator: Locator,
         send: quinn::SendStream,
         recv: quinn::RecvStream,
-        auth_identifier: Option<AuthIdentifier>,
+        auth_identifier: AuthId,
     ) -> LinkUnicastQuic {
         // Build the Quic object
         LinkUnicastQuic {
@@ -160,14 +161,15 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     fn is_streamed(&self) -> bool {
         true
     }
-    fn get_auth_identifier(&self) -> AuthIdentifier {
-        match &self.auth_identifier {
-            Some(identifier) => identifier.clone(),
-            None => AuthIdentifier {
-                username: None,
-                tls_cert_name: None,
-            },
-        }
+    fn get_auth_identifier(&self) -> AuthId {
+        self.auth_identifier.clone()
+        // match &self.auth_identifier {
+        //     Some(identifier) => identifier.clone(),
+        //     None => AuthIdentifier {
+        //         username: None,
+        //         tls_cert_name: None,
+        //     },
+        // }
     }
 }
 
@@ -309,7 +311,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        let mut test_auth_id: Option<AuthIdentifier> = None;
+        let mut auth_id = AuthId::None;
 
         let pi = &quic_conn.peer_identity().unwrap();
         match pi.downcast_ref::<Vec<rustls::Certificate>>() {
@@ -323,13 +325,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                         .next()
                         .and_then(|cn| cn.as_str().ok())
                         .unwrap();
-                    let auth_identifier = AuthIdentifier {
-                        username: None,
-                        tls_cert_name: Some(subject_name.to_string()),
-                    };
-
-                    println!("server side quic auth_identifier: {:?}", auth_identifier);
-                    test_auth_id = Some(auth_identifier);
+                    auth_id = AuthIdBuilder::new()
+                        .auth_type(AuthIdType::TlsCommonName)
+                        .auth_value(subject_name.to_string())
+                        .build();
                 }
             }
             None => {
@@ -343,7 +342,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             endpoint.into(),
             send,
             recv,
-            test_auth_id,
+            auth_id,
         ));
         Ok(LinkUnicast(link))
     }
@@ -546,7 +545,7 @@ async fn accept_task(
             }
         };
         println!("the accept function is also called before check");
-        let mut test_auth_id: Option<AuthIdentifier> = None;
+        let mut auth_id = AuthId::None;
         {
             let new_conn = quic_conn.clone();
             let server_name = new_conn
@@ -567,17 +566,23 @@ async fn accept_task(
                 .as_ref()
                 .unwrap()
                 .clone();
-            let auth_identifier = AuthIdentifier {
-                username: None,
-                tls_cert_name: Some(server_name.to_string()),
-            };
+
+            auth_id = AuthIdBuilder::new()
+                .auth_type(AuthIdType::TlsCommonName)
+                .auth_value(server_name.to_string())
+                .build();
+            // Ok(auth_id)
+            // let auth_identifier = AuthId {
+            //     username: None,
+            //     tls_cert_name: Some(server_name.to_string()),
+            // };
 
             println!(
                 "From conncetion, server_name {:?} and protocol_deets {:?}",
                 server_name, protocol_deets
             );
-            println!("client side quic auth_identifier: {:?}", auth_identifier);
-            test_auth_id = Some(auth_identifier);
+            println!("client side quic auth_identifier: {:?}", auth_id);
+            //auth_id = Some(auth_id);
 
             // if let Some(cert_info) = new_conn.peer_identity() {
             //     //use cert info
@@ -620,7 +625,7 @@ async fn accept_task(
             Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
             send,
             recv,
-            test_auth_id,
+            auth_id,
         ));
 
         // Communicate the new link to the initial transport manager

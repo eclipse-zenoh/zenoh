@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_link_commons::{
-    get_ip_interface_names, AuthIdentifier, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    get_ip_interface_names, AuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
@@ -156,11 +156,8 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     fn is_streamed(&self) -> bool {
         true
     }
-    fn get_auth_identifier(&self) -> AuthIdentifier {
-        AuthIdentifier {
-            username: None,
-            tls_cert_name: None,
-        }
+    fn get_auth_identifier(&self) -> AuthId {
+        AuthId::None
     }
 }
 

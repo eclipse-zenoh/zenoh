@@ -48,7 +48,7 @@ use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 
 use zenoh_link_commons::{
-    get_ip_interface_names, AuthIdBuilder, AuthIdType, AuthIdentifier, LinkManagerUnicastTrait,
+    get_ip_interface_names, AuthId, AuthIdBuilder, AuthIdType, LinkManagerUnicastTrait,
     LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::endpoint::Config;
@@ -79,7 +79,7 @@ pub struct LinkUnicastTls {
     // Make sure there are no concurrent read or writes
     write_mtx: AsyncMutex<()>,
     read_mtx: AsyncMutex<()>,
-    auth_identifier: Option<AuthIdentifier>,
+    auth_identifier: AuthId,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -90,7 +90,7 @@ impl LinkUnicastTls {
         socket: TlsStream<TcpStream>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
-        auth_identifier: Option<AuthIdentifier>,
+        auth_identifier: AuthId,
     ) -> LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
@@ -218,14 +218,15 @@ impl LinkUnicastTrait for LinkUnicastTls {
         true
     }
     #[inline(always)]
-    fn get_auth_identifier(&self) -> AuthIdentifier {
-        match &self.auth_identifier {
-            Some(identifier) => identifier.clone(),
-            None => AuthIdentifier {
-                username: None,
-                tls_cert_name: None,
-            },
-        }
+    fn get_auth_identifier(&self) -> AuthId {
+        self.auth_identifier.clone()
+        // match &self.auth_identifier {
+        //     Some(identifier) => identifier.clone(),
+        //     None => AuthIdentifier {
+        //         username: None,
+        //         tls_cert_name: None,
+        //     },
+        // }
     }
 }
 
@@ -322,13 +323,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         let (_, tls_conn) = tls_stream.get_ref();
 
-        let auth_identifier = get_serverside_id(tls_conn);
-        let subject_name = auth_identifier.unwrap().clone().tls_cert_name.unwrap();
-        let auth_val: Box<dyn Any> = Box::new(TlsCommonName(subject_name));
-        let authID = AuthIdBuilder::new()
-            .auth_type(AuthIdType::TlsCommonName)
-            .auth_value(Some(auth_val))
-            .build();
+        let auth_identifier = get_serverside_id(tls_conn)?;
 
         let tls_stream = TlsStream::Client(tls_stream);
 
@@ -466,13 +461,7 @@ async fn accept_task(
 
         let (_, tls_conn) = tls_stream.get_ref();
         //let mut test_auth_id: Option<AuthIdentifier> = None;
-        let auth_identifier = get_tls_cert_name(tls_conn);
-        println!("client side tls auth_identifier: {:?}", auth_identifier);
-        // match auth_identifier {
-        //     Some(auth_id) => println!("client's ID: {:?}", auth_id),
-        //     None => println!("no client ID found"),
-        // }
-
+        let auth_identifier = get_tls_common_name(tls_conn)?;
         log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
         // Create the new link object
         let link = Arc::new(LinkUnicastTls::new(
@@ -491,9 +480,9 @@ async fn accept_task(
     Ok(())
 }
 
-fn get_tls_cert_name(tls_conn: &rustls::CommonState) -> Option<AuthIdentifier> {
-    let serv_certs = tls_conn.peer_certificates()?;
-    let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref()).unwrap();
+fn get_tls_common_name(tls_conn: &rustls::CommonState) -> ZResult<AuthId> {
+    let serv_certs = tls_conn.peer_certificates().unwrap();
+    let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref())?;
     let subject_name = &cert
         .subject
         .iter_common_name()
@@ -501,35 +490,42 @@ fn get_tls_cert_name(tls_conn: &rustls::CommonState) -> Option<AuthIdentifier> {
         .and_then(|cn| cn.as_str().ok())
         .unwrap();
 
-    Some(AuthIdentifier {
-        username: None,
-        tls_cert_name: Some(subject_name.to_string()),
-    })
+    let auth_id = AuthIdBuilder::new()
+        .auth_type(AuthIdType::TlsCommonName)
+        .auth_value(subject_name.to_string())
+        .build();
+    Ok(auth_id)
 }
 
-fn get_serverside_id(tls_conn: &rustls::ClientConnection) -> Option<AuthIdentifier> {
+fn get_serverside_id(tls_conn: &rustls::ClientConnection) -> ZResult<AuthId> {
     let serv_certs = tls_conn.peer_certificates().unwrap();
-    let mut test_auth_id: Option<AuthIdentifier> = None;
+    let mut auth_id = AuthId::None;
 
     //need the first certificate in the chain
     if let Some(item) = serv_certs.iter().next() {
         // for item in serv_certs {
-        let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
+        let (_, cert) = X509Certificate::from_der(item.as_ref())?;
         let subject_name = &cert
             .subject
             .iter_common_name()
             .next()
             .and_then(|cn| cn.as_str().ok())
             .unwrap();
-        let auth_identifier = AuthIdentifier {
-            username: None,
-            tls_cert_name: Some(subject_name.to_string()),
-        };
+        // let auth_identifier = AuthIdentifier {
+        //     username: None,
+        //     tls_cert_name: Some(subject_name.to_string()),
+        // };
 
-        println!("server side tls auth_identifier: {:?}", auth_identifier);
-        test_auth_id = Some(auth_identifier);
+        //build the AuthId
+        auth_id = AuthIdBuilder::new()
+            .auth_type(AuthIdType::TlsCommonName)
+            .auth_value(subject_name.to_string())
+            .build();
+
+        println!("server side tls auth_identifier: {:?}", auth_id);
+        return Ok(auth_id);
     }
-    test_auth_id
+    Ok(auth_id)
 }
 
 struct TlsServerConfig {
