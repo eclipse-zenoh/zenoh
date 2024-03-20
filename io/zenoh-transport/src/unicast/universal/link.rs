@@ -59,6 +59,7 @@ impl TransportLinkUnicastUniversal {
                 is_compression: link.config.batch.is_compression,
             },
             queue_size: transport.manager.config.queue_size,
+            wait_before_drop: transport.manager.config.wait_before_drop,
             backoff: transport.manager.config.queue_backoff,
         };
 
