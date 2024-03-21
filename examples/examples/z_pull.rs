@@ -14,8 +14,7 @@
 use async_std::task::sleep;
 use clap::Parser;
 use std::time::Duration;
-use zenoh::handlers::RingBuffer;
-use zenoh::{config::Config, prelude::r#async::*};
+use zenoh::{config::Config, handlers::RingBuffer, prelude::r#async::*};
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -53,11 +52,11 @@ async fn main() {
                 );
             }
             Ok(None) => {
-                println!(">> [Subscriber] nothing... sleep for {:#?}", interval);
+                println!("nothing... sleep for {:#?}", interval);
                 sleep(interval).await;
             }
             Err(e) => {
-                println!(">> [Subscriber] Pull error: {e}")
+                println!("Pull error: {e}");
             }
         }
     }
