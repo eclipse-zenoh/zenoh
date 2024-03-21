@@ -318,7 +318,7 @@ impl Resource {
 
     pub fn close(self: &mut Arc<Resource>) {
         let r = get_mut_unchecked(self);
-        for (_s, c) in &mut r.childs {
+        for c in r.childs.values_mut() {
             Self::close(c);
         }
         r.parent.take();

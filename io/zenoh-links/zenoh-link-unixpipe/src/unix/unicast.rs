@@ -333,7 +333,7 @@ impl UnicastPipeListener {
 
     fn stop_listening(self) {
         self.token.cancel();
-        let _ = ResolveFuture::new(async move { self.handle.await }).res_sync();
+        let _ = ResolveFuture::new(self.handle).res_sync();
     }
 }
 
