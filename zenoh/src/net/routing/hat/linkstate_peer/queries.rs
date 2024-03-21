@@ -170,6 +170,10 @@ fn propagate_simple_queryable(
         if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
             && (current.is_none() || current.unwrap().1 != info)
             && dst_face.whatami == WhatAmI::Client
+            && face_hat!(dst_face)
+                .remote_qabl_interests
+                .values()
+                .any(|si| si.as_ref().map(|si| si.matches(res)).unwrap_or(true))
         {
             let id = current
                 .map(|c| c.0)
@@ -325,6 +329,13 @@ fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
+fn remote_client_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+    res.session_ctxs
+        .values()
+        .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
+}
+
+#[inline]
 fn send_forget_sourced_queryable_to_net_childs(
     tables: &Tables,
     net: &Network,
@@ -363,8 +374,8 @@ fn send_forget_sourced_queryable_to_net_childs(
 }
 
 fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
-    for face in tables.faces.values_mut() {
-        if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+    for mut face in tables.faces.values().cloned() {
+        if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
             // Still send WireExpr in UndeclareQueryable to clients for pico
             let ext_wire_expr = if face.whatami == WhatAmI::Client {
                 WireExprType {
@@ -382,6 +393,34 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                 },
                 res.expr(),
             ));
+        }
+        for res in face_hat!(&mut face)
+            .local_qabls
+            .keys()
+            .cloned()
+            .collect::<Vec<Arc<Resource>>>()
+        {
+            if !res.context().matches.iter().any(|m| {
+                m.upgrade().is_some_and(|m| {
+                    m.context.is_some()
+                        && (remote_client_qabls(&m, &face) || remote_peer_qabls(tables, &m))
+                })
+            }) {
+                if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        res.expr(),
+                    ));
+                }
+            }
         }
     }
 }
@@ -481,7 +520,7 @@ pub(super) fn undeclare_client_queryable(
         }
 
         if client_qabls.len() == 1 && !peer_qabls {
-            let face = &mut client_qabls[0];
+            let mut face = &mut client_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 // Still send WireExpr in UndeclareQueryable to clients for pico
                 let ext_wire_expr = if face.whatami == WhatAmI::Client {
@@ -504,6 +543,42 @@ pub(super) fn undeclare_client_queryable(
                     res.expr(),
                 ));
             }
+            for res in face_hat!(face)
+                .local_qabls
+                .keys()
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>()
+            {
+                if !res.context().matches.iter().any(|m| {
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some()
+                            && (remote_client_qabls(&m, face) || remote_peer_qabls(tables, &m))
+                    })
+                }) {
+                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                        // Still send WireExpr in UndeclareQueryable to clients for pico
+                        let ext_wire_expr = if face.whatami == WhatAmI::Client {
+                            WireExprType {
+                                wire_expr: Resource::get_best_key(&res, "", face.id),
+                            }
+                        } else {
+                            WireExprType::null()
+                        };
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id,
+                                    ext_wire_expr,
+                                }),
+                            },
+                            res.expr(),
+                        ));
+                    }
+                }
+            }
         }
     }
 }
@@ -521,32 +596,8 @@ fn forget_client_queryable(
     }
 }
 
-pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    if face.whatami == WhatAmI::Client {
-        for qabl in &hat!(tables).peer_qabls {
-            if qabl.context.is_some() {
-                let info = local_qabl_info(tables, qabl, face);
-                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                face_hat_mut!(face)
-                    .local_qabls
-                    .insert(qabl.clone(), (id, info));
-                let key_expr = Resource::decl_key(qabl, face);
-                face.primitives.send_declare(RoutingContext::with_expr(
-                    Declare {
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                            id,
-                            wire_expr: key_expr,
-                            ext_info: info,
-                        }),
-                    },
-                    qabl.expr(),
-                ));
-            }
-        }
-    }
+pub(super) fn queries_new_face(_tables: &mut Tables, _face: &mut Arc<FaceState>) {
+    // Nothing to do
 }
 
 pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId) {
@@ -648,24 +699,112 @@ lazy_static::lazy_static! {
 impl HatQueriesTrait for HatCode {
     fn declare_qabl_interest(
         &self,
-        _tables: &mut Tables,
-        _face: &mut Arc<FaceState>,
-        _id: InterestId,
-        _res: Option<&mut Arc<Resource>>,
-        _current: bool,
-        _future: bool,
-        _aggregate: bool,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        current: bool,
+        future: bool,
+        aggregate: bool,
     ) {
-        todo!()
+        if current && face.whatami == WhatAmI::Client {
+            if let Some(res) = res.as_ref() {
+                if aggregate {
+                    if hat!(tables).peer_qabls.iter().any(|qabl| {
+                        qabl.context.is_some()
+                            && qabl.matches(res)
+                            && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
+                    }) {
+                        let info = local_qabl_info(tables, res, face);
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face)
+                            .local_qabls
+                            .insert((*res).clone(), (id, info));
+                        let wire_expr = Resource::decl_key(res, face);
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id,
+                                    wire_expr,
+                                    ext_info: info,
+                                }),
+                            },
+                            res.expr(),
+                        ));
+                    }
+                } else {
+                    for qabl in hat!(tables).peer_qabls.iter() {
+                        if qabl.context.is_some()
+                            && qabl.matches(res)
+                            && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
+                        {
+                            let info = local_qabl_info(tables, qabl, face);
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face)
+                                .local_qabls
+                                .insert(qabl.clone(), (id, info));
+                            let key_expr = Resource::decl_key(qabl, face);
+                            face.primitives.send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                        id,
+                                        wire_expr: key_expr,
+                                        ext_info: info,
+                                    }),
+                                },
+                                qabl.expr(),
+                            ));
+                        }
+                    }
+                }
+            } else {
+                for qabl in hat!(tables).peer_qabls.iter() {
+                    if qabl.context.is_some()
+                        && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
+                    {
+                        let info = local_qabl_info(tables, qabl, face);
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face)
+                            .local_qabls
+                            .insert(qabl.clone(), (id, info));
+                        let key_expr = Resource::decl_key(qabl, face);
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id,
+                                    wire_expr: key_expr,
+                                    ext_info: info,
+                                }),
+                            },
+                            qabl.expr(),
+                        ));
+                    }
+                }
+            }
+        }
+        if future {
+            face_hat_mut!(face)
+                .remote_qabl_interests
+                .insert(id, res.cloned());
+        }
     }
 
     fn undeclare_qabl_interest(
         &self,
         _tables: &mut Tables,
-        _face: &mut Arc<FaceState>,
-        _id: InterestId,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
     ) {
-        todo!()
+        face_hat_mut!(face).remote_qabl_interests.remove(&id);
     }
 
     fn declare_queryable(
