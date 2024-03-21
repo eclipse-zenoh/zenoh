@@ -14,7 +14,7 @@
 use async_std::task::sleep;
 use clap::Parser;
 use std::time::Duration;
-use zenoh::handlers::RingQueue;
+use zenoh::handlers::RingBuffer;
 use zenoh::{config::Config, prelude::r#async::*};
 use zenoh_examples::CommonArgs;
 
@@ -31,7 +31,7 @@ async fn main() {
     println!("Declaring Subscriber on '{key_expr}'...");
     let subscriber = session
         .declare_subscriber(&key_expr)
-        .with(RingQueue::new(cache))
+        .with(RingBuffer::new(cache))
         .res()
         .await
         .unwrap();

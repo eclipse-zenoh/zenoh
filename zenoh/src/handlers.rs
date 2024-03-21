@@ -16,7 +16,7 @@
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 use std::sync::{Arc, Mutex, Weak};
-use zenoh_collections::RingBuffer;
+use zenoh_collections::RingBuffer as RingBuffer_inner;
 use zenoh_result::ZResult;
 
 /// An alias for `Arc<T>`.
@@ -92,23 +92,23 @@ impl<T: Send + Sync + 'static> IntoHandler<'static, T>
     }
 }
 
-pub struct RingQueue<T> {
-    cache: Arc<Mutex<RingBuffer<T>>>,
+pub struct RingBuffer<T> {
+    cache: Arc<Mutex<RingBuffer_inner<T>>>,
 }
 
-impl<T> RingQueue<T> {
+impl<T> RingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
-        RingQueue {
-            cache: Arc::new(Mutex::new(RingBuffer::new(capacity))),
+        RingBuffer {
+            cache: Arc::new(Mutex::new(RingBuffer_inner::new(capacity))),
         }
     }
 }
 
-pub struct RingHandler<T> {
-    cache: Weak<Mutex<RingBuffer<T>>>,
+pub struct RingBufferHandler<T> {
+    cache: Weak<Mutex<RingBuffer_inner<T>>>,
 }
 
-impl<T> RingHandler<T> {
+impl<T> RingBufferHandler<T> {
     pub fn recv(&self) -> ZResult<Option<T>> {
         let Some(cache) = self.cache.upgrade() else {
             bail!("The cache has been deleted.");
@@ -118,11 +118,11 @@ impl<T> RingHandler<T> {
     }
 }
 
-impl<T: Send + 'static> IntoHandler<'static, T> for RingQueue<T> {
-    type Handler = RingHandler<T>;
+impl<T: Send + 'static> IntoHandler<'static, T> for RingBuffer<T> {
+    type Handler = RingBufferHandler<T>;
 
     fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
-        let receiver = RingHandler {
+        let receiver = RingBufferHandler {
             cache: Arc::downgrade(&self.cache),
         };
         (
