@@ -131,11 +131,17 @@ impl Drop for HatTables {
     fn drop(&mut self) {
         if self.peers_trees_task.is_some() {
             let task = self.peers_trees_task.take().unwrap();
-            ResolveFuture::new(async move { let _ = task.await; }).res_sync();
+            ResolveFuture::new(async move {
+                let _ = task.await;
+            })
+            .res_sync();
         }
         if self.routers_trees_task.is_some() {
             let task = self.routers_trees_task.take().unwrap();
-            ResolveFuture::new(async move { let _ = task.await; }).res_sync();
+            ResolveFuture::new(async move {
+                let _ = task.await;
+            })
+            .res_sync();
         }
     }
 }

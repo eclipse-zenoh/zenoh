@@ -27,10 +27,10 @@ use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::sync::Arc;
-use tokio::task::JoinHandle;
 use tokio::fs::remove_file;
 use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, SyncResolve};
 use zenoh_protocol::core::{EndPoint, Locator};
@@ -333,7 +333,7 @@ impl UnicastPipeListener {
 
     fn stop_listening(self) {
         self.token.cancel();
-        let _ = ResolveFuture::new(async move { self.handle.await} ).res_sync();
+        let _ = ResolveFuture::new(async move { self.handle.await }).res_sync();
     }
 }
 
