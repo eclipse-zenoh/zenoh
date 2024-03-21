@@ -50,6 +50,7 @@ use std::{
 };
 use tokio::task::JoinHandle;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_core::{ResolveFuture, SyncResolve};
 use zenoh_protocol::{
     common::ZExtBody,
     network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE, Oam},
@@ -113,6 +114,15 @@ struct HatTables {
     peer_qabls: HashSet<Arc<Resource>>,
     peers_net: Option<Network>,
     peers_trees_task: Option<JoinHandle<()>>,
+}
+
+impl Drop for HatTables {
+    fn drop(&mut self) {
+        if self.peers_trees_task.is_some() {
+            let task = self.peers_trees_task.take().unwrap();
+            ResolveFuture::new(async move { let _ = task.await; }).res_sync();
+        }
+    }
 }
 
 impl HatTables {

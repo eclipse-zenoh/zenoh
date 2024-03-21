@@ -170,6 +170,12 @@ impl Runtime {
         self.manager().close().await;
         // clean up to break cyclic reference of self.state to itself
         self.state.transport_handlers.write().unwrap().clear();
+        // TODO: the call below is needed to prevent intermittent leak
+        // due to not freed resource Arc, that apparently happens because
+        // the task responsible for resource clean up was aborted earlier than expected.
+        // This should be resolved by identfying correspodning task, and placing 
+        // cancelaltion token manually inside it. 
+        self.router().tables.tables.write().unwrap().root_res.close();
         Ok(())
     }
 

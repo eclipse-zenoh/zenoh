@@ -316,6 +316,17 @@ impl Resource {
         }
     }
 
+    pub fn close(self: &mut Arc<Resource>) {
+        let r = get_mut_unchecked(self);
+        for (_s, c) in &mut r.childs {
+            Self::close(c);
+        }
+        r.parent.take();
+        r.childs.clear();
+        r.nonwild_prefix.take();
+        r.session_ctxs.clear();
+    }
+
     #[cfg(test)]
     pub fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr();
