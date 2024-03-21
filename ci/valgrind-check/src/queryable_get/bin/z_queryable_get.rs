@@ -23,22 +23,20 @@ async fn main() {
 
     let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();
-    
+
     println!("Declaring Queryable on '{queryable_key_expr}'...");
     let queryable_session = zenoh::open(Config::default()).res().await.unwrap();
     let _queryable = queryable_session
         .declare_queryable(&queryable_key_expr.clone())
         .callback(move |query| {
             println!(">> Handling query '{}'", query.selector());
-            let reply = Ok(Sample::new(queryable_key_expr.clone(), query.value().unwrap().clone()));
+            let reply = Ok(Sample::new(
+                queryable_key_expr.clone(),
+                query.value().unwrap().clone(),
+            ));
             futures::executor::block_on(async move {
-                query
-                .reply(reply)
-                .res()
-                .await
-                .unwrap();
-                }
-            )
+                query.reply(reply).res().await.unwrap();
+            })
         })
         .complete(true)
         .res()
@@ -47,15 +45,17 @@ async fn main() {
 
     println!("Declaring Get session for '{get_selector}'...");
     let get_session = zenoh::open(Config::default()).res().await.unwrap();
-    
+
     for idx in 0..5 {
         tokio::time::sleep(Duration::from_secs(1)).await;
         println!("Sending Query '{get_selector}'...");
-        let replies = get_session.get(&get_selector).with_value(idx)
-        .target(QueryTarget::All)
-        .res()
-        .await
-        .unwrap();
+        let replies = get_session
+            .get(&get_selector)
+            .with_value(idx)
+            .target(QueryTarget::All)
+            .res()
+            .await
+            .unwrap();
         while let Ok(reply) = replies.recv_async().await {
             match reply.sample {
                 Ok(sample) => println!(

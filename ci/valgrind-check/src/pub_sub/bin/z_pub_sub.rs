@@ -22,10 +22,14 @@ async fn main() {
 
     let pub_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let sub_key_expr = KeyExpr::try_from("test/valgrind/**").unwrap();
-    
+
     println!("Declaring Publisher on '{pub_key_expr}'...");
     let pub_session = zenoh::open(Config::default()).res().await.unwrap();
-    let publisher = pub_session.declare_publisher(&pub_key_expr).res().await.unwrap();
+    let publisher = pub_session
+        .declare_publisher(&pub_key_expr)
+        .res()
+        .await
+        .unwrap();
 
     println!("Declaring Subscriber on '{sub_key_expr}'...");
     let sub_session = zenoh::open(Config::default()).res().await.unwrap();
@@ -39,8 +43,9 @@ async fn main() {
                 sample.value
             );
         })
-        .res().await.unwrap();
-
+        .res()
+        .await
+        .unwrap();
 
     for idx in 0..5 {
         tokio::time::sleep(Duration::from_secs(1)).await;
