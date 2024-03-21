@@ -939,7 +939,8 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                     {
                         let dst_face = &mut get_mut_unchecked(ctx).face;
                         if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if let Some(id) = face_hat!(dst_face).local_subs.get(res).cloned() {
+                            if let Some((id, _)) = face_hat!(dst_face).local_qabls.get(res).cloned()
+                            {
                                 let forget = !HatTables::failover_brokering_to(links, dst_face.zid)
                                     && {
                                         let ctx_links = hat!(tables)
@@ -1121,7 +1122,9 @@ impl HatQueriesTrait for HatCode {
                     }) {
                         let info = local_qabl_info(tables, res, face);
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
+                        face_hat_mut!(face)
+                            .local_qabls
+                            .insert((*res).clone(), (id, info));
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
