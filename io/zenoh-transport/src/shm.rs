@@ -18,7 +18,7 @@ use zenoh_core::{zasyncread, zasyncwrite, zerror};
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{
-        err::{ext::ErrBodyType, Err},
+        err::Err,
         ext::ShmType,
         query::{ext::QueryBodyType, Query},
         reply::ReplyBody,
@@ -123,31 +123,11 @@ impl MapShm for Reply {
 // Impl - Err
 impl MapShm for Err {
     fn map_to_shminfo(&mut self) -> ZResult<bool> {
-        if let Self {
-            ext_body: Some(ErrBodyType {
-                payload, ext_shm, ..
-            }),
-            ..
-        } = self
-        {
-            map_to_shminfo!(payload, ext_shm)
-        } else {
-            Ok(false)
-        }
+        Ok(false)
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
-        if let Self {
-            ext_body: Some(ErrBodyType {
-                payload, ext_shm, ..
-            }),
-            ..
-        } = self
-        {
-            map_to_shmbuf!(payload, ext_shm, shmr)
-        } else {
-            Ok(false)
-        }
+    fn map_to_shmbuf(&mut self, _shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+        Ok(false)
     }
 }
 
@@ -160,12 +140,9 @@ pub fn map_zmsg_to_shminfo(msg: &mut NetworkMessage) -> ZResult<bool> {
         },
         NetworkBody::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_shminfo(),
-            RequestBody::Put(b) => b.map_to_shminfo(),
-            RequestBody::Del(_) | RequestBody::Pull(_) => Ok(false),
         },
         NetworkBody::Response(Response { payload, .. }) => match payload {
             ResponseBody::Reply(b) => b.map_to_shminfo(),
-            ResponseBody::Put(b) => b.map_to_shminfo(),
             ResponseBody::Err(b) => b.map_to_shminfo(),
         },
         NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
@@ -214,13 +191,10 @@ pub fn map_zmsg_to_shmbuf(
         },
         NetworkBody::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_shmbuf(shmr),
-            RequestBody::Put(b) => b.map_to_shmbuf(shmr),
-            RequestBody::Del(_) | RequestBody::Pull(_) => Ok(false),
         },
         NetworkBody::Response(Response { payload, .. }) => match payload {
-            ResponseBody::Put(b) => b.map_to_shmbuf(shmr),
-            ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
+            ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
         },
         NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
     }

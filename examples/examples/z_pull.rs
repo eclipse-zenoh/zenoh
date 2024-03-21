@@ -11,13 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
 use async_std::task::sleep;
 use clap::Parser;
-use futures::prelude::*;
-use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use zenoh::{config::Config, prelude::r#async::*};
+use zenoh_collections::RingBuffer;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -25,66 +26,67 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, key_expr) = parse_args();
+    let (config, key_expr, cache, interval) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Declaring Subscriber on '{key_expr}'...");
+    println!("Creating a local queue keeping the last {cache} elements...");
+    let arb = Arc::new(Mutex::new(RingBuffer::new(cache)));
+    let arb_c = arb.clone();
 
-    let subscriber = session
+    println!("Declaring Subscriber on '{key_expr}'...");
+    let _subscriber = session
         .declare_subscriber(&key_expr)
-        .pull_mode()
+        .callback(move |sample| {
+            arb_c.lock().unwrap().push_force(sample);
+        })
         .res()
         .await
         .unwrap();
 
-    println!("Press <enter> to pull data...");
-
-    // Define the future to handle incoming samples of the subscription.
-    let subs = async {
-        while let Ok(sample) = subscriber.recv_async().await {
-            let payload = sample
-                .payload
-                .deserialize::<String>()
-                .unwrap_or_else(|e| format!("{}", e));
-            println!(
-                ">> [Subscriber] Received {} ('{}': '{}')",
-                sample.kind,
-                sample.key_expr.as_str(),
-                payload,
-            );
-        }
-    };
-
-    // Define the future to handle keyboard's input.
-    let keyb = async {
-        let mut stdin = async_std::io::stdin();
-        let mut input = [0_u8];
-        loop {
-            stdin.read_exact(&mut input).await.unwrap();
-            match input[0] {
-                b'q' => break,
-                0 => sleep(Duration::from_secs(1)).await,
-                _ => subscriber.pull().res().await.unwrap(),
+    println!("Pulling data every {:#?} seconds", interval);
+    loop {
+        let mut res = arb.lock().unwrap().pull();
+        print!(">> [Subscriber] Pulling ");
+        match res.take() {
+            Some(sample) => {
+                let payload = sample
+                    .payload()
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
+                println!(
+                    "{} ('{}': '{}')",
+                    sample.kind(),
+                    sample.key_expr().as_str(),
+                    payload,
+                );
+            }
+            None => {
+                println!("nothing... sleep for {:#?}", interval);
+                sleep(interval).await;
             }
         }
-    };
-
-    // Execute both futures concurrently until one of them returns.
-    subs.race(keyb).await;
+    }
 }
 
-#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(clap::Parser, Clone, PartialEq, Debug)]
 struct SubArgs {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The Key Expression to subscribe to.
     key: KeyExpr<'static>,
+    /// The size of the cache.
+    #[arg(long, default_value = "3")]
+    cache: usize,
+    /// The interval for pulling the cache.
+    #[arg(long, default_value = "5.0")]
+    interval: f32,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, KeyExpr<'static>) {
+fn parse_args() -> (Config, KeyExpr<'static>, usize, Duration) {
     let args = SubArgs::parse();
-    (args.common.into(), args.key)
+    let interval = Duration::from_secs_f32(args.interval);
+    (args.common.into(), args.key, args.cache, interval)
 }

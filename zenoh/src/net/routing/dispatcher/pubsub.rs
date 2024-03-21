@@ -12,17 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::face::FaceState;
-use super::resource::{DataRoutes, Direction, PullCaches, Resource};
+use super::resource::{DataRoutes, Direction, Resource};
 use super::tables::{NodeId, Route, RoutingExpr, Tables, TablesLock};
 use crate::net::routing::hat::HatTrait;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::RwLock;
 use zenoh_core::zread;
-use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
+use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::declare::{InterestId, Mode, SubscriberId};
+use zenoh_protocol::network::declare::{InterestId, SubscriberId};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::{declare::ext, Push},
@@ -166,13 +164,10 @@ pub(crate) fn declare_subscription(
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes, matching_pulls) in matches_data_routes {
+            for (mut res, data_routes) in matches_data_routes {
                 get_mut_unchecked(&mut res)
                     .context_mut()
                     .update_data_routes(data_routes);
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_matching_pulls(matching_pulls);
             }
             drop(wtables);
         }
@@ -231,13 +226,10 @@ pub(crate) fn undeclare_subscription(
         drop(rtables);
 
         let wtables = zwrite!(tables.tables);
-        for (mut res, data_routes, matching_pulls) in matches_data_routes {
+        for (mut res, data_routes) in matches_data_routes {
             get_mut_unchecked(&mut res)
                 .context_mut()
                 .update_data_routes(data_routes);
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .update_matching_pulls(matching_pulls);
         }
         Resource::clean(&mut res);
         drop(wtables);
@@ -306,7 +298,6 @@ pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
 
 pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     update_data_routes(tables, res);
-    update_matching_pulls(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
         update_data_routes_from(tables, child);
@@ -316,22 +307,17 @@ pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resourc
 pub(crate) fn compute_matches_data_routes<'a>(
     tables: &'a Tables,
     res: &'a Arc<Resource>,
-) -> Vec<(Arc<Resource>, DataRoutes, Arc<PullCaches>)> {
+) -> Vec<(Arc<Resource>, DataRoutes)> {
     let mut routes = vec![];
     if res.context.is_some() {
         let mut expr = RoutingExpr::new(res, "");
-        routes.push((
-            res.clone(),
-            compute_data_routes(tables, &mut expr),
-            compute_matching_pulls(tables, &mut expr),
-        ));
+        routes.push((res.clone(), compute_data_routes(tables, &mut expr)));
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
                 let mut expr = RoutingExpr::new(&match_, "");
                 let match_routes = compute_data_routes(tables, &mut expr);
-                let matching_pulls = compute_matching_pulls(tables, &mut expr);
-                routes.push((match_, match_routes, matching_pulls));
+                routes.push((match_, match_routes));
             }
         }
     }
@@ -341,12 +327,10 @@ pub(crate) fn compute_matches_data_routes<'a>(
 pub(crate) fn update_matches_data_routes<'a>(tables: &'a mut Tables, res: &'a mut Arc<Resource>) {
     if res.context.is_some() {
         update_data_routes(tables, res);
-        update_matching_pulls(tables, res);
         for match_ in &res.context().matches {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
                 update_data_routes(tables, &mut match_);
-                update_matching_pulls(tables, &mut match_);
             }
         }
     }
@@ -361,9 +345,6 @@ pub(crate) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Re
                 get_mut_unchecked(&mut match_)
                     .context_mut()
                     .disable_data_routes();
-                get_mut_unchecked(&mut match_)
-                    .context_mut()
-                    .disable_matching_pulls();
             }
         }
     }
@@ -441,78 +422,6 @@ pub(crate) fn get_local_data_route(
         })
 }
 
-fn compute_matching_pulls_(tables: &Tables, pull_caches: &mut PullCaches, expr: &mut RoutingExpr) {
-    let ke = if let Ok(ke) = OwnedKeyExpr::try_from(expr.full_expr()) {
-        ke
-    } else {
-        return;
-    };
-    let res = Resource::get_resource(expr.prefix, expr.suffix);
-    let matches = res
-        .as_ref()
-        .and_then(|res| res.context.as_ref())
-        .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &ke)));
-
-    for mres in matches.iter() {
-        let mres = mres.upgrade().unwrap();
-        for context in mres.session_ctxs.values() {
-            if let Some(subinfo) = &context.subs {
-                if subinfo.mode == Mode::Pull {
-                    pull_caches.push(context.clone());
-                }
-            }
-        }
-    }
-}
-
-pub(crate) fn compute_matching_pulls(tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCaches> {
-    let mut pull_caches = PullCaches::default();
-    compute_matching_pulls_(tables, &mut pull_caches, expr);
-    Arc::new(pull_caches)
-}
-
-pub(crate) fn update_matching_pulls(tables: &Tables, res: &mut Arc<Resource>) {
-    if res.context.is_some() {
-        let mut res_mut = res.clone();
-        let res_mut = get_mut_unchecked(&mut res_mut);
-        if res_mut.context_mut().matching_pulls.is_none() {
-            res_mut.context_mut().matching_pulls = Some(Arc::new(PullCaches::default()));
-        }
-        compute_matching_pulls_(
-            tables,
-            get_mut_unchecked(res_mut.context_mut().matching_pulls.as_mut().unwrap()),
-            &mut RoutingExpr::new(res, ""),
-        );
-    }
-}
-
-#[inline]
-fn get_matching_pulls(
-    tables: &Tables,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
-) -> Arc<PullCaches> {
-    res.as_ref()
-        .and_then(|res| res.context.as_ref())
-        .and_then(|ctx| ctx.matching_pulls.clone())
-        .unwrap_or_else(|| compute_matching_pulls(tables, expr))
-}
-
-macro_rules! cache_data {
-    (
-        $matching_pulls:expr,
-        $expr:expr,
-        $payload:expr
-    ) => {
-        for context in $matching_pulls.iter() {
-            get_mut_unchecked(&mut context.clone())
-                .last_values
-                .insert($expr.full_expr().to_string(), $payload.clone());
-        }
-    };
-}
-
 #[cfg(feature = "stats")]
 macro_rules! inc_stats {
     (
@@ -580,12 +489,10 @@ pub fn full_reentrant_route_data(
 
                 let route = get_data_route(&tables, face, &res, &mut expr, routing_context);
 
-                let matching_pulls = get_matching_pulls(&tables, &res, &mut expr);
-
-                if !(route.is_empty() && matching_pulls.is_empty()) {
+                if !route.is_empty() {
                     treat_timestamp!(&tables.hlc, payload, tables.drop_future_timestamp);
 
-                    if route.len() == 1 && matching_pulls.len() == 0 {
+                    if route.len() == 1 {
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if tables
                             .hat_code
@@ -607,26 +514,43 @@ pub fn full_reentrant_route_data(
                                 payload,
                             })
                         }
-                    } else {
-                        if !matching_pulls.is_empty() {
-                            let lock = zlock!(tables.pull_caches_lock);
-                            cache_data!(matching_pulls, expr, payload);
-                            drop(lock);
+                    } else if tables.whatami == WhatAmI::Router {
+                        let route = route
+                            .values()
+                            .filter(|(outface, _key_expr, _context)| {
+                                tables
+                                    .hat_code
+                                    .egress_filter(&tables, face, outface, &mut expr)
+                            })
+                            .cloned()
+                            .collect::<Vec<Direction>>();
+
+                        drop(tables);
+                        for (outface, key_expr, context) in route {
+                            #[cfg(feature = "stats")]
+                            if !admin {
+                                inc_stats!(face, tx, user, payload)
+                            } else {
+                                inc_stats!(face, tx, admin, payload)
+                            }
+
+                            outface.primitives.send_push(Push {
+                                wire_expr: key_expr,
+                                ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: context },
+                                payload: payload.clone(),
+                            })
                         }
-
-                        if tables.whatami == WhatAmI::Router {
-                            let route = route
-                                .values()
-                                .filter(|(outface, _key_expr, _context)| {
-                                    tables
-                                        .hat_code
-                                        .egress_filter(&tables, face, outface, &mut expr)
-                                })
-                                .cloned()
-                                .collect::<Vec<Direction>>();
-
-                            drop(tables);
-                            for (outface, key_expr, context) in route {
+                    } else {
+                        drop(tables);
+                        for (outface, key_expr, context) in route.values() {
+                            if face.id != outface.id
+                                && match (face.mcast_group.as_ref(), outface.mcast_group.as_ref()) {
+                                    (Some(l), Some(r)) => l != r,
+                                    _ => true,
+                                }
+                            {
                                 #[cfg(feature = "stats")]
                                 if !admin {
                                     inc_stats!(face, tx, user, payload)
@@ -635,40 +559,12 @@ pub fn full_reentrant_route_data(
                                 }
 
                                 outface.primitives.send_push(Push {
-                                    wire_expr: key_expr,
+                                    wire_expr: key_expr.into(),
                                     ext_qos,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: context },
+                                    ext_nodeid: ext::NodeIdType { node_id: *context },
                                     payload: payload.clone(),
                                 })
-                            }
-                        } else {
-                            drop(tables);
-                            for (outface, key_expr, context) in route.values() {
-                                if face.id != outface.id
-                                    && match (
-                                        face.mcast_group.as_ref(),
-                                        outface.mcast_group.as_ref(),
-                                    ) {
-                                        (Some(l), Some(r)) => l != r,
-                                        _ => true,
-                                    }
-                                {
-                                    #[cfg(feature = "stats")]
-                                    if !admin {
-                                        inc_stats!(face, tx, user, payload)
-                                    } else {
-                                        inc_stats!(face, tx, admin, payload)
-                                    }
-
-                                    outface.primitives.send_push(Push {
-                                        wire_expr: key_expr.into(),
-                                        ext_qos,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType { node_id: *context },
-                                        payload: payload.clone(),
-                                    })
-                                }
                             }
                         }
                     }
@@ -679,69 +575,4 @@ pub fn full_reentrant_route_data(
             log::error!("{} Route data with unknown scope {}!", face, expr.scope);
         }
     }
-}
-
-pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireExpr) {
-    let tables = zread!(tables_ref);
-    match tables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                let res = get_mut_unchecked(&mut res);
-                match res.session_ctxs.get_mut(&face.id) {
-                    Some(ctx) => match &ctx.subs {
-                        Some(_subinfo) => {
-                            // let reliability = subinfo.reliability;
-                            let lock = zlock!(tables.pull_caches_lock);
-                            let route = get_mut_unchecked(ctx)
-                                .last_values
-                                .drain()
-                                .map(|(name, sample)| {
-                                    (
-                                        Resource::get_best_key(&tables.root_res, &name, face.id)
-                                            .to_owned(),
-                                        sample,
-                                    )
-                                })
-                                .collect::<Vec<(WireExpr, PushBody)>>();
-                            drop(lock);
-                            drop(tables);
-                            for (key_expr, payload) in route {
-                                face.primitives.send_push(Push {
-                                    wire_expr: key_expr,
-                                    ext_qos: ext::QoSType::PUSH,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    payload,
-                                });
-                            }
-                        }
-                        None => {
-                            log::error!(
-                                "{} Pull data for unknown subscriber {} (no info)!",
-                                face,
-                                prefix.expr() + expr.suffix.as_ref()
-                            );
-                        }
-                    },
-                    None => {
-                        log::error!(
-                            "{} Pull data for unknown subscriber {} (no context)!",
-                            face,
-                            prefix.expr() + expr.suffix.as_ref()
-                        );
-                    }
-                }
-            }
-            None => {
-                log::error!(
-                    "{} Pull data for unknown subscriber {} (no resource)!",
-                    face,
-                    prefix.expr() + expr.suffix.as_ref()
-                );
-            }
-        },
-        None => {
-            log::error!("{} Pull data with unknown scope {}!", face, expr.scope);
-        }
-    };
 }

@@ -313,12 +313,6 @@ impl Primitives for Face {
                     msg.ext_nodeid.node_id,
                 );
             }
-            RequestBody::Pull(_) => {
-                pull_data(&self.tables.tables, &self.state.clone(), msg.wire_expr);
-            }
-            _ => {
-                log::error!("{} Unsupported request!", self);
-            }
         }
     }
 

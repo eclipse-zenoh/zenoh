@@ -30,7 +30,7 @@ use zenoh_protocol::{
     core::{Reliability, WhatAmI},
     network::declare::{
         common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareSubscriber, Mode, UndeclareSubscriber,
+        DeclareSubscriber, UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -129,16 +129,11 @@ fn register_client_subscription(
     {
         let res = get_mut_unchecked(res);
         match res.session_ctxs.get_mut(&face.id) {
-            Some(ctx) => match &ctx.subs {
-                Some(info) => {
-                    if Mode::Pull == info.mode {
-                        get_mut_unchecked(ctx).subs = Some(*sub_info);
-                    }
-                }
-                None => {
+            Some(ctx) => {
+                if ctx.subs.is_none() {
                     get_mut_unchecked(ctx).subs = Some(*sub_info);
                 }
-            },
+            }
             None => {
                 let ctx = res
                     .session_ctxs
@@ -159,10 +154,8 @@ fn declare_client_subscription(
     sub_info: &SubscriberInfo,
 ) {
     register_client_subscription(tables, face, id, res, sub_info);
-    let mut propa_sub_info = *sub_info;
-    propa_sub_info.mode = Mode::Push;
 
-    propagate_simple_subscription(tables, res, &propa_sub_info, face);
+    propagate_simple_subscription(tables, res, sub_info, face);
     // This introduced a buffer overflow on windows
     // TODO: Let's deactivate this on windows until Fixed
     #[cfg(not(windows))]
@@ -363,7 +356,6 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     if face.whatami != WhatAmI::Client {
         let sub_info = SubscriberInfo {
             reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-            mode: Mode::Push,
         };
         for src_face in tables
             .faces
@@ -398,7 +390,6 @@ impl HatPubSubTrait for HatCode {
         if current && face.whatami == WhatAmI::Client {
             let sub_info = SubscriberInfo {
                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                mode: Mode::Push,
             };
             if let Some(res) = res.as_ref() {
                 if aggregate {
@@ -574,20 +565,19 @@ impl HatPubSubTrait for HatCode {
             let mres = mres.upgrade().unwrap();
 
             for (sid, context) in &mres.session_ctxs {
-                if let Some(subinfo) = &context.subs {
-                    if match tables.whatami {
+                if context.subs.is_some()
+                    && match tables.whatami {
                         WhatAmI::Router => context.face.whatami != WhatAmI::Router,
                         _ => {
                             source_type == WhatAmI::Client
                                 || context.face.whatami == WhatAmI::Client
                         }
-                    } && subinfo.mode == Mode::Push
-                    {
-                        route.entry(*sid).or_insert_with(|| {
-                            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                            (context.face.clone(), key_expr.to_owned(), NodeId::default())
-                        });
                     }
+                {
+                    route.entry(*sid).or_insert_with(|| {
+                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                        (context.face.clone(), key_expr.to_owned(), NodeId::default())
+                    });
                 }
             }
         }

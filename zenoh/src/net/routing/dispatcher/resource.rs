@@ -25,7 +25,6 @@ use zenoh_protocol::network::declare::InterestId;
 #[cfg(feature = "complete_n")]
 use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::RequestId;
-use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
@@ -52,7 +51,6 @@ pub(crate) struct QueryTargetQabl {
     pub(crate) distance: f64,
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
-pub(crate) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(crate) struct SessionContext {
     pub(crate) face: Arc<FaceState>,
@@ -60,7 +58,6 @@ pub(crate) struct SessionContext {
     pub(crate) remote_expr_id: Option<ExprId>,
     pub(crate) subs: Option<SubscriberInfo>,
     pub(crate) qabl: Option<QueryableInfo>,
-    pub(crate) last_values: HashMap<String, PushBody>,
     pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
     pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
 }
@@ -73,7 +70,6 @@ impl SessionContext {
             remote_expr_id: None,
             subs: None,
             qabl: None,
-            last_values: HashMap::new(),
             in_interceptor_cache: None,
             e_interceptor_cache: None,
         }
@@ -137,7 +133,6 @@ impl QueryRoutes {
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) matching_pulls: Option<Arc<PullCaches>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) valid_data_routes: bool,
     pub(crate) data_routes: DataRoutes,
@@ -149,7 +144,6 @@ impl ResourceContext {
     fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
         ResourceContext {
             matches: Vec::new(),
-            matching_pulls: None,
             hat,
             valid_data_routes: false,
             data_routes: DataRoutes::default(),
@@ -174,14 +168,6 @@ impl ResourceContext {
 
     pub(crate) fn disable_query_routes(&mut self) {
         self.valid_query_routes = false;
-    }
-
-    pub(crate) fn update_matching_pulls(&mut self, pulls: Arc<PullCaches>) {
-        self.matching_pulls = Some(pulls);
-    }
-
-    pub(crate) fn disable_matching_pulls(&mut self) {
-        self.matching_pulls = None;
     }
 }
 

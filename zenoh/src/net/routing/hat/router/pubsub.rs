@@ -33,7 +33,7 @@ use zenoh_protocol::{
     core::{Reliability, WhatAmI, ZenohId},
     network::declare::{
         common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareSubscriber, Mode, UndeclareSubscriber,
+        DeclareSubscriber, UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -278,8 +278,7 @@ fn declare_peer_subscription(
     peer: ZenohId,
 ) {
     register_peer_subscription(tables, face, res, sub_info, peer);
-    let mut propa_sub_info = *sub_info;
-    propa_sub_info.mode = Mode::Push;
+    let propa_sub_info = *sub_info;
     let zid = tables.zid;
     register_router_subscription(tables, face, res, &propa_sub_info, zid);
 }
@@ -295,16 +294,11 @@ fn register_client_subscription(
     {
         let res = get_mut_unchecked(res);
         match res.session_ctxs.get_mut(&face.id) {
-            Some(ctx) => match &ctx.subs {
-                Some(info) => {
-                    if Mode::Pull == info.mode {
-                        get_mut_unchecked(ctx).subs = Some(*sub_info);
-                    }
-                }
-                None => {
+            Some(ctx) => {
+                if ctx.subs.is_none() {
                     get_mut_unchecked(ctx).subs = Some(*sub_info);
                 }
-            },
+            }
             None => {
                 let ctx = res
                     .session_ctxs
@@ -325,10 +319,8 @@ fn declare_client_subscription(
     sub_info: &SubscriberInfo,
 ) {
     register_client_subscription(tables, face, id, res, sub_info);
-    let mut propa_sub_info = *sub_info;
-    propa_sub_info.mode = Mode::Push;
     let zid = tables.zid;
-    register_router_subscription(tables, face, res, &propa_sub_info, zid);
+    register_router_subscription(tables, face, res, sub_info, zid);
 }
 
 #[inline]
@@ -735,7 +727,6 @@ fn forget_client_subscription(
 pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-        mode: Mode::Push,
     };
 
     if face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
@@ -836,7 +827,6 @@ pub(super) fn pubsub_tree_change(
                         if *sub == tree_id {
                             let sub_info = SubscriberInfo {
                                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                                mode: Mode::Push,
                             };
                             send_sourced_subscription_to_net_childs(
                                 tables,
@@ -920,7 +910,6 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 let key_expr = Resource::decl_key(res, dst_face);
                                 let sub_info = SubscriberInfo {
                                     reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                                    mode: Mode::Push,
                                 };
                                 dst_face.primitives.send_declare(RoutingContext::with_expr(
                                     Declare {
@@ -991,7 +980,6 @@ impl HatPubSubTrait for HatCode {
         if current && face.whatami == WhatAmI::Client {
             let sub_info = SubscriberInfo {
                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                mode: Mode::Push,
             };
             if let Some(res) = res.as_ref() {
                 if aggregate {
@@ -1235,14 +1223,11 @@ impl HatPubSubTrait for HatCode {
 
             if master || source_type == WhatAmI::Router {
                 for (sid, context) in &mres.session_ctxs {
-                    if let Some(subinfo) = &context.subs {
-                        if context.face.whatami != WhatAmI::Router && subinfo.mode == Mode::Push {
-                            route.entry(*sid).or_insert_with(|| {
-                                let key_expr =
-                                    Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                                (context.face.clone(), key_expr.to_owned(), NodeId::default())
-                            });
-                        }
+                    if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
+                        route.entry(*sid).or_insert_with(|| {
+                            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                            (context.face.clone(), key_expr.to_owned(), NodeId::default())
+                        });
                     }
                 }
             }

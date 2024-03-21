@@ -22,7 +22,7 @@ use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
-    handlers::{Callback, DefaultHandler, IntoCallbackReceiverPair},
+    handlers::{Callback, DefaultHandler, IntoHandler},
     Id,
 };
 use std::future::Ready;
@@ -102,6 +102,15 @@ impl PutBuilder<'_, '_> {
         self
     }
 
+    /// Change the `express` policy to apply when routing the data.
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but negative impact on throughput.
+    #[inline]
+    pub fn express(mut self, is_express: bool) -> Self {
+        self.publisher = self.publisher.express(is_express);
+        self
+    }
+
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
@@ -141,6 +150,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
             key_expr,
             congestion_control,
             priority,
+            is_express,
             destination,
         } = self.publisher;
 
@@ -151,6 +161,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
             key_expr: key_expr?,
             congestion_control,
             priority,
+            is_express,
             destination,
         };
 
@@ -248,6 +259,7 @@ pub struct Publisher<'a> {
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
+    pub(crate) is_express: bool,
     pub(crate) destination: Locality,
 }
 
@@ -348,25 +360,6 @@ impl<'a> Publisher<'a> {
             #[cfg(feature = "unstable")]
             attachment: None,
         }
-    }
-
-    /// Send data with [`kind`](SampleKind) (Put or Delete).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.write(SampleKind::Put, "payload").res().await.unwrap();
-    /// # })
-    /// ```
-    pub fn write<IntoPayload>(&self, kind: SampleKind, value: IntoPayload) -> Publication
-    where
-        IntoPayload: Into<Payload>,
-    {
-        self._write(kind, value.into())
     }
 
     /// Put data.
@@ -757,6 +750,7 @@ pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
+    pub(crate) is_express: bool,
     pub(crate) destination: Locality,
 }
 
@@ -770,6 +764,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
             },
             congestion_control: self.congestion_control,
             priority: self.priority,
+            is_express: self.is_express,
             destination: self.destination,
         }
     }
@@ -787,6 +782,15 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
+        self
+    }
+
+    /// Change the `express` policy to apply when routing the data.
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but negative impact on throughput.
+    #[inline]
+    pub fn express(mut self, is_express: bool) -> Self {
+        self.is_express = is_express;
         self
     }
 
@@ -849,6 +853,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             key_expr,
             congestion_control: self.congestion_control,
             priority: self.priority,
+            is_express: self.is_express,
             destination: self.destination,
         };
         log::trace!("publish({:?})", publisher.key_expr);
@@ -886,7 +891,7 @@ fn resolve_put(
             ext_qos: ext::QoSType::new(
                 publisher.priority.into(),
                 publisher.congestion_control,
-                false,
+                publisher.is_express,
             ),
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -952,7 +957,7 @@ fn resolve_put(
             qos: QoS::from(ext::QoSType::new(
                 publisher.priority.into(),
                 publisher.congestion_control,
-                false,
+                publisher.is_express,
             )),
         };
 
@@ -1175,7 +1180,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
         self.callback(crate::handlers::locked(callback))
     }
 
-    /// Receive the MatchingStatuses for this listener with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the MatchingStatuses for this listener with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -1203,7 +1208,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, MatchingStatus>,
+        Handler: crate::prelude::IntoHandler<'static, MatchingStatus>,
     {
         let MatchingListenerBuilder {
             publisher,
@@ -1216,21 +1221,21 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
 #[zenoh_macros::unstable]
 impl<'a, Handler> Resolvable for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<MatchingListener<'a, Handler::Receiver>>;
+    type To = ZResult<MatchingListener<'a, Handler::Handler>>;
 }
 
 #[zenoh_macros::unstable]
 impl<'a, Handler> SyncResolve for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler::Handler: Send,
 {
     #[zenoh_macros::unstable]
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         self.publisher
             .session
             .declare_matches_listener_inner(&self.publisher, callback)
@@ -1248,8 +1253,8 @@ where
 #[zenoh_macros::unstable]
 impl<'a, Handler> AsyncResolve for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 
@@ -1451,11 +1456,17 @@ mod tests {
             let session = open(Config::default()).res().unwrap();
             let sub = session.declare_subscriber(KEY_EXPR).res().unwrap();
             let pub_ = session.declare_publisher(KEY_EXPR).res().unwrap();
-            pub_.write(kind, VALUE).res().unwrap();
+
+            match kind {
+                SampleKind::Put => pub_.put(VALUE).res().unwrap(),
+                SampleKind::Delete => pub_.delete().res().unwrap(),
+            }
             let sample = sub.recv().unwrap();
 
             assert_eq!(sample.kind, kind);
-            assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
+            if let SampleKind::Put = kind {
+                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
+            }
         }
 
         sample_kind_integrity_in_publication_with(SampleKind::Put);

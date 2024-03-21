@@ -131,9 +131,9 @@ impl<'a> Liveliness<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session.liveliness().declare_subscriber("key/expression").res().await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     match sample.kind {
-    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr),
-    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr),
+    ///     match sample.kind() {
+    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr()),
+    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
     ///     }
     /// }
     /// # })
@@ -169,7 +169,7 @@ impl<'a> Liveliness<'a> {
     /// let replies = session.liveliness().get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     if let Ok(sample) = reply.sample {
-    ///         println!(">> Liveliness token {}", sample.key_expr);
+    ///         println!(">> Liveliness token {}", sample.key_expr());
     ///     }
     /// }
     /// # })
@@ -398,7 +398,6 @@ impl Drop for LivelinessToken<'_> {
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .best_effort()
-///     .pull_mode()
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -425,7 +424,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr, sample.payload); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -484,7 +483,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -499,7 +498,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {:?}", sample.key_expr, sample.payload);
+    ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
     /// }
     /// # })
     /// ```
@@ -507,7 +506,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::handlers::IntoCallbackReceiverPair<'static, Sample>,
+        Handler: crate::handlers::IntoHandler<'static, Sample>,
     {
         let LivelinessSubscriberBuilder {
             session,
@@ -525,23 +524,23 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
 #[zenoh_macros::unstable]
 impl<'a, Handler> Resolvable for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<Subscriber<'a, Handler::Receiver>>;
+    type To = ZResult<Subscriber<'a, Handler::Handler>>;
 }
 
 #[zenoh_macros::unstable]
 impl<'a, Handler> SyncResolve for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     #[zenoh_macros::unstable]
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         session
             .declare_subscriber_inner(
                 &key_expr,
@@ -564,8 +563,8 @@ where
 #[zenoh_macros::unstable]
 impl<'a, Handler> AsyncResolve for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 
@@ -593,7 +592,7 @@ where
 ///     .unwrap();
 /// while let Ok(token) = tokens.recv_async().await {
 ///     match token.sample {
-///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr.as_str()),
+///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr().as_str()),
 ///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload),
 ///     }
 /// }
@@ -677,7 +676,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```
@@ -700,7 +699,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessGetBuilder<'a, 'b, Handler>
     where
-        Handler: IntoCallbackReceiverPair<'static, Reply>,
+        Handler: IntoHandler<'static, Reply>,
     {
         let LivelinessGetBuilder {
             session,
@@ -728,19 +727,19 @@ impl<'a, 'b, Handler> LivelinessGetBuilder<'a, 'b, Handler> {
 
 impl<Handler> Resolvable for LivelinessGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Reply> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<Handler::Receiver>;
+    type To = ZResult<Handler::Handler>;
 }
 
 impl<Handler> SyncResolve for LivelinessGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Reply> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
 
         self.session
             .query(
@@ -761,8 +760,8 @@ where
 
 impl<Handler> AsyncResolve for LivelinessGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Reply> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 

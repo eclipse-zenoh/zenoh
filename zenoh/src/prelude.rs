@@ -37,11 +37,11 @@ pub(crate) mod common {
     pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
 
     pub use crate::config::{self, Config, ValidatedMap};
-    pub use crate::handlers::IntoCallbackReceiverPair;
+    pub use crate::handlers::IntoHandler;
+    pub use crate::selector::{Parameter, Parameters, Selector};
     pub use crate::session::{Session, SessionDeclarations};
 
     pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
-    pub use crate::selector::{Parameter, Parameters, Selector};
 
     pub use crate::encoding::Encoding;
     /// The encoding of a zenoh `Value`.

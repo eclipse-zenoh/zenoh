@@ -146,31 +146,6 @@ impl Declare {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Mode {
-    #[default]
-    Push,
-    Pull,
-}
-
-impl Mode {
-    pub const DEFAULT: Self = Self::Push;
-
-    #[cfg(feature = "test")]
-    fn rand() -> Self {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-
-        if rng.gen_bool(0.5) {
-            Mode::Push
-        } else {
-            Mode::Pull
-        }
-    }
-}
-
 pub mod common {
     use super::*;
 
@@ -333,9 +308,7 @@ pub mod subscriber {
     /// ~  [decl_exts]  ~  if Z==1
     /// +---------------+
     ///
-    /// - if R==1 then the subscription is reliable, else it is best effort
-    /// - if P==1 then the subscription is pull, else it is push
-    ///
+    /// - if R==1 then the subscription is reliable, else it is best effort    ///
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct DeclareSubscriber {
@@ -356,34 +329,29 @@ pub mod subscriber {
         /// +-+-+-+-+-+-+-+-+
         /// |Z|0_1|    ID   |
         /// +-+-+-+---------+
-        /// % reserved  |P|R%
+        /// %  reserved   |R%
         /// +---------------+
         ///
         /// - if R==1 then the subscription is reliable, else it is best effort
-        /// - if P==1 then the subscription is pull, else it is push
         /// - rsv:  Reserved
         /// ```        
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub struct SubscriberInfo {
             pub reliability: Reliability,
-            pub mode: Mode,
         }
 
         impl SubscriberInfo {
             pub const R: u64 = 1;
-            pub const P: u64 = 1 << 1;
 
             pub const DEFAULT: Self = Self {
                 reliability: Reliability::DEFAULT,
-                mode: Mode::DEFAULT,
             };
 
             #[cfg(feature = "test")]
             pub fn rand() -> Self {
                 let reliability = Reliability::rand();
-                let mode = Mode::rand();
 
-                Self { reliability, mode }
+                Self { reliability }
             }
         }
 
@@ -400,12 +368,7 @@ pub mod subscriber {
                 } else {
                     Reliability::BestEffort
                 };
-                let mode = if imsg::has_option(ext.value, SubscriberInfo::P) {
-                    Mode::Pull
-                } else {
-                    Mode::Push
-                };
-                Self { reliability, mode }
+                Self { reliability }
             }
         }
 
@@ -414,9 +377,6 @@ pub mod subscriber {
                 let mut v: u64 = 0;
                 if ext.reliability == Reliability::Reliable {
                     v |= SubscriberInfo::R;
-                }
-                if ext.mode == Mode::Pull {
-                    v |= SubscriberInfo::P;
                 }
                 Info::new(v)
             }

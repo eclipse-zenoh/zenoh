@@ -58,7 +58,7 @@ impl Task {
                 let sub = ztimeout!(session.declare_subscriber(ke).res_async())?;
                 let mut counter = 0;
                 while let Ok(sample) = sub.recv_async().await {
-                    let recv_size = sample.payload.len();
+                    let recv_size = sample.payload().len();
                     if recv_size != *expected_size {
                         bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                     }
@@ -91,7 +91,7 @@ impl Task {
                     while let Ok(reply) = replies.recv_async().await {
                         match reply.sample {
                             Ok(sample) => {
-                                let recv_size = sample.payload.len();
+                                let recv_size = sample.payload().len();
                                 if recv_size != *expected_size {
                                     bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                                 }
@@ -115,12 +115,12 @@ impl Task {
             // The Queryable task keeps replying to requested messages until all checkpoints are finished.
             Self::Queryable(ke, payload_size) => {
                 let queryable = session.declare_queryable(ke).res_async().await?;
-                let sample = Sample::try_from(ke.clone(), vec![0u8; *payload_size])?;
+                let payload = vec![0u8; *payload_size];
 
                 loop {
                     futures::select! {
                         query = queryable.recv_async() => {
-                            query?.reply(Ok(sample.clone())).res_async().await?;
+                            query?.reply(KeyExpr::try_from(ke.to_owned())?, payload.clone()).res_async().await?;
                         },
 
                         _ = async_std::task::sleep(Duration::from_millis(100)).fuse() => {

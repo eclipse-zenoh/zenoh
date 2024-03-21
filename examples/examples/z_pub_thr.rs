@@ -41,9 +41,11 @@ fn main() {
         .declare_publisher("test/thr")
         .congestion_control(CongestionControl::Block)
         .priority(prio)
+        .express(args.express)
         .res()
         .unwrap();
 
+    println!("Press CTRL-C to quit...");
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
     loop {
@@ -64,6 +66,9 @@ fn main() {
 
 #[derive(Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct Args {
+    /// express for sending data
+    #[arg(long, default_value = "false")]
+    express: bool,
     /// Priority for sending data
     #[arg(short, long)]
     priority: Option<u8>,

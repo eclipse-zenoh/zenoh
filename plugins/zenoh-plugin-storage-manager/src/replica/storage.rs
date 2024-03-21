@@ -179,7 +179,7 @@ impl StorageService {
                         };
                         // log error if the sample is not timestamped
                         // This is to reduce down the line inconsistencies of having duplicate samples stored
-                        if sample.get_timestamp().is_none() {
+                        if sample.timestamp().is_none() {
                             log::error!("Sample {:?} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
                         }
                         else {
@@ -271,28 +271,28 @@ impl StorageService {
         };
 
         // if wildcard, update wildcard_updates
-        if sample.key_expr.is_wild() {
+        if sample.key_expr().is_wild() {
             self.register_wildcard_update(sample.clone()).await;
         }
 
-        let matching_keys = if sample.key_expr.is_wild() {
-            self.get_matching_keys(&sample.key_expr).await
+        let matching_keys = if sample.key_expr().is_wild() {
+            self.get_matching_keys(sample.key_expr()).await
         } else {
-            vec![sample.key_expr.clone().into()]
+            vec![sample.key_expr().clone().into()]
         };
         log::trace!(
             "The list of keys matching `{}` is : {:?}",
-            sample.key_expr,
+            sample.key_expr(),
             matching_keys
         );
 
         for k in matching_keys {
             if !self
-                .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
+                .is_deleted(&k.clone(), sample.timestamp().unwrap())
                 .await
                 && (self.capability.history.eq(&History::All)
                     || (self.capability.history.eq(&History::Latest)
-                        && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
+                        && self.is_latest(&k, sample.timestamp().unwrap()).await))
             {
                 log::trace!(
                     "Sample `{:?}` identified as neded processing for key {}",
@@ -302,30 +302,25 @@ impl StorageService {
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
                 let sample_to_store = match self
-                    .ovderriding_wild_update(&k, sample.get_timestamp().unwrap())
+                    .ovderriding_wild_update(&k, sample.timestamp().unwrap())
                     .await
                 {
                     Some(overriding_update) => {
                         let Value {
                             payload, encoding, ..
                         } = overriding_update.data.value;
-                        let mut sample_to_store = Sample::new(KeyExpr::from(k.clone()), payload)
+                        Sample::new(KeyExpr::from(k.clone()), payload)
                             .with_encoding(encoding)
-                            .with_timestamp(overriding_update.data.timestamp);
-                        sample_to_store.kind = overriding_update.kind;
-                        sample_to_store
+                            .with_timestamp(overriding_update.data.timestamp)
+                            .with_kind(overriding_update.kind)
                     }
-                    None => {
-                        let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), sample.payload.clone())
-                                .with_encoding(sample.encoding.clone())
-                                .with_timestamp(sample.timestamp.unwrap());
-                        sample_to_store.kind = sample.kind;
-                        sample_to_store
-                    }
+                    None => Sample::new(KeyExpr::from(k.clone()), sample.payload().clone())
+                        .with_encoding(sample.encoding().clone())
+                        .with_timestamp(*sample.timestamp().unwrap())
+                        .with_kind(sample.kind()),
                 };
 
-                let stripped_key = match self.strip_prefix(&sample_to_store.key_expr) {
+                let stripped_key = match self.strip_prefix(sample_to_store.key_expr()) {
                     Ok(stripped) => stripped,
                     Err(e) => {
                         log::error!("{}", e);
@@ -333,24 +328,25 @@ impl StorageService {
                     }
                 };
                 let mut storage = self.storage.lock().await;
-                let result = if sample.kind == SampleKind::Put {
-                    storage
-                        .put(
-                            stripped_key,
-                            Value::new(sample_to_store.payload.clone())
-                                .with_encoding(sample_to_store.encoding.clone()),
-                            sample_to_store.timestamp.unwrap(),
-                        )
-                        .await
-                } else if sample.kind == SampleKind::Delete {
-                    // register a tombstone
-                    self.mark_tombstone(&k, sample_to_store.timestamp.unwrap())
-                        .await;
-                    storage
-                        .delete(stripped_key, sample_to_store.timestamp.unwrap())
-                        .await
-                } else {
-                    Err("sample kind not implemented".into())
+                let result = match sample.kind() {
+                    SampleKind::Put => {
+                        storage
+                            .put(
+                                stripped_key,
+                                Value::new(sample_to_store.payload().clone())
+                                    .with_encoding(sample_to_store.encoding().clone()),
+                                *sample_to_store.timestamp().unwrap(),
+                            )
+                            .await
+                    }
+                    SampleKind::Delete => {
+                        // register a tombstone
+                        self.mark_tombstone(&k, *sample_to_store.timestamp().unwrap())
+                            .await;
+                        storage
+                            .delete(stripped_key, *sample_to_store.timestamp().unwrap())
+                            .await
+                    }
                 };
                 drop(storage);
                 if self.replication.is_some()
@@ -362,7 +358,7 @@ impl StorageService {
                         .as_ref()
                         .unwrap()
                         .log_propagation
-                        .send((k.clone(), *sample_to_store.get_timestamp().unwrap()));
+                        .send((k.clone(), *sample_to_store.timestamp().unwrap()));
                     match sending {
                         Ok(_) => (),
                         Err(e) => {
@@ -395,15 +391,16 @@ impl StorageService {
 
     async fn register_wildcard_update(&self, sample: Sample) {
         // @TODO: change into a better store that does incremental writes
-        let key = sample.clone().key_expr;
+        let key = sample.key_expr().clone();
         let mut wildcards = self.wildcard_updates.write().await;
+        let timestamp = *sample.timestamp().unwrap();
         wildcards.insert(
             &key,
             Update {
-                kind: sample.kind,
+                kind: sample.kind(),
                 data: StoredData {
-                    value: Value::new(sample.payload).with_encoding(sample.encoding),
-                    timestamp: sample.timestamp.unwrap(),
+                    value: Value::from(sample),
+                    timestamp,
                 },
             },
         );
@@ -532,7 +529,7 @@ impl StorageService {
                             } else {
                                 sample
                             };
-                            if let Err(e) = q.reply(Ok(sample)).res().await {
+                            if let Err(e) = q.reply_sample(sample).res().await {
                                 log::warn!(
                                     "Storage '{}' raised an error replying a query: {}",
                                     self.name,
@@ -570,7 +567,7 @@ impl StorageService {
                         } else {
                             sample
                         };
-                        if let Err(e) = q.reply(Ok(sample)).res().await {
+                        if let Err(e) = q.reply_sample(sample).res().await {
                             log::warn!(
                                 "Storage '{}' raised an error replying a query: {}",
                                 self.name,
@@ -583,7 +580,7 @@ impl StorageService {
                     let err_message =
                         format!("Storage '{}' raised an error on query: {}", self.name, e);
                     log::warn!("{}", err_message);
-                    if let Err(e) = q.reply(Err(err_message.into())).res().await {
+                    if let Err(e) = q.reply_err(err_message).res().await {
                         log::warn!(
                             "Storage '{}' raised an error replying a query: {}",
                             self.name,
