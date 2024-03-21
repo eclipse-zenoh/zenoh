@@ -104,7 +104,7 @@ jobs:
 
       - name: Install valgrind
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: apt-get install -y valgrind
+        run: sudo apt-get install -y valgrind
         shell: bash
 
       - name: Run memory leaks check
