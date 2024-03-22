@@ -24,7 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::ZBuf;
 use zenoh::prelude::r#async::*;
 use zenoh::query::ConsolidationMode;
-use zenoh::sample::SampleBuilder;
+use zenoh::sample_builder::{SampleBuilder, SampleBuilderTrait};
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
@@ -368,7 +368,7 @@ impl StorageService {
                             }
                         };
                         let sample = if sample.timestamp().is_none() {
-                            SampleBuilder::new(sample).with_current_timestamp().res_sync()
+                            SampleBuilder::from(sample).with_timestamp(new_reception_timestamp()).res_sync()
                         } else {
                             sample
                         };

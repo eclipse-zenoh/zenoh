@@ -146,6 +146,7 @@ pub mod publication;
 pub mod query;
 pub mod queryable;
 pub mod sample;
+pub mod sample_builder;
 pub mod subscriber;
 pub mod value;
 #[cfg(feature = "shared-memory")]

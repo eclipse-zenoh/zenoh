@@ -20,9 +20,9 @@ use std::time::Duration;
 use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
-use zenoh::sample::SampleBuilder;
+use zenoh::sample_builder::{SampleBuilder, SampleBuilderTrait};
 use zenoh::subscriber::{Reliability, Subscriber};
-use zenoh::time::Timestamp;
+use zenoh::time::{new_reception_timestamp, Timestamp};
 use zenoh::Result as ZResult;
 use zenoh::SessionRef;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
@@ -665,7 +665,9 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
                     let s = if s.timestamp().is_none() {
-                        SampleBuilder::new(s).with_current_timestamp().res_sync()
+                        SampleBuilder::from(s)
+                            .with_timestamp(new_reception_timestamp())
+                            .res_sync()
                     } else {
                         s
                     };
