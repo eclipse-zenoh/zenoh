@@ -82,7 +82,7 @@ use zenoh_protocol::{
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
-        Pull, PushBody, RequestBody, ResponseBody,
+        PushBody, RequestBody, ResponseBody,
     },
 };
 use zenoh_result::ZResult;
@@ -295,7 +295,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -304,7 +304,6 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             session: self.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::DEFAULT,
-            mode: PushMode,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -579,7 +578,7 @@ impl<'a> SessionDeclarations<'a, 'a> for Session {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -1557,29 +1556,6 @@ impl Session {
         }
     }
 
-    pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Resolve<ZResult<()>> + 'a {
-        ResolveClosure::new(move || {
-            trace!("pull({:?})", key_expr);
-            let state = zread!(self.state);
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.send_request(Request {
-                id: 0, // @TODO compute a proper request ID
-                wire_expr: key_expr.to_wire(self).to_owned(),
-                ext_qos: ext::QoSType::REQUEST,
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                ext_target: request::ext::TargetType::DEFAULT,
-                ext_budget: None,
-                ext_timeout: None,
-                payload: RequestBody::Pull(Pull {
-                    ext_unknown: vec![],
-                }),
-            });
-            Ok(())
-        })
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
         &self,
@@ -1820,7 +1796,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'static, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'static, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -1829,7 +1805,6 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::DEFAULT,
-            mode: PushMode,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -2111,20 +2086,12 @@ impl Primitives for Session {
                 #[cfg(feature = "unstable")]
                 m.ext_attachment.map(Into::into),
             ),
-            RequestBody::Put(_) => (),
-            RequestBody::Del(_) => (),
-            RequestBody::Pull(_) => todo!(),
         }
     }
 
     fn send_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
         match msg.payload {
-            ResponseBody::Put(_) => {
-                log::warn!(
-                    "Received a ResponseBody::Put, but this isn't supported yet. Dropping message."
-                )
-            }
             ResponseBody::Err(e) => {
                 let mut state = zwrite!(self.state);
                 match state.queries.get_mut(&msg.rid) {
@@ -2452,7 +2419,7 @@ pub trait SessionDeclarations<'s, 'a> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;

@@ -13,7 +13,6 @@
 //
 pub mod del;
 pub mod err;
-pub mod pull;
 pub mod put;
 pub mod query;
 pub mod reply;
@@ -21,7 +20,6 @@ pub mod reply;
 use crate::core::Encoding;
 pub use del::Del;
 pub use err::Err;
-pub use pull::Pull;
 pub use put::Put;
 pub use query::{Consolidation, Query};
 pub use reply::Reply;
@@ -33,7 +31,6 @@ pub mod id {
     pub const QUERY: u8 = 0x03;
     pub const REPLY: u8 = 0x04;
     pub const ERR: u8 = 0x05;
-    pub const PULL: u8 = 0x06;
 }
 
 // DataInfo
@@ -80,9 +77,6 @@ impl From<Del> for PushBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequestBody {
     Query(Query),
-    Put(Put),
-    Del(Del),
-    Pull(Pull),
 }
 
 impl RequestBody {
@@ -92,11 +86,8 @@ impl RequestBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..4) {
+        match rng.gen_range(0..1) {
             0 => RequestBody::Query(Query::rand()),
-            1 => RequestBody::Put(Put::rand()),
-            2 => RequestBody::Del(Del::rand()),
-            3 => RequestBody::Pull(Pull::rand()),
             _ => unreachable!(),
         }
     }
@@ -108,24 +99,11 @@ impl From<Query> for RequestBody {
     }
 }
 
-impl From<Put> for RequestBody {
-    fn from(p: Put) -> RequestBody {
-        RequestBody::Put(p)
-    }
-}
-
-impl From<Del> for RequestBody {
-    fn from(d: Del) -> RequestBody {
-        RequestBody::Del(d)
-    }
-}
-
 // Response
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponseBody {
     Reply(Reply),
     Err(Err),
-    Put(Put),
 }
 
 impl ResponseBody {
@@ -134,10 +112,9 @@ impl ResponseBody {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..3) {
+        match rng.gen_range(0..2) {
             0 => ResponseBody::Reply(Reply::rand()),
             1 => ResponseBody::Err(Err::rand()),
-            2 => ResponseBody::Put(Put::rand()),
             _ => unreachable!(),
         }
     }

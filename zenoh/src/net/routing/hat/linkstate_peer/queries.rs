@@ -285,7 +285,6 @@ fn register_client_queryable(
                 remote_expr_id: None,
                 subs: None,
                 qabl: None,
-                last_values: HashMap::new(),
                 in_interceptor_cache: None,
                 e_interceptor_cache: None,
             })

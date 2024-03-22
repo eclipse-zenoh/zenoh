@@ -460,20 +460,12 @@ macro_rules! inc_req_stats {
             if let Some(stats) = $face.stats.as_ref() {
                 use zenoh_buffers::buffer::Buffer;
                 match &$body {
-                    RequestBody::Put(p) => {
-                        stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](p.payload.len());
-                    }
-                    RequestBody::Del(_) => {
-                        stats.[<$txrx _z_del_msgs>].[<inc_ $space>](1);
-                    }
                     RequestBody::Query(q) => {
                         stats.[<$txrx _z_query_msgs>].[<inc_ $space>](1);
                         stats.[<$txrx _z_query_pl_bytes>].[<inc_ $space>](
                             q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
                         );
                     }
-                    RequestBody::Pull(_) => (),
                 }
             }
         }
@@ -492,14 +484,6 @@ macro_rules! inc_res_stats {
             if let Some(stats) = $face.stats.as_ref() {
                 use zenoh_buffers::buffer::Buffer;
                 match &$body {
-                    ResponseBody::Put(p) => {
-                        stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        let mut n =  p.payload.len();
-                        if let Some(a) = p.ext_attachment.as_ref() {
-                           n += a.buffer.len();
-                        }
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](n);
-                    }
                     ResponseBody::Reply(r) => {
                         stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
                         let mut n = 0;
