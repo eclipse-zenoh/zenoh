@@ -22,7 +22,6 @@ use core::{
 use serde::Serialize;
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::ZResult;
-
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
 pub trait LinkManagerUnicastTrait: Send + Sync {
@@ -48,7 +47,7 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
-    fn get_auth_identifier(&self) -> AuthId;
+    fn get_auth_identifier(&self) -> LinkAuthId;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
@@ -116,72 +115,96 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
         }
     }
 }
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 
-#[derive(Clone, Debug, Serialize, Eq, Hash, PartialEq)]
-pub enum AuthIdType {
+pub enum LinkAuthType {
+    Tls,
+    Quic,
     None,
-    TlsCommonName,
-    Username,
+}
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
+
+pub struct LinkAuthId {
+    auth_type: LinkAuthType,
+    auth_value: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Eq, Hash, PartialEq)]
-
-pub enum AuthId {
-    None,
-    TlsCommonName(String),
-    Username(String),
+impl LinkAuthId {
+    pub fn get_type(&self) -> &LinkAuthType {
+        &self.auth_type
+    }
+    pub fn get_value(&self) -> &Option<String> {
+        &self.auth_value
+    }
 }
-
-pub trait AuthIdTrait {
-    fn get_authid(&self) -> AuthId;
-}
-
-impl AuthId {
-    pub fn builder() -> AuthIdBuilder {
-        AuthIdBuilder::new()
+impl Default for LinkAuthId {
+    fn default() -> Self {
+        LinkAuthId {
+            auth_type: LinkAuthType::None,
+            auth_value: None,
+        }
     }
 }
 
-impl AuthIdTrait for AuthId {
-    fn get_authid(&self) -> AuthId {
-        self.clone()
-    }
-}
+// #[derive(Clone, Debug, Serialize, Eq, Hash, PartialEq)]
+// pub enum AuthIdType {
+//     None,
+//     TlsCommonName,
+//     Username,
+// }
+
+// #[derive(Clone, Debug, Serialize, Eq, Hash, PartialEq)]
+
+// pub enum AuthId {
+//     None,
+//     TlsCommonName(String),
+//     Username(String),
+// }
+
+// impl AuthId {
+//     pub fn builder() -> LinkAuthIdBuilder {
+//         LinkAuthIdBuilder::new()
+//     }
+// }
 #[derive(Debug)]
-pub struct AuthIdBuilder {
-    pub auth_type: AuthIdType, //HAS to be provided when building
-    pub auth_value: AuthId,    //actual value added to the above type; is None for None type
+pub struct LinkAuthIdBuilder {
+    pub auth_type: LinkAuthType,    //HAS to be provided when building
+    pub auth_value: Option<String>, //actual value added to the above type; is None for None type
 }
-impl Default for AuthIdBuilder {
+impl Default for LinkAuthIdBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AuthIdBuilder {
-    pub fn new() -> AuthIdBuilder {
-        AuthIdBuilder {
-            auth_type: AuthIdType::None,
-            auth_value: AuthId::None,
+impl LinkAuthIdBuilder {
+    pub fn new() -> LinkAuthIdBuilder {
+        LinkAuthIdBuilder {
+            auth_type: LinkAuthType::None,
+            auth_value: None,
         }
     }
 
-    pub fn auth_type(&mut self, auth_type: AuthIdType) -> &mut Self {
+    pub fn auth_type(&mut self, auth_type: LinkAuthType) -> &mut Self {
         self.auth_type = auth_type;
         self
     }
-    pub fn auth_value(&mut self, auth_value: String) -> &mut Self {
-        let value = auth_value;
+    pub fn auth_value(&mut self, auth_value: Option<String>) -> &mut Self {
+        self.auth_value = auth_value;
+        // let value = auth_value;
 
-        match self.auth_type {
-            AuthIdType::None => self.auth_value = AuthId::None,
-            AuthIdType::TlsCommonName => self.auth_value = AuthId::TlsCommonName(value),
-            AuthIdType::Username => self.auth_value = AuthId::Username(value),
-        };
+        // match self.auth_type {
+        //     LinkAuthType::None => self.auth_value = LinkAuthId::None,
+        //     LinkAuthType::Tls => self.auth_value = LinkAuthId::TlsCommonName(value),
+        //     LinkAuthType::Quic => self.auth_value = AuthId::Username(value),
+        // };
         self
     }
 
-    pub fn build(&self) -> AuthId {
-        self.auth_value.clone()
+    pub fn build(&self) -> LinkAuthId {
+        LinkAuthId {
+            auth_type: self.auth_type.clone(),
+            auth_value: self.auth_value.clone(),
+        }
     }
 }

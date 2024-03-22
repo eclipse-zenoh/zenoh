@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::super::authentication::AuthId;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -30,6 +31,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
+
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZenohId},
     network::NetworkMessage,
@@ -434,6 +436,13 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         zread!(self.links).iter().map(|l| l.link.link()).collect()
     }
 
+    fn get_auth_ids(&self) -> Vec<super::transport::AuthId> {
+        //convert local_value to authId??
+        zread!(self.links)
+            .iter()
+            .map(|l| l.link.link().auth_identifier.into())
+            .collect()
+    }
     /*************************************/
     /*                TX                 */
     /*************************************/

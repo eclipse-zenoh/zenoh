@@ -31,6 +31,7 @@ use async_std::task;
 use async_trait::async_trait;
 use futures::io::AsyncReadExt;
 use futures::io::AsyncWriteExt;
+use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Cursor};
@@ -38,7 +39,6 @@ use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use std::{any::Any, convert::TryInto};
 use std::{cell::UnsafeCell, io};
 use webpki::{
     anchor_from_trusted_cert,
@@ -48,7 +48,7 @@ use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 
 use zenoh_link_commons::{
-    get_ip_interface_names, AuthId, AuthIdBuilder, AuthIdType, LinkManagerUnicastTrait,
+    get_ip_interface_names, LinkAuthId, LinkAuthIdBuilder, LinkAuthType, LinkManagerUnicastTrait,
     LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::endpoint::Config;
@@ -79,7 +79,7 @@ pub struct LinkUnicastTls {
     // Make sure there are no concurrent read or writes
     write_mtx: AsyncMutex<()>,
     read_mtx: AsyncMutex<()>,
-    auth_identifier: AuthId,
+    auth_identifier: LinkAuthId,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -90,7 +90,7 @@ impl LinkUnicastTls {
         socket: TlsStream<TcpStream>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
-        auth_identifier: AuthId,
+        auth_identifier: LinkAuthId,
     ) -> LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
@@ -218,15 +218,8 @@ impl LinkUnicastTrait for LinkUnicastTls {
         true
     }
     #[inline(always)]
-    fn get_auth_identifier(&self) -> AuthId {
+    fn get_auth_identifier(&self) -> LinkAuthId {
         self.auth_identifier.clone()
-        // match &self.auth_identifier {
-        //     Some(identifier) => identifier.clone(),
-        //     None => AuthIdentifier {
-        //         username: None,
-        //         tls_cert_name: None,
-        //     },
-        // }
     }
 }
 
@@ -331,7 +324,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             tls_stream,
             src_addr,
             dst_addr,
-            auth_identifier,
+            auth_identifier.into(),
         ));
 
         Ok(LinkUnicast(link))
@@ -468,7 +461,7 @@ async fn accept_task(
             tls_stream,
             src_addr,
             dst_addr,
-            auth_identifier,
+            auth_identifier.into(),
         ));
 
         // Communicate the new link to the initial transport manager
@@ -479,55 +472,6 @@ async fn accept_task(
 
     Ok(())
 }
-
-fn get_tls_common_name(tls_conn: &rustls::CommonState) -> ZResult<AuthId> {
-    let serv_certs = tls_conn.peer_certificates().unwrap();
-    let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref())?;
-    let subject_name = &cert
-        .subject
-        .iter_common_name()
-        .next()
-        .and_then(|cn| cn.as_str().ok())
-        .unwrap();
-
-    let auth_id = AuthIdBuilder::new()
-        .auth_type(AuthIdType::TlsCommonName)
-        .auth_value(subject_name.to_string())
-        .build();
-    Ok(auth_id)
-}
-
-fn get_serverside_id(tls_conn: &rustls::ClientConnection) -> ZResult<AuthId> {
-    let serv_certs = tls_conn.peer_certificates().unwrap();
-    let mut auth_id = AuthId::None;
-
-    //need the first certificate in the chain
-    if let Some(item) = serv_certs.iter().next() {
-        // for item in serv_certs {
-        let (_, cert) = X509Certificate::from_der(item.as_ref())?;
-        let subject_name = &cert
-            .subject
-            .iter_common_name()
-            .next()
-            .and_then(|cn| cn.as_str().ok())
-            .unwrap();
-        // let auth_identifier = AuthIdentifier {
-        //     username: None,
-        //     tls_cert_name: Some(subject_name.to_string()),
-        // };
-
-        //build the AuthId
-        auth_id = AuthIdBuilder::new()
-            .auth_type(AuthIdType::TlsCommonName)
-            .auth_value(subject_name.to_string())
-            .build();
-
-        println!("server side tls auth_identifier: {:?}", auth_id);
-        return Ok(auth_id);
-    }
-    Ok(auth_id)
-}
-
 struct TlsServerConfig {
     server_config: ServerConfig,
 }
@@ -881,4 +825,56 @@ fn load_default_webpki_certs() -> RootCertStore {
         )
     }));
     root_cert_store
+}
+
+fn get_tls_common_name(tls_conn: &rustls::CommonState) -> ZResult<TlsAuthId> {
+    if let Some(serv_certs) = tls_conn.peer_certificates() {
+        let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref())?;
+        let subject_name = &cert
+            .subject
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+            .unwrap();
+
+        Ok(TlsAuthId {
+            auth_value: Some(subject_name.to_string()),
+        })
+    } else {
+        Ok(TlsAuthId { auth_value: None })
+    }
+}
+
+fn get_serverside_id(tls_conn: &rustls::ClientConnection) -> ZResult<TlsAuthId> {
+    let serv_certs = tls_conn.peer_certificates().unwrap();
+    let mut auth_id = TlsAuthId { auth_value: None };
+
+    //need the first certificate in the chain os no need for looping
+    if let Some(item) = serv_certs.iter().next() {
+        let (_, cert) = X509Certificate::from_der(item.as_ref())?;
+        let subject_name = &cert
+            .subject
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+            .unwrap();
+
+        auth_id = TlsAuthId {
+            auth_value: Some(subject_name.to_string()),
+        };
+        return Ok(auth_id);
+    }
+    Ok(auth_id)
+}
+
+struct TlsAuthId {
+    auth_value: Option<String>,
+}
+impl From<TlsAuthId> for LinkAuthId {
+    fn from(value: TlsAuthId) -> Self {
+        LinkAuthIdBuilder::new()
+            .auth_type(LinkAuthType::Tls)
+            .auth_value(value.auth_value.clone())
+            .build()
+    }
 }

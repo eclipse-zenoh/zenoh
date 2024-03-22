@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::super::authentication::AuthId;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -179,6 +180,10 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     fn get_zid(&self) -> ZenohId {
         self.config.zid
+    }
+
+    fn get_auth_ids(&self) -> Vec<AuthId> {
+        vec![]
     }
 
     fn get_whatami(&self) -> WhatAmI {

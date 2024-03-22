@@ -11,21 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod authentication;
 pub mod establishment;
 pub(crate) mod link;
 pub(crate) mod lowlatency;
 pub(crate) mod manager;
-pub(crate) mod transport_unicast_inner;
-pub(crate) mod universal;
-
 #[cfg(feature = "test")]
 pub mod test_helpers;
+pub(crate) mod transport_unicast_inner;
+pub(crate) mod universal;
 
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shared_memory_unicast;
 
+use self::authentication::AuthId;
 use self::transport_unicast_inner::TransportUnicastTrait;
-
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "transport_multilink")]
 use establishment::ext::auth::ZPublicKey;
@@ -113,6 +113,11 @@ impl TransportUnicast {
     pub fn get_links(&self) -> ZResult<Vec<Link>> {
         let transport = self.get_inner()?;
         Ok(transport.get_links())
+    }
+
+    pub fn get_auth_ids(&self) -> ZResult<Vec<AuthId>> {
+        let transport = self.get_inner()?;
+        Ok(transport.get_auth_ids())
     }
 
     #[inline(always)]

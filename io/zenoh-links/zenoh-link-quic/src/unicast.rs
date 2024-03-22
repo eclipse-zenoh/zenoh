@@ -1,4 +1,3 @@
-use async_rustls::server;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -34,7 +33,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, AuthId, AuthIdBuilder, AuthIdType, LinkManagerUnicastTrait,
+    get_ip_interface_names, LinkAuthId, LinkAuthIdBuilder, LinkAuthType, LinkManagerUnicastTrait,
     LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
@@ -48,7 +47,7 @@ pub struct LinkUnicastQuic {
     dst_locator: Locator,
     send: AsyncMutex<quinn::SendStream>,
     recv: AsyncMutex<quinn::RecvStream>,
-    auth_identifier: AuthId,
+    auth_identifier: LinkAuthId,
 }
 
 impl LinkUnicastQuic {
@@ -58,7 +57,7 @@ impl LinkUnicastQuic {
         dst_locator: Locator,
         send: quinn::SendStream,
         recv: quinn::RecvStream,
-        auth_identifier: AuthId,
+        auth_identifier: LinkAuthId,
     ) -> LinkUnicastQuic {
         // Build the Quic object
         LinkUnicastQuic {
@@ -161,15 +160,8 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     fn is_streamed(&self) -> bool {
         true
     }
-    fn get_auth_identifier(&self) -> AuthId {
+    fn get_auth_identifier(&self) -> LinkAuthId {
         self.auth_identifier.clone()
-        // match &self.auth_identifier {
-        //     Some(identifier) => identifier.clone(),
-        //     None => AuthIdentifier {
-        //         username: None,
-        //         tls_cert_name: None,
-        //     },
-        // }
     }
 }
 
@@ -311,30 +303,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        let mut auth_id = AuthId::None;
-
-        let pi = &quic_conn.peer_identity().unwrap();
-        match pi.downcast_ref::<Vec<rustls::Certificate>>() {
-            Some(serv_certs) => {
-                println!("the server certs were found");
-                for item in serv_certs {
-                    let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
-                    let subject_name = &cert
-                        .subject
-                        .iter_common_name()
-                        .next()
-                        .and_then(|cn| cn.as_str().ok())
-                        .unwrap();
-                    auth_id = AuthIdBuilder::new()
-                        .auth_type(AuthIdType::TlsCommonName)
-                        .auth_value(subject_name.to_string())
-                        .build();
-                }
-            }
-            None => {
-                println!("no server certs found");
-            }
-        }
+        let auth_id = get_tls_cert_name(quic_conn.clone())?;
 
         let link = Arc::new(LinkUnicastQuic::new(
             quic_conn,
@@ -342,7 +311,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             endpoint.into(),
             send,
             recv,
-            auth_id,
+            auth_id.into(),
         ));
         Ok(LinkUnicast(link))
     }
@@ -544,78 +513,7 @@ async fn accept_task(
                 continue;
             }
         };
-        println!("the accept function is also called before check");
-        let mut auth_id = AuthId::None;
-        {
-            let new_conn = quic_conn.clone();
-            let server_name = new_conn
-                .handshake_data()
-                .unwrap()
-                .downcast_ref::<quinn::crypto::rustls::HandshakeData>()
-                .unwrap()
-                .server_name
-                .as_ref()
-                .unwrap()
-                .clone();
-            let protocol_deets = new_conn
-                .handshake_data()
-                .unwrap()
-                .downcast_ref::<quinn::crypto::rustls::HandshakeData>()
-                .unwrap()
-                .protocol
-                .as_ref()
-                .unwrap()
-                .clone();
-
-            auth_id = AuthIdBuilder::new()
-                .auth_type(AuthIdType::TlsCommonName)
-                .auth_value(server_name.to_string())
-                .build();
-            // Ok(auth_id)
-            // let auth_identifier = AuthId {
-            //     username: None,
-            //     tls_cert_name: Some(server_name.to_string()),
-            // };
-
-            println!(
-                "From conncetion, server_name {:?} and protocol_deets {:?}",
-                server_name, protocol_deets
-            );
-            println!("client side quic auth_identifier: {:?}", auth_id);
-            //auth_id = Some(auth_id);
-
-            // if let Some(cert_info) = new_conn.peer_identity() {
-            //     //use cert info
-
-            //     match cert_info.downcast_ref::<Vec<rustls::Certificate>>() {
-            //         Some(serv_certs) => {
-            //             println!("the client certs were found");
-            //             for item in serv_certs {
-            //                 let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
-            //                 let subject_name = &cert
-            //                     .subject
-            //                     .iter_common_name()
-            //                     .next()
-            //                     .and_then(|cn| cn.as_str().ok())
-            //                     .unwrap();
-            //                 let auth_identifier = AuthIdentifier {
-            //                     username: None,
-            //                     tls_cert_name: Some(subject_name.to_string()),
-            //                 };
-
-            //                 println!("client side quic auth_identifier: {:?}", auth_identifier);
-            //                 test_auth_id = Some(auth_identifier);
-            //             }
-            //         }
-            //         None => {
-            //             println!("no client certs found");
-            //         }
-            //     }
-            // } else {
-            //     println!("no certs were found");
-            // }
-        }
-
+        let auth_id = get_tls_cert_name(quic_conn.clone())?;
         let dst_addr = quic_conn.remote_address();
         log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
         // Create the new link object
@@ -625,7 +523,7 @@ async fn accept_task(
             Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
             send,
             recv,
-            auth_id,
+            auth_id.into(),
         ));
 
         // Communicate the new link to the initial transport manager
@@ -635,4 +533,36 @@ async fn accept_task(
     }
 
     Ok(())
+}
+
+fn get_tls_cert_name(conn: quinn::Connection) -> ZResult<QuicAuthId> {
+    let mut auth_id = QuicAuthId { auth_value: None };
+    if let Some(pi) = conn.peer_identity() {
+        let serv_certs = pi.downcast::<Vec<rustls::Certificate>>().unwrap();
+        if let Some(item) = serv_certs.iter().next() {
+            let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
+            let subject_name = cert
+                .subject
+                .iter_common_name()
+                .next()
+                .and_then(|cn| cn.as_str().ok())
+                .unwrap();
+            auth_id = QuicAuthId {
+                auth_value: Some(subject_name.to_string()),
+            };
+        }
+    }
+    Ok(auth_id)
+}
+
+struct QuicAuthId {
+    auth_value: Option<String>,
+}
+impl From<QuicAuthId> for LinkAuthId {
+    fn from(value: QuicAuthId) -> Self {
+        LinkAuthIdBuilder::new()
+            .auth_type(LinkAuthType::Quic)
+            .auth_value(value.auth_value.clone())
+            .build()
+    }
 }

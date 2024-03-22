@@ -37,7 +37,6 @@ use zenoh_link::Link;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
-
 /*************************************/
 /*            TRANSPORT              */
 /*************************************/

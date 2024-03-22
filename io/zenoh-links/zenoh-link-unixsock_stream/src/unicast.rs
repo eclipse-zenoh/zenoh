@@ -31,7 +31,7 @@ use std::time::Duration;
 use uuid::Uuid;
 use zenoh_core::{zread, zwrite};
 use zenoh_link_commons::{
-    AuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{zerror, ZResult};
@@ -131,8 +131,9 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     fn is_streamed(&self) -> bool {
         true
     }
-    fn get_auth_identifier(&self) -> AuthId {
-        AuthId::None
+    #[inline(always)]
+    fn get_auth_identifier(&self) -> LinkAuthId {
+        LinkAuthId::default()
     }
 }
 

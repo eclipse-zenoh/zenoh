@@ -1,12 +1,11 @@
 use crate::KeyExpr;
 use std::any::Any;
 
-use zenoh_link::AuthId;
+use crate::net::routing::RoutingContext;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
+use zenoh_transport::unicast::authentication::AuthId;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
-
-use crate::net::routing::RoutingContext;
 
 use super::{
     EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorFactoryTrait,
@@ -32,12 +31,11 @@ impl InterceptorFactoryTrait for TestInterceptor {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        if let Ok(links) = transport.get_links() {
-            for link in links {
-                println!("value recevied in interceptor {:?}", link.auth_identifier);
+        if let Ok(ids) = transport.get_auth_ids() {
+            for id in ids {
+                println!("value recevied in interceptor {:?}", id);
             }
         }
-
         (
             Some(Box::new(IngressTestInterceptor { _auth_id: None })),
             Some(Box::new(EgressTestInterceptor { _auth_id: None })),
