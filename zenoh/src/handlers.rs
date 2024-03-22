@@ -92,11 +92,13 @@ impl<T: Send + Sync + 'static> IntoHandler<'static, T>
     }
 }
 
+/// Ring buffer with a limited queue size, which allows users to keep the last N data.
 pub struct RingBuffer<T> {
     cache: Arc<Mutex<RingBuffer_inner<T>>>,
 }
 
 impl<T> RingBuffer<T> {
+    /// Initialize the RingBuffer with the capacity size.
     pub fn new(capacity: usize) -> Self {
         RingBuffer {
             cache: Arc::new(Mutex::new(RingBuffer_inner::new(capacity))),
