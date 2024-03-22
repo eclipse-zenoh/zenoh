@@ -193,6 +193,8 @@ impl Runtime {
         self.state.locators.read().unwrap().clone()
     }
 
+    /// Spawns a task within runtime.
+    /// Upon runtime close the task will be automatically aborted.
     pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = T> + Send + 'static,

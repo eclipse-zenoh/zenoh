@@ -40,8 +40,8 @@ impl Default for TaskController {
 }
 
 impl TaskController {
-    /// Spawns a task (similarly to task::spawn) that can be later terminated by call to terminate_all()
-    /// Task output is ignored
+    /// Spawns a task that can be later terminated by call to [`TaskController::terminate_all()`].
+    /// Task output is ignored.
     pub fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = T> + Send + 'static,
@@ -57,7 +57,7 @@ impl TaskController {
         self.tracker.spawn(task)
     }
 
-    /// Spawns a task using a specified runtime (similarly to Runtime::spawn) that can be later terminated by call to terminate_all().
+    /// Spawns a task using a specified runtime that can be later terminated by call to [`TaskController::terminate_all()`].
     /// Task output is ignored.
     pub fn spawn_with_rt<F, T>(&self, rt: ZRuntime, future: F) -> JoinHandle<()>
     where
@@ -78,8 +78,9 @@ impl TaskController {
         self.token.child_token()
     }
 
-    /// Spawns a task that can be cancelled via cancelling a token obtained by get_cancellation_token().
-    /// It can be later terminated by call to terminate_all().
+    /// Spawns a task that can be cancelled via cancelling a token obtained by [`TaskController::get_cancellation_token()`],
+    /// or that can run to completion in finite amount of time.
+    /// It can be later terminated by call to [`TaskController::terminate_all()`].
     pub fn spawn_cancellable<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
@@ -88,8 +89,9 @@ impl TaskController {
         self.tracker.spawn(future)
     }
 
-    /// Spawns a task that can be cancelled via cancelling a token obtained by get_cancellation_token() using a specified runtime.
-    /// It can be later terminated by call to terminate_all().
+    /// Spawns a task that can be cancelled via cancelling a token obtained by [`TaskController::get_cancellation_token()`],
+    /// or that can run to completion in finite amount of time, using a specified runtime.
+    /// It can be later aborted by call to [`TaskController::terminate_all()`].
     pub fn spawn_cancellable_with_rt<F, T>(&self, rt: ZRuntime, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
@@ -99,6 +101,10 @@ impl TaskController {
     }
 
     /// Terminates all prevously spawned tasks
+    /// The caller must ensure that all tasks spawned with [`TaskController::spawn_cancellable()`]
+    /// or [`TaskController::spawn_cancellable_with_rt()`] can yield in finite amount of time either because they will run to completion
+    /// or due to cancellation of token acquired via [`TaskController::get_cancellation_token()`].
+    /// Tasks spawned with [`TaskController::spawn()`] or [`TaskController::spawn_with_rt()`] will be aborted (i.e. terminated upon next await call).
     pub fn terminate_all(&self) {
         self.tracker.close();
         self.token.cancel();
@@ -106,7 +112,7 @@ impl TaskController {
         futures::executor::block_on(async move { tracker.wait().await });
     }
 
-    /// Terminates all prevously spawned tasks
+    /// Async version of [`TaskController::terminate_all()`].
     pub async fn terminate_all_async(&self) {
         self.tracker.close();
         self.token.cancel();
