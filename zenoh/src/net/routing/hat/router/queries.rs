@@ -514,20 +514,15 @@ fn send_forget_sourced_queryable_to_net_childs(
 fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
     for mut face in tables.faces.values().cloned() {
         if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
-            // Still send WireExpr in UndeclareQueryable to clients for pico
-            let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                WireExprType {
-                    wire_expr: Resource::get_best_key(res, "", face.id),
-                }
-            } else {
-                WireExprType::null()
-            };
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable { id, ext_wire_expr }),
+                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                        id,
+                        ext_wire_expr: WireExprType::null(),
+                    }),
                 },
                 res.expr(),
             ));
@@ -547,14 +542,6 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                 })
             }) {
                 if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
-                    // Still send WireExpr in UndeclareQueryable to clients for pico
-                    let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                        WireExprType {
-                            wire_expr: Resource::get_best_key(&res, "", face.id),
-                        }
-                    } else {
-                        WireExprType::null()
-                    };
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
@@ -562,7 +549,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                 id,
-                                ext_wire_expr,
+                                ext_wire_expr: WireExprType::null(),
                             }),
                         },
                         res.expr(),
@@ -595,14 +582,6 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
                 })
             {
                 if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
-                    // Still send WireExpr in UndeclareQueryable to clients for pico
-                    let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                        WireExprType {
-                            wire_expr: Resource::get_best_key(res, "", face.id),
-                        }
-                    } else {
-                        WireExprType::null()
-                    };
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
@@ -610,7 +589,7 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                 id,
-                                ext_wire_expr,
+                                ext_wire_expr: WireExprType::null(),
                             }),
                         },
                         res.expr(),
@@ -765,14 +744,6 @@ pub(super) fn undeclare_client_queryable(
         if client_qabls.len() == 1 && !router_qabls && !peer_qabls {
             let mut face = &mut client_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
-                // Still send WireExpr in UndeclareQueryable to clients for pico
-                let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                    WireExprType {
-                        wire_expr: Resource::get_best_key(res, "", face.id),
-                    }
-                } else {
-                    WireExprType::null()
-                };
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
                         ext_qos: ext::QoSType::DECLARE,
@@ -780,7 +751,7 @@ pub(super) fn undeclare_client_queryable(
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                             id,
-                            ext_wire_expr,
+                            ext_wire_expr: WireExprType::null(),
                         }),
                     },
                     res.expr(),
@@ -801,14 +772,6 @@ pub(super) fn undeclare_client_queryable(
                     })
                 }) {
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
-                        // Still send WireExpr in UndeclareQueryable to clients for pico
-                        let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                            WireExprType {
-                                wire_expr: Resource::get_best_key(&res, "", face.id),
-                            }
-                        } else {
-                            WireExprType::null()
-                        };
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
@@ -816,7 +779,7 @@ pub(super) fn undeclare_client_queryable(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                     id,
-                                    ext_wire_expr,
+                                    ext_wire_expr: WireExprType::null(),
                                 }),
                             },
                             res.expr(),
@@ -958,21 +921,16 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                         })
                                     };
                                 if forget {
-                                    // Still send WireExpr in UndeclareQueryable to clients for pico
-                                    let ext_wire_expr = if dst_face.whatami == WhatAmI::Client {
-                                        WireExprType {
-                                            wire_expr: Resource::get_best_key(res, "", dst_face.id),
-                                        }
-                                    } else {
-                                        WireExprType::null()
-                                    };
                                     dst_face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
                                             ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
                                             ext_nodeid: ext::NodeIdType::DEFAULT,
                                             body: DeclareBody::UndeclareQueryable(
-                                                UndeclareQueryable { id, ext_wire_expr },
+                                                UndeclareQueryable {
+                                                    id,
+                                                    ext_wire_expr: WireExprType::null(),
+                                                },
                                             ),
                                         },
                                         res.expr(),

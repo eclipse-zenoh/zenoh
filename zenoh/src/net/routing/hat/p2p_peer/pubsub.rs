@@ -202,14 +202,6 @@ fn remote_client_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
 fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
-            // Still send WireExpr in UndeclareSubscriber to clients for pico
-            let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                WireExprType {
-                    wire_expr: Resource::get_best_key(res, "", face.id),
-                }
-            } else {
-                WireExprType::null()
-            };
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
@@ -217,7 +209,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                         id,
-                        ext_wire_expr,
+                        ext_wire_expr: WireExprType::null(),
                     }),
                 },
                 res.expr(),
@@ -234,14 +226,6 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                     .is_some_and(|m| m.context.is_some() && remote_client_subs(&m, &face))
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
-                    // Still send WireExpr in UndeclareSubscriber to clients for pico
-                    let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                        WireExprType {
-                            wire_expr: Resource::get_best_key(&res, "", face.id),
-                        }
-                    } else {
-                        WireExprType::null()
-                    };
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
@@ -249,7 +233,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                 id,
-                                ext_wire_expr,
+                                ext_wire_expr: WireExprType::null(),
                             }),
                         },
                         res.expr(),
@@ -279,14 +263,6 @@ pub(super) fn undeclare_client_subscription(
             let mut face = &mut client_subs[0];
             if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
-                    // Still send WireExpr in UndeclareSubscriber to clients for pico
-                    let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                        WireExprType {
-                            wire_expr: Resource::get_best_key(res, "", face.id),
-                        }
-                    } else {
-                        WireExprType::null()
-                    };
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
@@ -294,7 +270,7 @@ pub(super) fn undeclare_client_subscription(
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                 id,
-                                ext_wire_expr,
+                                ext_wire_expr: WireExprType::null(),
                             }),
                         },
                         res.expr(),
@@ -311,14 +287,6 @@ pub(super) fn undeclare_client_subscription(
                             .is_some_and(|m| m.context.is_some() && remote_client_subs(&m, face))
                     }) {
                         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
-                            // Still send WireExpr in UndeclareSubscriber to clients for pico
-                            let ext_wire_expr = if face.whatami == WhatAmI::Client {
-                                WireExprType {
-                                    wire_expr: Resource::get_best_key(&res, "", face.id),
-                                }
-                            } else {
-                                WireExprType::null()
-                            };
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
                                     ext_qos: ext::QoSType::DECLARE,
@@ -326,7 +294,7 @@ pub(super) fn undeclare_client_subscription(
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
                                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                         id,
-                                        ext_wire_expr,
+                                        ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
                                 res.expr(),
