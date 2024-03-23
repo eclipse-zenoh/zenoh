@@ -51,52 +51,76 @@ pub trait PutSampleBuilderTrait: SampleBuilderTrait {
 
 pub trait DeleteSampleBuilderTrait: SampleBuilderTrait {}
 
+#[derive(Debug)]
 pub struct SampleBuilder(Sample);
+
+impl SampleBuilder {
+    pub(crate) fn without_timestamp(self) -> Self {
+        Self(Sample {
+            timestamp: None,
+            ..self.0
+        })
+    }
+    pub(crate) fn without_attachment(self) -> Self {
+        Self(Sample {
+            attachment: None,
+            ..self.0
+        })
+    }
+}
 
 impl SampleBuilderTrait for SampleBuilder {
     fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
-        let mut this = self;
-        this.0.key_expr = key_expr.into();
-        this
+        Self(Sample {
+            key_expr: key_expr.into(),
+            ..self.0
+        })
     }
 
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
-        let mut this = self;
-        this.0.timestamp = Some(timestamp);
-        this
+        Self(Sample {
+            timestamp: Some(timestamp),
+            ..self.0
+        })
     }
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
-        let mut this = self;
-        this.0.source_info = source_info;
-        this
+        Self(Sample {
+            source_info,
+            ..self.0
+        })
     }
     #[zenoh_macros::unstable]
     fn with_attachment(self, attachment: Attachment) -> Self {
-        let mut this = self;
-        this.0.attachment = Some(attachment);
-        this
+        Self(Sample {
+            attachment: Some(attachment),
+            ..self.0
+        })
     }
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        let mut this = self;
-        this.0.qos = this.0.qos.with_congestion_control(congestion_control);
-        this
+        Self(Sample {
+            qos: self.0.qos.with_congestion_control(congestion_control),
+            ..self.0
+        })
     }
     fn priority(self, priority: Priority) -> Self {
-        let mut this = self;
-        this.0.qos = this.0.qos.with_priority(priority);
-        this
+        Self(Sample {
+            qos: self.0.qos.with_priority(priority),
+            ..self.0
+        })
     }
     fn express(self, is_express: bool) -> Self {
-        let mut this = self;
-        this.0.qos = this.0.qos.with_express(is_express);
-        this
+        Self(Sample {
+            qos: self.0.qos.with_express(is_express),
+            ..self.0
+        })
     }
 }
 
+#[derive(Debug)]
 pub struct PutSampleBuilder(SampleBuilder);
 
 impl PutSampleBuilder {
@@ -118,15 +142,17 @@ impl PutSampleBuilder {
             attachment: None,
         }))
     }
+    #[zenoh_macros::unstable]
     pub fn without_timestamp(self) -> Self {
-        let mut this = self;
-        this.0 .0.timestamp = None;
-        this
+        Self(self.0.without_timestamp())
     }
+    #[zenoh_macros::unstable]
     pub fn without_attachment(self) -> Self {
-        let mut this = self;
-        this.0 .0.attachment = None;
-        this
+        Self(self.0.without_attachment())
+    }
+    // It's convenient to set QoS as a whole for internal usage. For user API there are `congestion_control`, `priority` and `express` methods.
+    pub(crate) fn with_qos(self, qos: QoS) -> Self {
+        Self(SampleBuilder(Sample { qos, ..self.0 .0 }))
     }
 }
 
@@ -161,20 +187,23 @@ impl SampleBuilderTrait for PutSampleBuilder {
 
 impl PutSampleBuilderTrait for PutSampleBuilder {
     fn with_encoding(self, encoding: Encoding) -> Self {
-        let mut this = self;
-        this.0 .0.encoding = encoding;
-        this
+        Self(SampleBuilder(Sample {
+            encoding,
+            ..self.0 .0
+        }))
     }
     fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
     where
         IntoPayload: Into<Payload>,
     {
-        let mut this = self;
-        this.0 .0.payload = payload.into();
-        this
+        Self(SampleBuilder(Sample {
+            payload: payload.into(),
+            ..self.0 .0
+        }))
     }
 }
 
+#[derive(Debug)]
 pub struct DeleteSampleBuilder(SampleBuilder);
 
 impl DeleteSampleBuilder {
@@ -194,6 +223,10 @@ impl DeleteSampleBuilder {
             #[cfg(feature = "unstable")]
             attachment: None,
         }))
+    }
+    // It's convenient to set QoS as a whole for internal usage. For user API there are `congestion_control`, `priority` and `express` methods.
+    pub(crate) fn with_qos(self, qos: QoS) -> Self {
+        Self(SampleBuilder(Sample { qos, ..self.0 .0 }))
     }
 }
 
