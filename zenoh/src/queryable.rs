@@ -18,11 +18,10 @@ use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::sample::QoS;
 use crate::sample::SourceInfo;
 use crate::sample_builder::{
     DeleteSampleBuilder, DeleteSampleBuilderTrait, PutSampleBuilder, PutSampleBuilderTrait,
-    SampleBuilder, SampleBuilderTrait,
+    SampleBuilderTrait,
 };
 use crate::Id;
 use crate::SessionRef;
@@ -355,12 +354,6 @@ pub struct ReplyErrBuilder<'a> {
     value: Value,
 }
 
-impl AsRef<PutSampleBuilder> for ReplyBuilder<'_> {
-    fn as_ref(&self) -> &PutSampleBuilder {
-        &self.sample_builder
-    }
-}
-
 impl<'a> Resolvable for ReplyBuilder<'a> {
     type To = ZResult<()>;
 }
@@ -368,10 +361,27 @@ impl<'a> Resolvable for ReplyBuilder<'a> {
 impl SyncResolve for ReplyBuilder<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let sample = self.sample_builder.res_sync();
-        if !self.query._accepts_any_replies().unwrap_or(false)
-            && !self.query.key_expr().intersects(&sample.key_expr)
+        self.query._reply_sample(sample)
+    }
+}
+
+impl<'a> Resolvable for ReplyDelBuilder<'a> {
+    type To = ZResult<()>;
+}
+
+impl SyncResolve for ReplyDelBuilder<'_> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        let sample = self.sample_builder.res_sync();
+        self.query._reply_sample(sample)
+    }
+}
+
+impl Query {
+    fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
+        if !self._accepts_any_replies().unwrap_or(false)
+            && !self.key_expr().intersects(&sample.key_expr)
         {
-            bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr())
+            bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
         #[allow(unused_mut)] // will be unused if feature = "unstable" is not enabled
         let mut ext_sinfo = None;
@@ -384,8 +394,8 @@ impl SyncResolve for ReplyBuilder<'_> {
                 })
             }
         }
-        self.query.inner.primitives.send_response(Response {
-            rid: self.query.inner.qid,
+        self.inner.primitives.send_response(Response {
+            rid: self.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,
                 suffix: std::borrow::Cow::Owned(sample.key_expr.into()),
@@ -422,8 +432,8 @@ impl SyncResolve for ReplyBuilder<'_> {
             ext_qos: sample.qos.into(),
             ext_tstamp: None,
             ext_respid: Some(response::ext::ResponderIdType {
-                zid: self.query.inner.zid,
-                eid: self.query.eid,
+                zid: self.inner.zid,
+                eid: self.eid,
             }),
         });
         Ok(())

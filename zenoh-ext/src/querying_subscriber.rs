@@ -20,7 +20,7 @@ use std::time::Duration;
 use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
-use zenoh::sample_builder::{SampleBuilderTrait, SampleUpdater};
+use zenoh::sample_builder::{SampleBuilder, SampleBuilderTrait};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::{new_reception_timestamp, Timestamp};
 use zenoh::Result as ZResult;

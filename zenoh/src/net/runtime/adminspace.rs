@@ -20,6 +20,7 @@ use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
+use crate::sample_builder::PutSampleBuilderTrait;
 use crate::value::Value;
 use async_std::task;
 use log::{error, trace};
