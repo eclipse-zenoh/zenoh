@@ -121,10 +121,9 @@ async fn reply_sample(query: &Query, sample: &Sample) {
     let reply = query
         .reply_sample(sample.key_expr().clone().into_owned())
         .with_timestamp_opt(sample.timestamp().cloned());
-    #[cfg(feature = "unstable")]
     let reply = reply
-        .with_attachment_opt(sample.attachment())
-        .with_source_info(sample.source_info());
+        .with_attachment_opt(sample.attachment().cloned())
+        .with_source_info(sample.source_info().clone());
     if let Err(e) = match sample.kind() {
         SampleKind::Put => reply.put(sample.payload().clone()).res_async().await,
         SampleKind::Delete => reply.delete().res_async().await,
