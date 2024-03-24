@@ -68,16 +68,6 @@
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         Ok(Box::new(MyStorage::new(properties).await?))
 //!     }
-//!
-//!     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-//!         // No interception point for incoming data (on PUT operations)
-//!         None
-//!     }
-//!
-//!     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-//!         // No interception point for outgoing data (on GET operations)
-//!         None
-//!     }
 //! }
 //!
 //! // Your Storage implementation
