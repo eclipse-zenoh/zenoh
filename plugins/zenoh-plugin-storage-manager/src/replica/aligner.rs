@@ -12,11 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::replica::storage::StorageSampleKind;
-
 use super::storage::StorageSample;
 use super::{Digest, EraType, LogEntry, Snapshotter};
 use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
+use crate::replica::storage::StorageSampleKind;
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};

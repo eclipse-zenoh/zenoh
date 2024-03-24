@@ -24,6 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::ZBuf;
 use zenoh::prelude::r#async::*;
 use zenoh::query::ConsolidationMode;
+use zenoh::sample::SampleFields;
 use zenoh::sample_builder::{PutSampleBuilderTrait, SampleBuilder, SampleBuilderTrait};
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::{Result as ZResult, Session};
@@ -55,19 +56,23 @@ pub struct StorageSample {
 
 impl From<Sample> for StorageSample {
     fn from(sample: Sample) -> Self {
-        let timestamp = *sample.timestamp().unwrap_or(&new_reception_timestamp());
-        // TODO: add API for disassembly of Sample
-        let key_expr = sample.key_expr().clone();
-        let payload = sample.payload().clone();
-        let encoding = sample.encoding().clone();
-        let kind = match sample.kind() {
-            SampleKind::Put => StorageSampleKind::Put(Value::new(payload).with_encoding(encoding)),
-            SampleKind::Delete => StorageSampleKind::Delete,
-        };
-        StorageSample {
+        let SampleFields {
             key_expr,
             timestamp,
             kind,
+            payload,
+            encoding,
+            ..
+        } = sample.into();
+        StorageSample {
+            key_expr,
+            timestamp: timestamp.unwrap_or(new_reception_timestamp()),
+            kind: match kind {
+                SampleKind::Put => {
+                    StorageSampleKind::Put(Value::new(payload).with_encoding(encoding))
+                }
+                SampleKind::Delete => StorageSampleKind::Delete,
+            },
         }
     }
 }
