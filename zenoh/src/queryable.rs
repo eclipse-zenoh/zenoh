@@ -519,6 +519,22 @@ impl SyncResolve for ReplyDelBuilder<'_> {
     }
 }
 
+impl<'a> AsyncResolve for ReplyBuilder<'a> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl<'a> AsyncResolve for ReplyDelBuilder<'a> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
 impl Query {
     fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
         if !self._accepts_any_replies().unwrap_or(false)
@@ -580,14 +596,6 @@ impl Query {
             }),
         });
         Ok(())
-    }
-}
-
-impl<'a> AsyncResolve for ReplyBuilder<'a> {
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
     }
 }
 
