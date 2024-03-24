@@ -443,7 +443,7 @@ impl StorageService {
                     match self.ovderriding_wild_update(&k, &sample.timestamp).await {
                         Some(overriding_update) => overriding_update.into_sample(k.clone()),
 
-                        None => sample.clone().into(),
+                        None => sample.clone(),
                     };
 
                 let stripped_key = match self.strip_prefix(&sample_to_store.key_expr) {
