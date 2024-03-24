@@ -20,6 +20,7 @@ use std::convert::TryInto;
 use std::future::Ready;
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
+use zenoh::sample::SampleFields;
 use zenoh::sample_builder::SampleBuilderTrait;
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::SessionRef;
@@ -118,14 +119,22 @@ pub struct PublicationCache<'a> {
 }
 
 async fn reply_sample(query: &Query, sample: &Sample) {
+    let SampleFields {
+        key_expr,
+        timestamp,
+        attachment,
+        source_info,
+        payload,
+        kind,
+        ..
+    } = sample.clone().into();
     let reply = query
-        .reply_sample(sample.key_expr().clone().into_owned())
-        .with_timestamp_opt(sample.timestamp().cloned());
-    let reply = reply
-        .with_attachment_opt(sample.attachment().cloned())
-        .with_source_info(sample.source_info().clone());
-    if let Err(e) = match sample.kind() {
-        SampleKind::Put => reply.put(sample.payload().clone()).res_async().await,
+        .reply_sample(key_expr)
+        .with_timestamp_opt(timestamp)
+        .with_attachment_opt(attachment)
+        .with_source_info(source_info);
+    if let Err(e) = match kind {
+        SampleKind::Put => reply.put(payload).res_async().await,
         SampleKind::Delete => reply.delete().res_async().await,
     } {
         log::warn!("Error replying to query: {}", e);
