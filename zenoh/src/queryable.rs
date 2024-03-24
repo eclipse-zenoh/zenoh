@@ -21,7 +21,7 @@ use crate::prelude::*;
 use crate::sample::SourceInfo;
 use crate::sample_builder::{
     DeleteSampleBuilder, DeleteSampleBuilderTrait, PutSampleBuilder, PutSampleBuilderTrait,
-    SampleBuilderTrait,
+    SampleBuilder, SampleBuilderTrait,
 };
 use crate::Id;
 use crate::SessionRef;
@@ -105,6 +105,24 @@ impl Query {
     pub fn attachment(&self) -> Option<&Attachment> {
         self.inner.attachment.as_ref()
     }
+
+    /// Sends a reply or delete reply to this Query
+    ///
+    /// This function is useful when resending the samples which can be of [`SampleKind::Put`] or [`SampleKind::Delete`]
+    /// It allows to build the reply with same common parameters, like timestamp, attachment, source_info, etc.
+    /// and only on final step to choose the kind of reply by calling [`ReplySampleBuilder::put`] or [`ReplySampleBuilder::delete`] methods.
+    #[inline(always)]
+    pub fn reply_sample<IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> ReplySampleBuilder
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+    {
+        let sample_builder = SampleBuilder::new(key_expr);
+        ReplySampleBuilder {
+            query: self,
+            sample_builder,
+        }
+    }
+
     /// Sends a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
@@ -197,7 +215,87 @@ impl fmt::Display for Query {
     }
 }
 
-/// A builder returned by [`Query::reply()`](Query::reply) or [`Query::reply()`](Query::reply).
+pub struct ReplySampleBuilder<'a> {
+    query: &'a Query,
+    sample_builder: SampleBuilder,
+}
+
+impl<'a> ReplySampleBuilder<'a> {
+    pub fn put<IntoPayload>(self, payload: IntoPayload) -> ReplyBuilder<'a>
+    where
+        IntoPayload: Into<Payload>,
+    {
+        let builder = ReplyBuilder {
+            query: self.query,
+            sample_builder: self.sample_builder.into(),
+        };
+        builder.with_payload(payload)
+    }
+    pub fn delete(self) -> ReplyDelBuilder<'a> {
+        ReplyDelBuilder {
+            query: self.query,
+            sample_builder: self.sample_builder.into(),
+        }
+    }
+}
+
+impl SampleBuilderTrait for ReplySampleBuilder<'_> {
+    fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+    {
+        Self {
+            sample_builder: self.sample_builder.with_keyexpr(key_expr),
+            ..self
+        }
+    }
+
+    fn with_timestamp(self, timestamp: Timestamp) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_timestamp(timestamp),
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_source_info(source_info),
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_attachment(self, attachment: Attachment) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_attachment(attachment),
+            ..self
+        }
+    }
+
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
+        Self {
+            sample_builder: self.sample_builder.congestion_control(congestion_control),
+            ..self
+        }
+    }
+
+    fn priority(self, priority: Priority) -> Self {
+        Self {
+            sample_builder: self.sample_builder.priority(priority),
+            ..self
+        }
+    }
+
+    fn express(self, is_express: bool) -> Self {
+        Self {
+            sample_builder: self.sample_builder.express(is_express),
+            ..self
+        }
+    }
+}
+
+/// A builder returned by [`Query::reply()`](Query::reply)
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct ReplyBuilder<'a> {

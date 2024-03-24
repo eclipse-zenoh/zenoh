@@ -55,13 +55,30 @@ pub trait DeleteSampleBuilderTrait: SampleBuilderTrait {}
 pub struct SampleBuilder(Sample);
 
 impl SampleBuilder {
-    pub(crate) fn without_timestamp(self) -> Self {
+    pub fn new<IntoKeyExpr>(key_expr: IntoKeyExpr) -> Self
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+    {
+        Self(Sample {
+            key_expr: key_expr.into(),
+            payload: Payload::empty(),
+            kind: SampleKind::default(),
+            encoding: Encoding::default(),
+            timestamp: None,
+            qos: QoS::default(),
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
+        })
+    }
+    pub fn without_timestamp(self) -> Self {
         Self(Sample {
             timestamp: None,
             ..self.0
         })
     }
-    pub(crate) fn without_attachment(self) -> Self {
+    pub fn without_attachment(self) -> Self {
         Self(Sample {
             attachment: None,
             ..self.0
@@ -122,6 +139,17 @@ impl SampleBuilderTrait for SampleBuilder {
 
 #[derive(Debug)]
 pub struct PutSampleBuilder(SampleBuilder);
+
+impl From<SampleBuilder> for PutSampleBuilder {
+    fn from(sample_builder: SampleBuilder) -> Self {
+        Self(SampleBuilder {
+            0: Sample {
+                kind: SampleKind::Put,
+                ..sample_builder.0
+            },
+        })
+    }
+}
 
 impl PutSampleBuilder {
     pub fn new<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
@@ -205,6 +233,17 @@ impl PutSampleBuilderTrait for PutSampleBuilder {
 
 #[derive(Debug)]
 pub struct DeleteSampleBuilder(SampleBuilder);
+
+impl From<SampleBuilder> for DeleteSampleBuilder {
+    fn from(sample_builder: SampleBuilder) -> Self {
+        Self(SampleBuilder {
+            0: Sample {
+                kind: SampleKind::Delete,
+                ..sample_builder.0
+            },
+        })
+    }
+}
 
 impl DeleteSampleBuilder {
     pub fn new<IntoKeyExpr>(key_expr: IntoKeyExpr) -> Self
