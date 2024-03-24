@@ -67,10 +67,10 @@ pub(crate) trait DataInfoIntoSample {
 }
 
 impl DataInfoIntoSample for DataInfo {
-    // TODO: this is internal function.
+    // This function is for internal use only.
     // Technically it may create invalid sample (e.g. a delete sample with a payload and encoding)
     // The test for it is intentionally not added to avoid inserting extra "if" into hot path.
-    // This need to be additionally investigated and measured.
+    // The correctness of the data should be ensured by the caller.
     #[inline]
     fn into_sample<IntoKeyExpr, IntoPayload>(
         self,

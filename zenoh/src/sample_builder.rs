@@ -144,12 +144,10 @@ pub struct PutSampleBuilder(SampleBuilder);
 
 impl From<SampleBuilder> for PutSampleBuilder {
     fn from(sample_builder: SampleBuilder) -> Self {
-        Self(SampleBuilder {
-            0: Sample {
-                kind: SampleKind::Put,
-                ..sample_builder.0
-            },
-        })
+        Self(SampleBuilder(Sample {
+            kind: SampleKind::Put,
+            ..sample_builder.0
+        }))
     }
 }
 
@@ -237,12 +235,10 @@ pub struct DeleteSampleBuilder(SampleBuilder);
 
 impl From<SampleBuilder> for DeleteSampleBuilder {
     fn from(sample_builder: SampleBuilder) -> Self {
-        Self(SampleBuilder {
-            0: Sample {
-                kind: SampleKind::Delete,
-                ..sample_builder.0
-            },
-        })
+        Self(SampleBuilder(Sample {
+            kind: SampleKind::Delete,
+            ..sample_builder.0
+        }))
     }
 }
 
