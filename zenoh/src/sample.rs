@@ -433,6 +433,41 @@ impl TryFrom<u64> for SampleKind {
 #[zenoh_macros::unstable]
 pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 
+/// Structure with public fields for sample. It's convenient if it's necessary to decompose a sample into its fields.
+pub struct SampleFields {
+    pub key_expr: KeyExpr<'static>,
+    pub payload: Payload,
+    pub kind: SampleKind,
+    pub encoding: Encoding,
+    pub timestamp: Option<Timestamp>,
+    pub express: bool,
+    pub priority: Priority,
+    pub congestion_control: CongestionControl,
+    #[cfg(feature = "unstable")]
+    pub source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub attachment: Option<Attachment>,
+}
+
+impl From<Sample> for SampleFields {
+    fn from(sample: Sample) -> Self {
+        SampleFields {
+            key_expr: sample.key_expr,
+            payload: sample.payload,
+            kind: sample.kind,
+            encoding: sample.encoding,
+            timestamp: sample.timestamp,
+            express: sample.qos.express(),
+            priority: sample.qos.priority(),
+            congestion_control: sample.qos.congestion_control(),
+            #[cfg(feature = "unstable")]
+            source_info: sample.source_info,
+            #[cfg(feature = "unstable")]
+            attachment: sample.attachment,
+        }
+    }
+}
+
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]

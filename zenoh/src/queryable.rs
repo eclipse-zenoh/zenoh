@@ -250,6 +250,13 @@ impl SampleBuilderTrait for ReplySampleBuilder<'_> {
         }
     }
 
+    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
+            ..self
+        }
+    }
+
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp(timestamp),
@@ -261,6 +268,14 @@ impl SampleBuilderTrait for ReplySampleBuilder<'_> {
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
             sample_builder: self.sample_builder.with_source_info(source_info),
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_attachment_opt(attachment),
             ..self
         }
     }
@@ -314,6 +329,13 @@ impl SampleBuilderTrait for ReplyBuilder<'_> {
         }
     }
 
+    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
+            ..self
+        }
+    }
+
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp(timestamp),
@@ -325,6 +347,14 @@ impl SampleBuilderTrait for ReplyBuilder<'_> {
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
             sample_builder: self.sample_builder.with_source_info(source_info),
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_attachment_opt(attachment),
             ..self
         }
     }
@@ -397,6 +427,13 @@ impl SampleBuilderTrait for ReplyDelBuilder<'_> {
         }
     }
 
+    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
+            ..self
+        }
+    }
+
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp(timestamp),
@@ -408,6 +445,14 @@ impl SampleBuilderTrait for ReplyDelBuilder<'_> {
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
             sample_builder: self.sample_builder.with_source_info(source_info),
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+        Self {
+            sample_builder: self.sample_builder.with_attachment_opt(attachment),
             ..self
         }
     }

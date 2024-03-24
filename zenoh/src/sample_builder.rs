@@ -32,9 +32,12 @@ pub trait SampleBuilderTrait {
     fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>;
+    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self;
     fn with_timestamp(self, timestamp: Timestamp) -> Self;
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self;
+    #[zenoh_macros::unstable]
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self;
     #[zenoh_macros::unstable]
     fn with_attachment(self, attachment: Attachment) -> Self;
     fn congestion_control(self, congestion_control: CongestionControl) -> Self;
@@ -72,18 +75,6 @@ impl SampleBuilder {
             attachment: None,
         })
     }
-    pub fn without_timestamp(self) -> Self {
-        Self(Sample {
-            timestamp: None,
-            ..self.0
-        })
-    }
-    pub fn without_attachment(self) -> Self {
-        Self(Sample {
-            attachment: None,
-            ..self.0
-        })
-    }
 }
 
 impl SampleBuilderTrait for SampleBuilder {
@@ -97,12 +88,17 @@ impl SampleBuilderTrait for SampleBuilder {
         })
     }
 
-    fn with_timestamp(self, timestamp: Timestamp) -> Self {
+    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self(Sample {
-            timestamp: Some(timestamp),
+            timestamp,
             ..self.0
         })
     }
+
+    fn with_timestamp(self, timestamp: Timestamp) -> Self {
+        self.with_timestamp_opt(Some(timestamp))
+    }
+
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self(Sample {
@@ -110,12 +106,18 @@ impl SampleBuilderTrait for SampleBuilder {
             ..self.0
         })
     }
+
     #[zenoh_macros::unstable]
-    fn with_attachment(self, attachment: Attachment) -> Self {
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
         Self(Sample {
-            attachment: Some(attachment),
+            attachment,
             ..self.0
         })
+    }
+
+    #[zenoh_macros::unstable]
+    fn with_attachment(self, attachment: Attachment) -> Self {
+        self.with_attachment_opt(Some(attachment))
     }
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self(Sample {
@@ -170,14 +172,6 @@ impl PutSampleBuilder {
             attachment: None,
         }))
     }
-    #[zenoh_macros::unstable]
-    pub fn without_timestamp(self) -> Self {
-        Self(self.0.without_timestamp())
-    }
-    #[zenoh_macros::unstable]
-    pub fn without_attachment(self) -> Self {
-        Self(self.0.without_attachment())
-    }
     // It's convenient to set QoS as a whole for internal usage. For user API there are `congestion_control`, `priority` and `express` methods.
     pub(crate) fn with_qos(self, qos: QoS) -> Self {
         Self(SampleBuilder(Sample { qos, ..self.0 .0 }))
@@ -194,6 +188,9 @@ impl SampleBuilderTrait for PutSampleBuilder {
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self(self.0.with_timestamp(timestamp))
     }
+    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
+        Self(self.0.with_timestamp_opt(timestamp))
+    }
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self(self.0.with_source_info(source_info))
@@ -201,6 +198,10 @@ impl SampleBuilderTrait for PutSampleBuilder {
     #[zenoh_macros::unstable]
     fn with_attachment(self, attachment: Attachment) -> Self {
         Self(self.0.with_attachment(attachment))
+    }
+    #[zenoh_macros::unstable]
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+        Self(self.0.with_attachment_opt(attachment))
     }
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self(self.0.congestion_control(congestion_control))
@@ -279,6 +280,9 @@ impl SampleBuilderTrait for DeleteSampleBuilder {
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self(self.0.with_timestamp(timestamp))
     }
+    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
+        Self(self.0.with_timestamp_opt(timestamp))
+    }
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self(self.0.with_source_info(source_info))
@@ -286,6 +290,10 @@ impl SampleBuilderTrait for DeleteSampleBuilder {
     #[zenoh_macros::unstable]
     fn with_attachment(self, attachment: Attachment) -> Self {
         Self(self.0.with_attachment(attachment))
+    }
+    #[zenoh_macros::unstable]
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+        Self(self.0.with_attachment_opt(attachment))
     }
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self(self.0.congestion_control(congestion_control))
