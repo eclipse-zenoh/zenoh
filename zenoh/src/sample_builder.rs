@@ -29,15 +29,17 @@ use zenoh_core::SyncResolve;
 use zenoh_protocol::core::CongestionControl;
 
 pub trait QoSBuilderTrait {
+    /// Change the `congestion_control` to apply when routing the data.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self;
+    /// Change the priority of the written data.
     fn priority(self, priority: Priority) -> Self;
+    /// Change the `express` policy to apply when routing the data.
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but negative impact on throughput.
     fn express(self, is_express: bool) -> Self;
 }
 
 pub trait SampleBuilderTrait {
-    fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>;
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self;
     fn with_timestamp(self, timestamp: Timestamp) -> Self;
     #[zenoh_macros::unstable]
@@ -78,10 +80,8 @@ impl SampleBuilder {
             attachment: None,
         })
     }
-}
-
-impl SampleBuilderTrait for SampleBuilder {
-    fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
+    /// Allows to change keyexpr of [`Sample`]
+    pub fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
@@ -90,7 +90,9 @@ impl SampleBuilderTrait for SampleBuilder {
             ..self.0
         })
     }
+}
 
+impl SampleBuilderTrait for SampleBuilder {
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self(Sample {
             timestamp,
@@ -176,6 +178,13 @@ impl PutSampleBuilder {
             attachment: None,
         }))
     }
+    /// Allows to change keyexpr of [`Sample`]
+    pub fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+    {
+        Self(self.0.with_keyexpr(key_expr))
+    }
     // It's convenient to set QoS as a whole for internal usage. For user API there are `congestion_control`, `priority` and `express` methods.
     pub(crate) fn with_qos(self, qos: QoS) -> Self {
         Self(SampleBuilder(Sample { qos, ..self.0 .0 }))
@@ -183,12 +192,6 @@ impl PutSampleBuilder {
 }
 
 impl SampleBuilderTrait for PutSampleBuilder {
-    fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Self(self.0.with_keyexpr(key_expr))
-    }
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self(self.0.with_timestamp(timestamp))
     }
@@ -269,6 +272,13 @@ impl DeleteSampleBuilder {
             attachment: None,
         }))
     }
+    /// Allows to change keyexpr of [`Sample`]
+    pub fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+    {
+        Self(self.0.with_keyexpr(key_expr))
+    }
     // It's convenient to set QoS as a whole for internal usage. For user API there are `congestion_control`, `priority` and `express` methods.
     pub(crate) fn with_qos(self, qos: QoS) -> Self {
         Self(SampleBuilder(Sample { qos, ..self.0 .0 }))
@@ -276,12 +286,6 @@ impl DeleteSampleBuilder {
 }
 
 impl SampleBuilderTrait for DeleteSampleBuilder {
-    fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Self(self.0.with_keyexpr(key_expr))
-    }
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self(self.0.with_timestamp(timestamp))
     }

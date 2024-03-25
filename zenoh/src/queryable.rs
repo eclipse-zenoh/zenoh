@@ -240,16 +240,6 @@ impl<'a> ReplySampleBuilder<'a> {
 }
 
 impl SampleBuilderTrait for ReplySampleBuilder<'_> {
-    fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Self {
-            sample_builder: self.sample_builder.with_keyexpr(key_expr),
-            ..self
-        }
-    }
-
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
@@ -321,16 +311,6 @@ pub struct ReplyBuilder<'a> {
 }
 
 impl SampleBuilderTrait for ReplyBuilder<'_> {
-    fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Self {
-            sample_builder: self.sample_builder.with_keyexpr(key_expr),
-            ..self
-        }
-    }
-
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
@@ -421,16 +401,6 @@ pub struct ReplyDelBuilder<'a> {
 }
 
 impl SampleBuilderTrait for ReplyDelBuilder<'_> {
-    fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Self {
-            sample_builder: self.sample_builder.with_keyexpr(key_expr),
-            ..self
-        }
-    }
-
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
