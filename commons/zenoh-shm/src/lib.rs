@@ -39,22 +39,12 @@ macro_rules! tested_crate_module {
     };
 }
 
-#[macro_export]
-macro_rules! test_helpers_module {
-    () => {
-        #[cfg(feature = "test")]
-        pub mod test_helpers;
-    };
-}
-
 pub mod api;
 pub mod header;
 pub mod posix_shm;
 pub mod reader;
 pub mod watchdog;
 pub mod zsliceshm_access;
-
-test_helpers_module!();
 
 /// Informations about a [`SharedMemoryBuf`].
 ///

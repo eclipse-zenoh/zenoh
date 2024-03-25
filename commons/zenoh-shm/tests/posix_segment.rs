@@ -14,10 +14,10 @@
 
 use std::{fmt::Display, slice};
 
-use zenoh_shm::{
-    posix_shm::segment::Segment,
-    test_helpers::{validate_memory, TEST_SEGMENT_PREFIX},
-};
+use zenoh_shm::posix_shm::segment::Segment;
+
+pub mod common;
+use common::{validate_memory, TEST_SEGMENT_PREFIX};
 
 fn validate_segment<ID>(segment1: &Segment<ID>, segment2: &Segment<ID>)
 where

@@ -15,7 +15,10 @@
 use std::{fmt::Debug, mem::size_of};
 
 use num_traits::{AsPrimitive, PrimInt, Unsigned};
-use zenoh_shm::{posix_shm::array::ArrayInSHM, test_helpers::TEST_SEGMENT_PREFIX};
+use zenoh_shm::posix_shm::array::ArrayInSHM;
+
+pub mod common;
+use common::TEST_SEGMENT_PREFIX;
 
 type TestSegmentID = u32;
 
