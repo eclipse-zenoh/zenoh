@@ -159,6 +159,7 @@ impl StateOpen {
 pub(crate) struct StateAccept {
     nonce: u64,
 }
+pub(crate) struct Username(Vec<u8>);
 
 impl StateAccept {
     pub(crate) fn new<R>(prng: &mut R) -> Self
@@ -403,7 +404,7 @@ impl<'a> AcceptFsm for &'a AuthUsrPwdFsm<'a> {
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<ext::OpenSyn>);
-    type RecvOpenSynOut = ();
+    type RecvOpenSynOut = Vec<u8>; //value of userid is returned if recvopensynout is processed as valid
     async fn recv_open_syn(
         self,
         input: Self::RecvOpenSynIn,
@@ -433,8 +434,8 @@ impl<'a> AcceptFsm for &'a AuthUsrPwdFsm<'a> {
         if hmac != open_syn.hmac {
             bail!("{S} Invalid password.");
         }
-
-        Ok(())
+        let username = open_syn.user.to_owned();
+        Ok(username)
     }
 
     type SendOpenAckIn = &'a StateAccept;

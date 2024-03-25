@@ -84,6 +84,8 @@ pub(crate) struct TransportUnicastUniversal {
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
+    // #[cfg(feature = "transport_auth")]
+    // pub(super) transport_auth_id: Arc<AuthId>,
 }
 
 impl TransportUnicastUniversal {
@@ -128,6 +130,8 @@ impl TransportUnicastUniversal {
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
+            // #[cfg(feature = "transport_auth")]
+            // transport_auth_id: Arc::new(AuthId::None),
         });
 
         Ok(t)
@@ -437,11 +441,17 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_auth_ids(&self) -> Vec<super::transport::AuthId> {
-        //convert local_value to authId??
-        zread!(self.links)
+        //convert link auth ids to authId
+        #[allow(unused_mut)]
+        let mut auth_ids: Vec<AuthId> = zread!(self.links)
             .iter()
             .map(|l| l.link.link().auth_identifier.into())
-            .collect()
+            .collect();
+        //   convert transport auth ids to authId
+        #[cfg(feature = "transport_auth")]
+        auth_ids.push(self.config.auth_id.clone());
+        //  auth_ids.push((*self.transport_auth_id).clone());
+        auth_ids
     }
     /*************************************/
     /*                TX                 */

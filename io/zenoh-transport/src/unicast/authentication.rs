@@ -1,9 +1,9 @@
 use zenoh_link::{LinkAuthId, LinkAuthType};
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AuthId {
     CertCommonName(String),
-    Username(String),
+    Username(Vec<u8>),
     None,
 }
 impl From<LinkAuthId> for AuthId {

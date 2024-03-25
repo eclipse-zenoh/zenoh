@@ -146,26 +146,6 @@ impl Default for LinkAuthId {
     }
 }
 
-// #[derive(Clone, Debug, Serialize, Eq, Hash, PartialEq)]
-// pub enum AuthIdType {
-//     None,
-//     TlsCommonName,
-//     Username,
-// }
-
-// #[derive(Clone, Debug, Serialize, Eq, Hash, PartialEq)]
-
-// pub enum AuthId {
-//     None,
-//     TlsCommonName(String),
-//     Username(String),
-// }
-
-// impl AuthId {
-//     pub fn builder() -> LinkAuthIdBuilder {
-//         LinkAuthIdBuilder::new()
-//     }
-// }
 #[derive(Debug)]
 pub struct LinkAuthIdBuilder {
     pub auth_type: LinkAuthType,    //HAS to be provided when building
@@ -191,13 +171,6 @@ impl LinkAuthIdBuilder {
     }
     pub fn auth_value(&mut self, auth_value: Option<String>) -> &mut Self {
         self.auth_value = auth_value;
-        // let value = auth_value;
-
-        // match self.auth_type {
-        //     LinkAuthType::None => self.auth_value = LinkAuthId::None,
-        //     LinkAuthType::Tls => self.auth_value = LinkAuthId::TlsCommonName(value),
-        //     LinkAuthType::Quic => self.auth_value = AuthId::Username(value),
-        // };
         self
     }
 

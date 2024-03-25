@@ -16,6 +16,7 @@ use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
+        authentication::AuthId,
         establishment::{compute_sn, ext, OpenFsm},
         link::{
             LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
@@ -621,6 +622,8 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         is_shm: state.transport.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
+        #[cfg(feature = "transport_auth")]
+        auth_id: AuthId::None,
     };
 
     let o_config = TransportLinkUnicastConfig {

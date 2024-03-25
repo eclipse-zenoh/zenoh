@@ -31,9 +31,20 @@ impl InterceptorFactoryTrait for TestInterceptor {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
+        //transport.get_zid()
         if let Ok(ids) = transport.get_auth_ids() {
             for id in ids {
-                println!("value recevied in interceptor {:?}", id);
+                match id {
+                    AuthId::CertCommonName(name) => {
+                        println!("certificate common name {}", name)
+                    }
+                    AuthId::Username(name) => {
+                        println!("user name {}", std::str::from_utf8(&name).unwrap())
+                    }
+                    AuthId::None => {
+                        println!("No id was found, switch to interface values");
+                    }
+                }
             }
         }
         (

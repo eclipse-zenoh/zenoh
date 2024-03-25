@@ -56,6 +56,8 @@ pub(crate) struct TransportConfigUnicast {
     #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
     pub(crate) is_lowlatency: bool,
+    #[cfg(feature = "transport_auth")]
+    pub(crate) auth_id: AuthId,
 }
 
 /// [`TransportUnicast`] is the transport handler returned
