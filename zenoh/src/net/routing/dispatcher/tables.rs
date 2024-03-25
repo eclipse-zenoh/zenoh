@@ -23,13 +23,13 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
+use std::time::Duration;
 use uhlc::HLC;
 use zenoh_config::unwrap_or_default;
 use zenoh_config::Config;
 use zenoh_protocol::core::{ExprId, WhatAmI, ZenohId};
 use zenoh_protocol::network::Mapping;
 use zenoh_result::ZResult;
-// use zenoh_collections::Timer;
 use zenoh_sync::get_mut_unchecked;
 
 pub(crate) struct RoutingExpr<'a> {
@@ -64,8 +64,7 @@ pub struct Tables {
     #[allow(dead_code)]
     pub(crate) hlc: Option<Arc<HLC>>,
     pub(crate) drop_future_timestamp: bool,
-    // pub(crate) timer: Timer,
-    // pub(crate) queries_default_timeout: Duration,
+    pub(crate) queries_default_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
@@ -87,8 +86,8 @@ impl Tables {
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
-        // let queries_default_timeout =
-        //     Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
+        let queries_default_timeout =
+            Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let hat_code = hat::new_hat(whatami, config);
         Ok(Tables {
             zid,
@@ -96,8 +95,7 @@ impl Tables {
             face_counter: 0,
             hlc,
             drop_future_timestamp,
-            // timer: Timer::new(true),
-            // queries_default_timeout,
+            queries_default_timeout,
             root_res: Resource::root(),
             faces: HashMap::new(),
             mcast_groups: vec![],
