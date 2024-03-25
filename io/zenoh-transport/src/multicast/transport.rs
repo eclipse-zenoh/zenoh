@@ -390,7 +390,7 @@ impl TransportMulticastInner {
         };
 
         self.task_controller
-            .spawn_cancellable_with_rt(zenoh_runtime::ZRuntime::Acceptor, task);
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Acceptor, task);
 
         // TODO(yuyuan): Integrate the above async task into TransportMulticastPeer
         // Store the new peer

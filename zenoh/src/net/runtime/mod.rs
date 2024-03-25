@@ -28,6 +28,7 @@ use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
+use tokio_util::sync::CancellationToken;
 use std::any::Any;
 use std::sync::{Arc, Weak};
 use tokio::task::JoinHandle;
@@ -137,15 +138,26 @@ impl Runtime {
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
         let receiver = config.subscribe();
+        let token = runtime.get_cancellation_token();
         runtime.spawn({
             let runtime2 = runtime.clone();
             async move {
                 let mut stream = receiver.into_stream();
-                while let Some(event) = stream.next().await {
-                    if &*event == "connect/endpoints" {
-                        if let Err(e) = runtime2.update_peers().await {
-                            log::error!("Error updating peers: {}", e);
+                loop { 
+                    tokio::select! {
+                        res = stream.next() => {
+                            match res {
+                                Some(event) => {
+                                    if &*event == "connect/endpoints" {
+                                        if let Err(e) = runtime2.update_peers().await {
+                                            log::error!("Error updating peers: {}", e);
+                                        }
+                                    }
+                                },
+                                None => { break; }
+                            }
                         }
+                        _ = token.cancelled() => { break; }
                     }
                 }
             }
@@ -174,7 +186,7 @@ impl Runtime {
         // due to not freed resource Arc, that apparently happens because
         // the task responsible for resource clean up was aborted earlier than expected.
         // This should be resolved by identfying correspodning task, and placing
-        // cancelaltion token manually inside it.
+        // cancellation token manually inside it.
         self.router()
             .tables
             .tables
@@ -194,7 +206,7 @@ impl Runtime {
     }
 
     /// Spawns a task within runtime.
-    /// Upon runtime close the task will be automatically aborted.
+    /// Upon close runtime will block until this task completes
     pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = T> + Send + 'static,
@@ -203,6 +215,18 @@ impl Runtime {
         self.state
             .task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, future)
+    }
+
+    /// Spawns a task within runtime.
+    /// Upon runtime close the task will be automatically aborted.
+    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.state
+            .task_controller
+            .spawn_abortable_with_rt(zenoh_runtime::ZRuntime::Net, future)
     }
 
     pub(crate) fn router(&self) -> Arc<Router> {
@@ -229,6 +253,10 @@ impl Runtime {
         WeakRuntime {
             state: Arc::downgrade(&this.state),
         }
+    }
+
+    pub fn get_cancellation_token(&self) -> CancellationToken {
+        self.state.task_controller.get_cancellation_token()
     }
 }
 

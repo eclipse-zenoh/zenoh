@@ -220,7 +220,7 @@ impl Runtime {
                 let this = self.clone();
                 match (listen, autoconnect.is_empty()) {
                     (true, false) => {
-                        self.spawn(async move {
+                        self.spawn_abortable(async move {
                             tokio::select! {
                                 _ = this.responder(&mcast_socket, &sockets) => {},
                                 _ = this.connect_all(&sockets, autoconnect, &addr) => {},
@@ -228,12 +228,12 @@ impl Runtime {
                         });
                     }
                     (true, true) => {
-                        self.spawn(async move {
+                        self.spawn_abortable(async move {
                             this.responder(&mcast_socket, &sockets).await;
                         });
                     }
                     (false, false) => {
-                        self.spawn(
+                        self.spawn_abortable(
                             async move { this.connect_all(&sockets, autoconnect, &addr).await },
                         );
                     }
@@ -479,43 +479,44 @@ impl Runtime {
 
     async fn peer_connector(&self, peer: EndPoint) {
         let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
+        let cancellation_token = self.get_cancellation_token();
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            match tokio::time::timeout(
-                CONNECTION_TIMEOUT,
-                self.manager().open_transport_unicast(endpoint),
-            )
-            .await
-            {
-                Ok(Ok(transport)) => {
-                    log::debug!("Successfully connected to configured peer {}", peer);
-                    if let Ok(Some(orch_transport)) = transport.get_callback() {
-                        if let Some(orch_transport) = orch_transport
-                            .as_any()
-                            .downcast_ref::<super::RuntimeSession>()
-                        {
-                            *zwrite!(orch_transport.endpoint) = Some(peer);
+            tokio::select! {
+                res = tokio::time::timeout(CONNECTION_TIMEOUT, self.manager().open_transport_unicast(endpoint)) => {
+                    match res {
+                        Ok(Ok(transport)) => {
+                            log::debug!("Successfully connected to configured peer {}", peer);
+                            if let Ok(Some(orch_transport)) = transport.get_callback() {
+                                if let Some(orch_transport) = orch_transport
+                                    .as_any()
+                                    .downcast_ref::<super::RuntimeSession>()
+                                {
+                                    *zwrite!(orch_transport.endpoint) = Some(peer);
+                                }
+                            }
+                            break;
+                        }
+                        Ok(Err(e)) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
+                        Err(e) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
                         }
                     }
-                    break;
                 }
-                Ok(Err(e)) => {
-                    log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                        peer,
-                        e,
-                        delay
-                    );
-                }
-                Err(e) => {
-                    log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                        peer,
-                        e,
-                        delay
-                    );
-                }
+                _ = cancellation_token.cancelled() => { break; }
             }
             tokio::time::sleep(delay).await;
             delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
@@ -842,10 +843,14 @@ impl Runtime {
         match session.runtime.whatami() {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
+                let cancellation_token = runtime.get_cancellation_token();
                 session.runtime.spawn(async move {
                     let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
                     while runtime.start_client().await.is_err() {
-                        tokio::time::sleep(delay).await;
+                        tokio::select! { 
+                            _ = tokio::time::sleep(delay) => {}
+                            _ = cancellation_token.cancelled() => { break; }
+                        }
                         delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
                         if delay > CONNECTION_RETRY_MAX_PERIOD {
                             delay = CONNECTION_RETRY_MAX_PERIOD;

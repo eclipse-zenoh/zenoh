@@ -347,14 +347,20 @@ impl TransportManager {
         };
 
         // @TODO: this should be moved into the unicast module
+        let cancellation_token = this.task_controller.get_cancellation_token();
         this.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let this = this.clone();
                 async move {
                     loop {
-                        if let Ok(link) = new_unicast_link_receiver.recv_async().await {
-                            this.handle_new_link_unicast(link).await;
-                        }
+                        tokio::select! { 
+                            res = new_unicast_link_receiver.recv_async() => {
+                                if let Ok(link) = res {
+                                    this.handle_new_link_unicast(link).await;
+                                }
+                            }
+                            _ = cancellation_token.cancelled() => { break; }
+                    }
                     }
                 }
             });
