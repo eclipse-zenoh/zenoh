@@ -599,7 +599,7 @@ pub fn route_query(
                                 face: Arc::downgrade(outface),
                                 qid: *qid,
                             };
-                            tokio::task::spawn(async move {
+                            zenoh_runtime::ZRuntime::Net.spawn(async move {
                                 tokio::time::sleep(timeout).await;
                                 cleanup.run().await
                             });
@@ -636,7 +636,7 @@ pub fn route_query(
                                 face: Arc::downgrade(outface),
                                 qid: *qid,
                             };
-                            tokio::task::spawn(async move {
+                            zenoh_runtime::ZRuntime::Net.spawn(async move {
                                 tokio::time::sleep(timeout).await;
                                 cleanup.run().await
                             });
