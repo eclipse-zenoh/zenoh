@@ -272,8 +272,8 @@ impl Digest {
     }
 
     // Updates an existing digest with new entries, also replaces removed entries
-    pub async fn update_digest(
-        mut current: Digest,
+    pub fn update_digest(
+        current: Digest,
         latest_interval: u64,
         last_snapshot_time: Timestamp,
         new_content: HashSet<LogEntry>,
@@ -1068,7 +1068,7 @@ fn test_update_digest_add_content() {
     async_std::task::block_on(async {
         zenoh_core::zasync_executor_init!();
     });
-    let created = async_std::task::block_on(Digest::update_digest(
+    let created = Digest::update_digest(
         Digest {
             timestamp: Timestamp::from_str("2022-12-21T13:00:00.000000000Z/1").unwrap(),
             config: DigestConfig {
@@ -1089,7 +1089,7 @@ fn test_update_digest_add_content() {
             key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
         }]),
         HashSet::new(),
-    ));
+    );
     let expected = Digest {
         timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         config: DigestConfig {
@@ -1133,7 +1133,7 @@ fn test_update_digest_remove_content() {
     async_std::task::block_on(async {
         zenoh_core::zasync_executor_init!();
     });
-    let created = async_std::task::block_on(Digest::update_digest(
+    let created = Digest::update_digest(
         Digest {
             timestamp: Timestamp::from_str("2022-12-21T13:00:00.000000000Z/1").unwrap(),
             config: DigestConfig {
@@ -1178,7 +1178,7 @@ fn test_update_digest_remove_content() {
             timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
             key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
         }]),
-    ));
+    );
     let expected = Digest {
         timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         config: DigestConfig {
@@ -1211,7 +1211,7 @@ fn test_update_remove_digest() {
         Vec::new(),
         1671612730,
     );
-    let added = async_std::task::block_on(Digest::update_digest(
+    let added = Digest::update_digest(
         created.clone(),
         1671612730,
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -1220,10 +1220,10 @@ fn test_update_remove_digest() {
             key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
         }]),
         HashSet::new(),
-    ));
+    );
     assert_ne!(created, added);
 
-    let removed = async_std::task::block_on(Digest::update_digest(
+    let removed = Digest::update_digest(
         added.clone(),
         1671612730,
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -1232,10 +1232,10 @@ fn test_update_remove_digest() {
             timestamp: Timestamp::from_str("2022-12-21T12:00:00.000000000Z/1").unwrap(),
             key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
         }]),
-    ));
+    );
     assert_eq!(created, removed);
 
-    let added_again = async_std::task::block_on(Digest::update_digest(
+    let added_again = Digest::update_digest(
         removed,
         1671612730,
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -1244,6 +1244,6 @@ fn test_update_remove_digest() {
             key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
         }]),
         HashSet::new(),
-    ));
+    );
     assert_eq!(added, added_again);
 }
