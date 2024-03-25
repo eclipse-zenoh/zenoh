@@ -28,6 +28,12 @@ use zenoh_core::Resolvable;
 use zenoh_core::SyncResolve;
 use zenoh_protocol::core::CongestionControl;
 
+pub trait QoSBuilderTrait {
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self;
+    fn priority(self, priority: Priority) -> Self;
+    fn express(self, is_express: bool) -> Self;
+}
+
 pub trait SampleBuilderTrait {
     fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
     where
@@ -40,9 +46,6 @@ pub trait SampleBuilderTrait {
     fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self;
     #[zenoh_macros::unstable]
     fn with_attachment(self, attachment: Attachment) -> Self;
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self;
-    fn priority(self, priority: Priority) -> Self;
-    fn express(self, is_express: bool) -> Self;
 }
 
 pub trait PutSampleBuilderTrait: SampleBuilderTrait {
@@ -119,6 +122,9 @@ impl SampleBuilderTrait for SampleBuilder {
     fn with_attachment(self, attachment: Attachment) -> Self {
         self.with_attachment_opt(Some(attachment))
     }
+}
+
+impl QoSBuilderTrait for SampleBuilder {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self(Sample {
             qos: self.0.qos.with_congestion_control(congestion_control),
@@ -201,6 +207,9 @@ impl SampleBuilderTrait for PutSampleBuilder {
     fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
         Self(self.0.with_attachment_opt(attachment))
     }
+}
+
+impl QoSBuilderTrait for PutSampleBuilder {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self(self.0.congestion_control(congestion_control))
     }
@@ -291,6 +300,9 @@ impl SampleBuilderTrait for DeleteSampleBuilder {
     fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
         Self(self.0.with_attachment_opt(attachment))
     }
+}
+
+impl QoSBuilderTrait for DeleteSampleBuilder {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self(self.0.congestion_control(congestion_control))
     }

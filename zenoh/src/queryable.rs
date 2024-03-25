@@ -21,7 +21,7 @@ use crate::prelude::*;
 use crate::sample::SourceInfo;
 use crate::sample_builder::{
     DeleteSampleBuilder, DeleteSampleBuilderTrait, PutSampleBuilder, PutSampleBuilderTrait,
-    SampleBuilder, SampleBuilderTrait,
+    QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
 };
 use crate::Id;
 use crate::SessionRef;
@@ -287,7 +287,9 @@ impl SampleBuilderTrait for ReplySampleBuilder<'_> {
             ..self
         }
     }
+}
 
+impl QoSBuilderTrait for ReplySampleBuilder<'_> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
             sample_builder: self.sample_builder.congestion_control(congestion_control),
@@ -366,7 +368,9 @@ impl SampleBuilderTrait for ReplyBuilder<'_> {
             ..self
         }
     }
+}
 
+impl QoSBuilderTrait for ReplyBuilder<'_> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
             sample_builder: self.sample_builder.congestion_control(congestion_control),
@@ -464,7 +468,9 @@ impl SampleBuilderTrait for ReplyDelBuilder<'_> {
             ..self
         }
     }
+}
 
+impl QoSBuilderTrait for ReplyDelBuilder<'_> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
             sample_builder: self.sample_builder.congestion_control(congestion_control),
