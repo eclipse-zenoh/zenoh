@@ -42,6 +42,7 @@ tokio = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
+zenoh-buffers = { workspace = true, features = ["shared-memory"] }
 rand = { workspace = true }
 lazy_static = { workspace = true }
 num-traits = { workspace = true }

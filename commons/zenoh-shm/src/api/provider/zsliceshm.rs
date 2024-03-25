@@ -14,7 +14,9 @@
 
 use core::ops::{Deref, DerefMut};
 
-use crate::SharedMemoryBuf;
+use zenoh_buffers::ZSlice;
+
+use crate::{zsliceshm_access::consume_zsliceshm, SharedMemoryBuf};
 
 /// An SHM ZSlice in an exceptional state when it is recently allocated and thus
 /// is known to be unique, so it can be safely mutated without any checks.
@@ -52,5 +54,11 @@ impl AsRef<[u8]> for ZSliceShm {
 impl AsMut<[u8]> for ZSliceShm {
     fn as_mut(&mut self) -> &mut [u8] {
         self
+    }
+}
+
+impl From<ZSliceShm> for ZSlice {
+    fn from(val: ZSliceShm) -> Self {
+        consume_zsliceshm(val).into()
     }
 }
