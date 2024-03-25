@@ -258,8 +258,7 @@ impl Snapshotter {
             *last_snapshot_time,
             new_stable_content,
             deleted_content,
-        )
-        .await;
+        );
         *digest = updated_digest;
     }
 
@@ -304,8 +303,7 @@ impl Snapshotter {
             *last_snapshot_time,
             new_stable,
             deleted_stable,
-        )
-        .await;
+        );
         *digest = updated_digest;
         drop(digest);
 
