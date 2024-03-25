@@ -12,10 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::storage::StorageSample;
 use super::{Digest, EraType, LogEntry, Snapshotter};
 use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
-use crate::replica::storage::StorageSampleKind;
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
@@ -23,15 +21,17 @@ use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
+use zenoh::sample_builder::{PutSampleBuilder, PutSampleBuilderTrait, SampleBuilderTrait};
 use zenoh::time::Timestamp;
 use zenoh::Session;
+use zenoh_core::{AsyncResolve, SyncResolve};
 
 pub struct Aligner {
     session: Arc<Session>,
     digest_key: OwnedKeyExpr,
     snapshotter: Arc<Snapshotter>,
     rx_digest: Receiver<(String, Digest)>,
-    tx_sample: Sender<StorageSample>,
+    tx_sample: Sender<Sample>,
     digests_processed: RwLock<HashSet<u64>>,
 }
 
@@ -40,7 +40,7 @@ impl Aligner {
         session: Arc<Session>,
         digest_key: OwnedKeyExpr,
         rx_digest: Receiver<(String, Digest)>,
-        tx_sample: Sender<StorageSample>,
+        tx_sample: Sender<Sample>,
         snapshotter: Arc<Snapshotter>,
     ) {
         let aligner = Aligner {
@@ -107,11 +107,13 @@ impl Aligner {
             log::trace!("[ALIGNER] Received queried samples: {missing_data:?}");
 
             for (key, (ts, value)) in missing_data {
-                let sample = StorageSample {
-                    key_expr: key.into(),
-                    timestamp: ts,
-                    kind: StorageSampleKind::Put(value),
-                };
+                let Value {
+                    payload, encoding, ..
+                } = value;
+                let sample = PutSampleBuilder::new(key, payload)
+                    .with_encoding(encoding)
+                    .with_timestamp(ts)
+                    .res_sync();
                 log::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
                     log::error!("[ALIGNER] Error adding sample to storage: {}", e)
@@ -329,7 +331,7 @@ impl Aligner {
             .get(&selector)
             .consolidation(zenoh::query::ConsolidationMode::None)
             .accept_replies(zenoh::query::ReplyKeyExpr::Any)
-            .res()
+            .res_async()
             .await
         {
             Ok(replies) => {
