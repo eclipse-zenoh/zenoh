@@ -279,34 +279,32 @@ impl Digest {
         new_content: HashSet<LogEntry>,
         deleted_content: HashSet<LogEntry>,
     ) -> Digest {
+        // remove deleted content from proper places
+        let (current, further_subintervals, further_intervals, further_eras) =
+            Digest::remove_deleted_content(current, deleted_content, latest_interval);
+        log::trace!("Removed deleted content: {current:?}");
         // push content in correct places
         let (
-            mut current,
+            current,
             mut subintervals_to_update,
             mut intervals_to_update,
             mut eras_to_update,
-        ) = Digest::update_new_content(&mut current, new_content, latest_interval);
+        ) = Digest::update_new_content(current, new_content, latest_interval);
 
-        // remove deleted content from proper places
-        let (mut current, further_subintervals, further_intervals, further_eras) =
-            Digest::remove_deleted_content(
-                &mut current,
-                deleted_content,
-                latest_interval,
-            );
-
-        // move intervals into eras if changed -- iterate through hot and move them to warm/cold if needed, iterate through warm and move them to cold if needed
+        // move intervals into eras if changed -- iterate through hot
+        // and move them to warm/cold if needed, iterate through warm
+        // and move them to cold if needed
         let (current, realigned_eras) =
-            Digest::recalculate_era_content(&mut current, latest_interval);
+            Digest::recalculate_era_content(current, latest_interval);
 
         subintervals_to_update.extend(further_subintervals);
         intervals_to_update.extend(further_intervals);
         eras_to_update.extend(further_eras);
         eras_to_update.extend(realigned_eras);
 
-        let mut subintervals = current.subintervals.clone();
-        let mut intervals = current.intervals.clone();
-        let mut eras = current.eras.clone();
+        let mut subintervals = current.subintervals;
+        let mut intervals = current.intervals;
+        let mut eras = current.eras;
 
         // reconstruct updated parts of the digest
         for sub in subintervals_to_update {
@@ -440,7 +438,7 @@ impl Digest {
 
     // update the digest with new content
     fn update_new_content(
-        current: &mut Digest,
+        mut current: Digest,
         content: HashSet<LogEntry>,
         latest_interval: u64,
     ) -> (Digest, HashSet<u64>, HashSet<u64>, HashSet<EraType>) {
@@ -499,7 +497,7 @@ impl Digest {
         }
 
         (
-            current.clone(),
+            current,
             subintervals_to_update,
             intervals_to_update,
             eras_to_update,
@@ -508,7 +506,7 @@ impl Digest {
 
     // remove deleted content from the digest
     fn remove_deleted_content(
-        current: &mut Digest,
+        mut current: Digest,
         deleted_content: HashSet<LogEntry>,
         latest_interval: u64,
     ) -> (Digest, HashSet<u64>, HashSet<u64>, HashSet<EraType>) {
@@ -561,7 +559,7 @@ impl Digest {
             }
         }
         (
-            current.clone(),
+            current,
             subintervals_to_update,
             intervals_to_update,
             eras_to_update,
@@ -570,7 +568,7 @@ impl Digest {
 
     // re-assign intervals into eras as time moves on
     fn recalculate_era_content(
-        current: &mut Digest,
+        mut current: Digest,
         latest_interval: u64,
     ) -> (Digest, HashSet<EraType>) {
         let mut eras_to_update = HashSet::new();
@@ -602,11 +600,11 @@ impl Digest {
                 })
                 .or_insert(Interval {
                     checksum: 0,
-                    content: [interval].iter().cloned().collect(),
+                    content: [interval].into(),
                 });
         }
 
-        (current.clone(), eras_to_update)
+        (current, eras_to_update)
     }
 
     // compute the subinterval for a given timestamp
