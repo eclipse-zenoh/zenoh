@@ -57,10 +57,14 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
+use zenoh_protocol::core::EntityId;
+use zenoh_protocol::network::declare::Interest;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::network::AtomicRequestId;
+use zenoh_protocol::network::DeclareInterest;
 use zenoh_protocol::network::RequestId;
+use zenoh_protocol::network::UndeclareInterest;
 use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::Put;
@@ -103,7 +107,7 @@ pub(crate) struct SessionState {
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
     #[cfg(feature = "unstable")]
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
-    //pub(crate) publications: Vec<OwnedKeyExpr>,
+    pub(crate) publishers: HashMap<Id, PublisherState>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
@@ -112,13 +116,13 @@ pub(crate) struct SessionState {
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
-    //pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
+    pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
 }
 
 impl SessionState {
     pub(crate) fn new(
         aggregated_subscribers: Vec<OwnedKeyExpr>,
-        _aggregated_publishers: Vec<OwnedKeyExpr>,
+        aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -128,7 +132,7 @@ impl SessionState {
             remote_resources: HashMap::new(),
             #[cfg(feature = "unstable")]
             remote_subscribers: HashMap::new(),
-            //publications: Vec::new(),
+            publishers: HashMap::new(),
             subscribers: HashMap::new(),
             queryables: HashMap::new(),
             #[cfg(feature = "unstable")]
@@ -137,7 +141,7 @@ impl SessionState {
             matching_listeners: HashMap::new(),
             queries: HashMap::new(),
             aggregated_subscribers,
-            //aggregated_publishers,
+            aggregated_publishers,
         }
     }
 }
@@ -881,84 +885,103 @@ impl Session {
         })
     }
 
-    /// Declare a publication for the given key expression.
-    ///
-    /// Puts that match the given key expression will only be sent on the network
-    /// if matching subscribers exist in the system.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression to publish
-    pub(crate) fn declare_publication_intent<'a>(
-        &'a self,
-        _key_expr: KeyExpr<'a>,
-    ) -> impl Resolve<Result<(), std::convert::Infallible>> + 'a {
-        ResolveClosure::new(move || {
-            // log::trace!("declare_publication({:?})", key_expr);
-            // let mut state = zwrite!(self.state);
-            // if !state.publications.iter().any(|p| **p == **key_expr) {
-            //     let declared_pub = if let Some(join_pub) = state
-            //         .aggregated_publishers
-            //         .iter()
-            //         .find(|s| s.includes(&key_expr))
-            //     {
-            //         let joined_pub = state.publications.iter().any(|p| join_pub.includes(p));
-            //         (!joined_pub).then(|| join_pub.clone().into())
-            //     } else {
-            //         Some(key_expr.clone())
-            //     };
-            //     state.publications.push(key_expr.into());
+    pub(crate) fn declare_publisher_inner(
+        &self,
+        key_expr: KeyExpr,
+        destination: Locality,
+    ) -> ZResult<EntityId> {
+        let mut state = zwrite!(self.state);
+        log::trace!("declare_publisher({:?})", key_expr);
+        let id = self.runtime.next_id();
 
-            //     if let Some(res) = declared_pub {
-            //         let primitives = state.primitives.as_ref().unwrap().clone();
-            //         drop(state);
-            //         primitives.decl_publisher(&res.to_wire(self), None);
-            //     }
-            // }
-            Ok(())
-        })
+        let mut pub_state = PublisherState {
+            id,
+            remote_id: id,
+            key_expr: key_expr.clone().into_owned(),
+            destination,
+        };
+
+        let declared_pub = (destination != Locality::SessionLocal)
+            .then(|| {
+                match state
+                    .aggregated_publishers
+                    .iter()
+                    .find(|s| s.includes(&key_expr))
+                {
+                    Some(join_pub) => {
+                        if let Some(joined_pub) = state.publishers.values().find(|p| {
+                            p.destination != Locality::SessionLocal
+                                && join_pub.includes(&p.key_expr)
+                        }) {
+                            pub_state.remote_id = joined_pub.remote_id;
+                            None
+                        } else {
+                            Some(join_pub.clone().into())
+                        }
+                    }
+                    None => {
+                        if let Some(twin_pub) = state.publishers.values().find(|p| {
+                            p.destination != Locality::SessionLocal && p.key_expr == key_expr
+                        }) {
+                            pub_state.remote_id = twin_pub.remote_id;
+                            None
+                        } else {
+                            Some(key_expr.clone())
+                        }
+                    }
+                }
+            })
+            .flatten();
+
+        state.publishers.insert(id, pub_state);
+
+        if let Some(res) = declared_pub {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.send_declare(Declare {
+                ext_qos: declare::ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareInterest(DeclareInterest {
+                    id,
+                    interest: Interest::CURRENT
+                        + Interest::FUTURE
+                        + Interest::KEYEXPRS
+                        + Interest::SUBSCRIBERS,
+                    wire_expr: Some(res.to_wire(self).to_owned()),
+                }),
+            });
+        }
+        Ok(id)
     }
 
-    /// Undeclare a publication previously declared
-    /// with [`declare_publication`](Session::declare_publication).
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression of the publication to undeclarte
-    pub(crate) fn undeclare_publication_intent<'a>(
-        &'a self,
-        _key_expr: KeyExpr<'a>,
-    ) -> impl Resolve<ZResult<()>> + 'a {
-        ResolveClosure::new(move || {
-            // let mut state = zwrite!(self.state);
-            // if let Some(idx) = state.publications.iter().position(|p| **p == *key_expr) {
-            //     trace!("undeclare_publication({:?})", key_expr);
-            //     state.publications.remove(idx);
-            //     match state
-            //         .aggregated_publishers
-            //         .iter()
-            //         .find(|s| s.includes(&key_expr))
-            //     {
-            //         Some(join_pub) => {
-            //             let joined_pub = state.publications.iter().any(|p| join_pub.includes(p));
-            //             if !joined_pub {
-            //                 let primitives = state.primitives.as_ref().unwrap().clone();
-            //                 let key_expr = WireExpr::from(join_pub).to_owned();
-            //                 drop(state);
-            //                 primitives.forget_publisher(&key_expr, None);
-            //             }
-            //         }
-            //         None => {
-            //             let primitives = state.primitives.as_ref().unwrap().clone();
-            //             drop(state);
-            //             primitives.forget_publisher(&key_expr.to_wire(self), None);
-            //         }
-            //     };
-            // } else {
-            //     bail!("Unable to find publication")
-            // }
+    pub(crate) fn undeclare_publisher_inner(&self, pid: Id) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        if let Some(pub_state) = state.publishers.remove(&pid) {
+            trace!("undeclare_publisher({:?})", pub_state);
+            if pub_state.destination != Locality::SessionLocal {
+                // Note: there might be several publishers on the same KeyExpr.
+                // Before calling forget_publishers(key_expr), check if this was the last one.
+                if !state.publishers.values().any(|p| {
+                    p.destination != Locality::SessionLocal && p.remote_id == pub_state.remote_id
+                }) {
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
+                    primitives.send_declare(Declare {
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareInterest(UndeclareInterest {
+                            id: pub_state.remote_id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    });
+                }
+            }
             Ok(())
-        })
+        } else {
+            Err(zerror!("Unable to find publisher").into())
+        }
     }
 
     pub(crate) fn declare_subscriber_inner(
@@ -970,7 +993,7 @@ impl Session {
         info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("subscribe({:?})", key_expr);
+        log::trace!("declare_subscriber({:?})", key_expr);
         let id = self.runtime.next_id();
         let key_expr = match scope {
             Some(scope) => scope / key_expr,
@@ -1095,10 +1118,10 @@ impl Session {
         Ok(sub_state)
     }
 
-    pub(crate) fn unsubscribe(&self, sid: Id) -> ZResult<()> {
+    pub(crate) fn undeclare_subscriber_inner(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
-            trace!("unsubscribe({:?})", sub_state);
+            trace!("undeclare_subscriber({:?})", sub_state);
             for res in state
                 .local_resources
                 .values_mut()
@@ -1162,7 +1185,7 @@ impl Session {
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("queryable({:?})", key_expr);
+        log::trace!("declare_queryable({:?})", key_expr);
         let id = self.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
@@ -1198,7 +1221,7 @@ impl Session {
     pub(crate) fn close_queryable(&self, qid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
-            trace!("close_queryable({:?})", qable_state);
+            trace!("undeclare_queryable({:?})", qable_state);
             if qable_state.origin != Locality::SessionLocal {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
@@ -2021,11 +2044,21 @@ impl Primitives for Session {
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 trace!("recv UndeclareQueryable {:?}", m.id);
             }
-            DeclareBody::DeclareToken(_) => todo!(),
-            DeclareBody::UndeclareToken(_) => todo!(),
-            DeclareBody::DeclareInterest(_) => todo!(),
-            DeclareBody::FinalInterest(_) => todo!(),
-            DeclareBody::UndeclareInterest(_) => todo!(),
+            DeclareBody::DeclareToken(m) => {
+                trace!("recv DeclareToken {:?}", m.id);
+            }
+            DeclareBody::UndeclareToken(m) => {
+                trace!("recv UndeclareToken {:?}", m.id);
+            }
+            DeclareBody::DeclareInterest(m) => {
+                trace!("recv DeclareInterest {:?}", m.id);
+            }
+            DeclareBody::FinalInterest(m) => {
+                trace!("recv FinalInterest {:?}", m.id);
+            }
+            DeclareBody::UndeclareInterest(m) => {
+                trace!("recv UndeclareInterest {:?}", m.id);
+            }
         }
     }
 

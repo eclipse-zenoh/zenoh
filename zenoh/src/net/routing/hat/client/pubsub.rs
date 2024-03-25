@@ -20,12 +20,14 @@ use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
 use crate::net::routing::hat::HatPubSubTrait;
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
+use crate::KeyExpr;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::{InterestId, SubscriberId};
+use zenoh_protocol::network::declare::{Interest, InterestId, SubscriberId};
+use zenoh_protocol::network::{DeclareInterest, UndeclareInterest};
 use zenoh_protocol::{
     core::{Reliability, WhatAmI},
     network::declare::{
@@ -244,24 +246,96 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
 impl HatPubSubTrait for HatCode {
     fn declare_sub_interest(
         &self,
-        _tables: &mut Tables,
-        _face: &mut Arc<FaceState>,
-        _id: InterestId,
-        _res: Option<&mut Arc<Resource>>,
-        _current: bool,
-        _future: bool,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        current: bool,
+        future: bool,
         _aggregate: bool,
     ) {
-        todo!()
+        face_hat_mut!(face)
+            .remote_sub_interests
+            .insert(id, res.as_ref().map(|res| (*res).clone()));
+        for dst_face in tables
+            .faces
+            .values_mut()
+            .filter(|f| f.whatami != WhatAmI::Client)
+        {
+            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+            let mut interest = Interest::KEYEXPRS + Interest::SUBSCRIBERS;
+            if current {
+                interest += Interest::CURRENT;
+            }
+            if future {
+                interest += Interest::FUTURE;
+            }
+            get_mut_unchecked(dst_face).local_interests.insert(
+                id,
+                (interest, res.as_ref().map(|res| (*res).clone()), current),
+            );
+            let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
+            dst_face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareInterest(DeclareInterest {
+                        id,
+                        interest,
+                        wire_expr,
+                    }),
+                },
+                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+            ));
+        }
     }
 
     fn undeclare_sub_interest(
         &self,
-        _tables: &mut Tables,
-        _face: &mut Arc<FaceState>,
-        _id: InterestId,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
     ) {
-        todo!()
+        if let Some(interest) = face_hat_mut!(face).remote_sub_interests.remove(&id) {
+            if !tables.faces.values().any(|f| {
+                f.whatami == WhatAmI::Client
+                    && face_hat!(f)
+                        .remote_sub_interests
+                        .values()
+                        .any(|i| *i == interest)
+            }) {
+                for dst_face in tables
+                    .faces
+                    .values_mut()
+                    .filter(|f| f.whatami != WhatAmI::Client)
+                {
+                    for id in dst_face
+                        .local_interests
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<InterestId>>()
+                    {
+                        let (int, res, _) = dst_face.local_interests.get(&id).unwrap();
+                        if int.subscribers() && (*res == interest) {
+                            dst_face.primitives.send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::UndeclareInterest(UndeclareInterest {
+                                        id,
+                                        ext_wire_expr: WireExprType::null(),
+                                    }),
+                                },
+                                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+                            ));
+                            get_mut_unchecked(dst_face).local_interests.remove(&id);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn declare_subscription(
@@ -323,12 +397,51 @@ impl HatPubSubTrait for HatCode {
             }
         };
 
-        if let Some(face) = tables.faces.values().find(|f| f.whatami != WhatAmI::Client) {
-            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-            route.insert(
-                face.id,
-                (face.clone(), key_expr.to_owned(), NodeId::default()),
-            );
+        for face in tables
+            .faces
+            .values()
+            .filter(|f| f.whatami != WhatAmI::Client)
+        {
+            if face
+                .local_interests
+                .values()
+                .any(|(interest, res, finalized)| {
+                    *finalized
+                        && interest.subscribers()
+                        && res
+                            .as_ref()
+                            .map(|res| {
+                                KeyExpr::try_from(res.expr())
+                                    .and_then(|intres| {
+                                        KeyExpr::try_from(expr.full_expr())
+                                            .map(|putres| intres.includes(&putres))
+                                    })
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(true)
+                })
+            {
+                if face_hat!(face).remote_subs.values().any(|sub| {
+                    KeyExpr::try_from(sub.expr())
+                        .and_then(|subres| {
+                            KeyExpr::try_from(expr.full_expr())
+                                .map(|putres| subres.intersects(&putres))
+                        })
+                        .unwrap_or(false)
+                }) {
+                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    route.insert(
+                        face.id,
+                        (face.clone(), key_expr.to_owned(), NodeId::default()),
+                    );
+                }
+            } else {
+                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                route.insert(
+                    face.id,
+                    (face.clone(), key_expr.to_owned(), NodeId::default()),
+                );
+            }
         }
 
         let res = Resource::get_resource(expr.prefix, expr.suffix);
@@ -342,15 +455,7 @@ impl HatPubSubTrait for HatCode {
             let mres = mres.upgrade().unwrap();
 
             for (sid, context) in &mres.session_ctxs {
-                if context.subs.is_some()
-                    && match tables.whatami {
-                        WhatAmI::Router => context.face.whatami != WhatAmI::Router,
-                        _ => {
-                            source_type == WhatAmI::Client
-                                || context.face.whatami == WhatAmI::Client
-                        }
-                    }
-                {
+                if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
                     route.entry(*sid).or_insert_with(|| {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                         (context.face.clone(), key_expr.to_owned(), NodeId::default())

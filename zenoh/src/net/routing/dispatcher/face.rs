@@ -22,7 +22,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use zenoh_protocol::network::declare::{FinalInterest, InterestId};
+use zenoh_protocol::network::declare::{FinalInterest, Interest, InterestId};
 use zenoh_protocol::network::{ext, Declare, DeclareBody};
 use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
@@ -41,6 +41,7 @@ pub struct FaceState {
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
+    pub(crate) local_interests: HashMap<InterestId, (Interest, Option<Arc<Resource>>, bool)>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
@@ -70,6 +71,7 @@ impl FaceState {
             #[cfg(feature = "stats")]
             stats,
             primitives,
+            local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
@@ -265,7 +267,10 @@ impl Primitives for Face {
                 }
             }
             zenoh_protocol::network::DeclareBody::FinalInterest(m) => {
-                log::warn!("Received unsupported {m:?}")
+                get_mut_unchecked(&mut self.state.clone())
+                    .local_interests
+                    .entry(m.id)
+                    .and_modify(|interest| interest.2 = true);
             }
             zenoh_protocol::network::DeclareBody::UndeclareInterest(m) => {
                 unregister_expr_interest(&self.tables, &mut self.state.clone(), m.id);
