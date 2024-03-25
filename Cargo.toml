@@ -155,7 +155,7 @@ tokio-rustls = "0.25.0"
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
 console-subscriber = "0.2"
 typenum = "1.16.0"
-uhlc = { version = "0.6.0", default-features = false } # Default features are disabled due to usage in no_std crates
+uhlc = { git = "https://github.com/atolab/uhlc-rs.git", branch = "zid", version = "0.6.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.3.1"
 urlencoding = "2.1.2"
