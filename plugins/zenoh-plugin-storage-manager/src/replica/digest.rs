@@ -534,9 +534,11 @@ impl Digest {
 
             if let Some(sub) = current.subintervals.get_mut(&subinterval) {
                 sub.content.retain(|x| {
-                    x.timestamp.get_time() != entry.timestamp.get_time()
-                        && x.timestamp.get_id() != entry.timestamp.get_id()
-                        && x.key != entry.key
+                    // Retain everything except this exact entry that
+                    // should be deleted.
+                    !(x.timestamp.get_time() == entry.timestamp.get_time()
+                        && x.timestamp.get_id() == entry.timestamp.get_id()
+                        && x.key == entry.key)
                 });
                 subintervals_to_update.insert(subinterval);
 
