@@ -18,13 +18,17 @@ use zenoh_result::{bail, ZResult};
 
 use super::{chunk::AllocatedChunk, zsliceshm::ZSliceShm};
 
-// Allocation errors
+/// Allocation errors
+///
+///     - **NeedDefragment**: defragmentation needed
+///     - **OutOfMemory**: the provider is out of memory
+///     - **Other**: other error
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZAllocError {
-    NeedDefragment,             // defragmentation needed
-    OutOfMemory,                // the provider is out of memory
-    Other(zenoh_result::Error), // other error
+    NeedDefragment,
+    OutOfMemory,
+    Other(zenoh_result::Error),
 }
 
 impl From<zenoh_result::Error> for ZAllocError {
@@ -33,7 +37,7 @@ impl From<zenoh_result::Error> for ZAllocError {
     }
 }
 
-// alignemnt in powers of 2: 0 == 1-byte alignment, 1 == 2byte, 2 == 4byte, 3 == 8byte etc
+/// alignemnt in powers of 2: 0 == 1-byte alignment, 1 == 2byte, 2 == 4byte, 3 == 8byte etc
 #[zenoh_macros::unstable_doc]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AllocAlignment {
