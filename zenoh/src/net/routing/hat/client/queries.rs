@@ -38,15 +38,6 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-#[cfg(feature = "complete_n")]
-#[inline]
-fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete += info.complete;
-    this.distance = std::cmp::min(this.distance, info.distance);
-    this
-}
-
-#[cfg(not(feature = "complete_n"))]
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
     this.complete = u8::from(this.complete != 0 || info.complete != 0);

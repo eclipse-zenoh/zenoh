@@ -21,8 +21,6 @@ use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-#[cfg(feature = "complete_n")]
-use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -40,9 +38,6 @@ pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
-#[cfg(feature = "complete_n")]
-pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
-#[cfg(not(feature = "complete_n"))]
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
