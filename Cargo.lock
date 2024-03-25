@@ -3800,8 +3800,9 @@ checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
 
 [[package]]
 name = "uhlc"
-version = "0.6.3"
-source = "git+https://github.com/atolab/uhlc-rs.git?branch=zid#57a41e8f4efc4abb379a036417fe0a9ef225da79"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99b6df3f3e948b40e20c38a6d1fd6d8f91b3573922fc164e068ad3331560487e"
 dependencies = [
  "humantime",
  "lazy_static",
