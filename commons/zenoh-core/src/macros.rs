@@ -192,6 +192,25 @@ macro_rules! zparse {
     };
 }
 
+// This macro allows to parse a string to the target type
+// No faili, but log the error and use default
+#[macro_export]
+macro_rules! zparse_default {
+    ($str:expr, $default:expr) => {
+        match $str.parse() {
+            Ok(value) => value,
+            Err(_) => {
+                let e = zenoh_result::zerror!(
+                    "Failed to read configuration: {} is not a valid value",
+                    $str
+                );
+                log::warn!("{}", e);
+                $default
+            }
+        }
+    };
+}
+
 // This macro allows to do conditional compilation
 #[macro_export]
 macro_rules! zcondfeat {

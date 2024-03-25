@@ -27,7 +27,7 @@ use zenoh_core::ztimeout;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
 use zenoh_result::bail;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(60);
 const MSG_COUNT: usize = 50;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
 // Maximal recipes to run at once

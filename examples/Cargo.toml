@@ -49,7 +49,7 @@ futures = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 log = { workspace = true }
-zenoh = { workspace = true }
+zenoh = { workspace = true, default-features = true }
 zenoh-ext = { workspace = true }
 
 [dev-dependencies]

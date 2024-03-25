@@ -72,6 +72,11 @@ use zenoh_link_unixpipe::{
     LinkManagerUnicastPipe, UnixPipeConfigurator, UnixPipeLocatorInspector, UNIXPIPE_LOCATOR_PREFIX,
 };
 
+#[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+pub use zenoh_link_vsock as vsock;
+#[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+use zenoh_link_vsock::{LinkManagerUnicastVsock, VsockLocatorInspector, VSOCK_LOCATOR_PREFIX};
+
 pub use zenoh_link_commons::*;
 pub use zenoh_protocol::core::{EndPoint, Locator};
 
@@ -92,6 +97,8 @@ pub const PROTOCOLS: &[&str] = &[
     serial::SERIAL_LOCATOR_PREFIX,
     #[cfg(feature = "transport_unixpipe")]
     unixpipe::UNIXPIPE_LOCATOR_PREFIX,
+    #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+    vsock::VSOCK_LOCATOR_PREFIX,
 ];
 
 #[derive(Default, Clone)]
@@ -112,6 +119,8 @@ pub struct LocatorInspector {
     serial_inspector: SerialLocatorInspector,
     #[cfg(feature = "transport_unixpipe")]
     unixpipe_inspector: UnixPipeLocatorInspector,
+    #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+    vsock_inspector: VsockLocatorInspector,
 }
 impl LocatorInspector {
     pub async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
@@ -137,6 +146,8 @@ impl LocatorInspector {
             SERIAL_LOCATOR_PREFIX => self.serial_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_unixpipe")]
             UNIXPIPE_LOCATOR_PREFIX => self.unixpipe_inspector.is_multicast(locator).await,
+            #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+            VSOCK_LOCATOR_PREFIX => self.vsock_inspector.is_multicast(locator).await,
             _ => bail!("Unsupported protocol: {}.", protocol),
         }
     }
@@ -226,6 +237,8 @@ impl LinkManagerBuilderUnicast {
             UNIXPIPE_LOCATOR_PREFIX => {
                 Ok(std::sync::Arc::new(LinkManagerUnicastPipe::new(_manager)))
             }
+            #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+            VSOCK_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastVsock::new(_manager))),
             _ => bail!("Unicast not supported for {} protocol", protocol),
         }
     }

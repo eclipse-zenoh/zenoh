@@ -28,10 +28,10 @@ use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
-use tokio_util::sync::CancellationToken;
 use std::any::Any;
 use std::sync::{Arc, Weak};
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -143,7 +143,7 @@ impl Runtime {
             let runtime2 = runtime.clone();
             async move {
                 let mut stream = receiver.into_stream();
-                loop { 
+                loop {
                     tokio::select! {
                         res = stream.next() => {
                             match res {

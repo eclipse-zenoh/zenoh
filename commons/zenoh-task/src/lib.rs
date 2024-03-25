@@ -18,13 +18,13 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
+use futures::future::FutureExt;
 use std::future::Future;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use zenoh_runtime::ZRuntime;
-use futures::future::FutureExt;
 
 #[derive(Clone)]
 pub struct TaskController {
@@ -112,13 +112,13 @@ impl TaskController {
         self.token.cancel();
         let task = async move {
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(10)) => { 
-                    log::error!("Failed to terminate {} tasks", self.tracker.len()); 
+                _ = tokio::time::sleep(Duration::from_secs(10)) => {
+                    log::error!("Failed to terminate {} tasks", self.tracker.len());
                 }
                 _ = self.tracker.wait() => {}
             }
         };
-        let _ = futures::executor::block_on(task);
+        futures::executor::block_on(task);
     }
 
     /// Async version of [`TaskController::terminate_all()`].
@@ -127,7 +127,7 @@ impl TaskController {
         self.token.cancel();
         let task = async move {
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(10)) => { 
+                _ = tokio::time::sleep(Duration::from_secs(10)) => {
                     log::error!("Failed to terminate {} tasks", self.tracker.len());
                 }
                 _ = self.tracker.wait() => {}

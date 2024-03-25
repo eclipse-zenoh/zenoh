@@ -277,7 +277,9 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
-        zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        if let Some(iface) = iface {
+            zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        }
 
         // Connect the socket to the remote address
         socket.connect(dst_addr).await.map_err(|e| {
@@ -314,7 +316,9 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
-        zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        if let Some(iface) = iface {
+            zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        }
 
         let local_addr = socket.local_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
