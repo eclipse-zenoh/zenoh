@@ -40,17 +40,23 @@ pub trait QoSBuilderTrait {
 }
 
 pub trait SampleBuilderTrait {
+    /// Sets of clears timestamp
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self;
+    /// Sets timestamp
     fn with_timestamp(self, timestamp: Timestamp) -> Self;
+    /// Attach source information
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self;
+    /// Attach or remove user-provided data in key-value format
     #[zenoh_macros::unstable]
     fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self;
+    /// Attach user-provided data in key-value format
     #[zenoh_macros::unstable]
     fn with_attachment(self, attachment: Attachment) -> Self;
 }
 
 pub trait PutSampleBuilderTrait: SampleBuilderTrait {
+    /// Set the [`Encoding`]
     fn with_encoding(self, encoding: Encoding) -> Self;
     fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
     where

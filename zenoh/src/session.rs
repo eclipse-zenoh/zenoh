@@ -706,10 +706,12 @@ impl Session {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
             payload: payload.into(),
-            kind: SampleKind::Put,
+            timestamp: None,
             encoding: Encoding::default(),
             #[cfg(feature = "unstable")]
             attachment: None,
+            #[cfg(feature = "unstable")]
+            source_info: None,
         }
     }
 
@@ -737,13 +739,13 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PutBuilder {
+        DeleteBuilder {
             publisher: self.declare_publisher(key_expr),
-            payload: Payload::empty(),
-            kind: SampleKind::Delete,
-            encoding: Encoding::default(),
+            timestamp: None,
             #[cfg(feature = "unstable")]
             attachment: None,
+            #[cfg(feature = "unstable")]
+            source_info: None,
         }
     }
     /// Query data from the matching queryables in the system.

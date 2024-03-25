@@ -28,6 +28,7 @@ use std::time::{Duration, Instant};
 use zenoh::prelude::r#async::*;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
+use zenoh::sample_builder::QoSBuilderTrait;
 use zenoh::Error as ZError;
 use zenoh::Result as ZResult;
 use zenoh::Session;
