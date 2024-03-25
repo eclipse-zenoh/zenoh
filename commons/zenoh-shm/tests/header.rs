@@ -16,13 +16,13 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use rand::Rng;
 use zenoh_result::ZResult;
-use zenoh_shm::{
-    header::{
-        descriptor::HeaderDescriptor, storage::GLOBAL_HEADER_STORAGE,
-        subscription::GLOBAL_HEADER_SUBSCRIPTION,
-    },
-    test_helpers::execute_concurrent,
+use zenoh_shm::header::{
+    descriptor::HeaderDescriptor, storage::GLOBAL_HEADER_STORAGE,
+    subscription::GLOBAL_HEADER_SUBSCRIPTION,
 };
+
+pub mod common;
+use common::execute_concurrent;
 
 fn header_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {

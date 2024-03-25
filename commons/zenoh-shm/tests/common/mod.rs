@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{sync::{Arc, atomic::AtomicBool}, thread::JoinHandle};
+use std::{
+    sync::{atomic::AtomicBool, Arc},
+    thread::JoinHandle,
+};
 
 use zenoh_result::ZResult;
 
@@ -66,7 +69,7 @@ pub fn load_fn(
 
 pub struct CpuLoad {
     handle: Option<JoinHandle<()>>,
-    flag: Arc<AtomicBool>
+    flag: Arc<AtomicBool>,
 }
 
 impl Drop for CpuLoad {
@@ -89,16 +92,14 @@ impl CpuLoad {
         Self::new(1)
     }
 
-    fn  new(thread_count: usize) -> Self {
+    fn new(thread_count: usize) -> Self {
         let flag = Arc::new(AtomicBool::new(true));
-        
+
         let c_flag = flag.clone();
         let handle = Some(std::thread::spawn(move || {
             execute_concurrent(thread_count, 1, load_fn(c_flag));
         }));
-    
-        Self{handle, flag}
-        
+
+        Self { handle, flag }
     }
 }
-

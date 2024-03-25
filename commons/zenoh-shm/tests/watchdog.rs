@@ -18,12 +18,12 @@ use std::{
 };
 
 use zenoh_result::{bail, ZResult};
-use zenoh_shm::{
-    test_helpers::{execute_concurrent, CpuLoad},
-    watchdog::{
-        confirmator::GLOBAL_CONFIRMATOR, storage::GLOBAL_STORAGE, validator::GLOBAL_VALIDATOR,
-    },
+use zenoh_shm::watchdog::{
+    confirmator::GLOBAL_CONFIRMATOR, storage::GLOBAL_STORAGE, validator::GLOBAL_VALIDATOR,
 };
+
+pub mod common;
+use common::{execute_concurrent, CpuLoad};
 
 const VALIDATION_PERIOD: Duration = Duration::from_millis(100);
 const CONFIRMATION_PERIOD: Duration = Duration::from_millis(50);

@@ -17,7 +17,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use zenoh_shm::{test_helpers::CpuLoad, watchdog::periodic_task::PeriodicTask};
+use zenoh_shm::watchdog::periodic_task::PeriodicTask;
+
+pub mod common;
+use common::CpuLoad;
 
 const TASK_PERIOD: Duration = Duration::from_millis(50);
 const TASK_DELTA: Duration = Duration::from_millis(5);
