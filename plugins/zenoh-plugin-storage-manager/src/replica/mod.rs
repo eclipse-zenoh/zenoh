@@ -119,7 +119,7 @@ impl Replica {
 
         // Create channels for communication between components
         // channel to queue digests to be aligned
-        let (tx_digest, rx_digest) = flume::unbounded();
+        let (tx_digest, rx_digest) = flume::bounded(10);
         // channel for aligner to send missing samples to storage
         let (tx_sample, rx_sample) = flume::unbounded();
         // channel for storage to send logging information back
@@ -247,9 +247,12 @@ impl Replica {
                 .await;
             if to_be_processed {
                 log::trace!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
-                match tx.send_async((from.to_string(), digest)).await {
+                match tx.try_send((from.to_string(), digest)) {
                     Ok(()) => {}
-                    Err(e) => log::error!("[DIGEST_SUB] Error sending digest to aligner: {}", e),
+                    Err(e) => {
+                        // Trace because this can happen _a lot_ on busy channels.
+                        log::trace!("[DIGEST_SUB] Error sending digest to aligner: {}", e)
+                    }
                 }
             };
             received.insert(from.to_string(), ts);
