@@ -78,7 +78,8 @@ use zenoh_protocol::{
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
             subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
-            DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
+            DeclareQueryable, DeclareSubscriber, DeclareToken, UndeclareQueryable,
+            UndeclareSubscriber, UndeclareToken,
         },
         ext,
         request::{self, ext::TargetType, Request},
@@ -1305,10 +1306,9 @@ impl Session {
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+            body: DeclareBody::DeclareToken(DeclareToken {
                 id,
                 wire_expr: key_expr.to_wire(self).to_owned(),
-                ext_info: SubscriberInfo::DEFAULT,
             }),
         });
         Ok(tok_state)
@@ -1329,7 +1329,7 @@ impl Session {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                    body: DeclareBody::UndeclareToken(UndeclareToken {
                         id: tok_state.id,
                         ext_wire_expr: WireExprType::null(),
                     }),
