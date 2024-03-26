@@ -17,7 +17,7 @@ use crate::net::primitives::Primitives;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
-use crate::sample::{DataInfo, QoS, Sample, SampleKind};
+use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
 use crate::sample_builder::{
     DeleteSampleBuilderTrait, PutSampleBuilderTrait, QoSBuilderTrait, SampleBuilderTrait,
 };
@@ -33,8 +33,6 @@ use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
-#[zenoh_macros::unstable]
-use zenoh_protocol::zenoh::ext::SourceInfoType;
 use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::zenoh::Put;
@@ -63,7 +61,7 @@ pub struct DeleteBuilder<'a, 'b> {
     pub(crate) publisher: PublisherBuilder<'a, 'b>,
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: Option<SourceInfo>,
+    pub(crate) source_info: SourceInfo,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
@@ -94,7 +92,7 @@ pub struct PutBuilder<'a, 'b> {
     pub(crate) encoding: Encoding,
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: Option<SourceInfo>,
+    pub(crate) source_info: SourceInfo,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
@@ -160,7 +158,7 @@ impl SampleBuilderTrait for PutBuilder<'_, '_> {
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
-            source_info: Some(source_info),
+            source_info,
             ..self
         }
     }
@@ -190,7 +188,7 @@ impl SampleBuilderTrait for DeleteBuilder<'_, '_> {
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
-            source_info: Some(source_info),
+            source_info,
             ..self
         }
     }
@@ -258,7 +256,7 @@ impl Resolvable for DeleteBuilder<'_, '_> {
 impl SyncResolve for PutBuilder<'_, '_> {
     #[inline]
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let publisher = self.publisher.one_time_res_sync()?;
+        let publisher = self.publisher.create_one_shot_publisher()?;
         resolve_put(
             &publisher,
             self.payload,
@@ -276,7 +274,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
 impl SyncResolve for DeleteBuilder<'_, '_> {
     #[inline]
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let publisher = self.publisher.one_time_res_sync()?;
+        let publisher = self.publisher.create_one_shot_publisher()?;
         resolve_put(
             &publisher,
             Payload::empty(),
@@ -467,20 +465,6 @@ impl<'a> Publisher<'a> {
         std::sync::Arc::new(self)
     }
 
-    fn _write(&self, kind: SampleKind, payload: Payload) -> Publication {
-        Publication {
-            publisher: self,
-            payload,
-            kind,
-            encoding: Encoding::ZENOH_BYTES,
-            timestamp: None,
-            #[cfg(feature = "unstable")]
-            source_info: None,
-            #[cfg(feature = "unstable")]
-            attachment: None,
-        }
-    }
-
     /// Put data.
     ///
     /// # Examples
@@ -494,11 +478,20 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     #[inline]
-    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> Publication
+    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> PutPublication
     where
         IntoPayload: Into<Payload>,
     {
-        self._write(SampleKind::Put, payload.into())
+        PutPublication {
+            publisher: self,
+            payload: payload.into(),
+            encoding: Encoding::ZENOH_BYTES,
+            timestamp: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
+        }
     }
 
     /// Delete data.
@@ -513,8 +506,15 @@ impl<'a> Publisher<'a> {
     /// publisher.delete().res().await.unwrap();
     /// # })
     /// ```
-    pub fn delete(&self) -> Publication {
-        self._write(SampleKind::Delete, Payload::empty())
+    pub fn delete(&self) -> DeletePublication {
+        DeletePublication {
+            publisher: self,
+            timestamp: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
+        }
     }
 
     /// Return the [`MatchingStatus`] of the publisher.
@@ -737,64 +737,129 @@ impl Drop for Publisher<'_> {
 }
 
 /// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
-/// [`Publisher::delete()`](Publisher::delete) and [`Publisher::write()`](Publisher::write).
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct Publication<'a> {
+pub struct PutPublication<'a> {
     publisher: &'a Publisher<'a>,
     payload: Payload,
-    kind: SampleKind,
     encoding: Encoding,
     timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: Option<SourceInfo>,
+    pub(crate) source_info: SourceInfo,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
 
-impl<'a> Publication<'a> {
-    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
-        self
+/// A [`Resolvable`] returned by [`Publisher::delete()`](Publisher::delete)
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+pub struct DeletePublication<'a> {
+    publisher: &'a Publisher<'a>,
+    timestamp: Option<uhlc::Timestamp>,
+    #[cfg(feature = "unstable")]
+    pub(crate) source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachment: Option<Attachment>,
+}
+
+impl SampleBuilderTrait for PutPublication<'_> {
+    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
+        Self { timestamp, ..self }
     }
 
-    #[zenoh_macros::unstable]
-    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
-        self.attachment = Some(attachment);
-        self
+    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
+        Self {
+            timestamp: Some(timestamp),
+            ..self
+        }
     }
 
-    /// Send data with the given [`SourceInfo`].
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.put("Value").with_source_info(SourceInfo {
-    ///     source_id: Some(publisher.id()),
-    ///     source_sn: Some(0),
-    /// }).res().await.unwrap();
-    /// # })
-    /// ```
-    #[zenoh_macros::unstable]
-    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
-        self.source_info = Some(source_info);
-        self
+    #[cfg(feature = "unstable")]
+    fn with_source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            source_info,
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+        Self { attachment, ..self }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_attachment(self, attachment: Attachment) -> Self {
+        Self {
+            attachment: Some(attachment),
+            ..self
+        }
     }
 }
 
-impl Resolvable for Publication<'_> {
+impl PutSampleBuilderTrait for PutPublication<'_> {
+    fn with_encoding(self, encoding: Encoding) -> Self {
+        Self { encoding, ..self }
+    }
+
+    fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
+    where
+        IntoPayload: Into<Payload>,
+    {
+        Self {
+            payload: payload.into(),
+            ..self
+        }
+    }
+}
+
+impl SampleBuilderTrait for DeletePublication<'_> {
+    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
+        Self { timestamp, ..self }
+    }
+
+    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
+        Self {
+            timestamp: Some(timestamp),
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            source_info,
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+        Self { attachment, ..self }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn with_attachment(self, attachment: Attachment) -> Self {
+        Self {
+            attachment: Some(attachment),
+            ..self
+        }
+    }
+}
+
+impl DeleteSampleBuilderTrait for DeletePublication<'_> {}
+
+impl Resolvable for PutPublication<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for Publication<'_> {
+impl Resolvable for DeletePublication<'_> {
+    type To = ZResult<()>;
+}
+
+impl SyncResolve for PutPublication<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         resolve_put(
             self.publisher,
             self.payload,
-            self.kind,
+            SampleKind::Put,
             self.encoding,
             self.timestamp,
             #[cfg(feature = "unstable")]
@@ -805,7 +870,31 @@ impl SyncResolve for Publication<'_> {
     }
 }
 
-impl AsyncResolve for Publication<'_> {
+impl SyncResolve for DeletePublication<'_> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        resolve_put(
+            self.publisher,
+            Payload::empty(),
+            SampleKind::Delete,
+            Encoding::ZENOH_BYTES,
+            self.timestamp,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            #[cfg(feature = "unstable")]
+            self.attachment,
+        )
+    }
+}
+
+impl AsyncResolve for PutPublication<'_> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl AsyncResolve for DeletePublication<'_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -823,18 +912,25 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 
     #[inline]
     fn start_send(self: Pin<&mut Self>, item: Sample) -> Result<(), Self::Error> {
-        Publication {
-            publisher: &self,
-            payload: item.payload,
-            kind: item.kind,
-            encoding: item.encoding,
-            timestamp: None,
+        let SampleFields {
+            payload,
+            kind,
+            encoding,
             #[cfg(feature = "unstable")]
-            source_info: None,
+            attachment,
+            ..
+        } = item.into();
+        resolve_put(
+            &self,
+            payload,
+            kind,
+            encoding,
+            None,
             #[cfg(feature = "unstable")]
-            attachment: item.attachment,
-        }
-        .res_sync()
+            SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment,
+        )
     }
 
     #[inline]
@@ -928,7 +1024,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     }
 
     // internal function for `PutBuilder` and `DeleteBuilder`
-    fn one_time_res_sync(self) -> ZResult<Publisher<'a>> {
+    fn create_one_shot_publisher(self) -> ZResult<Publisher<'a>> {
         Ok(Publisher {
             session: self.session,
             #[cfg(feature = "unstable")]
@@ -1013,7 +1109,7 @@ fn resolve_put(
     kind: SampleKind,
     encoding: Encoding,
     timestamp: Option<uhlc::Timestamp>,
-    #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")] source_info: SourceInfo,
     #[cfg(feature = "unstable")] attachment: Option<Attachment>,
 ) -> ZResult<()> {
     log::trace!("write({:?}, [...])", &publisher.key_expr);
@@ -1051,10 +1147,7 @@ fn resolve_put(
                         timestamp,
                         encoding: encoding.clone().into(),
                         #[cfg(feature = "unstable")]
-                        ext_sinfo: source_info.map(|s| SourceInfoType {
-                            id: s.source_id.unwrap_or_default(),
-                            sn: s.source_sn.unwrap_or_default() as u32,
-                        }),
+                        ext_sinfo: source_info.into(),
                         #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
@@ -1076,10 +1169,7 @@ fn resolve_put(
                     PushBody::Del(Del {
                         timestamp,
                         #[cfg(feature = "unstable")]
-                        ext_sinfo: source_info.map(|s| SourceInfoType {
-                            id: s.source_id.unwrap_or_default(),
-                            sn: s.source_sn.unwrap_or_default() as u32,
-                        }),
+                        ext_sinfo: source_info.into(),
                         #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         ext_attachment,

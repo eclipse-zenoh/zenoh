@@ -518,17 +518,10 @@ impl Query {
         {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
-        #[allow(unused_mut)] // will be unused if feature = "unstable" is not enabled
-        let mut ext_sinfo = None;
+        #[cfg(not(feature = "unstable"))]
+        let ext_sinfo = None;
         #[cfg(feature = "unstable")]
-        {
-            if sample.source_info.source_id.is_some() || sample.source_info.source_sn.is_some() {
-                ext_sinfo = Some(zenoh::put::ext::SourceInfoType {
-                    id: sample.source_info.source_id.unwrap_or_default(),
-                    sn: sample.source_info.source_sn.unwrap_or_default() as u32,
-                })
-            }
-        }
+        let ext_sinfo = sample.source_info.into();
         self.inner.primitives.send_response(Response {
             rid: self.inner.qid,
             wire_expr: WireExpr {

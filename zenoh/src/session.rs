@@ -41,6 +41,7 @@ use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
 use crate::Selector;
+use crate::SourceInfo;
 use crate::Value;
 use async_std::task;
 use log::{error, trace, warn};
@@ -711,7 +712,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             attachment: None,
             #[cfg(feature = "unstable")]
-            source_info: None,
+            source_info: SourceInfo::empty(),
         }
     }
 
@@ -745,7 +746,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             attachment: None,
             #[cfg(feature = "unstable")]
-            source_info: None,
+            source_info: SourceInfo::empty(),
         }
     }
     /// Query data from the matching queryables in the system.

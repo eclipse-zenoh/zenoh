@@ -22,7 +22,7 @@ use crate::Priority;
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
 use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::{core::CongestionControl, network::push::ext::QoSType};
+use zenoh_protocol::{core::CongestionControl, network::push::ext::QoSType, zenoh};
 
 pub type SourceSn = u64;
 
@@ -161,6 +161,22 @@ impl SourceInfo {
         SourceInfo {
             source_id: None,
             source_sn: None,
+        }
+    }
+    pub(crate) fn is_empty(&self) -> bool {
+        self.source_id.is_none() && self.source_sn.is_none()
+    }
+}
+
+impl From<SourceInfo> for Option<zenoh::put::ext::SourceInfoType> {
+    fn from(source_info: SourceInfo) -> Option<zenoh::put::ext::SourceInfoType> {
+        if source_info.is_empty() {
+            None
+        } else {
+            Some(zenoh::put::ext::SourceInfoType {
+                id: source_info.source_id.unwrap_or_default(),
+                sn: source_info.source_sn.unwrap_or_default() as u32,
+            })
         }
     }
 }
