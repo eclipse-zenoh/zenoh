@@ -16,7 +16,7 @@
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 use std::sync::{Arc, Mutex, Weak};
-use zenoh_collections::RingBuffer as RingBuffer_inner;
+use zenoh_collections::RingBuffer as RingBufferInner;
 use zenoh_result::ZResult;
 
 /// An alias for `Arc<T>`.
@@ -94,20 +94,20 @@ impl<T: Send + Sync + 'static> IntoHandler<'static, T>
 
 /// Ring buffer with a limited queue size, which allows users to keep the last N data.
 pub struct RingBuffer<T> {
-    cache: Arc<Mutex<RingBuffer_inner<T>>>,
+    cache: Arc<Mutex<RingBufferInner<T>>>,
 }
 
 impl<T> RingBuffer<T> {
     /// Initialize the RingBuffer with the capacity size.
     pub fn new(capacity: usize) -> Self {
         RingBuffer {
-            cache: Arc::new(Mutex::new(RingBuffer_inner::new(capacity))),
+            cache: Arc::new(Mutex::new(RingBufferInner::new(capacity))),
         }
     }
 }
 
 pub struct RingBufferHandler<T> {
-    cache: Weak<Mutex<RingBuffer_inner<T>>>,
+    cache: Weak<Mutex<RingBufferInner<T>>>,
 }
 
 impl<T> RingBufferHandler<T> {
