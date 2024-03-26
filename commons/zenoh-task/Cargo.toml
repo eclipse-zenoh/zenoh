@@ -28,5 +28,6 @@ description = "Internal crate for zenoh."
 tokio = { workspace = true, features = ["default", "sync"] }
 futures = { workspace = true }
 log = { workspace = true }
+zenoh-core = { workspace = true }
 zenoh-runtime = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }

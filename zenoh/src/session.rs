@@ -521,7 +521,7 @@ impl Session {
     pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
-            self.task_controller.terminate_all();
+            self.task_controller.terminate_all(Duration::from_secs(10));
             self.runtime.close().await?;
 
             let mut state = zwrite!(self.state);
@@ -1768,25 +1768,30 @@ impl Session {
             _ => 1,
         };
 
+        let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let state = self.state.clone();
                 let zid = self.runtime.zid();
                 async move {
-                    tokio::time::sleep(timeout).await;
-                    let mut state = zwrite!(state);
-                    if let Some(query) = state.queries.remove(&qid) {
-                        std::mem::drop(state);
-                        log::debug!("Timeout on query {}! Send error and close.", qid);
-                        if query.reception_mode == ConsolidationMode::Latest {
-                            for (_, reply) in query.replies.unwrap().into_iter() {
-                                (query.callback)(reply);
+                    tokio::select! {
+                        _ = tokio::time::sleep(timeout) => {
+                            let mut state = zwrite!(state);
+                            if let Some(query) = state.queries.remove(&qid) {
+                                std::mem::drop(state);
+                                log::debug!("Timeout on query {}! Send error and close.", qid);
+                                if query.reception_mode == ConsolidationMode::Latest {
+                                    for (_, reply) in query.replies.unwrap().into_iter() {
+                                        (query.callback)(reply);
+                                    }
+                                }
+                                (query.callback)(Reply {
+                                    sample: Err("Timeout".into()),
+                                    replier_id: zid,
+                                });
                             }
                         }
-                        (query.callback)(Reply {
-                            sample: Err("Timeout".into()),
-                            replier_id: zid,
-                        });
+                        _ = token.cancelled() => {}
                     }
                 }
             });

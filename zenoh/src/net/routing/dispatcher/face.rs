@@ -27,6 +27,7 @@ use zenoh_protocol::{
     network::{Mapping, Push, Request, RequestId, Response, ResponseFinal},
 };
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
@@ -45,6 +46,7 @@ pub struct FaceState {
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) task_controller: TaskController,
 }
 
 impl FaceState {
@@ -73,6 +75,7 @@ impl FaceState {
             mcast_group,
             in_interceptors,
             hat,
+            task_controller: TaskController::default(),
         })
     }
 

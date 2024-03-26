@@ -24,6 +24,7 @@ use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
+use zenoh_core::{ResolveFuture, SyncResolve};
 use zenoh_runtime::ZRuntime;
 
 #[derive(Clone)]
@@ -102,37 +103,89 @@ impl TaskController {
         self.tracker.spawn_on(future.map(|_f| ()), &rt)
     }
 
-    /// Terminates all prevously spawned tasks
+    /// Attempts tp terminate all previously spawned tasks
     /// The caller must ensure that all tasks spawned with [`TaskController::spawn()`]
     /// or [`TaskController::spawn_with_rt()`] can yield in finite amount of time either because they will run to completion
     /// or due to cancellation of token acquired via [`TaskController::get_cancellation_token()`].
     /// Tasks spawned with [`TaskController::spawn_abortable()`] or [`TaskController::spawn_abortable_with_rt()`] will be aborted (i.e. terminated upon next await call).
-    pub fn terminate_all(&self) {
-        self.tracker.close();
-        self.token.cancel();
-        let task = async move {
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(10)) => {
-                    log::error!("Failed to terminate {} tasks", self.tracker.len());
-                }
-                _ = self.tracker.wait() => {}
-            }
-        };
-        futures::executor::block_on(task);
+    /// The call blocks until all tasks yield or timeout duration expires.
+    /// Returns 0 in case of success, number of non terminated tasks otherwise.
+    pub fn terminate_all(&self, timeout: Duration) -> usize {
+        ResolveFuture::new(async move { self.terminate_all_async(timeout).await }).res_sync()
     }
 
     /// Async version of [`TaskController::terminate_all()`].
-    pub async fn terminate_all_async(&self) {
+    pub async fn terminate_all_async(&self, timeout: Duration) -> usize {
         self.tracker.close();
         self.token.cancel();
+        if tokio::time::timeout(timeout, self.tracker.wait())
+            .await
+            .is_err()
+        {
+            log::error!("Failed to terminate {} tasks", self.tracker.len());
+            return self.tracker.len();
+        }
+        0
+    }
+}
+
+pub struct TerminatableTask {
+    handle: JoinHandle<()>,
+    token: CancellationToken,
+}
+
+impl TerminatableTask {
+    pub fn create_cancellation_token() -> CancellationToken {
+        CancellationToken::new()
+    }
+
+    /// Spawns a task that can be later terminated by [`TerminatableTask::terminate()`].
+    /// Prior to termination attempt the specified cancellation token will be cancelled.
+    pub fn spawn<F, T>(rt: ZRuntime, future: F, token: CancellationToken) -> TerminatableTask
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        TerminatableTask {
+            handle: rt.spawn(future.map(|_f| ())),
+            token,
+        }
+    }
+
+    /// Spawns a task that can be later aborted by [`TerminatableTask::terminate()`].
+    pub fn spawn_abortable<F, T>(rt: ZRuntime, future: F) -> TerminatableTask
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let token = CancellationToken::new();
+        let token2 = token.clone();
         let task = async move {
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(10)) => {
-                    log::error!("Failed to terminate {} tasks", self.tracker.len());
-                }
-                _ = self.tracker.wait() => {}
+                _ = token2.cancelled() => {},
+                _ = future => {}
             }
         };
-        task.await;
+
+        TerminatableTask {
+            handle: rt.spawn(task),
+            token,
+        }
+    }
+
+    /// Attempts to terminate the task.
+    /// Returns true if task completed / aborted within timeout duration, false otherwise.
+    pub fn terminate(self, timeout: Duration) -> bool {
+        ResolveFuture::new(async move { self.terminate_async(timeout).await }).res_sync()
+    }
+
+    /// Async version of [`TerminatableTask::terminate()`].
+    pub async fn terminate_async(self, timeout: Duration) -> bool {
+        self.token.cancel();
+        if tokio::time::timeout(timeout, self.handle).await.is_err() {
+            log::error!("Failed to terminate the task");
+            return false;
+        };
+        true
     }
 }

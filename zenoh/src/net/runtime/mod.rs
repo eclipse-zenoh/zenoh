@@ -30,6 +30,7 @@ use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -178,7 +179,9 @@ impl Runtime {
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
-        self.state.task_controller.terminate_all();
+        self.state
+            .task_controller
+            .terminate_all(Duration::from_secs(10));
         self.manager().close().await;
         // clean up to break cyclic reference of self.state to itself
         self.state.transport_handlers.write().unwrap().clear();

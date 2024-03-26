@@ -34,9 +34,9 @@ async fn main() {
                 queryable_key_expr.clone(),
                 query.value().unwrap().clone(),
             ));
-            futures::executor::block_on(async move {
-                query.reply(reply).res().await.unwrap();
-            })
+            zenoh_runtime::ZRuntime::Application.block_in_place(
+                async move { query.reply(reply).res().await.unwrap(); }
+            );
         })
         .complete(true)
         .res()

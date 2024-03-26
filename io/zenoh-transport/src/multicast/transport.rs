@@ -184,7 +184,9 @@ impl TransportMulticastInner {
             cb.closed();
         }
 
-        self.task_controller.terminate_all_async().await;
+        self.task_controller
+            .terminate_all_async(Duration::from_secs(10))
+            .await;
 
         Ok(())
     }
