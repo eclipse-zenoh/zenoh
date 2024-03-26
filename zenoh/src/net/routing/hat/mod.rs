@@ -243,6 +243,7 @@ pub trait HatLivelinessTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
+        id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,
     );
@@ -251,6 +252,7 @@ pub trait HatLivelinessTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
+        id: TokenId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
     );
