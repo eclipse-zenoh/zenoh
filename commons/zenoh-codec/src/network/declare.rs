@@ -523,9 +523,6 @@ where
         if x.complete {
             flags |= queryable::ext::flag::C;
         }
-        if x.distance != 0 {
-            flags |= queryable::ext::flag::D;
-        }
         let v: u64 = (flags as u64) | ((x.distance as u64) << 8);
         let ext = queryable::ext::QueryableInfo::new(v);
 

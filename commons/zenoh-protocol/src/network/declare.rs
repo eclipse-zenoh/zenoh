@@ -474,21 +474,15 @@ pub mod queryable {
 
         pub mod flag {
             pub const C: u8 = 1; // 0x01 Complete      if C==1 then the queryable is complete
-            pub const D: u8 = 1 << 1; // 0x02 Distance      if D==1 then distance of the queryable is provided
         }
-
-        /// Flags:
-        /// - X: Reserved
-        /// - X: Reserved
-        /// - Z: Extension      If Z==1 then at least one extension is present
         ///
         ///  7 6 5 4 3 2 1 0
         /// +-+-+-+-+-+-+-+-+
         /// |Z|0_1|    ID   |
         /// +-+-+-+---------+
-        /// |x|x|x|x|x|x|D|C|
+        /// |x|x|x|x|x|x|x|C|
         /// +---------------+
-        /// ~ distance <z16>~  -- if D==1
+        /// ~ distance <z16>~
         /// +---------------+
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub struct QueryableInfoType {
