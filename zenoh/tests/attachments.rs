@@ -1,7 +1,7 @@
 #[cfg(feature = "unstable")]
 #[test]
 fn pubsub() {
-    use zenoh::prelude::sync::*;
+    use zenoh::{prelude::sync::*, sample_builder::SampleBuilderTrait};
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh

@@ -15,6 +15,7 @@ use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
+use zenoh::sample_builder::QoSBuilderTrait;
 use zenoh_examples::CommonArgs;
 
 fn main() {
