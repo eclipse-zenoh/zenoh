@@ -596,8 +596,8 @@ impl std::fmt::Display for StringOrBase64 {
 impl From<&Payload> for StringOrBase64 {
     fn from(v: &Payload) -> Self {
         use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
-        match v.deserialize::<String>() {
-            Ok(s) => StringOrBase64::String(s),
+        match v.deserialize::<Cow<str>>() {
+            Ok(s) => StringOrBase64::String(s.into_owned()),
             Err(_) => {
                 let cow: Cow<'_, [u8]> = Cow::from(v);
                 StringOrBase64::Base64(b64_std_engine.encode(cow))

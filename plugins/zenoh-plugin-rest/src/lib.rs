@@ -126,7 +126,10 @@ fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.key_expr().as_str(),
-        sample.payload().deserialize::<String>().unwrap_or_default()
+        sample
+            .payload()
+            .deserialize::<Cow<'_, str>>()
+            .unwrap_or_default()
     )
 }
 
@@ -136,7 +139,9 @@ fn result_to_html(sample: Result<Sample, Value>) -> String {
         Err(err) => {
             format!(
                 "<dt>ERROR</dt>\n<dd>{}</dd>\n",
-                err.payload.deserialize::<String>().unwrap_or_default()
+                err.payload
+                    .deserialize::<Cow<'_, str>>()
+                    .unwrap_or_default()
             )
         }
     }
@@ -162,12 +167,15 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
             Ok(sample) => response(
                 StatusCode::Ok,
                 Cow::from(sample.encoding()).as_ref(),
-                &sample.payload().deserialize::<String>().unwrap_or_default(),
+                &sample
+                    .payload()
+                    .deserialize::<Cow<str>>()
+                    .unwrap_or_default(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
                 Cow::from(&value.encoding).as_ref(),
-                &value.payload.deserialize::<String>().unwrap_or_default(),
+                &value.payload.deserialize::<Cow<str>>().unwrap_or_default(),
             ),
         },
         Err(_) => response(StatusCode::Ok, "", ""),
