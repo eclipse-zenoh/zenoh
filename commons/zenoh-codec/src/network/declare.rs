@@ -511,7 +511,49 @@ where
 }
 
 // QueryableInfo
-crate::impl_zextz64!(queryable::ext::QueryableInfo, queryable::ext::Info::ID);
+impl<W> WCodec<(&queryable::ext::QueryableInfoType, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+    fn write(self, writer: &mut W, x: (&queryable::ext::QueryableInfoType, bool)) -> Self::Output {
+        let (x, more) = x;
+
+        let mut flags: u8 = 0;
+        if x.complete {
+            flags |= queryable::ext::flag::C;
+        }
+        if x.distance != 0 {
+            flags |= queryable::ext::flag::D;
+        }
+        let v: u64 = (flags as u64) | ((x.distance as u64) << 8);
+        let ext = queryable::ext::QueryableInfo::new(v);
+
+        self.write(&mut *writer, (&ext, more))
+    }
+}
+
+impl<R> RCodec<(queryable::ext::QueryableInfoType, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(
+        self,
+        reader: &mut R,
+    ) -> Result<(queryable::ext::QueryableInfoType, bool), Self::Error> {
+        let (ext, more): (queryable::ext::QueryableInfo, bool) = self.read(&mut *reader)?;
+
+        let complete = imsg::has_flag(ext.value as u8, queryable::ext::flag::C);
+        let distance = (ext.value >> 8) as u16;
+
+        Ok((
+            queryable::ext::QueryableInfoType { complete, distance },
+            more,
+        ))
+    }
+}
 
 // DeclareQueryable
 impl<W> WCodec<&queryable::DeclareQueryable, &mut W> for Zenoh080
@@ -529,7 +571,7 @@ where
 
         // Header
         let mut header = declare::id::D_QUERYABLE;
-        let mut n_exts = (ext_info != &queryable::ext::QueryableInfo::DEFAULT) as u8;
+        let mut n_exts = (ext_info != &queryable::ext::QueryableInfoType::DEFAULT) as u8;
         if n_exts != 0 {
             header |= subscriber::flag::Z;
         }
@@ -544,9 +586,9 @@ where
         // Body
         self.write(&mut *writer, id)?;
         self.write(&mut *writer, wire_expr)?;
-        if ext_info != &queryable::ext::QueryableInfo::DEFAULT {
+        if ext_info != &queryable::ext::QueryableInfoType::DEFAULT {
             n_exts -= 1;
-            self.write(&mut *writer, (*ext_info, n_exts != 0))?;
+            self.write(&mut *writer, (ext_info, n_exts != 0))?;
         }
 
         Ok(())
@@ -589,15 +631,15 @@ where
         };
 
         // Extensions
-        let mut ext_info = queryable::ext::QueryableInfo::DEFAULT;
+        let mut ext_info = queryable::ext::QueryableInfoType::DEFAULT;
 
         let mut has_ext = imsg::has_flag(self.header, queryable::flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match iext::eid(ext) {
-                queryable::ext::Info::ID => {
-                    let (i, ext): (queryable::ext::QueryableInfo, bool) =
+                queryable::ext::QueryableInfo::ID => {
+                    let (i, ext): (queryable::ext::QueryableInfoType, bool) =
                         eodec.read(&mut *reader)?;
                     ext_info = i;
                     has_ext = ext;

@@ -42,7 +42,9 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::declare::{queryable::ext::QueryableInfo, QueryableId, SubscriberId};
+use zenoh_protocol::network::declare::{
+    queryable::ext::QueryableInfoType, QueryableId, SubscriberId,
+};
 use zenoh_protocol::network::Oam;
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
@@ -284,7 +286,7 @@ struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfo)>,
+    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
 

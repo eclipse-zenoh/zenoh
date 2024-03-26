@@ -24,7 +24,7 @@ use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
-        declare::{ext, queryable::ext::QueryableInfo, QueryableId},
+        declare::{ext, queryable::ext::QueryableInfoType, QueryableId},
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
@@ -44,7 +44,7 @@ pub(crate) fn declare_queryable(
     face: &mut Arc<FaceState>,
     id: QueryableId,
     expr: &WireExpr,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
     node_id: NodeId,
 ) {
     let rtables = zread!(tables.tables);

@@ -53,7 +53,7 @@ use zenoh_protocol::network::{
 };
 use zenoh_protocol::{
     common::ZExtBody,
-    network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE},
+    network::{declare::queryable::ext::QueryableInfoType, oam::id::OAM_LINKSTATE},
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
@@ -360,7 +360,7 @@ struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfo)>,
+    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
 

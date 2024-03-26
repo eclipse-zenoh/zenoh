@@ -26,7 +26,7 @@ use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
         declare::{
-            ext, queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, Declare,
+            ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
             DeclareBody, DeclareKeyExpr,
         },
         Mapping,
@@ -51,7 +51,7 @@ pub(crate) struct SessionContext {
     pub(crate) local_expr_id: Option<ExprId>,
     pub(crate) remote_expr_id: Option<ExprId>,
     pub(crate) subs: Option<SubscriberInfo>,
-    pub(crate) qabl: Option<QueryableInfo>,
+    pub(crate) qabl: Option<QueryableInfoType>,
     pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
     pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
 }

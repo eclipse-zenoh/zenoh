@@ -39,7 +39,7 @@ use zenoh_protocol::{
         ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
     network::{
-        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
+        declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
         ResponseFinal,
     },
@@ -283,10 +283,7 @@ impl AdminSpace {
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                 id: runtime.next_id(),
                 wire_expr: [&root_key, "/**"].concat().into(),
-                ext_info: QueryableInfo {
-                    complete: 0,
-                    distance: 0,
-                },
+                ext_info: QueryableInfoType::DEFAULT,
             }),
         });
 

@@ -464,31 +464,41 @@ pub mod queryable {
     pub struct DeclareQueryable {
         pub id: QueryableId,
         pub wire_expr: WireExpr<'static>,
-        pub ext_info: ext::QueryableInfo,
+        pub ext_info: ext::QueryableInfoType,
     }
 
     pub mod ext {
         use super::*;
 
-        pub type Info = zextz64!(0x01, false);
+        pub type QueryableInfo = zextz64!(0x01, false);
 
+        pub mod flag {
+            pub const C: u8 = 1; // 0x01 Complete      if C==1 then the queryable is complete
+            pub const D: u8 = 1 << 1; // 0x02 Distance      if D==1 then distance of the queryable is provided
+        }
+
+        /// Flags:
+        /// - X: Reserved
+        /// - X: Reserved
+        /// - Z: Extension      If Z==1 then at least one extension is present
+        ///
         ///  7 6 5 4 3 2 1 0
         /// +-+-+-+-+-+-+-+-+
         /// |Z|0_1|    ID   |
         /// +-+-+-+---------+
-        /// ~   complete    ~
+        /// |x|x|x|x|x|x|D|C|
         /// +---------------+
-        /// ~   distance    ~
+        /// ~ distance <z16>~  -- if D==1
         /// +---------------+
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        pub struct QueryableInfo {
-            pub complete: u8,  // Default 0: incomplete // @TODO: maybe a bitflag
-            pub distance: u32, // Default 0: no distance
+        pub struct QueryableInfoType {
+            pub complete: bool, // Default false: incomplete
+            pub distance: u16,  // Default 0: no distance
         }
 
-        impl QueryableInfo {
+        impl QueryableInfoType {
             pub const DEFAULT: Self = Self {
-                complete: 0,
+                complete: false,
                 distance: 0,
             };
 
@@ -496,33 +506,16 @@ pub mod queryable {
             pub fn rand() -> Self {
                 use rand::Rng;
                 let mut rng = rand::thread_rng();
-                let complete: u8 = rng.gen();
-                let distance: u32 = rng.gen();
+                let complete: bool = rng.gen_bool(0.5);
+                let distance: u16 = rng.gen();
 
                 Self { complete, distance }
             }
         }
 
-        impl Default for QueryableInfo {
+        impl Default for QueryableInfoType {
             fn default() -> Self {
                 Self::DEFAULT
-            }
-        }
-
-        impl From<Info> for QueryableInfo {
-            fn from(ext: Info) -> Self {
-                let complete = ext.value as u8;
-                let distance = (ext.value >> 8) as u32;
-
-                Self { complete, distance }
-            }
-        }
-
-        impl From<QueryableInfo> for Info {
-            fn from(ext: QueryableInfo) -> Self {
-                let mut v: u64 = ext.complete as u64;
-                v |= (ext.distance as u64) << 8;
-                Info::new(v)
             }
         }
     }
@@ -535,7 +528,7 @@ pub mod queryable {
 
             let id: QueryableId = rng.gen();
             let wire_expr = WireExpr::rand();
-            let ext_info = ext::QueryableInfo::rand();
+            let ext_info = ext::QueryableInfoType::rand();
 
             Self {
                 id,
@@ -553,7 +546,7 @@ pub mod queryable {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X|  U_QBL  |
+    /// |Z|0_2|  U_QBL  |
     /// +---------------+
     /// ~  qbls_id:z32  ~
     /// +---------------+
