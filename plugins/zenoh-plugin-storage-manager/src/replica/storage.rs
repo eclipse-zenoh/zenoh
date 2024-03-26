@@ -676,6 +676,7 @@ fn serialize_update(update: &Update) -> String {
             },
     } = update;
     let zbuf: ZBuf = payload.into();
+
     let result = (
         kind.to_string(),
         timestamp.to_string(),

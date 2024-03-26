@@ -107,10 +107,10 @@ impl Payload {
 
     /// Decode an object of type `T` from a [`Value`] using the [`ZSerde`].
     /// See [encode](Value::encode) for an example.
-    pub fn deserialize<T>(&self) -> ZResult<T>
+    pub fn deserialize<'a, T>(&'a self) -> ZResult<T>
     where
-        ZSerde: Deserialize<T>,
-        <ZSerde as Deserialize<T>>::Error: Debug,
+        ZSerde: Deserialize<'a, T>,
+        <ZSerde as Deserialize<'a, T>>::Error: Debug,
     {
         let t: T = ZSerde.deserialize(self).map_err(|e| zerror!("{:?}", e))?;
         Ok(t)
@@ -125,11 +125,11 @@ pub trait Serialize<T> {
     fn serialize(self, t: T) -> Self::Output;
 }
 
-pub trait Deserialize<T> {
+pub trait Deserialize<'a, T> {
     type Error;
 
     /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
-    fn deserialize(self, t: &Payload) -> Result<T, Self::Error>;
+    fn deserialize(self, t: &'a Payload) -> Result<T, Self::Error>;
 }
 
 /// The default serializer for Zenoh payload. It supports primitives types, such as: vec<u8>, int, uint, float, string, bool.
@@ -155,7 +155,7 @@ impl From<Payload> for ZBuf {
     }
 }
 
-impl Deserialize<ZBuf> for ZSerde {
+impl Deserialize<'_, ZBuf> for ZSerde {
     type Error = Infallible;
 
     fn deserialize(self, v: &Payload) -> Result<ZBuf, Self::Error> {
@@ -185,18 +185,17 @@ impl Serialize<&[u8]> for ZSerde {
     }
 }
 
-impl Deserialize<Vec<u8>> for ZSerde {
+impl Deserialize<'_, Vec<u8>> for ZSerde {
     type Error = Infallible;
 
     fn deserialize(self, v: &Payload) -> Result<Vec<u8>, Self::Error> {
-        let v: ZBuf = v.into();
-        Ok(v.contiguous().to_vec())
+        Ok(Vec::from(v))
     }
 }
 
 impl From<&Payload> for Vec<u8> {
     fn from(value: &Payload) -> Self {
-        value.0.contiguous().to_vec()
+        Cow::from(value).to_vec()
     }
 }
 
@@ -208,12 +207,11 @@ impl<'a> Serialize<Cow<'a, [u8]>> for ZSerde {
     }
 }
 
-impl<'a> Deserialize<Cow<'a, [u8]>> for ZSerde {
+impl<'a> Deserialize<'a, Cow<'a, [u8]>> for ZSerde {
     type Error = Infallible;
 
-    fn deserialize(self, v: &Payload) -> Result<Cow<'a, [u8]>, Self::Error> {
-        let v: Vec<u8> = Self.deserialize(v)?;
-        Ok(Cow::Owned(v))
+    fn deserialize(self, v: &'a Payload) -> Result<Cow<'a, [u8]>, Self::Error> {
+        Ok(Cow::from(v))
     }
 }
 
@@ -240,11 +238,11 @@ impl Serialize<&str> for ZSerde {
     }
 }
 
-impl Deserialize<String> for ZSerde {
+impl Deserialize<'_, String> for ZSerde {
     type Error = FromUtf8Error;
 
     fn deserialize(self, v: &Payload) -> Result<String, Self::Error> {
-        String::from_utf8(v.0.contiguous().to_vec())
+        String::from_utf8(Vec::from(v))
     }
 }
 
@@ -272,7 +270,7 @@ impl<'a> Serialize<Cow<'a, str>> for ZSerde {
     }
 }
 
-impl<'a> Deserialize<Cow<'a, str>> for ZSerde {
+impl<'a> Deserialize<'a, Cow<'a, str>> for ZSerde {
     type Error = FromUtf8Error;
 
     fn deserialize(self, v: &Payload) -> Result<Cow<'a, str>, Self::Error> {
@@ -281,10 +279,10 @@ impl<'a> Deserialize<Cow<'a, str>> for ZSerde {
     }
 }
 
-impl TryFrom<&Payload> for Cow<'_, str> {
+impl<'a> TryFrom<&'a Payload> for Cow<'a, str> {
     type Error = FromUtf8Error;
 
-    fn try_from(value: &Payload) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a Payload) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
     }
 }
@@ -321,16 +319,19 @@ macro_rules! impl_int {
             }
         }
 
-        impl Deserialize<$t> for ZSerde {
+        impl<'a> Deserialize<'a, $t> for ZSerde {
             type Error = ZDeserializeError;
 
             fn deserialize(self, v: &Payload) -> Result<$t, Self::Error> {
-                let p = v.0.contiguous();
+                use std::io::Read;
+
+                let mut r = v.reader();
                 let mut bs = (0 as $t).to_le_bytes();
-                if p.len() > bs.len() {
+                if v.len() > bs.len() {
                     return Err(ZDeserializeError);
                 }
-                bs[..p.len()].copy_from_slice(&p);
+                r.read_exact(&mut bs[..v.len()])
+                    .map_err(|_| ZDeserializeError)?;
                 let t = <$t>::from_le_bytes(bs);
                 Ok(t)
             }
@@ -375,15 +376,12 @@ impl Serialize<bool> for ZSerde {
     }
 }
 
-impl Deserialize<bool> for ZSerde {
+impl Deserialize<'_, bool> for ZSerde {
     type Error = ZDeserializeError;
 
     fn deserialize(self, v: &Payload) -> Result<bool, Self::Error> {
-        let p = v.0.contiguous();
-        if p.len() != 1 {
-            return Err(ZDeserializeError);
-        }
-        match p[0] {
+        let p = v.deserialize::<u8>().map_err(|_| ZDeserializeError)?;
+        match p {
             0 => Ok(false),
             1 => Ok(true),
             _ => Err(ZDeserializeError),
@@ -419,7 +417,7 @@ impl Serialize<serde_json::Value> for ZSerde {
     }
 }
 
-impl Deserialize<serde_json::Value> for ZSerde {
+impl Deserialize<'_, serde_json::Value> for ZSerde {
     type Error = serde_json::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_json::Value, Self::Error> {
@@ -454,7 +452,7 @@ impl Serialize<serde_yaml::Value> for ZSerde {
     }
 }
 
-impl Deserialize<serde_yaml::Value> for ZSerde {
+impl Deserialize<'_, serde_yaml::Value> for ZSerde {
     type Error = serde_yaml::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_yaml::Value, Self::Error> {
@@ -489,7 +487,7 @@ impl Serialize<serde_cbor::Value> for ZSerde {
     }
 }
 
-impl Deserialize<serde_cbor::Value> for ZSerde {
+impl Deserialize<'_, serde_cbor::Value> for ZSerde {
     type Error = serde_cbor::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_cbor::Value, Self::Error> {
@@ -528,7 +526,7 @@ impl Serialize<serde_pickle::Value> for ZSerde {
     }
 }
 
-impl Deserialize<serde_pickle::Value> for ZSerde {
+impl Deserialize<'_, serde_pickle::Value> for ZSerde {
     type Error = serde_pickle::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_pickle::Value, Self::Error> {
@@ -618,7 +616,10 @@ impl From<&Payload> for StringOrBase64 {
         use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
         match v.deserialize::<String>() {
             Ok(s) => StringOrBase64::String(s),
-            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.0.contiguous())),
+            Err(_) => {
+                let cow: Cow<'_, [u8]> = Cow::from(v);
+                StringOrBase64::Base64(b64_std_engine.encode(cow))
+            }
         }
     }
 }
