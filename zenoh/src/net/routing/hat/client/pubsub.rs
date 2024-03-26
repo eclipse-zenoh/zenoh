@@ -272,7 +272,7 @@ impl HatPubSubTrait for HatCode {
             }
             get_mut_unchecked(dst_face).local_interests.insert(
                 id,
-                (interest, res.as_ref().map(|res| (*res).clone()), current),
+                (interest, res.as_ref().map(|res| (*res).clone()), !current),
             );
             let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
             dst_face.primitives.send_declare(RoutingContext::with_expr(
