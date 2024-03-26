@@ -32,11 +32,13 @@ impl InterceptorFactoryTrait for TestInterceptor {
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         //transport.get_zid()
+        let mut subject_name = vec![];
         if let Ok(ids) = transport.get_auth_ids() {
             for id in ids {
                 match id {
                     AuthId::CertCommonName(name) => {
-                        println!("certificate common name {}", name)
+                        println!("certificate common name {}", name);
+                        subject_name.push("name");
                     }
                     AuthId::Username(name) => {
                         println!("user name {}", std::str::from_utf8(&name).unwrap())

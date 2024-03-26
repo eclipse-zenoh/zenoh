@@ -159,6 +159,8 @@ impl StateOpen {
 pub(crate) struct StateAccept {
     nonce: u64,
 }
+
+#[allow(dead_code)]
 pub(crate) struct Username(Vec<u8>);
 
 impl StateAccept {

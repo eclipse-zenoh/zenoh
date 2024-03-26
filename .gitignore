@@ -21,9 +21,5 @@
 
 cargo-timing*.html
 
-# remove secret files
-
-*.pem
-*.crt
-*.key
-*.json5
+#ignore test data
+tests

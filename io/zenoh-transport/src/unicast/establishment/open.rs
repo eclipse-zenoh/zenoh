@@ -13,6 +13,7 @@
 //
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shared_memory_unicast::Challenge;
+#[allow(unused_imports)]
 use crate::{
     common::batch::BatchConfig,
     unicast::{

@@ -470,16 +470,16 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Auth
+        #[allow(unused_mut, unused_assignments)]
         let mut auth_id = AuthId::None;
 
         #[cfg(feature = "transport_auth")]
         {
-            let inner_auth_id = self
+            auth_id = self
                 .ext_auth
                 .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-            auth_id = inner_auth_id;
         }
 
         // Extension MultiLink
@@ -596,7 +596,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 }
 
 pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -> ZResult<()> {
-    println!("accept link is called");
     let mtu = link.get_mtu();
     let is_streamed = link.is_streamed();
     let config = TransportLinkUnicastConfig {
@@ -722,6 +721,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "shared-memory")]
         is_shm: state.transport.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
+        #[cfg(feature = "transport_auth")]
         auth_id: osyn_out.other_auth_id,
     };
 
