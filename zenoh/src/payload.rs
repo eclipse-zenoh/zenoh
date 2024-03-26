@@ -19,7 +19,7 @@ use std::{
 };
 use zenoh_buffers::buffer::Buffer;
 use zenoh_buffers::{
-    buffer::SplitBuffer, reader::HasReader, writer::HasWriter, ZBufReader, ZBufWriter, ZSlice,
+    buffer::SplitBuffer, reader::HasReader, writer::HasWriter, ZBufReader, ZSlice,
 };
 use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
@@ -57,11 +57,6 @@ impl Payload {
     pub fn reader(&self) -> PayloadReader<'_> {
         PayloadReader(self.0.reader())
     }
-
-    /// Get a [`PayloadWriter`] implementing [`std::io::Write`] trait.
-    pub fn writer(&mut self) -> PayloadWriter<'_> {
-        PayloadWriter(self.0.writer())
-    }
 }
 
 /// A reader that implements [`std::io::Read`] trait to read from a [`Payload`].
@@ -70,19 +65,6 @@ pub struct PayloadReader<'a>(ZBufReader<'a>);
 impl std::io::Read for PayloadReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.0.read(buf)
-    }
-}
-
-/// A writer that implements [`std::io::Write`] trait to read from a [`Payload`].
-pub struct PayloadWriter<'a>(ZBufWriter<'a>);
-
-impl std::io::Write for PayloadWriter<'_> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.0.flush()
     }
 }
 
@@ -404,7 +386,7 @@ impl Serialize<&serde_json::Value> for ZSerde {
 
     fn serialize(self, t: &serde_json::Value) -> Self::Output {
         let mut payload = Payload::empty();
-        serde_json::to_writer(payload.writer(), t)?;
+        serde_json::to_writer(payload.0.writer(), t)?;
         Ok(payload)
     }
 }
@@ -439,7 +421,7 @@ impl Serialize<&serde_yaml::Value> for ZSerde {
 
     fn serialize(self, t: &serde_yaml::Value) -> Self::Output {
         let mut payload = Payload::empty();
-        serde_yaml::to_writer(payload.writer(), t)?;
+        serde_yaml::to_writer(payload.0.writer(), t)?;
         Ok(payload)
     }
 }
@@ -474,7 +456,7 @@ impl Serialize<&serde_cbor::Value> for ZSerde {
 
     fn serialize(self, t: &serde_cbor::Value) -> Self::Output {
         let mut payload = Payload::empty();
-        serde_cbor::to_writer(payload.writer(), t)?;
+        serde_cbor::to_writer(payload.0.writer(), t)?;
         Ok(payload)
     }
 }
@@ -510,7 +492,7 @@ impl Serialize<&serde_pickle::Value> for ZSerde {
     fn serialize(self, t: &serde_pickle::Value) -> Self::Output {
         let mut payload = Payload::empty();
         serde_pickle::value_to_writer(
-            &mut payload.writer(),
+            &mut payload.0.writer(),
             t,
             serde_pickle::SerOptions::default(),
         )?;
