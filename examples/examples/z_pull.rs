@@ -22,7 +22,7 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, key_expr, cache, interval) = parse_args();
+    let (config, key_expr, size, interval) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
@@ -30,7 +30,7 @@ async fn main() {
     println!("Declaring Subscriber on '{key_expr}'...");
     let subscriber = session
         .declare_subscriber(&key_expr)
-        .with(RingBuffer::new(cache))
+        .with(RingBuffer::new(size))
         .res()
         .await
         .unwrap();
@@ -67,10 +67,10 @@ struct SubArgs {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The Key Expression to subscribe to.
     key: KeyExpr<'static>,
-    /// The size of the cache.
+    /// The size of the ringbuffer.
     #[arg(long, default_value = "3")]
-    cache: usize,
-    /// The interval for pulling the cache.
+    size: usize,
+    /// The interval for pulling the ringbuffer.
     #[arg(long, default_value = "5.0")]
     interval: f32,
     #[command(flatten)]
@@ -80,5 +80,5 @@ struct SubArgs {
 fn parse_args() -> (Config, KeyExpr<'static>, usize, Duration) {
     let args = SubArgs::parse();
     let interval = Duration::from_secs_f32(args.interval);
-    (args.common.into(), args.key, args.cache, interval)
+    (args.common.into(), args.key, args.size, interval)
 }
