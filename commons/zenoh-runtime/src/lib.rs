@@ -148,6 +148,7 @@ impl ZRuntimePool {
     }
 }
 
+// If there are any blocking tasks spawned by ZRuntimes, the function will block until they return.
 impl Drop for ZRuntimePool {
     fn drop(&mut self) {
         let handles: Vec<_> = self
@@ -156,7 +157,7 @@ impl Drop for ZRuntimePool {
             .map(|(name, mut rt)| {
                 std::thread::spawn(move || {
                     rt.take()
-                        .expect(&format!("ZRuntime {name:?} failed to shutdown."))
+                        .unwrap_or_else(|| panic!("ZRuntime {name:?} failed to shutdown."))
                         .shutdown_timeout(Duration::from_secs(1))
                 })
             })
@@ -168,11 +169,8 @@ impl Drop for ZRuntimePool {
     }
 }
 
-/// Force drops ZRUNTIME_POOL.
-///
-/// Rust does not drop static variables. They are always reported by valgrind for example.
-/// This function can be used to force drop ZRUNTIME_POOL, to prevent valgrind reporting memory leaks related to it.
-/// If there are any blocking tasks spawned by ZRuntimes, the function will block until they return.
+/// In order to prevent valgrind reporting memory leaks,
+/// we use this guard to force drop ZRUNTIME_POOL since Rust does not drop static variables.
 #[doc(hidden)]
 pub struct ZRuntimePoolGuard;
 
