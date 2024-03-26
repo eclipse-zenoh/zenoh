@@ -13,6 +13,7 @@
 //
 #[test]
 fn pubsub_with_ringbuffer() {
+    use std::{thread, time::Duration};
     use zenoh::{handlers::RingBuffer, prelude::sync::*};
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
@@ -39,6 +40,8 @@ fn pubsub_with_ringbuffer() {
             format!("put{i}")
         );
     }
+    // Wait for the subscriber to get the value
+    thread::sleep(Duration::from_millis(1000));
 }
 
 #[test]
