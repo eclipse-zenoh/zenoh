@@ -94,28 +94,28 @@ impl<T: Send + Sync + 'static> IntoHandler<'static, T>
 
 /// Ring buffer with a limited queue size, which allows users to keep the last N data.
 pub struct RingBuffer<T> {
-    cache: Arc<Mutex<RingBufferInner<T>>>,
+    ring: Arc<Mutex<RingBufferInner<T>>>,
 }
 
 impl<T> RingBuffer<T> {
     /// Initialize the RingBuffer with the capacity size.
     pub fn new(capacity: usize) -> Self {
         RingBuffer {
-            cache: Arc::new(Mutex::new(RingBufferInner::new(capacity))),
+            ring: Arc::new(Mutex::new(RingBufferInner::new(capacity))),
         }
     }
 }
 
 pub struct RingBufferHandler<T> {
-    cache: Weak<Mutex<RingBufferInner<T>>>,
+    ring: Weak<Mutex<RingBufferInner<T>>>,
 }
 
 impl<T> RingBufferHandler<T> {
     pub fn recv(&self) -> ZResult<Option<T>> {
-        let Some(cache) = self.cache.upgrade() else {
-            bail!("The cache has been deleted.");
+        let Some(ring) = self.ring.upgrade() else {
+            bail!("The ringbuffer has been deleted.");
         };
-        let mut guard = cache.lock().map_err(|e| zerror!("{}", e))?;
+        let mut guard = ring.lock().map_err(|e| zerror!("{}", e))?;
         Ok(guard.pull())
     }
 }
@@ -125,10 +125,10 @@ impl<T: Send + 'static> IntoHandler<'static, T> for RingBuffer<T> {
 
     fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
         let receiver = RingBufferHandler {
-            cache: Arc::downgrade(&self.cache),
+            ring: Arc::downgrade(&self.ring),
         };
         (
-            Dyn::new(move |t| match self.cache.lock() {
+            Dyn::new(move |t| match self.ring.lock() {
                 Ok(mut g) => {
                     // Eventually drop the oldest element.
                     g.push_force(t);
