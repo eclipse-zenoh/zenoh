@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use zenoh_protocol::network::declare::TokenId;
+
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
     hat::HatLivelinessTrait,
@@ -13,6 +15,7 @@ impl HatLivelinessTrait for HatCode {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
+        id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,
     ) {
@@ -23,6 +26,7 @@ impl HatLivelinessTrait for HatCode {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
+        id: TokenId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
     ) {
