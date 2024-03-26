@@ -21,14 +21,12 @@ use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-#[cfg(feature = "complete_n")]
-use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
         declare::{
-            ext, queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, Declare,
+            ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
             DeclareBody, DeclareKeyExpr,
         },
         Mapping,
@@ -40,9 +38,6 @@ pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
-#[cfg(feature = "complete_n")]
-pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
-#[cfg(not(feature = "complete_n"))]
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
@@ -56,7 +51,7 @@ pub(crate) struct SessionContext {
     pub(crate) local_expr_id: Option<ExprId>,
     pub(crate) remote_expr_id: Option<ExprId>,
     pub(crate) subs: Option<SubscriberInfo>,
-    pub(crate) qabl: Option<QueryableInfo>,
+    pub(crate) qabl: Option<QueryableInfoType>,
     pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
     pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
 }

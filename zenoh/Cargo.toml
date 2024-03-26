@@ -31,7 +31,6 @@ maintenance = { status = "actively-developed" }
 [features]
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
-complete_n = ["zenoh-codec/complete_n"]
 shared-memory = [
     "zenoh-shm",
     "zenoh-protocol/shared-memory",

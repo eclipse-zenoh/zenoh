@@ -43,8 +43,6 @@ where
             ext::TargetType::BestMatching => 0,
             ext::TargetType::All => 1,
             ext::TargetType::AllComplete => 2,
-            #[cfg(feature = "complete_n")]
-            ext::TargetType::Complete(n) => 3 + *n,
         };
         let ext = ext::Target::new(v);
         self.write(&mut *writer, (&ext, more))
@@ -63,9 +61,6 @@ where
             0 => ext::TargetType::BestMatching,
             1 => ext::TargetType::All,
             2 => ext::TargetType::AllComplete,
-            #[cfg(feature = "complete_n")]
-            n => ext::TargetType::Complete(n - 3),
-            #[cfg(not(feature = "complete_n"))]
             _ => return Err(DidntRead),
         };
         Ok((rt, more))

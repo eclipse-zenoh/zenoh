@@ -36,7 +36,6 @@ std = [
 test = ["rand", "zenoh-buffers/test"]
 shared-memory = ["std", "zenoh-buffers/shared-memory"]
 stats = []
-complete_n = []
 
 [dependencies]
 const_format = { workspace = true }
