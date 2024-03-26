@@ -32,29 +32,24 @@ use zenoh_protocol::network::declare::QueryableId;
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::declare::{
-        common::ext::WireExprType, ext, queryable::ext::QueryableInfo, Declare, DeclareBody,
+        common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
         DeclareQueryable, UndeclareQueryable,
     },
 };
 use zenoh_sync::get_mut_unchecked;
 
-#[cfg(feature = "complete_n")]
 #[inline]
-fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete += info.complete;
+fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
+    this.complete = this.complete || info.complete;
     this.distance = std::cmp::min(this.distance, info.distance);
     this
 }
 
-#[cfg(not(feature = "complete_n"))]
-#[inline]
-fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete = u8::from(this.complete != 0 || info.complete != 0);
-    this.distance = std::cmp::min(this.distance, info.distance);
-    this
-}
-
-fn local_qabl_info(_tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> QueryableInfo {
+fn local_qabl_info(
+    _tables: &Tables,
+    res: &Arc<Resource>,
+    face: &Arc<FaceState>,
+) -> QueryableInfoType {
     res.session_ctxs
         .values()
         .fold(None, |accu, ctx| {
@@ -71,10 +66,7 @@ fn local_qabl_info(_tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>)
                 accu
             }
         })
-        .unwrap_or(QueryableInfo {
-            complete: 0,
-            distance: 0,
-        })
+        .unwrap_or(QueryableInfoType::DEFAULT)
 }
 
 fn propagate_simple_queryable(
@@ -121,7 +113,7 @@ fn register_client_queryable(
     face: &mut Arc<FaceState>,
     id: QueryableId,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
 ) {
     // Register queryable
     {
@@ -147,7 +139,7 @@ fn declare_client_queryable(
     face: &mut Arc<FaceState>,
     id: QueryableId,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
 ) {
     register_client_queryable(tables, face, id, res, qabl_info);
     propagate_simple_queryable(tables, res, Some(face));
@@ -263,7 +255,7 @@ impl HatQueriesTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
-        qabl_info: &QueryableInfo,
+        qabl_info: &QueryableInfoType,
         _node_id: NodeId,
     ) {
         declare_client_queryable(tables, face, id, res, qabl_info);

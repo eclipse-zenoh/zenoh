@@ -93,8 +93,6 @@ pub mod ext {
         BestMatching,
         All,
         AllComplete,
-        #[cfg(feature = "complete_n")]
-        Complete(u64),
     }
 
     impl TargetType {
@@ -109,8 +107,6 @@ pub mod ext {
                 TargetType::All,
                 TargetType::AllComplete,
                 TargetType::BestMatching,
-                #[cfg(feature = "complete_n")]
-                TargetType::Complete(rng.gen()),
             ]
             .choose(&mut rng)
             .unwrap()
