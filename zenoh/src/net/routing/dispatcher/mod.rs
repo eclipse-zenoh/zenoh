@@ -18,6 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 pub mod face;
+pub mod liveliness;
 pub mod pubsub;
 pub mod queries;
 pub mod resource;

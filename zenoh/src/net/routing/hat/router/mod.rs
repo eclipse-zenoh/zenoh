@@ -65,6 +65,7 @@ use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
+mod liveliness;
 mod network;
 mod pubsub;
 mod queries;

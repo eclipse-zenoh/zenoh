@@ -60,6 +60,7 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
 mod gossip;
+mod liveliness;
 mod pubsub;
 mod queries;
 
