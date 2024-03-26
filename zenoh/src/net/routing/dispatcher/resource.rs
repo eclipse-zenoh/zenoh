@@ -53,6 +53,7 @@ pub(crate) struct SessionContext {
     pub(crate) remote_expr_id: Option<ExprId>,
     pub(crate) subs: Option<SubscriberInfo>,
     pub(crate) qabl: Option<QueryableInfoType>,
+    pub(crate) token: bool,
     pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
     pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
 }
@@ -65,6 +66,7 @@ impl SessionContext {
             remote_expr_id: None,
             subs: None,
             qabl: None,
+            token: false,
             in_interceptor_cache: None,
             e_interceptor_cache: None,
         }

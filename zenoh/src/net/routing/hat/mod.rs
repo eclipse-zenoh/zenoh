@@ -33,7 +33,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, InterestId,
-            QueryableId, SubscriberId,
+            QueryableId, SubscriberId, TokenId,
         },
         Oam,
     },
