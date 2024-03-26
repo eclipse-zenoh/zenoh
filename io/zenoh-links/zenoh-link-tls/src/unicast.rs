@@ -13,38 +13,31 @@
 //
 use crate::{
     base64_decode, config::*, get_tls_addr, get_tls_host, get_tls_server_name,
-    verify::WebPkiVerifierAnyServerName, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,
-    TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
+    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
-use async_rustls::{
-    rustls::{
-        server::AllowAnyAuthenticatedClient, version::TLS13, Certificate, ClientConfig,
-        OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
-    },
-    TlsAcceptor, TlsConnector, TlsStream,
-};
-use async_std::fs;
-use async_std::net::{SocketAddr, TcpListener, TcpStream};
-use async_std::prelude::FutureExt;
-use async_std::sync::Mutex as AsyncMutex;
-use async_std::task;
 use async_trait::async_trait;
-use futures::io::AsyncReadExt;
-use futures::io::AsyncWriteExt;
+use rustls::{
+    pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
+    server::WebPkiClientVerifier,
+    version::TLS13,
+    ClientConfig, RootCertStore, ServerConfig,
+};
 use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Cursor};
-use std::net::Shutdown;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{cell::UnsafeCell, io};
-use webpki::{
-    anchor_from_trusted_cert,
-    types::{CertificateDer, TrustAnchor},
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Mutex as AsyncMutex;
+use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
+use tokio_util::sync::CancellationToken;
+use webpki::anchor_from_trusted_cert;
 use zenoh_core::zasynclock;
+use zenoh_link_commons::tls::WebPkiVerifierAnyServerName;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
@@ -52,7 +45,6 @@ use zenoh_link_commons::{
 use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZError, ZResult};
-use zenoh_sync::Signal;
 
 pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library
@@ -96,12 +88,9 @@ impl LinkUnicastTls {
         }
 
         // Set the TLS linger option
-        if let Err(err) = zenoh_util::net::set_linger(
-            tcp_stream,
-            Some(Duration::from_secs(
-                (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
-            )),
-        ) {
+        if let Err(err) = tcp_stream.set_linger(Some(Duration::from_secs(
+            (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
+        ))) {
             log::warn!(
                 "Unable to set LINGER option on TLS link {} => {}: {}",
                 src_addr,
@@ -141,8 +130,8 @@ impl LinkUnicastTrait for LinkUnicastTls {
         let res = tls_stream.flush().await;
         log::trace!("TLS link flush {}: {:?}", self, res);
         // Close the underlying TCP stream
-        let (tcp_stream, _) = tls_stream.get_ref();
-        let res = tcp_stream.shutdown(Shutdown::Both);
+        let (tcp_stream, _) = tls_stream.get_mut();
+        let res = tcp_stream.shutdown().await;
         log::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| zerror!(e).into())
     }
@@ -173,10 +162,11 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
-        self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
+        let _ = self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
             log::trace!("Read error on TLS link {}: {}", self, e);
-            zerror!(e).into()
-        })
+            zerror!(e)
+        })?;
+        Ok(())
     }
 
     #[inline(always)]
@@ -213,8 +203,9 @@ impl LinkUnicastTrait for LinkUnicastTls {
 impl Drop for LinkUnicastTls {
     fn drop(&mut self) {
         // Close the underlying TCP stream
-        let (tcp_stream, _) = self.get_sock_mut().get_ref();
-        let _ = tcp_stream.shutdown(Shutdown::Both);
+        let (tcp_stream, _) = self.get_sock_mut().get_mut();
+        let _ =
+            zenoh_runtime::ZRuntime::TX.block_in_place(async move { tcp_stream.shutdown().await });
     }
 }
 
@@ -331,16 +322,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         // Initialize the TlsAcceptor
         let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
-        let active = Arc::new(AtomicBool::new(true));
-        let signal = Signal::new();
-
-        let c_active = active.clone();
-        let c_signal = signal.clone();
+        let token = self.listeners.token.child_token();
+        let c_token = token.clone();
         let c_manager = self.manager.clone();
 
-        let handle = task::spawn(async move {
-            accept_task(socket, acceptor, c_active, c_signal, c_manager).await
-        });
+        let task = async move { accept_task(socket, acceptor, c_token, c_manager).await };
 
         // Update the endpoint locator address
         let locator = Locator::new(
@@ -350,7 +336,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         )?;
 
         self.listeners
-            .add_listener(endpoint, local_addr, active, signal, handle)
+            .add_listener(endpoint, local_addr, task, token)
             .await?;
 
         Ok(locator)
@@ -362,11 +348,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         self.listeners.del_listener(addr).await
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
+    async fn get_listeners(&self) -> Vec<EndPoint> {
         self.listeners.get_endpoints()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
+    async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
     }
 }
@@ -374,23 +360,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 async fn accept_task(
     socket: TcpListener,
     acceptor: TlsAcceptor,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-    enum Action {
-        Accept((TcpStream, SocketAddr)),
-        Stop,
-    }
-
-    async fn accept(socket: &TcpListener) -> ZResult<Action> {
+    async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
-        Ok(Action::Accept(res))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok(res)
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
@@ -400,42 +375,44 @@ async fn accept_task(
     })?;
 
     log::trace!("Ready to accept TLS connections on: {:?}", src_addr);
-    while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
-        let (tcp_stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
-            Ok(action) => match action {
-                Action::Accept((tcp_stream, dst_addr)) => (tcp_stream, dst_addr),
-                Action::Stop => break,
-            },
-            Err(e) => {
-                log::warn!("{}. Hint: increase the system open file limit.", e);
-                // Throttle the accept loop upon an error
-                // NOTE: This might be due to various factors. However, the most common case is that
-                //       the process has reached the maximum number of open files in the system. On
-                //       Linux systems this limit can be changed by using the "ulimit" command line
-                //       tool. In case of systemd-based systems, this can be changed by using the
-                //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*TLS_ACCEPT_THROTTLE_TIME)).await;
-                continue;
-            }
-        };
-        // Accept the TLS connection
-        let tls_stream = match acceptor.accept(tcp_stream).await {
-            Ok(stream) => TlsStream::Server(stream),
-            Err(e) => {
-                let e = format!("Can not accept TLS connection: {e}");
-                log::warn!("{}", e);
-                continue;
-            }
-        };
+    loop {
+        tokio::select! {
+            _ = token.cancelled() => break,
 
-        log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
-        // Create the new link object
-        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
+            res = accept(&socket) => {
+                match res {
+                    Ok((tcp_stream, dst_addr)) => {
+                        // Accept the TLS connection
+                        let tls_stream = match acceptor.accept(tcp_stream).await {
+                            Ok(stream) => TlsStream::Server(stream),
+                            Err(e) => {
+                                let e = format!("Can not accept TLS connection: {e}");
+                                log::warn!("{}", e);
+                                continue;
+                            }
+                        };
 
-        // Communicate the new link to the initial transport manager
-        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-            log::error!("{}-{}: {}", file!(), line!(), e)
+                        log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
+                        // Create the new link object
+                        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
+
+                        // Communicate the new link to the initial transport manager
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                            log::error!("{}-{}: {}", file!(), line!(), e)
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("{}. Hint: increase the system open file limit.", e);
+                        // Throttle the accept loop upon an error
+                        // NOTE: This might be due to various factors. However, the most common case is that
+                        //       the process has reached the maximum number of open files in the system. On
+                        //       Linux systems this limit can be changed by using the "ulimit" command line
+                        //       tool. In case of systemd-based systems, this can be changed by using the
+                        //       "sysctl" command line tool.
+                        tokio::time::sleep(Duration::from_micros(*TLS_ACCEPT_THROTTLE_TIME)).await;
+                    }
+                }
+            }
         }
     }
 
@@ -457,42 +434,29 @@ impl TlsServerConfig {
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
 
-        let certs: Vec<Certificate> =
+        let certs: Vec<CertificateDer> =
             rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
-                .map(|result| {
-                    result
-                        .map_err(|err| zerror!("Error processing server certificate: {err}."))
-                        .map(|der| Certificate(der.to_vec()))
-                })
-                .collect::<Result<Vec<Certificate>, ZError>>()?;
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing server certificate: {err}."))?;
 
-        let mut keys: Vec<PrivateKey> =
+        let mut keys: Vec<PrivateKeyDer> =
             rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|result| {
-                    result
-                        .map_err(|err| zerror!("Error processing server key: {err}."))
-                        .map(|key| PrivateKey(key.secret_pkcs1_der().to_vec()))
-                })
-                .collect::<Result<Vec<PrivateKey>, ZError>>()?;
+                .map(|x| x.map(PrivateKeyDer::from))
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing server key: {err}."))?;
 
         if keys.is_empty() {
             keys = rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|result| {
-                    result
-                        .map_err(|err| zerror!("Error processing server key: {err}."))
-                        .map(|key| PrivateKey(key.secret_pkcs8_der().to_vec()))
-                })
-                .collect::<Result<Vec<PrivateKey>, ZError>>()?;
+                .map(|x| x.map(PrivateKeyDer::from))
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing server key: {err}."))?;
         }
 
         if keys.is_empty() {
             keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|result| {
-                    result
-                        .map_err(|err| zerror!("Error processing server key: {err}."))
-                        .map(|key| PrivateKey(key.secret_sec1_der().to_vec()))
-                })
-                .collect::<Result<Vec<PrivateKey>, ZError>>()?;
+                .map(|x| x.map(PrivateKeyDer::from))
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing server key: {err}."))?;
         }
 
         if keys.is_empty() {
@@ -508,17 +472,13 @@ impl TlsServerConfig {
                 },
                 Ok,
             )?;
-            ServerConfig::builder()
-                .with_safe_default_cipher_suites()
-                .with_safe_default_kx_groups()
-                .with_protocol_versions(&[&TLS13]) // Force TLS 1.3
-                .map_err(|e| zerror!(e))?
-                .with_client_cert_verifier(Arc::new(AllowAnyAuthenticatedClient::new(root_cert_store)))
+            let client_auth = WebPkiClientVerifier::builder(root_cert_store.into()).build()?;
+            ServerConfig::builder_with_protocol_versions(&[&TLS13])
+                .with_client_cert_verifier(client_auth)
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
         } else {
             ServerConfig::builder()
-                .with_safe_defaults()
                 .with_no_client_auth()
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
@@ -575,13 +535,13 @@ impl TlsClientConfig {
 
         // Allows mixed user-generated CA and webPKI CA
         log::debug!("Loading default Web PKI certificates.");
-        let mut root_cert_store: RootCertStore = RootCertStore {
-            roots: load_default_webpki_certs().roots,
+        let mut root_cert_store = RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
         };
 
         if let Some(custom_root_cert) = load_trust_anchors(config)? {
             log::debug!("Loading user-generated certificates.");
-            root_cert_store.add_trust_anchors(custom_root_cert.roots.into_iter());
+            root_cert_store.extend(custom_root_cert.roots);
         }
 
         let cc = if tls_client_server_auth {
@@ -589,54 +549,37 @@ impl TlsClientConfig {
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
             let tls_client_certificate = TlsClientConfig::load_tls_certificate(config).await?;
 
-            let certs: Vec<Certificate> =
+            let certs: Vec<CertificateDer> =
                 rustls_pemfile::certs(&mut Cursor::new(&tls_client_certificate))
-                    .map(|result| {
-                        result
-                            .map_err(|err| zerror!("Error processing client certificate: {err}."))
-                            .map(|der| Certificate(der.to_vec()))
-                    })
-                    .collect::<Result<Vec<Certificate>, ZError>>()?;
+                    .collect::<Result<_, _>>()
+                    .map_err(|err| zerror!("Error processing client certificate: {err}."))?;
 
-            let mut keys: Vec<PrivateKey> =
+            let mut keys: Vec<PrivateKeyDer> =
                 rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map(|result| {
-                        result
-                            .map_err(|err| zerror!("Error processing client key: {err}."))
-                            .map(|key| PrivateKey(key.secret_pkcs1_der().to_vec()))
-                    })
-                    .collect::<Result<Vec<PrivateKey>, ZError>>()?;
+                    .map(|x| x.map(PrivateKeyDer::from))
+                    .collect::<Result<_, _>>()
+                    .map_err(|err| zerror!("Error processing client key: {err}."))?;
 
             if keys.is_empty() {
                 keys =
                     rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_client_private_key))
-                        .map(|result| {
-                            result
-                                .map_err(|err| zerror!("Error processing client key: {err}."))
-                                .map(|key| PrivateKey(key.secret_pkcs8_der().to_vec()))
-                        })
-                        .collect::<Result<Vec<PrivateKey>, ZError>>()?;
+                        .map(|x| x.map(PrivateKeyDer::from))
+                        .collect::<Result<_, _>>()
+                        .map_err(|err| zerror!("Error processing client key: {err}."))?;
             }
 
             if keys.is_empty() {
                 keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map(|result| {
-                        result
-                            .map_err(|err| zerror!("Error processing client key: {err}."))
-                            .map(|key| PrivateKey(key.secret_sec1_der().to_vec()))
-                    })
-                    .collect::<Result<Vec<PrivateKey>, ZError>>()?;
+                    .map(|x| x.map(PrivateKeyDer::from))
+                    .collect::<Result<_, _>>()
+                    .map_err(|err| zerror!("Error processing client key: {err}."))?;
             }
 
             if keys.is_empty() {
                 bail!("No private key found for TLS client.");
             }
 
-            let builder = ClientConfig::builder()
-                .with_safe_default_cipher_suites()
-                .with_safe_default_kx_groups()
-                .with_protocol_versions(&[&TLS13])
-                .map_err(|e| zerror!("Config parameters should be valid: {}", e))?;
+            let builder = ClientConfig::builder_with_protocol_versions(&[&TLS13]);
 
             if tls_server_name_verification {
                 builder
@@ -644,6 +587,7 @@ impl TlsClientConfig {
                     .with_client_auth_cert(certs, keys.remove(0))
             } else {
                 builder
+                    .dangerous()
                     .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
                         root_cert_store,
                     )))
@@ -651,13 +595,14 @@ impl TlsClientConfig {
             }
             .map_err(|e| zerror!("Bad certificate/key: {}", e))?
         } else {
-            let builder = ClientConfig::builder().with_safe_defaults();
+            let builder = ClientConfig::builder();
             if tls_server_name_verification {
                 builder
                     .with_root_certificates(root_cert_store)
                     .with_no_client_auth()
             } else {
                 builder
+                    .dangerous()
                     .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
                         root_cert_store,
                     )))
@@ -696,10 +641,14 @@ async fn load_tls_key(
 ) -> ZResult<Vec<u8>> {
     if let Some(value) = config.get(tls_private_key_raw_config_key) {
         return Ok(value.as_bytes().to_vec());
-    } else if let Some(b64_key) = config.get(tls_private_key_base64_config_key) {
+    }
+
+    if let Some(b64_key) = config.get(tls_private_key_base64_config_key) {
         return base64_decode(b64_key);
-    } else if let Some(value) = config.get(tls_private_key_file_config_key) {
-        return Ok(fs::read(value)
+    }
+
+    if let Some(value) = config.get(tls_private_key_file_config_key) {
+        return Ok(tokio::fs::read(value)
             .await
             .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?)
         .and_then(|result| {
@@ -721,10 +670,14 @@ async fn load_tls_certificate(
 ) -> ZResult<Vec<u8>> {
     if let Some(value) = config.get(tls_certificate_raw_config_key) {
         return Ok(value.as_bytes().to_vec());
-    } else if let Some(b64_certificate) = config.get(tls_certificate_base64_config_key) {
+    }
+
+    if let Some(b64_certificate) = config.get(tls_certificate_base64_config_key) {
         return base64_decode(b64_certificate);
-    } else if let Some(value) = config.get(tls_certificate_file_config_key) {
-        return Ok(fs::read(value)
+    }
+
+    if let Some(value) = config.get(tls_certificate_file_config_key) {
+        return Ok(tokio::fs::read(value)
             .await
             .map_err(|e| zerror!("Invalid TLS certificate file: {}", e))?);
     }
@@ -736,7 +689,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
     if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
         let mut pem = BufReader::new(value.as_bytes());
         let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.add_trust_anchors(trust_anchors.into_iter());
+        root_cert_store.extend(trust_anchors);
         return Ok(Some(root_cert_store));
     }
 
@@ -744,20 +697,20 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
         let certificate_pem = base64_decode(b64_certificate)?;
         let mut pem = BufReader::new(certificate_pem.as_slice());
         let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.add_trust_anchors(trust_anchors.into_iter());
+        root_cert_store.extend(trust_anchors);
         return Ok(Some(root_cert_store));
     }
 
     if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
         let mut pem = BufReader::new(File::open(filename)?);
         let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.add_trust_anchors(trust_anchors.into_iter());
+        root_cert_store.extend(trust_anchors);
         return Ok(Some(root_cert_store));
     }
     Ok(None)
 }
 
-fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<OwnedTrustAnchor>> {
+fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<TrustAnchor<'static>>> {
     let certs: Vec<CertificateDer> = rustls_pemfile::certs(pem)
         .map(|result| result.map_err(|err| zerror!("Error processing PEM certificates: {err}.")))
         .collect::<Result<Vec<CertificateDer>, ZError>>()?;
@@ -771,28 +724,5 @@ fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<OwnedTrustAnchor>> {
         })
         .collect::<Result<Vec<TrustAnchor>, ZError>>()?;
 
-    let owned_trust_anchors: Vec<OwnedTrustAnchor> = trust_anchors
-        .into_iter()
-        .map(|ta| {
-            OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject.to_vec(),
-                ta.subject_public_key_info.to_vec(),
-                ta.name_constraints.map(|x| x.to_vec()),
-            )
-        })
-        .collect();
-
-    Ok(owned_trust_anchors)
-}
-
-fn load_default_webpki_certs() -> RootCertStore {
-    let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject.to_vec(),
-            ta.subject_public_key_info.to_vec(),
-            ta.name_constraints.clone().map(|x| x.to_vec()),
-        )
-    }));
-    root_cert_store
+    Ok(trust_anchors)
 }

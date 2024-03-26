@@ -532,6 +532,8 @@ pub fn route_query(
                         .compute_local_replies(&rtables, &prefix, expr.suffix, face);
                 let zid = rtables.zid;
 
+                let timeout = rtables.queries_default_timeout;
+
                 drop(queries_lock);
                 drop(rtables);
 
@@ -589,19 +591,18 @@ pub fn route_query(
                             expr.full_expr().to_string(),
                         ));
                 } else {
-                    // let timer = tables.timer.clone();
-                    // let timeout = tables.queries_default_timeout;
                     #[cfg(feature = "complete_n")]
                     {
                         for ((outface, key_expr, context), qid, t) in route.values() {
-                            // timer.add(TimedEvent::once(
-                            //     Instant::now() + timeout,
-                            //     QueryCleanup {
-                            //         tables: tables_ref.clone(),
-                            //         face: Arc::downgrade(&outface),
-                            //         *qid,
-                            //     },
-                            // ));
+                            let mut cleanup = QueryCleanup {
+                                tables: tables_ref.clone(),
+                                face: Arc::downgrade(outface),
+                                qid: *qid,
+                            };
+                            zenoh_runtime::ZRuntime::Net.spawn(async move {
+                                tokio::time::sleep(timeout).await;
+                                cleanup.run().await
+                            });
                             #[cfg(feature = "stats")]
                             if !admin {
                                 inc_req_stats!(outface, tx, user, body)
@@ -630,14 +631,15 @@ pub fn route_query(
                     #[cfg(not(feature = "complete_n"))]
                     {
                         for ((outface, key_expr, context), qid) in route.values() {
-                            // timer.add(TimedEvent::once(
-                            //     Instant::now() + timeout,
-                            //     QueryCleanup {
-                            //         tables: tables_ref.clone(),
-                            //         face: Arc::downgrade(&outface),
-                            //         *qid,
-                            //     },
-                            // ));
+                            let mut cleanup = QueryCleanup {
+                                tables: tables_ref.clone(),
+                                face: Arc::downgrade(outface),
+                                qid: *qid,
+                            };
+                            zenoh_runtime::ZRuntime::Net.spawn(async move {
+                                tokio::time::sleep(timeout).await;
+                                cleanup.run().await
+                            });
                             #[cfg(feature = "stats")]
                             if !admin {
                                 inc_req_stats!(outface, tx, user, body)

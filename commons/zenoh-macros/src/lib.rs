@@ -252,7 +252,7 @@ impl syn::parse::Parse for FormatDeclarations {
 /// - `formatter()`, a function that constructs a `Formatter` specialized for your format:
 ///     - for every spec in your format, `Formatter` will have a method named after the spec's `id` that lets you set a value for that field of your format. These methods will return `Result<&mut Formatter, FormatError>`.
 /// - `parse(target: &keyexpr) -> ZResult<Parsed<'_>>` will parse the provided key expression according to your format. Just like `KeFormat::parse`, parsing is lazy: each field will match the smallest subsection of your `target` that is included in its pattern.
-///     - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks.
+///     - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `&keyexpr`; except for specs whose pattern was `**`, these will return an `Option<&keyexpr>`, where `None` signifies that the pattern was matched by an empty list of chunks.
 #[proc_macro]
 pub fn kedefine(tokens: TokenStream) -> TokenStream {
     let declarations: FormatDeclarations = syn::parse(tokens).unwrap();
@@ -265,7 +265,7 @@ pub fn kedefine(tokens: TokenStream) -> TokenStream {
 - `formatter()`, a function that constructs a `Formatter` specialized for your format:
     - for every spec in your format, `Formatter` will have a method named after the spec's `id` that lets you set a value for that field of your format. These methods will return `Result<&mut Formatter, FormatError>`.
 - `parse(target: &keyexpr) -> ZResult<Parsed<'_>>` will parse the provided key expression according to your format. Just like `KeFormat::parse`, parsing is lazy: each field will match the smallest subsection of your `target` that is included in its pattern.
-    - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks."
+    - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `&keyexpr`; except for specs whose pattern was `**`, these will return an `Option<&keyexpr>`, where `None` signifies that the pattern was matched by an empty list of chunks."
     );
     let support = keformat_support(&source);
     quote! {
@@ -304,9 +304,9 @@ impl syn::parse::Parse for FormatUsage {
 /// Write a set of values into a `Formatter`, stopping as soon as a value doesn't fit the specification for its field.
 /// Contrary to `keformat` doesn't build the Formatter into a Key Expression.
 ///
-/// `kewrite!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.  
-/// `$formatter` must be an expression that dereferences to `&mut Formatter`.  
-/// `$expr` must resolve to a value that implements `core::fmt::Display`.  
+/// `kewrite!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.
+/// `$formatter` must be an expression that dereferences to `&mut Formatter`.
+/// `$expr` must resolve to a value that implements `core::fmt::Display`.
 /// `$expr` defaults to `$ident` if omitted.
 ///
 /// This macro always results in an expression that resolves to `Result<&mut Formatter, FormatSetError>`.
@@ -326,9 +326,9 @@ pub fn kewrite(tokens: TokenStream) -> TokenStream {
 
 /// Write a set of values into a `Formatter` and then builds it into an `OwnedKeyExpr`, stopping as soon as a value doesn't fit the specification for its field.
 ///
-/// `keformat!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.  
-/// `$formatter` must be an expression that dereferences to `&mut Formatter`.  
-/// `$expr` must resolve to a value that implements `core::fmt::Display`.  
+/// `keformat!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.
+/// `$formatter` must be an expression that dereferences to `&mut Formatter`.
+/// `$expr` must resolve to a value that implements `core::fmt::Display`.
 /// `$expr` defaults to `$ident` if omitted.
 ///
 /// This macro always results in an expression that resolves to `ZResult<OwnedKeyExpr>`, and leaves `$formatter` in its written state.

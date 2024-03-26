@@ -18,7 +18,7 @@ use zenoh::publication::CongestionControl;
 use zenoh::shm::SharedMemoryManager;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();
@@ -42,6 +42,7 @@ async fn main() {
     // Make sure to not drop messages because of congestion control
     .congestion_control(CongestionControl::Block).res().await.unwrap();
 
+    println!("Press CTRL-C to quit...");
     loop {
         publisher.put(buf.clone()).res().await.unwrap();
     }

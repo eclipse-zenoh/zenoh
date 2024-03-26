@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use std::io::{stdin, Read};
 use std::time::Instant;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
@@ -95,12 +94,8 @@ fn main() {
         .res()
         .unwrap();
 
-    for byte in stdin().bytes() {
-        match byte {
-            Ok(b'q') => break,
-            _ => std::thread::yield_now(),
-        }
-    }
+    println!("Press CTRL-C to quit...");
+    std::thread::park();
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

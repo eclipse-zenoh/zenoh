@@ -24,7 +24,7 @@ categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
 
 [features]
-default = ["no_mangle"]
+default = ["no_mangle", "zenoh/default"]
 no_mangle = []
 
 [lib]
@@ -33,9 +33,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow = { workspace = true, features = ["default"] }
-async-std = { workspace = true, features = ["default"] }
+async-std = { workspace = true, features = ["default", "attributes"] }
 base64 = { workspace = true }
-clap = { workspace = true }
 const_format = { workspace = true }
 env_logger = { workspace = true }
 flume = { workspace = true }
@@ -59,6 +58,9 @@ schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 jsonschema = { workspace = true }
+
+[dev-dependencies]
+clap = { workspace = true }
 
 [[example]]
 name = "z_serve_sse"

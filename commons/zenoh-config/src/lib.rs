@@ -15,12 +15,10 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+
 use include::recursive_include;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
-use serde::{
-    de::{self, MapAccess, Visitor},
-    Deserialize, Serialize,
-};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
@@ -29,7 +27,6 @@ use std::{
     collections::HashSet,
     fmt,
     io::Read,
-    marker::PhantomData,
     net::SocketAddr,
     path::Path,
     sync::{Arc, Mutex, MutexGuard, Weak},
@@ -46,6 +43,12 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
+
+pub mod mode_dependent;
+pub use mode_dependent::*;
+
+pub mod connection_retry;
+pub use connection_retry::*;
 
 // Wrappers for secrecy of values
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -224,12 +227,22 @@ validated_struct::validator! {
         /// Which zenoh nodes to connect to.
         pub connect: #[derive(Default)]
         ConnectConfig {
+            /// global timeout for full connect cycle
+            pub timeout_ms: Option<ModeDependentValue<i64>>,
             pub endpoints: Vec<EndPoint>,
+            /// if connection timeout exceed, exit from application
+            pub exit_on_failure: Option<ModeDependentValue<bool>>,
+            pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
         /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
         pub listen: #[derive(Default)]
         ListenConfig {
+            /// global timeout for full listen cycle
+            pub timeout_ms: Option<ModeDependentValue<i64>>,
             pub endpoints: Vec<EndPoint>,
+            /// if connection timeout exceed, exit from application
+            pub exit_on_failure: Option<ModeDependentValue<bool>>,
+            pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
         pub scouting: #[derive(Default)]
         ScoutingConf {
@@ -385,6 +398,13 @@ validated_struct::validator! {
                             data_low: usize,
                             background: usize,
                         } where (queue_size_validator),
+                        /// Congestion occurs when the queue is empty (no available batch).
+                        /// Using CongestionControl::Block the caller is blocked until a batch is available and re-insterted into the queue.
+                        /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
+                        pub congestion_control: CongestionControlConf {
+                            /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
+                            pub wait_before_drop: u64,
+                        },
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
                         backoff: u64,
@@ -1293,190 +1313,6 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             }
         }
         Ok(serde_json::to_string(value).unwrap())
-    }
-}
-
-pub trait ModeDependent<T> {
-    fn router(&self) -> Option<&T>;
-    fn peer(&self) -> Option<&T>;
-    fn client(&self) -> Option<&T>;
-    #[inline]
-    fn get(&self, whatami: WhatAmI) -> Option<&T> {
-        match whatami {
-            WhatAmI::Router => self.router(),
-            WhatAmI::Peer => self.peer(),
-            WhatAmI::Client => self.client(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ModeValues<T> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    router: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    peer: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client: Option<T>,
-}
-
-impl<T> ModeDependent<T> for ModeValues<T> {
-    #[inline]
-    fn router(&self) -> Option<&T> {
-        self.router.as_ref()
-    }
-
-    #[inline]
-    fn peer(&self) -> Option<&T> {
-        self.peer.as_ref()
-    }
-
-    #[inline]
-    fn client(&self) -> Option<&T> {
-        self.client.as_ref()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum ModeDependentValue<T> {
-    Unique(T),
-    Dependent(ModeValues<T>),
-}
-
-impl<T> ModeDependent<T> for ModeDependentValue<T> {
-    #[inline]
-    fn router(&self) -> Option<&T> {
-        match self {
-            Self::Unique(v) => Some(v),
-            Self::Dependent(o) => o.router(),
-        }
-    }
-
-    #[inline]
-    fn peer(&self) -> Option<&T> {
-        match self {
-            Self::Unique(v) => Some(v),
-            Self::Dependent(o) => o.peer(),
-        }
-    }
-
-    #[inline]
-    fn client(&self) -> Option<&T> {
-        match self {
-            Self::Unique(v) => Some(v),
-            Self::Dependent(o) => o.client(),
-        }
-    }
-}
-
-impl<T> serde::Serialize for ModeDependentValue<T>
-where
-    T: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            ModeDependentValue::Unique(value) => value.serialize(serializer),
-            ModeDependentValue::Dependent(options) => options.serialize(serializer),
-        }
-    }
-}
-impl<'a> serde::Deserialize<'a> for ModeDependentValue<bool> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'a>,
-    {
-        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
-
-        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<bool>> {
-            type Value = ModeDependentValue<bool>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("bool or mode dependent bool")
-            }
-
-            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                Ok(ModeDependentValue::Unique(value))
-            }
-
-            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
-                    .map(ModeDependentValue::Dependent)
-            }
-        }
-        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
-    }
-}
-
-impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'a>,
-    {
-        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
-
-        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<WhatAmIMatcher>> {
-            type Value = ModeDependentValue<WhatAmIMatcher>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("WhatAmIMatcher or mode dependent WhatAmIMatcher")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                WhatAmIMatcherVisitor {}
-                    .visit_str(value)
-                    .map(ModeDependentValue::Unique)
-            }
-
-            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
-                    .map(ModeDependentValue::Dependent)
-            }
-        }
-        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
-    }
-}
-
-impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
-    #[inline]
-    fn router(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.router(),
-            None => None,
-        }
-    }
-
-    #[inline]
-    fn peer(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.peer(),
-            None => None,
-        }
-    }
-
-    #[inline]
-    fn client(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.client(),
-            None => None,
-        }
     }
 }
 

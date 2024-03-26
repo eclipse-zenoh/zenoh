@@ -14,463 +14,168 @@
 name: Release
 
 on:
-  release:
-    types: [published]
   schedule:
     - cron: "0 0 * * 1-5"
   workflow_dispatch:
     inputs:
-      runtests:
-        description: "run tests"
+      live-run:
         type: boolean
-      doc:
-        description: "generate doc"
-        type: boolean
-      build:
-        description: "build"
-        type: boolean
-      publish:
-        description: "publish"
-        type: boolean
-      githubrelease:
-        description: "publish as github release"
-        type: boolean
-      eclipse:
-        description: "publish to download.eclipse.org/zenoh"
-        type: boolean
-      cratesio:
-        description: "publish to crates.io"
-        type: boolean
-      dockerhub:
-        description: "publish to dockerhub"
-        type: boolean
-      features:
-        description: "build with specified features (comma separated, no space)"
+        description: If false (or undefined) the workflow runs in dry-run mode (i.e. with no side-effects)
+        required: false
+        default: false
+      version:
         type: string
-
-env:
-  VERSION_CROSS: 0.2.4
-  VERSION_CARGO_DEB: 1.44.1
-  VERSION_CARGO_NEXTEST: 0.9.67
+        description: Release number. If undefined, the workflow auto-generates a version using git-describe
+        required: false
 
 jobs:
-  checks:
-    name: Code checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
+  tag:
+    name: Bump and tag crates
+    uses: eclipse-zenoh/ci/.github/workflows/tag-crates.yml@main
+    with:
+      repo: ${{ github.repository }}
+      live-run: ${{ inputs.live-run || false }}
+      version: ${{ inputs.version }}
+      inter-deps-pattern: zenoh.*
+    secrets: inherit
 
-      - name: Install Rust toolchain
-        run: |
-          rustup show
-          rustup component add rustfmt clippy
+  build-debian:
+    name: Build Debian packages
+    needs: tag
+    uses: eclipse-zenoh/ci/.github/workflows/build-crates-debian.yml@main
+    with:
+      repo: ${{ github.repository }}
+      version: ${{ needs.tag.outputs.version }}
+      branch: ${{ needs.tag.outputs.branch }}
+    secrets: inherit
 
-      - name: Code format check
-        run: cargo fmt --check
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  build-standalone:
+    name: Build executables and libraries
+    needs: tag
+    uses: eclipse-zenoh/ci/.github/workflows/build-crates-standalone.yml@main
+    with:
+      repo: ${{ github.repository }}
+      version: ${{ needs.tag.outputs.version }}
+      branch: ${{ needs.tag.outputs.branch }}
+      artifact-patterns: |
+        ^zenohd(\.exe)?$
+        ^libzenoh_plugin_(rest|storage_manager)\.(dylib|so)$
+        ^zenoh_plugin_(rest|storage_manager)\.dll$
+    secrets: inherit
 
-      - name: Clippy check
-        run: cargo +stable clippy --all-targets --features=${{ github.event.inputs.features}} -- --deny warnings
+  cargo:
+    name: Publish Cargo crates
+    needs: tag
+    uses: eclipse-zenoh/ci/.github/workflows/release-crates-cargo.yml@main
+    with:
+      repos: ${{ github.repository }}
+      live-run: ${{ inputs.live-run || false }}
+      branch: ${{ needs.tag.outputs.branch }}
+      inter-deps-pattern: zenoh.*
+    secrets: inherit
 
-      - name: Clippy unstable check
-        run: cargo +stable clippy --all-targets  -- --deny warnings
+  debian:
+    name: Publish Debian packages
+    needs: [tag, build-debian]
+    uses: eclipse-zenoh/ci/.github/workflows/release-crates-debian.yml@main
+    with:
+      no-build: true
+      live-run: ${{ inputs.live-run || false }}
+      version: ${{ needs.tag.outputs.version }}
+      repo: ${{ github.repository }}
+      branch: ${{ needs.tag.outputs.branch }}
+    secrets: inherit
 
-      - name: Clippy all features
-        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
+  homebrew:
+    name: Publish Homebrew formulae
+    needs: [tag, build-standalone]
+    uses: eclipse-zenoh/ci/.github/workflows/release-crates-homebrew.yml@main
+    with:
+      no-build: true
+      repo: ${{ github.repository }}
+      live-run: ${{ inputs.live-run || false }}
+      version: ${{ needs.tag.outputs.version }}
+      branch: ${{ needs.tag.outputs.branch }}
+      artifact-patterns: |
+        ^zenohd$
+        ^libzenoh_plugin_rest\.dylib$
+        ^libzenoh_plugin_storage_manager\.dylib$
+      formulae: |
+        zenoh
+        zenohd
+        zenoh-plugin-rest
+        zenoh-plugin-storage-manager
+    secrets: inherit
 
-      - name: Environment setup
-        id: env
-        shell: bash
-        run: |
-          # log some info
-          gcc --version || true
-          rustup -V
-          rustup toolchain list
-          rustup default
-          cargo -V
-          rustc -V
+  eclipse:
+    name: Publish artifacts to Eclipse downloads
+    needs: [tag, build-standalone]
+    uses: eclipse-zenoh/ci/.github/workflows/release-crates-eclipse.yml@main
+    with:
+      no-build: true
+      live-run: ${{ inputs.live-run || false }}
+      version: ${{ needs.tag.outputs.version }}
+      repo: ${{ github.repository }}
+      branch: ${{ needs.tag.outputs.branch }}
+      artifact-patterns: |
+        ^zenohd(\.exe)?$
+        ^libzenoh_plugin_(rest|storage_manager)\.(dylib|so)$
+        ^zenoh_plugin_(rest|storage_manager)\.dll$
+      name: zenoh
+    secrets: inherit
 
-          echo "GITHUB_REF=${GITHUB_REF}"
-          echo "GITHUB_SHA=${GITHUB_SHA:0:8}"
-          GIT_BRANCH=`[[ $GITHUB_REF =~ ^refs/heads/.* ]] && echo ${GITHUB_REF/refs\/heads\//} || true`
-          echo "GIT_BRANCH=${GIT_BRANCH}" >> $GITHUB_OUTPUT
-          GIT_TAG=`[[ $GITHUB_REF =~ ^refs/tags/.* ]] && echo ${GITHUB_REF/refs\/tags\//} || true`
-          echo "GIT_TAG=${GIT_TAG}" >> $GITHUB_OUTPUT
+  github:
+    name: Publish artifacts to GitHub Releases
+    needs: [tag, build-standalone]
+    uses: eclipse-zenoh/ci/.github/workflows/release-crates-github.yml@main
+    with:
+      no-build: true
+      live-run: ${{ inputs.live-run || false }}
+      version: ${{ needs.tag.outputs.version }}
+      repo: ${{ github.repository }}
+      branch: ${{ needs.tag.outputs.branch }}
+      artifact-patterns: |
+        ^zenohd(\.exe)?$
+        ^libzenoh_plugin_(rest|storage_manager)\.(dylib|so)$
+        ^zenoh_plugin_(rest|storage_manager)\.dll$
+    secrets: inherit
 
-          sudo apt-get update
-          sudo apt-get install -y jq
+  dockerhub:
+    name: Publish container image to DockerHub
+    needs: [tag, build-standalone]
+    uses: eclipse-zenoh/ci/.github/workflows/release-crates-dockerhub.yml@main
+    with:
+      no-build: true
+      live-run: ${{ inputs.live-run || false }}
+      version: ${{ needs.tag.outputs.version }}
+      repo: ${{ github.repository }}
+      tags: "eclipse/zenoh:${{ needs.tag.outputs.version }}"
+      binary: zenohd
+      files: |
+        zenohd
+        libzenoh_plugin_rest.so
+        libzenoh_plugin_storage_manager.so
+      platforms: |
+        linux/arm64
+        linux/amd64
+    secrets: inherit
 
-          ZENOH_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "zenoh") | .version')
-          echo "ZENOH_VERSION=${ZENOH_VERSION}" >> $GITHUB_OUTPUT
-          if [ -n "${GIT_TAG}" ]; then
-            IS_RELEASE="true"
-            echo "IS_RELEASE=${IS_RELEASE}" >> $GITHUB_OUTPUT
-            PKG_VERSION=${ZENOH_VERSION}
-          elif [ -n "${GIT_BRANCH}" ]; then
-            PKG_VERSION=${GIT_BRANCH}-${GITHUB_SHA:0:8}
-          else
-            PKG_VERSION=${ZENOH_VERSION}-${GITHUB_SHA:0:8}
-          fi
-          echo "PKG_VERSION=${PKG_VERSION}"  >> $GITHUB_OUTPUT
-          echo "GITHUB_OUTPUT : ${GITHUB_OUTPUT}"
-    outputs:
-      GIT_BRANCH: ${{ steps.env.outputs.GIT_BRANCH }}
-      GIT_TAG: ${{ steps.env.outputs.GIT_TAG }}
-      IS_RELEASE: ${{ steps.env.outputs.IS_RELEASE }}
-      ZENOH_VERSION: ${{ steps.env.outputs.ZENOH_VERSION }}
-      PKG_VERSION: ${{ steps.env.outputs.PKG_VERSION }}
-
-  tests:
-    name: Tests
-    if: ${{ !(github.event.inputs.runtests == 'false') }}
-    needs: checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        run: rustup show
-
-      - name: Install nextest
-        run: cargo install --version ${{ env.VERSION_CARGO_NEXTEST }} --locked cargo-nextest
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-
-      - name: Run tests
-        run: cargo nextest run --release --features=${{ github.event.inputs.features}} --verbose
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-          ASYNC_STD_THREAD_COUNT: 4
-
-      - name: Run doctests
-        run: cargo test --release --features=${{ github.event.inputs.features}} --doc
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-          ASYNC_STD_THREAD_COUNT: 4
-
-  doc:
-    name: Doc generation
-    if: ${{ !(github.event.inputs.doc == 'false') }}
-    needs: checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
-
-      # Use a similar command than docs.rs build: rustdoc with nightly toolchain
-      - name: Install Rust toolchain nightly for docs gen
-        run: rustup toolchain install nightly
-
-      - name: generate doc
-        # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
-        run: >
-          cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features unstable -j3
-          -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples
-          --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]'
-        env:
-          RUSTDOCFLAGS: -Dwarnings
-
-  builds:
-    name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
-    if: ${{ !(github.event.inputs.build == 'false') }}
-    needs: checks
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - {
-              target: x86_64-unknown-linux-gnu,
-              arch: amd64,
-              os: ubuntu-20.04,
-              build-cmd: "cargo",
-            }
-          - {
-              target: x86_64-unknown-linux-musl,
-              arch: amd64,
-              os: ubuntu-20.04,
-              build-cmd: "cross",
-            }
-          - {
-              target: arm-unknown-linux-gnueabi,
-              arch: armel,
-              os: ubuntu-20.04,
-              build-cmd: "cross",
-            }
-          - {
-              target: arm-unknown-linux-gnueabihf,
-              arch: armhf,
-              os: ubuntu-20.04,
-              build-cmd: "cross",
-            }
-          - {
-              target: armv7-unknown-linux-gnueabihf,
-              arch: armhf,
-              os: ubuntu-20.04,
-              build-cmd: "cross",
-            }
-          - {
-              target: aarch64-unknown-linux-gnu,
-              arch: arm64,
-              os: ubuntu-20.04,
-              build-cmd: "cross",
-            }
-          - {
-              target: aarch64-unknown-linux-musl,
-              arch: arm64,
-              os: ubuntu-20.04,
-              build-cmd: "cross",
-            }
-          - {
-              target: x86_64-apple-darwin,
-              arch: darwin,
-              os: macos-latest,
-              build-cmd: "cargo",
-            }
-          - {
-              target: aarch64-apple-darwin,
-              arch: darwin,
-              os: macos-latest,
-              build-cmd: "cargo",
-            }
-          - {
-              target: x86_64-pc-windows-msvc,
-              arch: win64,
-              os: windows-2019,
-              build-cmd: "cargo",
-            }
-          # - { target: x86_64-pc-windows-gnu         , arch: win64 , os: windows-2019                  }
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
-
-      - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
-        shell: bash
-        run: git fetch --tags --force
-
-      - name: Install prerequisites
-        shell: bash
-        run: |
-          case ${{ matrix.job.target }} in
-            *-linux-gnu*) cargo install --version ${{ env.VERSION_CARGO_DEB }} cargo-deb ;;
-          esac
-
-          case ${{ matrix.job.target }} in
-            arm-unknown-linux-gnueabi)
-              sudo apt-get -y update
-              sudo apt-get -y install gcc-arm-linux-gnueabi
-              ;;
-            arm*-unknown-linux-gnueabihf)
-              sudo apt-get -y update
-              sudo apt-get -y install gcc-arm-linux-gnueabihf
-              ;;
-            aarch64-unknown-linux-gnu)
-              sudo apt-get -y update
-              sudo apt-get -y install gcc-aarch64-linux-gnu
-              ;;
-          esac
-
-          cargo install --version ${{ env.VERSION_CROSS }} cross
-
-      - name: Install Rust toolchain
-        run: |
-          rustup show
-          rustup target add ${{ matrix.job.target }}
-
-      - name: Build
-        run: ${{ matrix.job.build-cmd }} build --release --bins --lib --features=${{ github.event.inputs.features}} --target=${{ matrix.job.target }}
-
-      - name: Debian package - zenohd
-        if: contains(matrix.job.target, '-linux-gnu')
-        run: cargo deb --no-build --target=${{ matrix.job.target }} -p zenohd
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-
-      - name: Debian package - zenoh-plugin-storage-manager
-        if: contains(matrix.job.target, '-linux-gnu')
-        run: cargo deb --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-
-      - name: Debian package - zenoh-plugin-rest
-        if: contains(matrix.job.target, '-linux-gnu')
-        run: cargo deb --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-
-      - name: Packaging
-        id: package
-        shell: bash
-        run: |
-          TARGET=${{ matrix.job.target }}
-          MAIN_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}.zip"
-          DEBS_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-deb-pkgs.zip"
-
-          case ${TARGET} in
-            *linux*)
-              cd "target/${TARGET}/release/"
-              echo "Packaging ${MAIN_PKG_NAME}:"
-              zip ${MAIN_PKG_NAME} zenohd libzenoh_plugin_*.so
-              cd -
-              echo "MAIN_PKG_NAME=${MAIN_PKG_NAME}" >> $GITHUB_OUTPUT
-
-              # check if debian packages has been created and packages them in a single tgz
-              if [[ -d target/${TARGET}/debian ]]; then
-                cd target/${TARGET}/debian
-                echo "Packaging ${DEBS_PKG_NAME}:"
-                zip ${DEBS_PKG_NAME} *.deb
-                cd -
-                echo "DEBS_PKG_NAME=${DEBS_PKG_NAME}" >> $GITHUB_OUTPUT
-              fi
-              ;;
-            *apple*)
-              cd "target/${TARGET}/release/"
-              echo "Packaging ${MAIN_PKG_NAME}:"
-              zip ${MAIN_PKG_NAME} zenohd libzenoh_plugin_*.dylib
-              cd -
-              echo "MAIN_PKG_NAME=${MAIN_PKG_NAME}" >> $GITHUB_OUTPUT
-              ;;
-            *windows*)
-              cd "target/${TARGET}/release/"
-              echo "Packaging ${MAIN_PKG_NAME}:"
-              7z -y a "${MAIN_PKG_NAME}" zenohd.exe zenoh_plugin_*.dll
-              cd -
-              echo "MAIN_PKG_NAME=${MAIN_PKG_NAME}" >> $GITHUB_OUTPUT
-              ;;
-          esac
-
-      - name: "Upload packages"
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.job.target }}
-          path: |
-            ${{ steps.package.outputs.MAIN_PKG_NAME }}
-            ${{ steps.package.outputs.DEBS_PKG_NAME }}
-
-  publication:
-    name: Release publication
-    if: ${{ (needs.checks.outputs.IS_RELEASE == 'true' || github.event.inputs.publish == 'true') && !failure() }}
-    needs: [checks, builds, tests, doc]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download result of previous builds
-        uses: actions/download-artifact@v3
-        with:
-          path: ARTIFACTS
-
-      - name: Publish as github release
-        if: ${{ !(github.event.inputs.githubrelease == 'false') }}
-        uses: softprops/action-gh-release@v1
-        with:
-          files: ARTIFACTS/*/*.*
-
-      - name: Publish to download.eclipse.org/zenoh
-        if: ${{ !(github.event.inputs.eclipse == 'false') }}
-        env:
-          SSH_TARGET: genie.zenoh@projects-storage.eclipse.org
-          ECLIPSE_BASE_DIR: /home/data/httpd/download.eclipse.org/zenoh
-        shell: bash
-        run: |
-          echo "--- setup ssh-agent"
-          eval "$(ssh-agent -s)"
-          echo 'echo "${{ secrets.SSH_PASSPHRASE }}"' > ~/.ssh_askpass && chmod +x ~/.ssh_askpass
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' | DISPLAY=NONE SSH_ASKPASS=~/.ssh_askpass ssh-add - > /dev/null 2>&1
-          rm -f ~/.ssh_askpass
-          echo "--- test ssh:"
-          ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} ls -al
-          echo "---- list artifacts to upload:"
-          ls -R ARTIFACTS || true
-          DOWNLOAD_DIR=${ECLIPSE_BASE_DIR}/zenoh/${{ needs.checks.outputs.ZENOH_VERSION }}
-          echo "---- copy artifacts into ${DOWNLOAD_DIR}"
-          ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} mkdir -p ${DOWNLOAD_DIR}
-          cd ARTIFACTS
-          sha256sum */* > sha256sums.txt
-          scp -o "StrictHostKeyChecking=no" -r * ${SSH_TARGET}:${DOWNLOAD_DIR}/
-          echo "---- cleanup identity"
-          ssh-add -D
-
-      - name: Checkout this repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        if: ${{ !(github.event.inputs.cratesio == 'false') }}
-        run: rustup show
-
-      - name: Check crates
-        if: ${{ !(github.event.inputs.cratesio == 'false') }}
-        shell: bash
-        run: .github/workflows/crates_check.sh
-
-      - name: Publish to crates.io
-        if: ${{ !(github.event.inputs.cratesio == 'false') }}
-        shell: bash
-        run: |
-          set +x
-          .github/workflows/crates_publish.sh ${{ secrets.CRATES_IO_TOKEN }}
-
-      - name: Cancel workflow if fail # thus Docker job be interrupted
-        if: failure()
-        uses: andymckay/cancel-action@0.2
-
-  docker:
-    name: Docker build and push
-    if: ${{ !(github.event.inputs.dockerhub == 'false') && !failure() }}
-    needs: [checks, builds, tests, doc]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout this repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
-
-      - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
-        shell: bash
-        run: git fetch --tags --force
-
-      - name: Download packages from previous job
-        uses: actions/download-artifact@v3
-        with:
-          path: PACKAGES
-
-      - name: Unzip PACKAGES
-        run: |
-          ls PACKAGES
-          mkdir -p docker/linux/amd
-          unzip PACKAGES/x86_64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-x86_64-unknown-linux-musl.zip -d docker/linux/amd64/
-          rm docker/linux/amd64/libzenoh_plugin_example.so
-          mkdir -p docker/linux/arm64
-          unzip PACKAGES/aarch64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-aarch64-unknown-linux-musl.zip -d docker/linux/arm64/
-          rm docker/linux/arm64/libzenoh_plugin_example.so
-          tree docker
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Docker meta - set tags and labels
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: eclipse/zenoh
-          labels: |
-            org.opencontainers.image.licenses=EPL-2.0 OR Apache-2.0
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_COM_USERNAME }}
-          password: ${{ secrets.DOCKER_COM_PASSWORD }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64, linux/arm64
-          file: .github/workflows/Dockerfile
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+  ghcr:
+    name: Publish container image to GitHub Container Registry
+    needs: [tag, build-standalone]
+    uses: eclipse-zenoh/ci/.github/workflows/release-crates-ghcr.yml@main
+    with:
+      no-build: true
+      live-run: ${{ inputs.live-run || false }}
+      version: ${{ needs.tag.outputs.version }}
+      repo: ${{ github.repository }}
+      tags: "${{ github.repository }}:${{ needs.tag.outputs.version }}"
+      binary: zenohd
+      files: |
+        zenohd
+        libzenoh_plugin_rest.so
+        libzenoh_plugin_storage_manager.so
+      platforms: |
+        linux/arm64
+        linux/amd64
+    secrets: inherit

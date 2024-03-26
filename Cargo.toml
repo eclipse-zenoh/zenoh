@@ -27,6 +27,7 @@ members = [
   "commons/zenoh-shm",
   "commons/zenoh-sync",
   "commons/zenoh-util",
+  "commons/zenoh-runtime",
   "examples",
   "io/zenoh-link",
   "io/zenoh-link-commons",
@@ -38,6 +39,7 @@ members = [
   "io/zenoh-links/zenoh-link-unixsock_stream/",
   "io/zenoh-links/zenoh-link-ws/",
   "io/zenoh-links/zenoh-link-unixpipe/",
+  "io/zenoh-links/zenoh-link-vsock/",
   "io/zenoh-transport",
   "plugins/zenoh-backend-example",
   "plugins/zenoh-plugin-example",
@@ -76,8 +78,7 @@ ahash = "0.8.7"
 anyhow = { version = "1.0.69", default-features = false } # Default features are disabled due to usage in no_std crates
 async-executor = "1.5.0"
 async-global-executor = "2.3.1"
-async-io = "=1.13.0"
-async-rustls = "0.4.0"
+async-io = "1.13.0"
 async-std = { version = "=1.12.0", default-features = false } # Default features are disabled due to some crates' requirements
 async-trait = "0.1.60"
 base64 = "0.21.4"
@@ -88,7 +89,7 @@ crc = "3.0.1"
 criterion = "0.5"
 derive_more = "0.99.17"
 derive-new = "0.6.0"
-env_logger = "0.10.0"
+env_logger = "0.11.0"
 event-listener = "4.0.0"
 flume = "0.11"
 form_urlencoded = "1.1.0"
@@ -102,7 +103,7 @@ home = "0.5.4"
 http-types = "2.12.0"
 humantime = "2.1.0"
 json5 = "0.4.1"
-jsonschema = "0.17.1"
+jsonschema = { version = "0.17.1", default-features = false }
 keyed-set = "0.4.4"
 lazy_static = "1.4.0"
 libc = "0.2.139"
@@ -127,10 +128,11 @@ regex = "1.7.1"
 ringbuffer-spsc = "0.1.9"
 rsa = "0.9"
 rustc_version = "0.4.0"
-rustls = { version = "0.21.5", features = ["dangerous_configuration"] }
+rustls = "0.22.2"
 rustls-native-certs = "0.7.0"
 rustls-pemfile = "2.0.0"
 rustls-webpki = "0.102.0"
+rustls-pki-types = "1.1.0"
 schemars = "0.8.12"
 secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
 serde = { version = "1.0.154", default-features = false, features = [
@@ -146,9 +148,14 @@ stop-token = "0.7.0"
 syn = "2.0"
 tide = "0.16.0"
 token-cell = { version = "1.4.2", default-features = false }
-tokio = { version = "1.26.0", default-features = false } # Default features are disabled due to some crates' requirements
-tokio-tungstenite = "0.20"
-uhlc = { version = "0.6.0", default-features = false } # Default features are disabled due to usage in no_std crates
+tokio = { version = "1.35.1", default-features = false } # Default features are disabled due to some crates' requirements
+tokio-util = "0.7.10"
+tokio-tungstenite = "0.21"
+tokio-rustls = "0.25.0"
+# tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
+console-subscriber = "0.2"
+typenum = "1.16.0"
+uhlc = { version = "0.7.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.3.1"
 urlencoding = "2.1.2"
@@ -185,9 +192,11 @@ zenoh-link-udp = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-udp
 zenoh-link-ws = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-ws" }
 zenoh-link-unixpipe = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-unixpipe" }
 zenoh-link-serial = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-serial" }
+zenoh-link-vsock = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-vsock" }
 zenoh-link = { version = "0.11.0-dev", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "0.11.0-dev", path = "io/zenoh-link-commons" }
 zenoh = { version = "0.11.0-dev", path = "zenoh", default-features = false }
+zenoh-runtime = { version = "0.11.0-dev", path = "commons/zenoh-runtime" }
 
 [profile.dev]
 debug = true

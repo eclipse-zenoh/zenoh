@@ -65,6 +65,15 @@ pub struct TransportMessageLowLatency {
     pub body: TransportBodyLowLatency,
 }
 
+impl TryFrom<NetworkMessage> for TransportMessageLowLatency {
+    type Error = zenoh_result::Error;
+    fn try_from(msg: NetworkMessage) -> Result<Self, Self::Error> {
+        Ok(Self {
+            body: TransportBodyLowLatency::Network(msg),
+        })
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum TransportBodyLowLatency {

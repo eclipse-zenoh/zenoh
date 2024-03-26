@@ -170,6 +170,7 @@ impl Default for QueueConf {
     fn default() -> Self {
         Self {
             size: QueueSizeConf::default(),
+            congestion_control: CongestionControlConf::default(),
             backoff: 100,
         }
     }
@@ -191,6 +192,14 @@ impl Default for QueueSizeConf {
             data: 4,
             data_low: 2,
             background: 1,
+        }
+    }
+}
+
+impl Default for CongestionControlConf {
+    fn default() -> Self {
+        Self {
+            wait_before_drop: 1000,
         }
     }
 }
@@ -218,6 +227,33 @@ impl Default for AclConfig {
             enabled: false,
             default_permission: Permission::Deny,
             rules: None,
+        }
+    }
+}
+
+pub const DEFAULT_CONNECT_TIMEOUT_MS: ModeDependentValue<i64> =
+    ModeDependentValue::Dependent(ModeValues {
+        client: Some(0),
+        peer: Some(-1),
+        router: Some(-1),
+    });
+
+pub const DEFAULT_CONNECT_EXIT_ON_FAIL: ModeDependentValue<bool> =
+    ModeDependentValue::Dependent(ModeValues {
+        client: Some(true),
+        peer: Some(false),
+        router: Some(false),
+    });
+
+pub const DEFAULT_LISTEN_TIMEOUT_MS: ModeDependentValue<i64> = ModeDependentValue::Unique(0);
+pub const DEFAULT_LISTEN_EXIT_ON_FAIL: ModeDependentValue<bool> = ModeDependentValue::Unique(true);
+
+impl Default for ConnectionRetryModeDependentConf {
+    fn default() -> Self {
+        Self {
+            period_init_ms: Some(ModeDependentValue::Unique(1000)),
+            period_max_ms: Some(ModeDependentValue::Unique(4000)),
+            period_increase_factor: Some(ModeDependentValue::Unique(2.)),
         }
     }
 }

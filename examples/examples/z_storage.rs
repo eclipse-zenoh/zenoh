@@ -13,17 +13,14 @@
 //
 #![recursion_limit = "256"]
 
-use async_std::task::sleep;
 use clap::Parser;
-use futures::prelude::*;
 use futures::select;
 use std::collections::HashMap;
-use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();
@@ -46,9 +43,7 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("Enter 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0u8];
+    println!("Press CTRL-C to quit...");
     loop {
         select!(
             sample = subscriber.recv_async() => {
@@ -69,14 +64,6 @@ async fn main() {
                     if query.selector().key_expr.intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
                         query.reply(Ok(sample.clone())).res().await.unwrap();
                     }
-                }
-            },
-
-            _ = stdin.read_exact(&mut input).fuse() => {
-                match input[0] {
-                    b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
-                    _ => (),
                 }
             }
         );
