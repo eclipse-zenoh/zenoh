@@ -15,14 +15,12 @@
 //! Payload primitives.
 use crate::buffers::ZBuf;
 use std::{
-    borrow::Cow,
-    convert::Infallible,
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-    string::FromUtf8Error,
-    sync::Arc,
+    borrow::Cow, convert::Infallible, fmt::Debug, ops::Deref, string::FromUtf8Error, sync::Arc,
 };
-use zenoh_buffers::{buffer::SplitBuffer, reader::HasReader, writer::HasWriter, ZSlice};
+use zenoh_buffers::buffer::Buffer;
+use zenoh_buffers::{
+    buffer::SplitBuffer, reader::HasReader, writer::HasWriter, ZBufReader, ZBufWriter, ZSlice,
+};
 use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
@@ -44,19 +42,47 @@ impl Payload {
     {
         Self(t.into())
     }
-}
 
-impl Deref for Payload {
-    type Target = ZBuf;
+    /// Returns wether the payload is empty or not.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    /// Returns the length of the payload.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Get a [`PayloadReader`] implementing [`std::io::Read`] trait.
+    pub fn reader(&self) -> PayloadReader<'_> {
+        PayloadReader(self.0.reader())
+    }
+
+    /// Get a [`PayloadWriter`] implementing [`std::io::Write`] trait.
+    pub fn writer(&mut self) -> PayloadWriter<'_> {
+        PayloadWriter(self.0.writer())
     }
 }
 
-impl DerefMut for Payload {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+/// A reader that implements [`std::io::Read`] trait to read from a [`Payload`].
+pub struct PayloadReader<'a>(ZBufReader<'a>);
+
+impl std::io::Read for PayloadReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+/// A writer that implements [`std::io::Write`] trait to read from a [`Payload`].
+pub struct PayloadWriter<'a>(ZBufWriter<'a>);
+
+impl std::io::Write for PayloadWriter<'_> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
     }
 }
 
@@ -170,7 +196,7 @@ impl Deserialize<Vec<u8>> for ZSerde {
 
 impl From<&Payload> for Vec<u8> {
     fn from(value: &Payload) -> Self {
-        value.contiguous().to_vec()
+        value.0.contiguous().to_vec()
     }
 }
 
@@ -193,7 +219,7 @@ impl<'a> Deserialize<Cow<'a, [u8]>> for ZSerde {
 
 impl<'a> From<&'a Payload> for Cow<'a, [u8]> {
     fn from(value: &'a Payload) -> Self {
-        value.contiguous()
+        value.0.contiguous()
     }
 }
 
@@ -218,7 +244,7 @@ impl Deserialize<String> for ZSerde {
     type Error = FromUtf8Error;
 
     fn deserialize(self, v: &Payload) -> Result<String, Self::Error> {
-        String::from_utf8(v.contiguous().to_vec())
+        String::from_utf8(v.0.contiguous().to_vec())
     }
 }
 
@@ -299,7 +325,7 @@ macro_rules! impl_int {
             type Error = ZDeserializeError;
 
             fn deserialize(self, v: &Payload) -> Result<$t, Self::Error> {
-                let p = v.contiguous();
+                let p = v.0.contiguous();
                 let mut bs = (0 as $t).to_le_bytes();
                 if p.len() > bs.len() {
                     return Err(ZDeserializeError);
@@ -353,7 +379,7 @@ impl Deserialize<bool> for ZSerde {
     type Error = ZDeserializeError;
 
     fn deserialize(self, v: &Payload) -> Result<bool, Self::Error> {
-        let p = v.contiguous();
+        let p = v.0.contiguous();
         if p.len() != 1 {
             return Err(ZDeserializeError);
         }
@@ -592,7 +618,7 @@ impl From<&Payload> for StringOrBase64 {
         use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
         match v.deserialize::<String>() {
             Ok(s) => StringOrBase64::String(s),
-            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.contiguous())),
+            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.0.contiguous())),
         }
     }
 }

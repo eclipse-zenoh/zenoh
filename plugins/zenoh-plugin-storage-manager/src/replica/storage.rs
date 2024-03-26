@@ -665,11 +665,22 @@ impl StorageService {
 }
 
 fn serialize_update(update: &Update) -> String {
+    let Update {
+        kind,
+        data:
+            StoredData {
+                value: Value {
+                    payload, encoding, ..
+                },
+                timestamp,
+            },
+    } = update;
+    let zbuf: ZBuf = payload.into();
     let result = (
-        update.kind.to_string(),
-        update.data.timestamp.to_string(),
-        update.data.value.encoding.to_string(),
-        update.data.value.payload.slices().collect::<Vec<&[u8]>>(),
+        kind.to_string(),
+        timestamp.to_string(),
+        encoding.to_string(),
+        zbuf.slices().collect::<Vec<&[u8]>>(),
     );
     serde_json::to_string_pretty(&result).unwrap()
 }
