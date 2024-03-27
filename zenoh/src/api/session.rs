@@ -28,7 +28,7 @@ use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, Config, Notifier};
+use zenoh_config::{unwrap_or_default, Config, Notifier, WhatAmI};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{declare::SubscriberId, ext};
@@ -865,8 +865,10 @@ impl Session {
             .await;
             session.owns_runtime = true;
             runtime.start().await?;
-            // Workaround for the declare_and_shoot problem
-            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+            if runtime.whatami() != WhatAmI::Client {
+                // Workaround for the declare_and_shoot problem
+                tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+            }
             Ok(session)
         })
     }
