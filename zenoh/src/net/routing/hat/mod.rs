@@ -32,7 +32,7 @@ use zenoh_protocol::{
     core::WireExpr,
     network::{
         declare::{
-            queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, InterestId,
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, InterestId,
             QueryableId, SubscriberId,
         },
         Oam,
@@ -188,7 +188,7 @@ pub(crate) trait HatQueriesTrait {
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
-        qabl_info: &QueryableInfo,
+        qabl_info: &QueryableInfoType,
         node_id: NodeId,
     );
     fn undeclare_queryable(

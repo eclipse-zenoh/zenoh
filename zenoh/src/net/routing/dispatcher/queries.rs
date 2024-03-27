@@ -25,7 +25,7 @@ use zenoh_protocol::network::declare::InterestId;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
-        declare::{ext, queryable::ext::QueryableInfo, QueryableId},
+        declare::{ext, queryable::ext::QueryableInfoType, QueryableId},
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
@@ -128,7 +128,7 @@ pub(crate) fn declare_queryable(
     face: &mut Arc<FaceState>,
     id: QueryableId,
     expr: &WireExpr,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
     node_id: NodeId,
 ) {
     let rtables = zread!(tables.tables);
@@ -371,22 +371,11 @@ fn compute_final_route(
                     .hat_code
                     .egress_filter(tables, src_face, &qabl.direction.0, expr)
                 {
-                    #[cfg(feature = "complete_n")]
-                    {
-                        route.entry(qabl.direction.0.id).or_insert_with(|| {
-                            let mut direction = qabl.direction.clone();
-                            let qid = insert_pending_query(&mut direction.0, query.clone());
-                            (direction, qid, *target)
-                        });
-                    }
-                    #[cfg(not(feature = "complete_n"))]
-                    {
-                        route.entry(qabl.direction.0.id).or_insert_with(|| {
-                            let mut direction = qabl.direction.clone();
-                            let qid = insert_pending_query(&mut direction.0, query.clone());
-                            (direction, qid)
-                        });
-                    }
+                    route.entry(qabl.direction.0.id).or_insert_with(|| {
+                        let mut direction = qabl.direction.clone();
+                        let qid = insert_pending_query(&mut direction.0, query.clone());
+                        (direction, qid)
+                    });
                 }
             }
             route
@@ -399,46 +388,11 @@ fn compute_final_route(
                         .hat_code
                         .egress_filter(tables, src_face, &qabl.direction.0, expr)
                 {
-                    #[cfg(feature = "complete_n")]
-                    {
-                        route.entry(qabl.direction.0.id).or_insert_with(|| {
-                            let mut direction = qabl.direction.clone();
-                            let qid = insert_pending_query(&mut direction.0, query.clone());
-                            (direction, qid, *target)
-                        });
-                    }
-                    #[cfg(not(feature = "complete_n"))]
-                    {
-                        route.entry(qabl.direction.0.id).or_insert_with(|| {
-                            let mut direction = qabl.direction.clone();
-                            let qid = insert_pending_query(&mut direction.0, query.clone());
-                            (direction, qid)
-                        });
-                    }
-                }
-            }
-            route
-        }
-        #[cfg(feature = "complete_n")]
-        TargetType::Complete(n) => {
-            let mut route = HashMap::new();
-            let mut remaining = *n;
-            for qabl in qabls.iter() {
-                if qabl.complete > 0
-                    && tables
-                        .hat_code
-                        .egress_filter(tables, src_face, &qabl.direction.0, expr)
-                {
-                    let nb = std::cmp::min(qabl.complete, remaining);
                     route.entry(qabl.direction.0.id).or_insert_with(|| {
                         let mut direction = qabl.direction.clone();
                         let qid = insert_pending_query(&mut direction.0, query.clone());
-                        (direction, qid, TargetType::Complete(nb))
+                        (direction, qid)
                     });
-                    remaining -= nb;
-                    if remaining == 0 {
-                        break;
-                    }
                 }
             }
             route
@@ -449,18 +403,11 @@ fn compute_final_route(
                 .find(|qabl| qabl.direction.0.id != src_face.id && qabl.complete > 0)
             {
                 let mut route = HashMap::new();
-                #[cfg(feature = "complete_n")]
-                {
-                    let mut direction = qabl.direction.clone();
-                    let qid = insert_pending_query(&mut direction.0, query);
-                    route.insert(direction.0.id, (direction, qid, *target));
-                }
-                #[cfg(not(feature = "complete_n"))]
-                {
-                    let mut direction = qabl.direction.clone();
-                    let qid = insert_pending_query(&mut direction.0, query);
-                    route.insert(direction.0.id, (direction, qid));
-                }
+
+                let mut direction = qabl.direction.clone();
+                let qid = insert_pending_query(&mut direction.0, query);
+                route.insert(direction.0.id, (direction, qid));
+
                 route
             } else {
                 compute_final_route(tables, qabls, src_face, expr, &TargetType::All, query)
@@ -708,78 +655,37 @@ pub fn route_query(
                             expr.full_expr().to_string(),
                         ));
                 } else {
-                    // let timer = tables.timer.clone();
-                    // let timeout = tables.queries_default_timeout;
-                    #[cfg(feature = "complete_n")]
-                    {
-                        for ((outface, key_expr, context), qid, t) in route.values() {
-                            // timer.add(TimedEvent::once(
-                            //     Instant::now() + timeout,
-                            //     QueryCleanup {
-                            //         tables: tables_ref.clone(),
-                            //         face: Arc::downgrade(&outface),
-                            //         *qid,
-                            //     },
-                            // ));
-                            #[cfg(feature = "stats")]
-                            if !admin {
-                                inc_req_stats!(outface, tx, user, body)
-                            } else {
-                                inc_req_stats!(outface, tx, admin, body)
-                            }
-
-                            log::trace!("Propagate query {}:{} to {}", face, qid, outface);
-                            outface.primitives.send_request(RoutingContext::with_expr(
-                                Request {
-                                    id: *qid,
-                                    wire_expr: key_expr.into(),
-                                    ext_qos: ext::QoSType::REQUEST,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: *context },
-                                    ext_target: *t,
-                                    ext_budget: None,
-                                    ext_timeout: None,
-                                    payload: body.clone(),
-                                },
-                                expr.full_expr().to_string(),
-                            ));
+                    for ((outface, key_expr, context), qid) in route.values() {
+                        // timer.add(TimedEvent::once(
+                        //     Instant::now() + timeout,
+                        //     QueryCleanup {
+                        //         tables: tables_ref.clone(),
+                        //         face: Arc::downgrade(&outface),
+                        //         *qid,
+                        //     },
+                        // ));
+                        #[cfg(feature = "stats")]
+                        if !admin {
+                            inc_req_stats!(outface, tx, user, body)
+                        } else {
+                            inc_req_stats!(outface, tx, admin, body)
                         }
-                    }
 
-                    #[cfg(not(feature = "complete_n"))]
-                    {
-                        for ((outface, key_expr, context), qid) in route.values() {
-                            // timer.add(TimedEvent::once(
-                            //     Instant::now() + timeout,
-                            //     QueryCleanup {
-                            //         tables: tables_ref.clone(),
-                            //         face: Arc::downgrade(&outface),
-                            //         *qid,
-                            //     },
-                            // ));
-                            #[cfg(feature = "stats")]
-                            if !admin {
-                                inc_req_stats!(outface, tx, user, body)
-                            } else {
-                                inc_req_stats!(outface, tx, admin, body)
-                            }
-
-                            log::trace!("Propagate query {}:{} to {}", face, qid, outface);
-                            outface.primitives.send_request(RoutingContext::with_expr(
-                                Request {
-                                    id: *qid,
-                                    wire_expr: key_expr.into(),
-                                    ext_qos: ext::QoSType::REQUEST,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: *context },
-                                    ext_target: target,
-                                    ext_budget: None,
-                                    ext_timeout: None,
-                                    payload: body.clone(),
-                                },
-                                expr.full_expr().to_string(),
-                            ));
-                        }
+                        log::trace!("Propagate query {}:{} to {}", face, qid, outface);
+                        outface.primitives.send_request(RoutingContext::with_expr(
+                            Request {
+                                id: *qid,
+                                wire_expr: key_expr.into(),
+                                ext_qos: ext::QoSType::REQUEST,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: *context },
+                                ext_target: target,
+                                ext_budget: None,
+                                ext_timeout: None,
+                                payload: body.clone(),
+                            },
+                            expr.full_expr().to_string(),
+                        ));
                     }
                 }
             } else {

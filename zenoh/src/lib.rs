@@ -106,7 +106,6 @@ pub const FEATURES: &str = concat_enabled_features!(
     features = [
         "auth_pubkey",
         "auth_usrpwd",
-        "complete_n",
         "shared-memory",
         "stats",
         "transport_multilink",

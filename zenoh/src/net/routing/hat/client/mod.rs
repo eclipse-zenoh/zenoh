@@ -43,7 +43,7 @@ use std::{
 };
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::declare::{
-    queryable::ext::QueryableInfo, InterestId, QueryableId, SubscriberId,
+    queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId,
 };
 use zenoh_protocol::network::Oam;
 use zenoh_result::ZResult;
@@ -287,7 +287,7 @@ struct HatFace {
     remote_sub_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfo)>,
+    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
 

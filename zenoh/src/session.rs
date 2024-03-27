@@ -75,7 +75,7 @@ use zenoh_protocol::{
     },
     network::{
         declare::{
-            self, common::ext::WireExprType, queryable::ext::QueryableInfo,
+            self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
             subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
@@ -1234,8 +1234,8 @@ impl Session {
         if origin != Locality::SessionLocal {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            let qabl_info = QueryableInfo {
-                complete: if complete { 1 } else { 0 },
+            let qabl_info = QueryableInfoType {
+                complete,
                 distance: 0,
             };
             primitives.send_declare(Declare {

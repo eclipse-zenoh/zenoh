@@ -13,12 +13,8 @@
 //
 use async_std::task::sleep;
 use clap::Parser;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-use zenoh::{config::Config, prelude::r#async::*};
-use zenoh_collections::RingBuffer;
+use std::time::Duration;
+use zenoh::{config::Config, handlers::RingBuffer, prelude::r#async::*};
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -26,31 +22,24 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, key_expr, cache, interval) = parse_args();
+    let (config, key_expr, size, interval) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Creating a local queue keeping the last {cache} elements...");
-    let arb = Arc::new(Mutex::new(RingBuffer::new(cache)));
-    let arb_c = arb.clone();
-
     println!("Declaring Subscriber on '{key_expr}'...");
-    let _subscriber = session
+    let subscriber = session
         .declare_subscriber(&key_expr)
-        .callback(move |sample| {
-            arb_c.lock().unwrap().push_force(sample);
-        })
+        .with(RingBuffer::new(size))
         .res()
         .await
         .unwrap();
 
     println!("Pulling data every {:#?} seconds", interval);
     loop {
-        let mut res = arb.lock().unwrap().pull();
         print!(">> [Subscriber] Pulling ");
-        match res.take() {
-            Some(sample) => {
+        match subscriber.recv() {
+            Ok(Some(sample)) => {
                 let payload = sample
                     .payload()
                     .deserialize::<String>()
@@ -62,9 +51,12 @@ async fn main() {
                     payload,
                 );
             }
-            None => {
+            Ok(None) => {
                 println!("nothing... sleep for {:#?}", interval);
                 sleep(interval).await;
+            }
+            Err(e) => {
+                println!("Pull error: {e}");
             }
         }
     }
@@ -75,10 +67,10 @@ struct SubArgs {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The Key Expression to subscribe to.
     key: KeyExpr<'static>,
-    /// The size of the cache.
+    /// The size of the ringbuffer.
     #[arg(long, default_value = "3")]
-    cache: usize,
-    /// The interval for pulling the cache.
+    size: usize,
+    /// The interval for pulling the ringbuffer.
     #[arg(long, default_value = "5.0")]
     interval: f32,
     #[command(flatten)]
@@ -88,5 +80,5 @@ struct SubArgs {
 fn parse_args() -> (Config, KeyExpr<'static>, usize, Duration) {
     let args = SubArgs::parse();
     let interval = Duration::from_secs_f32(args.interval);
-    (args.common.into(), args.key, args.cache, interval)
+    (args.common.into(), args.key, args.size, interval)
 }

@@ -371,7 +371,6 @@ fn test_default_features() {
         concat!(
             " zenoh/auth_pubkey",
             " zenoh/auth_usrpwd",
-            // " zenoh/complete_n",
             // " zenoh/shared-memory",
             // " zenoh/stats",
             " zenoh/transport_multilink",
@@ -397,7 +396,6 @@ fn test_no_default_features() {
         concat!(
             // " zenoh/auth_pubkey",
             // " zenoh/auth_usrpwd",
-            // " zenoh/complete_n",
             // " zenoh/shared-memory",
             // " zenoh/stats",
             // " zenoh/transport_multilink",

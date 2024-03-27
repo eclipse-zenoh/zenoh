@@ -15,6 +15,10 @@
 //! Callback handler trait.
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 
+use std::sync::{Arc, Mutex, Weak};
+use zenoh_collections::RingBuffer as RingBufferInner;
+use zenoh_result::ZResult;
+
 /// An alias for `Arc<T>`.
 pub type Dyn<T> = std::sync::Arc<T>;
 
@@ -82,6 +86,54 @@ impl<T: Send + Sync + 'static> IntoHandler<'static, T>
                 if let Err(e) = sender.send(t) {
                     log::error!("{}", e)
                 }
+            }),
+            receiver,
+        )
+    }
+}
+
+/// Ring buffer with a limited queue size, which allows users to keep the last N data.
+pub struct RingBuffer<T> {
+    ring: Arc<Mutex<RingBufferInner<T>>>,
+}
+
+impl<T> RingBuffer<T> {
+    /// Initialize the RingBuffer with the capacity size.
+    pub fn new(capacity: usize) -> Self {
+        RingBuffer {
+            ring: Arc::new(Mutex::new(RingBufferInner::new(capacity))),
+        }
+    }
+}
+
+pub struct RingBufferHandler<T> {
+    ring: Weak<Mutex<RingBufferInner<T>>>,
+}
+
+impl<T> RingBufferHandler<T> {
+    pub fn recv(&self) -> ZResult<Option<T>> {
+        let Some(ring) = self.ring.upgrade() else {
+            bail!("The ringbuffer has been deleted.");
+        };
+        let mut guard = ring.lock().map_err(|e| zerror!("{}", e))?;
+        Ok(guard.pull())
+    }
+}
+
+impl<T: Send + 'static> IntoHandler<'static, T> for RingBuffer<T> {
+    type Handler = RingBufferHandler<T>;
+
+    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+        let receiver = RingBufferHandler {
+            ring: Arc::downgrade(&self.ring),
+        };
+        (
+            Dyn::new(move |t| match self.ring.lock() {
+                Ok(mut g) => {
+                    // Eventually drop the oldest element.
+                    g.push_force(t);
+                }
+                Err(e) => log::error!("{}", e),
             }),
             receiver,
         )

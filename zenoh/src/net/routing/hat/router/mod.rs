@@ -56,7 +56,7 @@ use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, Ze
 use zenoh_protocol::{
     common::ZExtBody,
     network::{
-        declare::{queryable::ext::QueryableInfo, InterestId, QueryableId, SubscriberId},
+        declare::{queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId},
         oam::id::OAM_LINKSTATE,
         Oam,
     },
@@ -748,8 +748,8 @@ impl HatBaseTrait for HatCode {
 struct HatContext {
     router_subs: HashSet<ZenohId>,
     peer_subs: HashSet<ZenohId>,
-    router_qabls: HashMap<ZenohId, QueryableInfo>,
-    peer_qabls: HashMap<ZenohId, QueryableInfo>,
+    router_qabls: HashMap<ZenohId, QueryableInfoType>,
+    peer_qabls: HashMap<ZenohId, QueryableInfoType>,
 }
 
 impl HatContext {
@@ -770,7 +770,7 @@ struct HatFace {
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     remote_qabl_interests: HashMap<InterestId, Option<Arc<Resource>>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfo)>,
+    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
 

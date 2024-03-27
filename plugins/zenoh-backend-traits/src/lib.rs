@@ -68,16 +68,6 @@
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         Ok(Box::new(MyStorage::new(properties).await?))
 //!     }
-//!
-//!     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-//!         // No interception point for incoming data (on PUT operations)
-//!         None
-//!     }
-//!
-//!     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-//!         // No interception point for outgoing data (on GET operations)
-//!         None
-//!     }
 //! }
 //!
 //! // Your Storage implementation
@@ -135,9 +125,7 @@
 
 use async_trait::async_trait;
 use const_format::concatcp;
-use std::sync::Arc;
-use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
-use zenoh::queryable::ReplyBuilder;
+use zenoh::prelude::OwnedKeyExpr;
 use zenoh::time::Timestamp;
 use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
@@ -210,14 +198,6 @@ pub trait Volume: Send + Sync {
 
     /// Creates a storage configured with some properties.
     async fn create_storage(&self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
-
-    /// Returns an interceptor that will be called before pushing any data
-    /// into a storage created by this backend. `None` can be returned for no interception point.
-    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
-
-    /// Returns an interceptor that will be called before sending any reply
-    /// to a query from a storage created by this backend. `None` can be returned for no interception point.
-    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
 }
 
 pub type VolumeInstance = Box<dyn Volume + 'static>;
@@ -281,50 +261,4 @@ pub trait Storage: Send + Sync {
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
     /// Remember to fetch the entry corresponding to the `None` key
     async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>>;
-}
-
-/// A wrapper around the [`zenoh::queryable::Query`] allowing to call the
-/// OutgoingDataInterceptor (if any) before to send the reply
-pub struct Query {
-    q: zenoh::queryable::Query,
-    interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-}
-
-impl Query {
-    pub fn new(
-        q: zenoh::queryable::Query,
-        interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    ) -> Query {
-        Query { q, interceptor }
-    }
-
-    /// The full [`Selector`] of this Query.
-    #[inline(always)]
-    pub fn selector(&self) -> Selector<'_> {
-        self.q.selector()
-    }
-
-    /// The key selector part of this Query.
-    #[inline(always)]
-    pub fn key_expr(&self) -> &KeyExpr<'static> {
-        self.q.key_expr()
-    }
-
-    /// This Query's selector parameters.
-    #[inline(always)]
-    pub fn parameters(&self) -> &str {
-        self.q.parameters()
-    }
-
-    /// Sends a Sample as a reply to this Query
-    pub fn reply(&self, sample: Sample) -> ReplyBuilder<'_> {
-        // Call outgoing intercerceptor
-        let sample = if let Some(ref interceptor) = self.interceptor {
-            interceptor(sample)
-        } else {
-            sample
-        };
-        // Send reply
-        self.q.reply_sample(sample)
-    }
 }

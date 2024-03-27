@@ -35,29 +35,20 @@ use zenoh_protocol::network::declare::{InterestId, QueryableId};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr, ZenohId},
     network::declare::{
-        common::ext::WireExprType, ext, queryable::ext::QueryableInfo, Declare, DeclareBody,
+        common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
         DeclareQueryable, UndeclareQueryable,
     },
 };
 use zenoh_sync::get_mut_unchecked;
 
-#[cfg(feature = "complete_n")]
 #[inline]
-fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete += info.complete;
+fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
+    this.complete = this.complete || info.complete;
     this.distance = std::cmp::min(this.distance, info.distance);
     this
 }
 
-#[cfg(not(feature = "complete_n"))]
-#[inline]
-fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete = u8::from(this.complete != 0 || info.complete != 0);
-    this.distance = std::cmp::min(this.distance, info.distance);
-    this
-}
-
-fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfo {
+fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
     let info = if hat!(tables).full_net(WhatAmI::Peer) {
         res.context.as_ref().and_then(|_| {
             res_hat!(res)
@@ -89,13 +80,10 @@ fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfo
                 accu
             }
         })
-        .unwrap_or(QueryableInfo {
-            complete: 0,
-            distance: 0,
-        })
+        .unwrap_or(QueryableInfoType::DEFAULT)
 }
 
-fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfo {
+fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
     let info = if res.context.is_some() {
         res_hat!(res)
             .router_qabls
@@ -125,13 +113,14 @@ fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfo {
                 accu
             }
         })
-        .unwrap_or(QueryableInfo {
-            complete: 0,
-            distance: 0,
-        })
+        .unwrap_or(QueryableInfoType::DEFAULT)
 }
 
-fn local_qabl_info(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> QueryableInfo {
+fn local_qabl_info(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    face: &Arc<FaceState>,
+) -> QueryableInfoType {
     let mut info = if res.context.is_some() {
         res_hat!(res)
             .router_qabls
@@ -183,10 +172,7 @@ fn local_qabl_info(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) 
                 accu
             }
         })
-        .unwrap_or(QueryableInfo {
-            complete: 0,
-            distance: 0,
-        })
+        .unwrap_or(QueryableInfoType::DEFAULT)
 }
 
 #[inline]
@@ -195,7 +181,7 @@ fn send_sourced_queryable_to_net_childs(
     net: &Network,
     childs: &[NodeIndex],
     res: &Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
     src_face: Option<&mut Arc<FaceState>>,
     routing_context: NodeId,
 ) {
@@ -284,7 +270,7 @@ fn propagate_simple_queryable(
 fn propagate_sourced_queryable(
     tables: &Tables,
     res: &Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
     src_face: Option<&mut Arc<FaceState>>,
     source: &ZenohId,
     net_type: WhatAmI,
@@ -323,7 +309,7 @@ fn register_router_queryable(
     tables: &mut Tables,
     mut face: Option<&mut Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
     router: ZenohId,
 ) {
     let current_info = res_hat!(res).router_qabls.get(&router);
@@ -361,7 +347,7 @@ fn declare_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
     router: ZenohId,
 ) {
     register_router_queryable(tables, Some(face), res, qabl_info, router);
@@ -371,7 +357,7 @@ fn register_peer_queryable(
     tables: &mut Tables,
     face: Option<&mut Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
     peer: ZenohId,
 ) {
     let current_info = res_hat!(res).peer_qabls.get(&peer);
@@ -391,7 +377,7 @@ fn declare_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
     peer: ZenohId,
 ) {
     let mut face = Some(face);
@@ -406,7 +392,7 @@ fn register_client_queryable(
     face: &mut Arc<FaceState>,
     id: QueryableId,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
 ) {
     // Register queryable
     {
@@ -426,7 +412,7 @@ fn declare_client_queryable(
     face: &mut Arc<FaceState>,
     id: QueryableId,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfo,
+    qabl_info: &QueryableInfoType,
 ) {
     register_client_queryable(tables, face, id, res, qabl_info);
     let local_details = local_router_qabl_info(tables, res);
@@ -1018,7 +1004,7 @@ fn insert_target_for_qabls(
     tables: &Tables,
     net: &Network,
     source: NodeId,
-    qabls: &HashMap<ZenohId, QueryableInfo>,
+    qabls: &HashMap<ZenohId, QueryableInfoType>,
     complete: bool,
 ) {
     if net.trees.len() > source as usize {
@@ -1180,7 +1166,7 @@ impl HatQueriesTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
-        qabl_info: &QueryableInfo,
+        qabl_info: &QueryableInfoType,
         node_id: NodeId,
     ) {
         match face.whatami {
