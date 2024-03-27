@@ -95,6 +95,7 @@ where
 
     fn write(self, writer: &mut W, x: &Declare) -> Self::Output {
         let Declare {
+            interest_id,
             ext_qos,
             ext_tstamp,
             ext_nodeid,
@@ -103,6 +104,9 @@ where
 
         // Header
         let mut header = id::DECLARE;
+        if x.interest_id.is_some() {
+            header |= declare::flag::I;
+        }
         let mut n_exts = ((ext_qos != &declare::ext::QoSType::DEFAULT) as u8)
             + (ext_tstamp.is_some() as u8)
             + ((ext_nodeid != &declare::ext::NodeIdType::DEFAULT) as u8);
@@ -110,6 +114,11 @@ where
             header |= declare::flag::Z;
         }
         self.write(&mut *writer, header)?;
+
+        // Body
+        if let Some(interest_id) = interest_id {
+            self.write(&mut *writer, interest_id)?;
+        }
 
         // Extensions
         if ext_qos != &declare::ext::QoSType::DEFAULT {
@@ -157,6 +166,11 @@ where
             return Err(DidntRead);
         }
 
+        let mut interest_id = None;
+        if imsg::has_flag(self.header, declare::flag::I) {
+            interest_id = Some(self.codec.read(&mut *reader)?);
+        }
+
         // Extensions
         let mut ext_qos = declare::ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
@@ -192,10 +206,11 @@ where
         let body: DeclareBody = self.codec.read(&mut *reader)?;
 
         Ok(Declare {
-            body,
+            interest_id,
             ext_qos,
             ext_tstamp,
             ext_nodeid,
+            body,
         })
     }
 }
