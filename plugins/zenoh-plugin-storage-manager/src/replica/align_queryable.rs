@@ -19,6 +19,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
 use zenoh::prelude::r#async::*;
+use zenoh::queryable::Query;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 
@@ -89,87 +90,58 @@ impl AlignQueryable {
                 diff_required
             );
             if diff_required.is_some() {
-                let values = self.get_value(diff_required.unwrap()).await;
-                log::trace!("[ALIGN QUERYABLE] value for the query is {:?}", values);
-                for value in values {
-                    match value {
-                        AlignData::Interval(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
-                        }
-                        AlignData::Subinterval(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
-                        }
-                        AlignData::Content(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
-                        }
-                        AlignData::Data(k, (v, ts)) => {
-                            let sample = Sample::new(k, v).with_timestamp(ts);
-                            query.reply(Ok(sample)).res().await.unwrap();
-                        }
-                    }
-                }
+                self.reply_diff(diff_required.unwrap(), query).await;
             }
         }
     }
 
-    async fn get_value(&self, diff_required: AlignComponent) -> Vec<AlignData> {
+    async fn reply_diff(&self, diff_required: AlignComponent, query: Query) {
+        let reply = |value| async {
+            let ke = query.key_expr().clone();
+            let sample = match value {
+                AlignData::Content(i, c) => {
+                    Sample::new(ke, serde_json::to_string(&(i, c)).unwrap())
+                }
+
+                AlignData::Subinterval(i, c) | AlignData::Interval(i, c) => {
+                    Sample::new(ke, serde_json::to_string(&(i, c)).unwrap())
+                }
+                AlignData::Data(k, (v, ts)) => Sample::new(k, v).with_timestamp(ts),
+            };
+            query.reply(Ok(sample)).res().await.unwrap();
+        };
+
         // TODO: Discuss if having timestamp is useful
         match diff_required {
             AlignComponent::Era(era) => {
-                let intervals = self.get_intervals(&era).await;
-                let mut result = Vec::new();
-                for (i, c) in intervals {
-                    result.push(AlignData::Interval(i, c));
+                for (i, c) in self.get_intervals(&era).await {
+                    reply(AlignData::Interval(i, c)).await;
                 }
-                result
             }
             AlignComponent::Intervals(intervals) => {
-                let mut subintervals = HashMap::new();
                 for each in intervals {
-                    subintervals.extend(self.get_subintervals(each).await);
-                }
-                let mut result = Vec::new();
-                for (i, c) in subintervals {
-                    result.push(AlignData::Subinterval(i, c));
-                }
-                result
-            }
-            AlignComponent::Subintervals(subintervals) => {
-                let mut content = HashMap::new();
-                for each in subintervals {
-                    content.extend(self.get_content(each).await);
-                }
-                let mut result = Vec::new();
-                for (i, c) in content {
-                    result.push(AlignData::Content(i, c));
-                }
-                result
-            }
-            AlignComponent::Contents(contents) => {
-                let mut result = Vec::new();
-                for each in contents {
-                    let entry = self.get_entry(&each).await;
-                    if entry.is_some() {
-                        let entry = entry.unwrap();
-                        result.push(AlignData::Data(
-                            OwnedKeyExpr::from(entry.key_expr),
-                            (entry.value, each.timestamp),
-                        ));
+                    for (i, c) in self.get_subintervals(each).await {
+                        reply(AlignData::Subinterval(i, c)).await;
                     }
                 }
-                result
+            }
+            AlignComponent::Subintervals(subintervals) => {
+                for each in subintervals {
+                    for (i, c) in self.get_content(each).await {
+                        reply(AlignData::Content(i, c)).await;
+                    }
+                }
+            }
+            AlignComponent::Contents(contents) => {
+                for each in contents {
+                    if let Some(entry) = self.get_entry(&each).await {
+                        reply(AlignData::Data(
+                            OwnedKeyExpr::from(entry.key_expr),
+                            (entry.value, each.timestamp),
+                        ))
+                        .await;
+                    }
+                }
             }
         }
     }
