@@ -18,7 +18,7 @@ use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
 use crate::net::routing::hat::HatPubSubTrait;
-use crate::net::routing::router::RoutesIndexes;
+use crate::net::routing::router::{update_data_routes_from, RoutesIndexes};
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use crate::KeyExpr;
 use std::borrow::Cow;
@@ -231,7 +231,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
     };
-    for src_face in tables
+    for mut src_face in tables
         .faces
         .values()
         .cloned()
@@ -240,7 +240,36 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         for sub in face_hat!(src_face).remote_subs.values() {
             propagate_simple_subscription_to(tables, face, sub, &sub_info, &mut src_face.clone());
         }
+        if face.whatami != WhatAmI::Client {
+            for res in face_hat_mut!(&mut src_face).remote_sub_interests.values() {
+                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                let interest = Interest::KEYEXPRS
+                    + Interest::SUBSCRIBERS
+                    + Interest::CURRENT
+                    + Interest::FUTURE;
+                get_mut_unchecked(face).local_interests.insert(
+                    id,
+                    (interest, res.as_ref().map(|res| (*res).clone()), false),
+                );
+                let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face));
+                face.primitives.send_declare(RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareInterest(DeclareInterest {
+                            id,
+                            interest,
+                            wire_expr,
+                        }),
+                    },
+                    res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+                ));
+            }
+        }
     }
+    // recompute routes
+    update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 impl HatPubSubTrait for HatCode {
