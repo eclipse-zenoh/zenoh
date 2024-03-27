@@ -744,17 +744,18 @@ impl TransportManager {
 
         // Spawn a task to accept the link
         let c_manager = self.clone();
-        zenoh_runtime::ZRuntime::Acceptor.spawn(async move {
-            if let Err(e) = tokio::time::timeout(
-                c_manager.config.unicast.accept_timeout,
-                super::establishment::accept::accept_link(link, &c_manager),
-            )
-            .await
-            {
-                log::debug!("{}", e);
-            }
-            incoming_counter.fetch_sub(1, SeqCst);
-        });
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Acceptor, async move {
+                if let Err(e) = tokio::time::timeout(
+                    c_manager.config.unicast.accept_timeout,
+                    super::establishment::accept::accept_link(link, &c_manager),
+                )
+                .await
+                {
+                    log::debug!("{}", e);
+                }
+                incoming_counter.fetch_sub(1, SeqCst);
+            });
     }
 }
 

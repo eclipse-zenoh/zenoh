@@ -102,6 +102,16 @@ jobs:
       - name: Run doctests
         run: cargo test --doc
 
+      - name: Install valgrind
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get install -y valgrind
+        shell: bash
+
+      - name: Run memory leaks check
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: ci/valgrind-check/run.sh
+        shell: bash
+
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
   # from branches where specific status checks have passed. These checks are

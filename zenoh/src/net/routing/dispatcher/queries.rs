@@ -599,10 +599,16 @@ pub fn route_query(
                                 face: Arc::downgrade(outface),
                                 qid: *qid,
                             };
-                            zenoh_runtime::ZRuntime::Net.spawn(async move {
-                                tokio::time::sleep(timeout).await;
-                                cleanup.run().await
-                            });
+                            let cancellation_token = face.task_controller.get_cancellation_token();
+                            face.task_controller.spawn_with_rt(
+                                zenoh_runtime::ZRuntime::Net,
+                                async move {
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(timeout) => { cleanup.run().await }
+                                        _ = cancellation_token.cancelled() => {}
+                                    }
+                                },
+                            );
                             #[cfg(feature = "stats")]
                             if !admin {
                                 inc_req_stats!(outface, tx, user, body)
@@ -636,10 +642,16 @@ pub fn route_query(
                                 face: Arc::downgrade(outface),
                                 qid: *qid,
                             };
-                            zenoh_runtime::ZRuntime::Net.spawn(async move {
-                                tokio::time::sleep(timeout).await;
-                                cleanup.run().await
-                            });
+                            let cancellation_token = face.task_controller.get_cancellation_token();
+                            face.task_controller.spawn_with_rt(
+                                zenoh_runtime::ZRuntime::Net,
+                                async move {
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(timeout) => { cleanup.run().await }
+                                        _ = cancellation_token.cancelled() => {}
+                                    }
+                                },
+                            );
                             #[cfg(feature = "stats")]
                             if !admin {
                                 inc_req_stats!(outface, tx, user, body)
