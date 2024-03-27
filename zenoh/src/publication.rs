@@ -73,6 +73,7 @@ pub struct DeleteBuilder<'a, 'b> {
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
+/// use zenoh::sample_builder::{PutSampleBuilderTrait, QoSBuilderTrait};
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
@@ -951,6 +952,7 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
+/// use zenoh::sample_builder::{PutSampleBuilderTrait, QoSBuilderTrait};
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session
