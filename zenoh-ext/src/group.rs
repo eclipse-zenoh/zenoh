@@ -25,6 +25,7 @@ use std::convert::TryInto;
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use zenoh::payload::PayloadReader;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
@@ -249,7 +250,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
         .await
         .unwrap();
     while let Ok(s) = sub.recv_async().await {
-        match bincode::deserialize::<GroupNetEvent>(&(s.payload().contiguous())) {
+        match bincode::deserialize_from::<PayloadReader, GroupNetEvent>(s.payload().reader()) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
                     log::debug!("Member join: {:?}", &je.member);
@@ -308,8 +309,8 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 while let Ok(reply) = receiver.recv_async().await {
                                     match reply.sample {
                                         Ok(sample) => {
-                                            match bincode::deserialize::<Member>(
-                                                &sample.payload().contiguous(),
+                                            match bincode::deserialize_from::<PayloadReader, Member>(
+                                                sample.payload().reader(),
                                             ) {
                                                 Ok(m) => {
                                                     let mut expiry = Instant::now();

@@ -20,10 +20,7 @@ fn pubsub() {
     let _sub = zenoh
         .declare_subscriber("test/attachment")
         .callback(|sample| {
-            println!(
-                "{}",
-                std::str::from_utf8(&sample.payload().contiguous()).unwrap()
-            );
+            println!("{}", sample.payload().deserialize::<String>().unwrap());
             for (k, v) in sample.attachment().unwrap() {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
             }
@@ -72,13 +69,10 @@ fn queries() {
         .callback(|query| {
             println!(
                 "{}",
-                std::str::from_utf8(
-                    &query
-                        .value()
-                        .map(|q| q.payload.contiguous())
-                        .unwrap_or_default()
-                )
-                .unwrap()
+                query
+                    .value()
+                    .map(|q| q.payload.deserialize::<String>().unwrap())
+                    .unwrap_or_default()
             );
             let mut attachment = Attachment::new();
             for (k, v) in query.attachment().unwrap() {
