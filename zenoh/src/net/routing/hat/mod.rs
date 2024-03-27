@@ -33,7 +33,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, InterestId,
-            QueryableId, SubscriberId,
+            QueryableId, SubscriberId, TokenId,
         },
         Oam,
     },
@@ -50,7 +50,10 @@ zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
-pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
+pub(crate) trait HatTrait:
+    HatBaseTrait + HatPubSubTrait + HatQueriesTrait + HatLivelinessTrait
+{
+}
 
 pub(crate) trait HatBaseTrait {
     fn as_any(&self) -> &dyn Any;
@@ -233,4 +236,24 @@ pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + S
         }
         WhatAmI::Router => Box::new(router::HatCode {}),
     }
+}
+
+pub trait HatLivelinessTrait {
+    fn declare_liveliness(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: TokenId,
+        res: &mut Arc<Resource>,
+        node_id: NodeId,
+    );
+
+    fn undeclare_liveliness(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: TokenId,
+        res: Option<Arc<Resource>>,
+        node_id: NodeId,
+    );
 }

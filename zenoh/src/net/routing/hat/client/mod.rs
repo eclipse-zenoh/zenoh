@@ -43,13 +43,14 @@ use std::{
 };
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::declare::{
-    queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId,
+    queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId, TokenId,
 };
 use zenoh_protocol::network::Oam;
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
+mod liveliness;
 mod pubsub;
 mod queries;
 
@@ -285,10 +286,13 @@ impl HatContext {
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_sub_interests: HashMap<InterestId, Option<Arc<Resource>>>,
+    remote_token_interests: HashMap<TokenId, Option<Arc<Resource>>>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    local_tokens: HashMap<Arc<Resource>, TokenId>,
+    remote_tokens: HashMap<TokenId, Arc<Resource>>,
 }
 
 impl HatFace {
@@ -296,10 +300,13 @@ impl HatFace {
         Self {
             next_id: AtomicU32::new(0),
             remote_sub_interests: HashMap::new(),
+            remote_token_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),
+            local_tokens: HashMap::new(),
+            remote_tokens: HashMap::new(),
         }
     }
 }

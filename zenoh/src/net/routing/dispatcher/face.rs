@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::super::router::*;
+use super::liveliness::{declare_liveliness, undeclare_liveliness};
 use super::tables::TablesLock;
 use super::{resource::*, tables};
 use crate::net::primitives::{McastMux, Mux, Primitives};
@@ -216,10 +217,24 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
-                log::warn!("Received unsupported {m:?}")
+                declare_liveliness(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                    &m.wire_expr,
+                    msg.ext_nodeid.node_id,
+                );
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
-                log::warn!("Received unsupported {m:?}")
+                undeclare_liveliness(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                    &m.ext_wire_expr,
+                    msg.ext_nodeid.node_id,
+                );
             }
             zenoh_protocol::network::DeclareBody::DeclareInterest(m) => {
                 if m.interest.keyexprs() && m.interest.future() {

@@ -56,7 +56,9 @@ use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, Ze
 use zenoh_protocol::{
     common::ZExtBody,
     network::{
-        declare::{queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId},
+        declare::{
+            queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId, TokenId,
+        },
         oam::id::OAM_LINKSTATE,
         Oam,
     },
@@ -65,6 +67,7 @@ use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
+mod liveliness;
 mod network;
 mod pubsub;
 mod queries;
@@ -118,6 +121,8 @@ use face_hat_mut;
 struct HatTables {
     router_subs: HashSet<Arc<Resource>>,
     peer_subs: HashSet<Arc<Resource>>,
+    router_tokens: HashSet<Arc<Resource>>,
+    peer_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
     peer_qabls: HashSet<Arc<Resource>>,
     routers_net: Option<Network>,
@@ -135,6 +140,8 @@ impl HatTables {
             peer_subs: HashSet::new(),
             router_qabls: HashSet::new(),
             peer_qabls: HashSet::new(),
+            router_tokens: HashSet::new(),
+            peer_tokens: HashSet::new(),
             routers_net: None,
             peers_net: None,
             shared_nodes: vec![],
@@ -750,6 +757,8 @@ struct HatContext {
     peer_subs: HashSet<ZenohId>,
     router_qabls: HashMap<ZenohId, QueryableInfoType>,
     peer_qabls: HashMap<ZenohId, QueryableInfoType>,
+    router_tokens: HashSet<ZenohId>,
+    peer_tokens: HashSet<ZenohId>,
 }
 
 impl HatContext {
@@ -759,6 +768,8 @@ impl HatContext {
             peer_subs: HashSet::new(),
             router_qabls: HashMap::new(),
             peer_qabls: HashMap::new(),
+            router_tokens: HashSet::new(),
+            peer_tokens: HashSet::new(),
         }
     }
 }
@@ -772,6 +783,9 @@ struct HatFace {
     remote_qabl_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    local_tokens: HashMap<Arc<Resource>, TokenId>,
+    remote_tokens: HashMap<TokenId, Arc<Resource>>,
+    remote_token_interests: HashMap<TokenId, (Option<Arc<Resource>>, bool)>,
 }
 
 impl HatFace {
@@ -785,6 +799,9 @@ impl HatFace {
             remote_qabl_interests: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),
+            local_tokens: HashMap::new(),
+            remote_tokens: HashMap::new(),
+            remote_token_interests: HashMap::new(),
         }
     }
 }
