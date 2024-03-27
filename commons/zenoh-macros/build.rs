@@ -25,7 +25,6 @@ fn main() {
         .create(true)
         .truncate(true)
         .write(true)
-        .truncate(true)
         .open(version_rs)
         .unwrap();
     version_rs.write_all(&output.stdout).unwrap();
