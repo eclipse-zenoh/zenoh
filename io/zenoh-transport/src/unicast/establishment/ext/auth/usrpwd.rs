@@ -161,7 +161,8 @@ pub(crate) struct StateAccept {
 }
 
 #[allow(dead_code)]
-pub(crate) struct Username(Vec<u8>);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct UsrPwdId(pub Option<Vec<u8>>);
 
 impl StateAccept {
     pub(crate) fn new<R>(prng: &mut R) -> Self

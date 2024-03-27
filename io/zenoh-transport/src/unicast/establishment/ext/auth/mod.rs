@@ -16,7 +16,6 @@ pub(crate) mod pubkey;
 #[cfg(feature = "auth_usrpwd")]
 pub(crate) mod usrpwd;
 
-use crate::unicast::authentication::AuthId;
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
@@ -574,13 +573,16 @@ impl<'a> AcceptFsm for &'a AuthFsm<'a> {
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Auth>);
-    type RecvOpenSynOut = AuthId;
+    #[cfg(feature = "auth_usrpwd")]
+
+    type RecvOpenSynOut = UsrPwdId;
     async fn recv_open_syn(
         self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         const S: &str = "Auth extension - Recv OpenSyn.";
-        let mut auth_id = AuthId::None;
+        #[cfg(feature = "transport_auth")]
+        let mut user_passwd_id = UsrPwdId(None);
 
         let (state, ext) = input;
         let ext = ext.unwrap_or(init::ext::Auth::new(ZBuf::empty()));
@@ -609,14 +611,14 @@ impl<'a> AcceptFsm for &'a AuthFsm<'a> {
                 (Some(e), Some(s)) => {
                     let x = ztake!(exts, id::USRPWD);
                     let username = e.recv_open_syn((s, ztryinto!(x, S))).await?;
-                    auth_id = AuthId::Username(username);
+                    user_passwd_id = UsrPwdId(Some(username));
                 }
                 (None, None) => {}
                 _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
-        Ok(auth_id)
+        Ok(user_passwd_id)
     }
 
     type SendOpenAckIn = &'a StateAccept;

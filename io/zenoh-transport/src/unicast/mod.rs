@@ -25,6 +25,8 @@ pub(crate) mod universal;
 pub(crate) mod shared_memory_unicast;
 
 use self::authentication::AuthId;
+#[cfg(feature = "auth_usrpwd")]
+use self::establishment::ext::auth::UsrPwdId;
 use self::transport_unicast_inner::TransportUnicastTrait;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "transport_multilink")]
@@ -56,8 +58,8 @@ pub(crate) struct TransportConfigUnicast {
     #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
     pub(crate) is_lowlatency: bool,
-    #[cfg(feature = "transport_auth")]
-    pub(crate) auth_id: AuthId,
+    #[cfg(feature = "auth_usrpwd")]
+    pub(crate) auth_id: UsrPwdId,
 }
 
 /// [`TransportUnicast`] is the transport handler returned

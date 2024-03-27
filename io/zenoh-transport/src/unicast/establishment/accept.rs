@@ -11,12 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "auth_usrpwd")]
+use super::ext::auth::UsrPwdId;
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
-        authentication::AuthId,
         establishment::{compute_sn, ext, AcceptFsm, Cookie, Zenoh080Cookie},
         link::{
             LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
@@ -106,7 +107,8 @@ struct RecvOpenSynOut {
     other_whatami: WhatAmI,
     other_lease: Duration,
     other_initial_sn: TransportSn,
-    other_auth_id: crate::unicast::authentication::AuthId,
+    #[cfg(feature = "auth_usrpwd")]
+    other_auth_id: UsrPwdId,
 }
 
 // OpenAck
@@ -471,11 +473,12 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension Auth
         #[allow(unused_mut, unused_assignments)]
-        let mut auth_id = AuthId::None;
+        #[cfg(feature = "auth_usrpwd")]
+        let mut user_pawssword_id = UsrPwdId(None);
 
         #[cfg(feature = "transport_auth")]
         {
-            auth_id = self
+            user_pawssword_id = self
                 .ext_auth
                 .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
                 .await
@@ -507,7 +510,8 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             other_whatami: cookie.whatami,
             other_lease: open_syn.lease,
             other_initial_sn: open_syn.initial_sn,
-            other_auth_id: auth_id,
+            #[cfg(feature = "transport_auth")]
+            other_auth_id: user_pawssword_id,
         };
         Ok((state, output))
     }
@@ -696,11 +700,6 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         cookie_nonce: iack_out.cookie_nonce,
     };
     let (mut state, osyn_out) = step!(fsm.recv_open_syn(osyn_in).await);
-
-    println!(
-        "output of opensyn validation is {:?}",
-        osyn_out.other_auth_id
-    );
     // Create the OpenAck but not send it yet
     let oack_in = SendOpenAckIn {
         mine_zid: manager.config.zid,
@@ -721,7 +720,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "shared-memory")]
         is_shm: state.transport.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
-        #[cfg(feature = "transport_auth")]
+        #[cfg(feature = "auth_usrpwd")]
         auth_id: osyn_out.other_auth_id,
     };
 

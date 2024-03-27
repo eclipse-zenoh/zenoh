@@ -31,7 +31,7 @@ impl InterceptorFactoryTrait for TestInterceptor {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        //transport.get_zid()
+        //build a subject map here
         let mut subject_name = vec![];
         if let Ok(ids) = transport.get_auth_ids() {
             for id in ids {
@@ -41,7 +41,7 @@ impl InterceptorFactoryTrait for TestInterceptor {
                         subject_name.push("name");
                     }
                     AuthId::Username(name) => {
-                        println!("user name {}", std::str::from_utf8(&name).unwrap())
+                        println!("user name {}", name)
                     }
                     AuthId::None => {
                         println!("No id was found, switch to interface values");

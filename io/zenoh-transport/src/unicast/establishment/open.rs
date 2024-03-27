@@ -1,3 +1,5 @@
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::establishment::ext::auth::UsrPwdId;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -623,8 +625,8 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         is_shm: state.transport.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
-        #[cfg(feature = "transport_auth")]
-        auth_id: AuthId::None,
+        #[cfg(feature = "auth_usrpwd")]
+        auth_id: UsrPwdId(None),
     };
 
     let o_config = TransportLinkUnicastConfig {
