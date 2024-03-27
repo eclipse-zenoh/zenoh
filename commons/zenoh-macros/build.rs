@@ -24,6 +24,7 @@ fn main() {
     let mut version_rs = OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(true)
         .open(version_rs)
         .unwrap();
     version_rs.write_all(&output.stdout).unwrap();
