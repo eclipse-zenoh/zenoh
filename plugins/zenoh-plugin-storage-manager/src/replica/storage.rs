@@ -21,14 +21,17 @@ use futures::select;
 use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
+use zenoh::buffers::buffer::SplitBuffer;
 use zenoh::buffers::ZBuf;
-use zenoh::prelude::r#async::*;
-use zenoh::query::ConsolidationMode;
+use zenoh::key_expr::KeyExpr;
+use zenoh::query::{ConsolidationMode, QueryTarget};
+use zenoh::sample::{Sample, SampleKind};
 use zenoh::sample_builder::{
-    PutSampleBuilder, PutSampleBuilderTrait, SampleBuilder, SampleBuilderTrait,
+    DeleteSampleBuilder, PutSampleBuilder, PutSampleBuilderTrait, SampleBuilder, SampleBuilderTrait,
 };
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
-use zenoh::{Result as ZResult, Session};
+use zenoh::value::Value;
+use zenoh::{Result as ZResult, Session, SessionDeclarations};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
 use zenoh_core::{AsyncResolve, SyncResolve};
@@ -235,11 +238,8 @@ impl StorageService {
                                 continue;
                             }
                         };
-                        let sample = if sample.timestamp().is_none() {
-                            SampleBuilder::from(sample).with_timestamp(new_reception_timestamp()).res_sync()
-                        } else {
-                            sample
-                        };
+                        let timestamp = sample.timestamp().cloned().unwrap_or(new_reception_timestamp());
+                        let sample = SampleBuilder::from(sample).with_timestamp(timestamp).res_sync();
                         self.process_sample(sample).await;
                     },
                     // on query on key_expr
@@ -307,21 +307,27 @@ impl StorageService {
                     .ovderriding_wild_update(&k, sample.timestamp().unwrap())
                     .await
                 {
-                    Some(overriding_update) => {
+                    Some(Update {
+                        kind: SampleKind::Put,
+                        data,
+                    }) => {
                         let Value {
                             payload, encoding, ..
-                        } = overriding_update.data.value;
+                        } = data.value;
                         PutSampleBuilder::new(KeyExpr::from(k.clone()), payload)
                             .with_encoding(encoding)
-                            .with_timestamp(overriding_update.data.timestamp)
+                            .with_timestamp(data.timestamp)
                             .res_sync()
                     }
-                    None => {
-                        PutSampleBuilder::new(KeyExpr::from(k.clone()), sample.payload().clone())
-                            .with_encoding(sample.encoding().clone())
-                            .with_timestamp(*sample.timestamp().unwrap())
-                            .res_sync()
-                    }
+                    Some(Update {
+                        kind: SampleKind::Delete,
+                        data,
+                    }) => DeleteSampleBuilder::new(KeyExpr::from(k.clone()))
+                        .with_timestamp(data.timestamp)
+                        .res_sync(),
+                    None => SampleBuilder::from(sample.clone())
+                        .keyexpr(k.clone())
+                        .res_sync(),
                 };
 
                 let stripped_key = match self.strip_prefix(sample_to_store.key_expr()) {

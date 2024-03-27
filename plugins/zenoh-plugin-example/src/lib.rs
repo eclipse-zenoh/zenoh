@@ -24,8 +24,6 @@ use std::sync::{
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
-use zenoh::sample::SampleFields;
-use zenoh::sample_builder::SampleBuilderTrait;
 use zenoh_core::zlock;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, ZResult};
@@ -176,16 +174,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
                     if query.selector().key_expr.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
-                        let SampleFields { key_expr, timestamp, attachment, source_info, payload, kind, .. } = sample.clone().into();
-                        let reply = query
-                            .reply_sample(key_expr)
-                            .with_timestamp_opt(timestamp)
-                            .with_attachment_opt(attachment)
-                            .with_source_info(source_info);
-                        match kind {
-                            SampleKind::Put => reply.put(payload).res().await.unwrap(),
-                            SampleKind::Delete => reply.delete().res().await.unwrap(),
-                        }
+                        query.reply_sample(sample.clone()).res().await.unwrap();
                     }
                 }
             }

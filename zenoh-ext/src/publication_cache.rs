@@ -20,8 +20,6 @@ use std::convert::TryInto;
 use std::future::Ready;
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
-use zenoh::sample::SampleFields;
-use zenoh::sample_builder::SampleBuilderTrait;
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::SessionRef;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
@@ -116,29 +114,6 @@ pub struct PublicationCache<'a> {
     local_sub: FlumeSubscriber<'a>,
     _queryable: Queryable<'a, flume::Receiver<Query>>,
     _stoptx: Sender<bool>,
-}
-
-async fn reply_sample(query: &Query, sample: &Sample) {
-    let SampleFields {
-        key_expr,
-        timestamp,
-        attachment,
-        source_info,
-        payload,
-        kind,
-        ..
-    } = sample.clone().into();
-    let reply = query
-        .reply_sample(key_expr)
-        .with_timestamp_opt(timestamp)
-        .with_attachment_opt(attachment)
-        .with_source_info(source_info);
-    if let Err(e) = match kind {
-        SampleKind::Put => reply.put(payload).res_async().await,
-        SampleKind::Delete => reply.delete().res_async().await,
-    } {
-        log::warn!("Error replying to query: {}", e);
-    }
 }
 
 impl<'a> PublicationCache<'a> {
@@ -237,7 +212,9 @@ impl<'a> PublicationCache<'a> {
                                                 continue;
                                             }
                                         }
-                                        reply_sample(&query, sample).await;
+                                        if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
+                                            log::warn!("Error replying to query: {}", e);
+                                        }
                                     }
                                 }
                             } else {
@@ -249,7 +226,9 @@ impl<'a> PublicationCache<'a> {
                                                     continue;
                                                 }
                                             }
-                                            reply_sample(&query, sample).await;
+                                            if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
+                                                log::warn!("Error replying to query: {}", e);
+                                            }
                                         }
                                     }
                                 }

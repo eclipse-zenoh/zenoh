@@ -664,13 +664,8 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
                     log::trace!("Sample received while fetch in progress: push it to merge_queue");
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
-                    let s = if s.timestamp().is_none() {
-                        SampleBuilder::from(s)
-                            .with_timestamp(new_reception_timestamp())
-                            .res_sync()
-                    } else {
-                        s
-                    };
+                    let timestamp = s.timestamp().cloned().unwrap_or(new_reception_timestamp());
+                    let s = SampleBuilder::from(s).with_timestamp(timestamp).res_sync();
                     state.merge_queue.push(s);
                 }
             }

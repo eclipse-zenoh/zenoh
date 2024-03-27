@@ -106,20 +106,19 @@ impl Query {
         self.inner.attachment.as_ref()
     }
 
-    /// Sends a reply or delete reply to this Query
+    /// Sends a reply in the form of [`Sample`] to this Query.
     ///
-    /// This function is useful when resending the samples which can be of [`SampleKind::Put`] or [`SampleKind::Delete`]
-    /// It allows to build the reply with same common parameters, like timestamp, attachment, source_info, etc.
-    /// and only on final step to choose the kind of reply by calling [`ReplySampleBuilder::put`] or [`ReplySampleBuilder::delete`] methods.
+    /// By default, queries only accept replies whose key expression intersects with the query's.
+    /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
+    /// replying on a disjoint key expression will result in an error when resolving the reply.
+    /// This api is for internal use only.
     #[inline(always)]
-    pub fn reply_sample<IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> ReplySampleBuilder
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        let sample_builder = SampleBuilder::new(key_expr);
+    #[cfg(feature = "unstable")]
+    #[doc(hidden)]
+    pub fn reply_sample(&self, sample: Sample) -> ReplySampleBuilder<'_> {
         ReplySampleBuilder {
             query: self,
-            sample_builder,
+            sample_builder: sample.into(),
         }
     }
 
@@ -299,6 +298,25 @@ impl QoSBuilderTrait for ReplySampleBuilder<'_> {
             sample_builder: self.sample_builder.express(is_express),
             ..self
         }
+    }
+}
+
+impl Resolvable for ReplySampleBuilder<'_> {
+    type To = ZResult<()>;
+}
+
+impl SyncResolve for ReplySampleBuilder<'_> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        let sample = self.sample_builder.res_sync();
+        self.query._reply_sample(sample)
+    }
+}
+
+impl AsyncResolve for ReplySampleBuilder<'_> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
     }
 }
 
