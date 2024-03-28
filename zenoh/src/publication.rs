@@ -215,6 +215,14 @@ impl ValueBuilderTrait for PutBuilder<'_, '_> {
             ..self
         }
     }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let Value { payload, encoding } = value.into();
+        Self {
+            payload,
+            encoding,
+            ..self
+        }
+    }
 }
 
 impl PutBuilder<'_, '_> {
@@ -795,6 +803,15 @@ impl ValueBuilderTrait for PutPublication<'_> {
     {
         Self {
             payload: payload.into(),
+            ..self
+        }
+    }
+
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let Value { payload, encoding } = value.into();
+        Self {
+            payload,
+            encoding,
             ..self
         }
     }

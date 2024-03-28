@@ -178,6 +178,13 @@ impl<Handler> ValueBuilderTrait for GetBuilder<'_, '_, Handler> {
         let value = Some(self.value.unwrap_or_default().payload(payload));
         Self { value, ..self }
     }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let value: Value = value.into();
+        Self {
+            value: if value.is_empty() { None } else { Some(value) },
+            ..self
+        }
+    }
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -328,48 +335,34 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
 impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// Change the target of the query.
     #[inline]
-    pub fn target(mut self, target: QueryTarget) -> Self {
-        self.target = target;
-        self
+    pub fn target(self, target: QueryTarget) -> Self {
+        Self { target, ..self }
     }
 
     /// Change the consolidation mode of the query.
     #[inline]
-    pub fn consolidation<QC: Into<QueryConsolidation>>(mut self, consolidation: QC) -> Self {
-        self.consolidation = consolidation.into();
-        self
+    pub fn consolidation<QC: Into<QueryConsolidation>>(self, consolidation: QC) -> Self {
+        Self {
+            consolidation: consolidation.into(),
+            ..self
+        }
     }
 
     /// Restrict the matching queryables that will receive the query
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.destination = destination;
-        self
+    pub fn allowed_destination(self, destination: Locality) -> Self {
+        Self {
+            destination,
+            ..self
+        }
     }
 
     /// Set query timeout.
     #[inline]
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
-    /// Set query value.
-    #[inline]
-    pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
-    where
-        IntoValue: Into<Value>,
-    {
-        self.value = Some(value.into());
-        self
-    }
-
-    #[zenoh_macros::unstable]
-    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
-        self.attachment = Some(attachment);
-        self
+    pub fn timeout(self, timeout: Duration) -> Self {
+        Self { timeout, ..self }
     }
 
     /// By default, `get` guarantees that it will only receive replies whose key expressions intersect

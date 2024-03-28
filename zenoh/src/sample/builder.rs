@@ -22,6 +22,7 @@ use crate::Payload;
 use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
+use crate::Value;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
@@ -56,6 +57,9 @@ pub trait ValueBuilderTrait {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self;
     /// Sets the payload
     fn payload<T: Into<Payload>>(self, payload: T) -> Self;
+    /// Sets both payload and encoding at once.
+    /// This is convenient for passing user type which supports `Into<Value>` when both payload and encoding depends on user type
+    fn value<T: Into<Value>>(self, value: T) -> Self;
 }
 
 #[derive(Debug)]
@@ -218,6 +222,14 @@ impl ValueBuilderTrait for PutSampleBuilder {
     fn payload<T: Into<Payload>>(self, payload: T) -> Self {
         Self(SampleBuilder(Sample {
             payload: payload.into(),
+            ..self.0 .0
+        }))
+    }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let Value { payload, encoding } = value.into();
+        Self(SampleBuilder(Sample {
+            payload,
+            encoding,
             ..self.0 .0
         }))
     }

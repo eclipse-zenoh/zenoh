@@ -100,13 +100,13 @@ fn queries() {
         }
         let get = zenoh
             .get("test/attachment")
-            .with_value("query")
-            .with_attachment(
+            .payload("query")
+            .attachment(Some(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            )
+            ))
             .res()
             .unwrap();
         while let Ok(reply) = get.recv() {

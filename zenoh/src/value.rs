@@ -43,6 +43,11 @@ impl Value {
             encoding: Encoding::default(),
         }
     }
+    /// Checks if the [`Value`] is empty.
+    /// Value is considered empty if its payload is empty and encoding is default.
+    pub fn is_empty(&self) -> bool {
+        self.payload.is_empty() && self.encoding == Encoding::default()
+    }
 }
 
 impl ValueBuilderTrait for Value {
@@ -58,6 +63,10 @@ impl ValueBuilderTrait for Value {
             ..self
         }
     }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let Value { payload, encoding } = value.into();
+        Self { payload, encoding }
+    }
 }
 
 impl<T> From<T> for Value
@@ -69,6 +78,15 @@ where
             payload: t.into(),
             encoding: Encoding::default(),
         }
+    }
+}
+
+impl<T> From<Option<T>> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: Option<T>) -> Self {
+        t.map_or_else(Value::empty, Into::into)
     }
 }
 

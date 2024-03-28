@@ -420,7 +420,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 .content_type()
                 .map(|m| Encoding::from(m.to_string()))
                 .unwrap_or_default();
-            query = query.with_value(Value::from(body).encoding(encoding));
+            query = query.payload(body).encoding(encoding);
         }
         match query.res().await {
             Ok(receiver) => {

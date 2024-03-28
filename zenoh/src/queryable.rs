@@ -378,6 +378,13 @@ impl ValueBuilderTrait for ReplyBuilder<'_> {
             ..self
         }
     }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let Value { payload, encoding } = value.into();
+        Self {
+            sample_builder: self.sample_builder.payload(payload).encoding(encoding),
+            ..self
+        }
+    }
 }
 
 /// A builder returned by [`Query::reply_del()`](Query::reply)
