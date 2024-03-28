@@ -254,7 +254,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     (interest, res.as_ref().map(|res| (*res).clone()), false),
                 );
                 let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face));
-                face.primitives.send_declare(RoutingContext::with_expr(
+                face.primitives.egress_declare(RoutingContext::with_expr(
                     Declare {
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
