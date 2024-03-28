@@ -30,7 +30,7 @@ async fn main() {
     println!("Sending Query '{selector}'...");
     let replies = session
         .get(&selector)
-        .value(value.map(Value::from))
+        .value(value)
         .target(target)
         .timeout(timeout)
         .res()
