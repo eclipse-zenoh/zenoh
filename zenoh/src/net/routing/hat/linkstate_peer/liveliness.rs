@@ -46,4 +46,26 @@ impl HatLivelinessTrait for HatCode {
     ) {
         todo!()
     }
+
+    fn declare_liveliness_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: zenoh_protocol::network::declare::InterestId,
+        res: Option<&mut Arc<Resource>>,
+        current: bool,
+        future: bool,
+        aggregate: bool,
+    ) {
+        todo!()
+    }
+
+    fn undeclare_liveliness_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: zenoh_protocol::network::declare::InterestId,
+    ) {
+        todo!()
+    }
 }

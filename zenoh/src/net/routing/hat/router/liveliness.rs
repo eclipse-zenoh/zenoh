@@ -725,4 +725,99 @@ impl HatLivelinessTrait for HatCode {
             _ => forget_client_liveliness(tables, face, id),
         }
     }
+
+    fn declare_liveliness_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: zenoh_protocol::network::declare::InterestId,
+        res: Option<&mut Arc<Resource>>,
+        current: bool,
+        future: bool,
+        aggregate: bool,
+    ) {
+        if current && face.whatami == WhatAmI::Client {
+            if let Some(res) = res.as_ref() {
+                if aggregate {
+                    if hat!(tables).router_tokens.iter().any(|token| {
+                        token.context.is_some()
+                            && token.matches(res)
+                            && (remote_client_tokens(token, face)
+                                || remote_peer_tokens(tables, token)
+                                || remote_router_tokens(tables, token))
+                    }) {
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
+                        let wire_expr = Resource::decl_key(res, face);
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                            },
+                            res.expr(),
+                        ));
+                    }
+                } else {
+                    for token in &hat!(tables).router_tokens {
+                        if token.context.is_some()
+                            && token.matches(res)
+                            && (remote_client_tokens(token, face)
+                                || remote_peer_tokens(tables, token)
+                                || remote_router_tokens(tables, token))
+                        {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                            let wire_expr = Resource::decl_key(token, face);
+                            face.primitives.send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                                },
+                                token.expr(),
+                            ));
+                        }
+                    }
+                }
+            } else {
+                for token in &hat!(tables).router_tokens {
+                    if token.context.is_some()
+                        && (remote_client_tokens(token, face)
+                            || remote_peer_tokens(tables, token)
+                            || remote_router_tokens(tables, token))
+                    {
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                        let wire_expr = Resource::decl_key(token, face);
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                            },
+                            token.expr(),
+                        ));
+                    }
+                }
+            }
+        }
+        if future {
+            face_hat_mut!(face)
+                .remote_token_interests
+                .insert(id, (res.cloned(), aggregate));
+        }
+    }
+
+    fn undeclare_liveliness_interest(
+        &self,
+        _tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: zenoh_protocol::network::declare::InterestId,
+    ) {
+        face_hat_mut!(face).remote_token_interests.remove(&id);
+    }
 }

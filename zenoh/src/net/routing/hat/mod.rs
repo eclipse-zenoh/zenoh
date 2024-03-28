@@ -256,4 +256,23 @@ pub trait HatLivelinessTrait {
         res: Option<Arc<Resource>>,
         node_id: NodeId,
     );
+
+    #[allow(clippy::too_many_arguments)] // TODO refactor
+    fn declare_liveliness_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        current: bool,
+        future: bool,
+        aggregate: bool,
+    );
+
+    fn undeclare_liveliness_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+    );
 }

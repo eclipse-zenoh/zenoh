@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::super::router::*;
-use super::liveliness::{declare_liveliness, undeclare_liveliness};
+use super::liveliness::{
+    declare_liveliness, declare_liveliness_interest, undeclare_liveliness,
+    undeclare_liveliness_interest,
+};
 use super::tables::TablesLock;
 use super::{resource::*, tables};
 use crate::net::primitives::{McastMux, Mux, Primitives};
@@ -257,6 +260,18 @@ impl Primitives for Face {
                         m.interest.aggregate(),
                     );
                 }
+                if m.interest.tokens() {
+                    declare_liveliness_interest(
+                        ctrl_lock.as_ref(),
+                        &self.tables,
+                        &mut self.state.clone(),
+                        m.id,
+                        m.wire_expr.as_ref(),
+                        m.interest.current(),
+                        m.interest.future(),
+                        m.interest.aggregate(),
+                    );
+                }
                 if m.interest.queryables() {
                     declare_qabl_interest(
                         ctrl_lock.as_ref(),
@@ -296,6 +311,12 @@ impl Primitives for Face {
                     m.id,
                 );
                 undeclare_qabl_interest(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                );
+                undeclare_liveliness_interest(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),

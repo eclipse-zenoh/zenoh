@@ -16,8 +16,8 @@ use std::sync::{atomic::Ordering, Arc};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
-    declare::{common::ext::WireExprType, TokenId},
-    ext, Declare, DeclareBody, DeclareToken, UndeclareToken,
+    declare::{common::ext::WireExprType, Interest, InterestId, TokenId},
+    ext, Declare, DeclareBody, DeclareInterest, DeclareToken, UndeclareInterest, UndeclareToken,
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -235,5 +235,99 @@ impl HatLivelinessTrait for HatCode {
         _node_id: NodeId,
     ) {
         forget_client_liveliness(tables, face, id)
+    }
+
+    fn declare_liveliness_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: zenoh_protocol::network::declare::InterestId,
+        res: Option<&mut Arc<Resource>>,
+        current: bool,
+        future: bool,
+        _aggregate: bool,
+    ) {
+        face_hat_mut!(face)
+            .remote_token_interests
+            .insert(id, res.as_ref().map(|res| (*res).clone()));
+        for dst_face in tables
+            .faces
+            .values_mut()
+            .filter(|f| f.whatami != WhatAmI::Client)
+        {
+            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+            let mut interest = Interest::KEYEXPRS + Interest::TOKENS;
+            if current {
+                interest += Interest::CURRENT;
+            }
+            if future {
+                interest += Interest::FUTURE;
+            }
+            get_mut_unchecked(dst_face).local_interests.insert(
+                id,
+                (interest, res.as_ref().map(|res| (*res).clone()), !current),
+            );
+            let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
+            dst_face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareInterest(DeclareInterest {
+                        id,
+                        interest,
+                        wire_expr,
+                    }),
+                },
+                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+            ));
+        }
+    }
+
+    fn undeclare_liveliness_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: zenoh_protocol::network::declare::InterestId,
+    ) {
+        if let Some(interest) = face_hat_mut!(face).remote_token_interests.remove(&id) {
+            if !tables.faces.values().any(|f| {
+                f.whatami == WhatAmI::Client
+                    && face_hat!(f)
+                        .remote_token_interests
+                        .values()
+                        .any(|i| *i == interest)
+            }) {
+                for dst_face in tables
+                    .faces
+                    .values_mut()
+                    .filter(|f| f.whatami != WhatAmI::Client)
+                {
+                    for id in dst_face
+                        .local_interests
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<InterestId>>()
+                    {
+                        let (int, res, _) = dst_face.local_interests.get(&id).unwrap();
+                        if int.tokens() && (*res == interest) {
+                            dst_face.primitives.send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::UndeclareInterest(UndeclareInterest {
+                                        id,
+                                        ext_wire_expr: WireExprType::null(),
+                                    }),
+                                },
+                                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+                            ));
+                            get_mut_unchecked(dst_face).local_interests.remove(&id);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
