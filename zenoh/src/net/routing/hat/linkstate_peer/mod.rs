@@ -451,6 +451,8 @@ struct HatContext {
     router_subs: HashSet<ZenohId>,
     peer_subs: HashSet<ZenohId>,
     peer_qabls: HashMap<ZenohId, QueryableInfoType>,
+    router_tokens: HashSet<ZenohId>,
+    peer_tokens: HashSet<ZenohId>,
 }
 
 impl HatContext {
@@ -459,6 +461,8 @@ impl HatContext {
             router_subs: HashSet::new(),
             peer_subs: HashSet::new(),
             peer_qabls: HashMap::new(),
+            router_tokens: HashSet::new(),
+            peer_tokens: HashSet::new(),
         }
     }
 }

@@ -1363,9 +1363,9 @@ impl HatQueriesTrait for HatCode {
                 for mres in matches.iter() {
                     let mres = mres.upgrade().unwrap();
                     if (mres.context.is_some()
-                        && (!res_hat!(mres).router_subs.is_empty()
-                            || !res_hat!(mres).peer_subs.is_empty()))
-                        || mres.session_ctxs.values().any(|ctx| ctx.subs.is_some())
+                        && (!res_hat!(mres).router_tokens.is_empty()
+                            || !res_hat!(mres).peer_tokens.is_empty()))
+                        || mres.session_ctxs.values().any(|ctx| ctx.token)
                     {
                         result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
                     }

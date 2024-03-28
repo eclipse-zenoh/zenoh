@@ -392,7 +392,7 @@ impl HatQueriesTrait for HatCode {
                     .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
                 for mres in matches.iter() {
                     let mres = mres.upgrade().unwrap();
-                    if mres.session_ctxs.values().any(|ctx| ctx.subs.is_some()) {
+                    if mres.session_ctxs.values().any(|ctx| ctx.token) {
                         result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
                     }
                 }
