@@ -57,6 +57,7 @@ fn send_sourced_subscription_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -104,6 +105,7 @@ fn propagate_simple_subscription_to(
         let key_expr = Resource::decl_key(res, dst_face);
         dst_face.primitives.send_declare(RoutingContext::with_expr(
             Declare {
+                interest_id: None,
                 ext_qos: ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -345,6 +347,7 @@ fn send_forget_sourced_subscription_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -370,6 +373,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
         if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -408,6 +412,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -559,6 +564,7 @@ pub(super) fn undeclare_client_subscription(
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -600,6 +606,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             let key_expr = Resource::decl_key(sub, face);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -628,6 +635,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 let key_expr = Resource::decl_key(sub, face);
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
+                        interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -766,6 +774,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 if forget {
                                     dst_face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
+                                            interest_id: None,
                                             ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
                                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -791,6 +800,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 };
                                 dst_face.primitives.send_declare(RoutingContext::with_expr(
                                     Declare {
+                                        interest_id: None,
                                         ext_qos: ext::QoSType::DECLARE,
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType::DEFAULT,
