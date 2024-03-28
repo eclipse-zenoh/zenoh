@@ -239,14 +239,7 @@ impl<'a> ReplySampleBuilder<'a> {
 }
 
 impl TimestampBuilderTrait for ReplySampleBuilder<'_> {
-    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
-        Self {
-            sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
-            ..self
-        }
-    }
-
-    fn with_timestamp(self, timestamp: Timestamp) -> Self {
+    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp(timestamp),
             ..self
@@ -331,14 +324,7 @@ pub struct ReplyBuilder<'a> {
 }
 
 impl TimestampBuilderTrait for ReplyBuilder<'_> {
-    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
-        Self {
-            sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
-            ..self
-        }
-    }
-
-    fn with_timestamp(self, timestamp: Timestamp) -> Self {
+    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp(timestamp),
             ..self
@@ -423,14 +409,7 @@ pub struct ReplyDelBuilder<'a> {
 }
 
 impl TimestampBuilderTrait for ReplyDelBuilder<'_> {
-    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
-        Self {
-            sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
-            ..self
-        }
-    }
-
-    fn with_timestamp(self, timestamp: Timestamp) -> Self {
+    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp(timestamp),
             ..self

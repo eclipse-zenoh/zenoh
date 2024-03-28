@@ -147,14 +147,8 @@ impl QoSBuilderTrait for DeleteBuilder<'_, '_> {
 }
 
 impl TimestampBuilderTrait for PutBuilder<'_, '_> {
-    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
+    fn with_timestamp(self, timestamp: Option<uhlc::Timestamp>) -> Self {
         Self { timestamp, ..self }
-    }
-    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
-        Self {
-            timestamp: Some(timestamp),
-            ..self
-        }
     }
 }
 
@@ -180,14 +174,8 @@ impl SampleBuilderTrait for PutBuilder<'_, '_> {
 }
 
 impl TimestampBuilderTrait for DeleteBuilder<'_, '_> {
-    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
+    fn with_timestamp(self, timestamp: Option<uhlc::Timestamp>) -> Self {
         Self { timestamp, ..self }
-    }
-    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
-        Self {
-            timestamp: Some(timestamp),
-            ..self
-        }
     }
 }
 
@@ -766,15 +754,8 @@ pub struct DeletePublication<'a> {
 }
 
 impl TimestampBuilderTrait for PutPublication<'_> {
-    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
+    fn with_timestamp(self, timestamp: Option<uhlc::Timestamp>) -> Self {
         Self { timestamp, ..self }
-    }
-
-    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
-        Self {
-            timestamp: Some(timestamp),
-            ..self
-        }
     }
 }
 
@@ -818,15 +799,8 @@ impl ValueBuilderTrait for PutPublication<'_> {
 }
 
 impl TimestampBuilderTrait for DeletePublication<'_> {
-    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
+    fn with_timestamp(self, timestamp: Option<uhlc::Timestamp>) -> Self {
         Self { timestamp, ..self }
-    }
-
-    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
-        Self {
-            timestamp: Some(timestamp),
-            ..self
-        }
     }
 }
 

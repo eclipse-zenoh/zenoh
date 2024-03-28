@@ -42,9 +42,7 @@ pub trait QoSBuilderTrait {
 
 pub trait TimestampBuilderTrait {
     /// Sets of clears timestamp
-    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self;
-    /// Sets timestamp
-    fn with_timestamp(self, timestamp: Timestamp) -> Self;
+    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self;
 }
 
 pub trait SampleBuilderTrait {
@@ -102,15 +100,11 @@ impl SampleBuilder {
 }
 
 impl TimestampBuilderTrait for SampleBuilder {
-    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
+    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
         Self(Sample {
             timestamp,
             ..self.0
         })
-    }
-
-    fn with_timestamp(self, timestamp: Timestamp) -> Self {
-        self.with_timestamp_opt(Some(timestamp))
     }
 }
 
@@ -200,11 +194,8 @@ impl PutSampleBuilder {
 }
 
 impl TimestampBuilderTrait for PutSampleBuilder {
-    fn with_timestamp(self, timestamp: Timestamp) -> Self {
+    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
         Self(self.0.with_timestamp(timestamp))
-    }
-    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
-        Self(self.0.with_timestamp_opt(timestamp))
     }
 }
 
@@ -297,11 +288,8 @@ impl DeleteSampleBuilder {
 }
 
 impl TimestampBuilderTrait for DeleteSampleBuilder {
-    fn with_timestamp(self, timestamp: Timestamp) -> Self {
+    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
         Self(self.0.with_timestamp(timestamp))
-    }
-    fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
-        Self(self.0.with_timestamp_opt(timestamp))
     }
 }
 
