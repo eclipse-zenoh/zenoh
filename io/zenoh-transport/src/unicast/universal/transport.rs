@@ -23,11 +23,11 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
-use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use async_trait::async_trait;
 use std::fmt::DebugStruct;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -41,13 +41,6 @@ macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
         $guard.iter().find(|tl| tl.link == $link)
-    };
-}
-
-macro_rules! zlinkgetmut {
-    ($guard:expr, $link:expr) => {
-        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter_mut().find(|tl| tl.link == $link)
     };
 }
 
@@ -140,6 +133,7 @@ impl TransportUnicastUniversal {
             self.manager.config.zid,
             self.config.zid
         );
+
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;
@@ -214,24 +208,6 @@ impl TransportUnicastUniversal {
         match target {
             Target::Transport => self.delete().await,
             Target::Link(stl) => stl.close().await,
-        }
-    }
-
-    pub(crate) fn stop_rx_tx(&self, link: &Link) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, *link) {
-            Some(l) => {
-                l.stop_rx();
-                l.stop_tx();
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not stop Link RX {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
         }
     }
 
@@ -327,12 +303,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             // Start the TX loop
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            link.start_tx(
-                transport.clone(),
-                consumer,
-                &self.manager.tx_executor,
-                keep_alive,
-            );
+            link.start_tx(transport.clone(), consumer, keep_alive);
 
             // Start the RX loop
             link.start_rx(transport, other_lease);

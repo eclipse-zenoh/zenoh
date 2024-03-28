@@ -606,13 +606,14 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
 /// session.undeclare(key_expr).res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct KeyExprUndeclaration<'a> {

@@ -63,7 +63,8 @@ lazy_static::lazy_static!(
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -73,7 +74,7 @@ lazy_static::lazy_static!(
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[zenoh_macros::unstable]
 pub struct Liveliness<'a> {
@@ -90,7 +91,8 @@ impl<'a> Liveliness<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -100,7 +102,7 @@ impl<'a> Liveliness<'a> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn declare_token<'b, TryIntoKeyExpr>(
@@ -125,7 +127,8 @@ impl<'a> Liveliness<'a> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -136,7 +139,7 @@ impl<'a> Liveliness<'a> {
     ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
     ///     }
     /// }
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn declare_subscriber<'b, TryIntoKeyExpr>(
@@ -162,7 +165,8 @@ impl<'a> Liveliness<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -172,7 +176,7 @@ impl<'a> Liveliness<'a> {
     ///         println!(">> Liveliness token {}", sample.key_expr());
     ///     }
     /// }
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn get<'b: 'a, TryIntoKeyExpr>(
@@ -201,7 +205,8 @@ impl<'a> Liveliness<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -211,7 +216,7 @@ impl<'a> Liveliness<'a> {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
@@ -275,7 +280,8 @@ pub(crate) struct LivelinessTokenState {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -285,7 +291,7 @@ pub(crate) struct LivelinessTokenState {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[zenoh_macros::unstable]
 #[derive(Debug)]
@@ -299,7 +305,8 @@ pub struct LivelinessToken<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -311,7 +318,7 @@ pub struct LivelinessToken<'a> {
 ///     .unwrap();
 ///
 /// liveliness.undeclare().res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
@@ -351,7 +358,8 @@ impl<'a> LivelinessToken<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -363,7 +371,7 @@ impl<'a> LivelinessToken<'a> {
     ///     .unwrap();
     ///
     /// liveliness.undeclare().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
@@ -391,7 +399,8 @@ impl Drop for LivelinessToken<'_> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -401,7 +410,7 @@ impl Drop for LivelinessToken<'_> {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
@@ -418,7 +427,8 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -428,7 +438,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
@@ -458,7 +468,8 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -469,7 +480,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
@@ -487,7 +498,8 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -500,7 +512,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
@@ -578,7 +590,8 @@ where
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// # use std::convert::TryFrom;
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::query::*;
@@ -596,7 +609,7 @@ where
 ///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload),
 ///     }
 /// }
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -612,7 +625,8 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -623,7 +637,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> LivelinessGetBuilder<'a, 'b, Callback>
@@ -651,7 +665,8 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -663,7 +678,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
@@ -680,7 +695,8 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -694,7 +710,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// while let Ok(reply) = replies.recv_async().await {
     ///     println!("Received {:?}", reply.sample);
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessGetBuilder<'a, 'b, Handler>

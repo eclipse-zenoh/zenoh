@@ -17,7 +17,7 @@ use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 use zenoh_ext::SubscriberForward;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
     env_logger::init();

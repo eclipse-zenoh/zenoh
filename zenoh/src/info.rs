@@ -14,7 +14,6 @@
 
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 use crate::SessionRef;
-use async_std::task;
 use std::future::Ready;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
@@ -24,12 +23,13 @@ use zenoh_protocol::core::{WhatAmI, ZenohId};
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let zid = session.info().zid().res().await;
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -61,13 +61,14 @@ impl<'a> AsyncResolve for ZidBuilder<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let mut routers_zid = session.info().routers_zid().res().await;
 /// while let Some(router_zid) = routers_zid.next() {}
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -82,7 +83,8 @@ impl<'a> Resolvable for RoutersZidBuilder<'a> {
 impl<'a> SyncResolve for RoutersZidBuilder<'a> {
     fn res_sync(self) -> Self::To {
         Box::new(
-            task::block_on(self.session.runtime.manager().get_transports_unicast())
+            zenoh_runtime::ZRuntime::Application
+                .block_in_place(self.session.runtime.manager().get_transports_unicast())
                 .into_iter()
                 .filter_map(|s| {
                     s.get_whatami()
@@ -107,14 +109,15 @@ impl<'a> AsyncResolve for RoutersZidBuilder<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let zid = session.info().zid().res().await;
 /// let mut peers_zid = session.info().peers_zid().res().await;
 /// while let Some(peer_zid) = peers_zid.next() {}
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -129,7 +132,8 @@ impl<'a> Resolvable for PeersZidBuilder<'a> {
 impl<'a> SyncResolve for PeersZidBuilder<'a> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         Box::new(
-            task::block_on(self.session.runtime.manager().get_transports_unicast())
+            zenoh_runtime::ZRuntime::Application
+                .block_in_place(self.session.runtime.manager().get_transports_unicast())
                 .into_iter()
                 .filter_map(|s| {
                     s.get_whatami()
@@ -154,13 +158,14 @@ impl<'a> AsyncResolve for PeersZidBuilder<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let info = session.info();
 /// let zid = info.zid().res().await;
-/// # })
+/// # }
 /// ```
 pub struct SessionInfo<'a> {
     pub(crate) session: SessionRef<'a>,
@@ -171,12 +176,13 @@ impl SessionInfo<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let zid = session.info().zid().res().await;
-    /// # })
+    /// # }
     /// ```
     pub fn zid(&self) -> ZidBuilder<'_> {
         ZidBuilder {
@@ -189,13 +195,14 @@ impl SessionInfo<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut routers_zid = session.info().routers_zid().res().await;
     /// while let Some(router_zid) = routers_zid.next() {}
-    /// # })
+    /// # }
     /// ```
     pub fn routers_zid(&self) -> RoutersZidBuilder<'_> {
         RoutersZidBuilder {
@@ -207,13 +214,14 @@ impl SessionInfo<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut peers_zid = session.info().peers_zid().res().await;
     /// while let Some(peer_zid) = peers_zid.next() {}
-    /// # })
+    /// # }
     /// ```
     pub fn peers_zid(&self) -> PeersZidBuilder<'_> {
         PeersZidBuilder {

@@ -91,6 +91,7 @@ pub(crate) async fn open_link(
     w_guard.insert(locator.clone(), ti.clone());
     drop(w_guard);
 
+    // TODO(yuyuan): resolve the structure entanglement below
     // Notify the transport event handler
     let transport: TransportMulticast = (&ti).into();
 

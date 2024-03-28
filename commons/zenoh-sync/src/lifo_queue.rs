@@ -11,28 +11,27 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::Condition;
-use async_std::sync::Mutex;
+use std::sync::{Condvar, Mutex};
 use zenoh_collections::StackBuffer;
-use zenoh_core::zasynclock;
+use zenoh_core::zlock;
 
 pub struct LifoQueue<T> {
-    not_empty: Condition,
-    not_full: Condition,
+    not_empty: Condvar,
+    not_full: Condvar,
     buffer: Mutex<StackBuffer<T>>,
 }
 
 impl<T> LifoQueue<T> {
     pub fn new(capacity: usize) -> LifoQueue<T> {
         LifoQueue {
-            not_empty: Condition::new(),
-            not_full: Condition::new(),
+            not_empty: Condvar::new(),
+            not_full: Condvar::new(),
             buffer: Mutex::new(StackBuffer::new(capacity)),
         }
     }
 
     pub fn try_push(&self, x: T) -> Option<T> {
-        if let Some(mut guard) = self.buffer.try_lock() {
+        if let Ok(mut guard) = self.buffer.try_lock() {
             let res = guard.push(x);
             if res.is_none() {
                 drop(guard);
@@ -43,21 +42,21 @@ impl<T> LifoQueue<T> {
         Some(x)
     }
 
-    pub async fn push(&self, x: T) {
+    pub fn push(&self, x: T) {
+        let mut guard = zlock!(self.buffer);
         loop {
-            let mut guard = zasynclock!(self.buffer);
             if !guard.is_full() {
                 guard.push(x);
                 drop(guard);
                 self.not_empty.notify_one();
                 return;
             }
-            self.not_full.wait(guard).await;
+            guard = self.not_full.wait(guard).unwrap();
         }
     }
 
     pub fn try_pull(&self) -> Option<T> {
-        if let Some(mut guard) = self.buffer.try_lock() {
+        if let Ok(mut guard) = self.buffer.try_lock() {
             if let Some(e) = guard.pop() {
                 drop(guard);
                 self.not_full.notify_one();
@@ -67,15 +66,15 @@ impl<T> LifoQueue<T> {
         None
     }
 
-    pub async fn pull(&self) -> T {
+    pub fn pull(&self) -> T {
+        let mut guard = zlock!(self.buffer);
         loop {
-            let mut guard = zasynclock!(self.buffer);
             if let Some(e) = guard.pop() {
                 drop(guard);
                 self.not_full.notify_one();
                 return e;
             }
-            self.not_empty.wait(guard).await;
+            guard = self.not_empty.wait(guard).unwrap();
         }
     }
 }

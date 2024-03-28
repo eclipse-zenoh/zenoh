@@ -11,14 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::{arg, Command};
 use std::time::Duration;
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
 use zenoh_ext::*;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
     env_logger::init();
@@ -40,7 +39,7 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
-        sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {value}");
         println!("Put Data ('{}': '{}')", &key_expr, buf);
         session.put(&key_expr, buf).res().await.unwrap();

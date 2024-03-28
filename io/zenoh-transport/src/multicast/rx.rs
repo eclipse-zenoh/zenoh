@@ -269,7 +269,7 @@ impl TransportMulticastInner {
             let r_guard = zread!(self.peers);
             match r_guard.get(&locator) {
                 Some(peer) => {
-                    peer.active();
+                    peer.set_active();
                     match msg.body {
                         TransportBody::Frame(msg) => self.handle_frame(msg, peer)?,
                         TransportBody::Fragment(fragment) => {

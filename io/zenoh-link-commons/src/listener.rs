@@ -11,73 +11,79 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::net::SocketAddr;
-use async_std::task;
-use async_std::task::JoinHandle;
+use futures::Future;
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use zenoh_core::{zread, zwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{zerror, ZResult};
-use zenoh_sync::Signal;
 
 use crate::BIND_INTERFACE;
 
 pub struct ListenerUnicastIP {
     endpoint: EndPoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerUnicastIP {
     fn new(
         endpoint: EndPoint,
-        active: Arc<AtomicBool>,
-        signal: Signal,
+        token: CancellationToken,
         handle: JoinHandle<ZResult<()>>,
     ) -> ListenerUnicastIP {
         ListenerUnicastIP {
             endpoint,
-            active,
-            signal,
+            token,
             handle,
         }
+    }
+
+    async fn stop(&self) {
+        self.token.cancel();
     }
 }
 
 pub struct ListenersUnicastIP {
+    // TODO(yuyuan): should we change this to AsyncRwLock?
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastIP>>>,
+    pub token: CancellationToken,
 }
 
 impl ListenersUnicastIP {
     pub fn new() -> ListenersUnicastIP {
         ListenersUnicastIP {
             listeners: Arc::new(RwLock::new(HashMap::new())),
+            token: CancellationToken::new(),
         }
     }
 
-    pub async fn add_listener(
+    pub async fn add_listener<F>(
         &self,
         endpoint: EndPoint,
         addr: SocketAddr,
-        active: Arc<AtomicBool>,
-        signal: Signal,
-        handle: JoinHandle<ZResult<()>>,
-    ) -> ZResult<()> {
+        future: F,
+        token: CancellationToken,
+    ) -> ZResult<()>
+    where
+        F: Future<Output = ZResult<()>> + Send + 'static,
+    {
         let mut listeners = zwrite!(self.listeners);
         let c_listeners = self.listeners.clone();
         let c_addr = addr;
-        let wraphandle = task::spawn(async move {
+        let task = async move {
             // Wait for the accept loop to terminate
-            let res = handle.await;
+            let res = future.await;
             zwrite!(c_listeners).remove(&c_addr);
             res
-        });
+        };
+        let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
-        let listener = ListenerUnicastIP::new(endpoint, active, signal, wraphandle);
+        let listener = ListenerUnicastIP::new(endpoint, token, handle);
         // Update the list of active listeners on the manager
         listeners.insert(addr, listener);
         Ok(())
@@ -93,9 +99,8 @@ impl ListenersUnicastIP {
         })?;
 
         // Send the stop signal
-        listener.active.store(false, Ordering::Release);
-        listener.signal.trigger();
-        listener.handle.await
+        listener.stop().await;
+        listener.handle.await?
     }
 
     pub fn get_endpoints(&self) -> Vec<EndPoint> {

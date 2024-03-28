@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
-use async_std::net::SocketAddr;
 use async_trait::async_trait;
 use core::{
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
 };
+use std::net::SocketAddr;
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::ZResult;
 
@@ -28,8 +28,8 @@ pub trait LinkManagerUnicastTrait: Send + Sync {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast>;
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator>;
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()>;
-    fn get_listeners(&self) -> Vec<EndPoint>;
-    fn get_locators(&self) -> Vec<Locator>;
+    async fn get_listeners(&self) -> Vec<EndPoint>;
+    async fn get_locators(&self) -> Vec<Locator>;
 }
 pub type NewLinkChannelSender = flume::Sender<LinkUnicast>;
 pub trait ConstructibleLinkManagerUnicast<T>: Sized {

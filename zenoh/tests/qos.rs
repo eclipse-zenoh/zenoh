@@ -11,56 +11,47 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::{publication::Priority, SessionDeclarations};
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn pubsub() {
+    let session1 = ztimeout!(zenoh::open(zenoh_config::peer()).res_async()).unwrap();
+    let session2 = ztimeout!(zenoh::open(zenoh_config::peer()).res_async()).unwrap();
 
-#[test]
-fn pubsub() {
-    task::block_on(async {
-        zasync_executor_init!();
-        let session1 = ztimeout!(zenoh::open(zenoh_config::peer()).res_async()).unwrap();
-        let session2 = ztimeout!(zenoh::open(zenoh_config::peer()).res_async()).unwrap();
+    let publisher1 = ztimeout!(session1
+        .declare_publisher("test/qos")
+        .priority(Priority::DataHigh)
+        .congestion_control(CongestionControl::Drop)
+        .res())
+    .unwrap();
 
-        let publisher1 = ztimeout!(session1
-            .declare_publisher("test/qos")
-            .priority(Priority::DataHigh)
-            .congestion_control(CongestionControl::Drop)
-            .res())
-        .unwrap();
+    let publisher2 = ztimeout!(session1
+        .declare_publisher("test/qos")
+        .priority(Priority::DataLow)
+        .congestion_control(CongestionControl::Block)
+        .res())
+    .unwrap();
 
-        let publisher2 = ztimeout!(session1
-            .declare_publisher("test/qos")
-            .priority(Priority::DataLow)
-            .congestion_control(CongestionControl::Block)
-            .res())
-        .unwrap();
+    let subscriber = ztimeout!(session2.declare_subscriber("test/qos").res()).unwrap();
+    tokio::time::sleep(SLEEP).await;
 
-        let subscriber = ztimeout!(session2.declare_subscriber("test/qos").res()).unwrap();
-        task::sleep(SLEEP).await;
+    ztimeout!(publisher1.put("qos").res_async()).unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+    let qos = sample.qos();
 
-        ztimeout!(publisher1.put("qos").res_async()).unwrap();
-        let qos = *ztimeout!(subscriber.recv_async()).unwrap().qos();
+    assert_eq!(qos.priority(), Priority::DataHigh);
+    assert_eq!(qos.congestion_control(), CongestionControl::Drop);
 
-        assert_eq!(qos.priority(), Priority::DataHigh);
-        assert_eq!(qos.congestion_control(), CongestionControl::Drop);
+    ztimeout!(publisher2.put("qos").res_async()).unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+    let qos = sample.qos();
 
-        ztimeout!(publisher2.put("qos").res_async()).unwrap();
-        let qos = *ztimeout!(subscriber.recv_async()).unwrap().qos();
-
-        assert_eq!(qos.priority(), Priority::DataLow);
-        assert_eq!(qos.congestion_control(), CongestionControl::Block);
-    });
+    assert_eq!(qos.priority(), Priority::DataLow);
+    assert_eq!(qos.congestion_control(), CongestionControl::Block);
 }

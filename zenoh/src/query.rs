@@ -95,7 +95,8 @@ pub(crate) struct QueryState {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::query::*;
 ///
@@ -110,7 +111,7 @@ pub(crate) struct QueryState {
 /// while let Ok(reply) = replies.recv_async().await {
 ///     println!("Received {:?}", reply.sample)
 /// }
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -133,7 +134,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -143,7 +145,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> GetBuilder<'a, 'b, Callback>
@@ -185,7 +187,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -196,7 +199,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
@@ -213,7 +216,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -226,7 +230,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// while let Ok(reply) = replies.recv_async().await {
     ///     println!("Received {:?}", reply.sample);
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> GetBuilder<'a, 'b, Handler>

@@ -14,7 +14,6 @@
 use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
 use crate::net::runtime::Runtime;
-use async_std::task;
 use petgraph::graph::NodeIndex;
 use std::convert::TryInto;
 use vec_map::VecMap;
@@ -407,7 +406,8 @@ impl Network {
 
                     if !self.autoconnect.is_empty() {
                         // Connect discovered peers
-                        if task::block_on(self.runtime.manager().get_transport_unicast(&zid))
+                        if zenoh_runtime::ZRuntime::Net
+                            .block_in_place(self.runtime.manager().get_transport_unicast(&zid))
                             .is_none()
                             && self.autoconnect.matches(whatami)
                         {
@@ -415,7 +415,7 @@ impl Network {
                                 let runtime = self.runtime.clone();
                                 self.runtime.spawn(async move {
                                     // random backoff
-                                    async_std::task::sleep(std::time::Duration::from_millis(
+                                    tokio::time::sleep(std::time::Duration::from_millis(
                                         rand::random::<u64>() % 100,
                                     ))
                                     .await;

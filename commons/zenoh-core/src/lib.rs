@@ -163,7 +163,7 @@ where
     F: Future<Output = To> + Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        async_std::task::block_on(self.0)
+        zenoh_runtime::ZRuntime::Application.block_in_place(self.0)
     }
 }
 

@@ -34,7 +34,7 @@
 //! ```
 //! use zenoh::prelude::r#async::*;
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
 //!     session.put("key/expression", "value").res().await.unwrap();
@@ -48,7 +48,7 @@
 //! use futures::prelude::*;
 //! use zenoh::prelude::r#async::*;
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
 //!     let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
@@ -65,7 +65,7 @@
 //! use futures::prelude::*;
 //! use zenoh::prelude::r#async::*;
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
 //!     let replies = session.get("key/expression").res().await.unwrap();
@@ -117,6 +117,7 @@ pub const FEATURES: &str = concat_enabled_features!(
         "transport_udp",
         "transport_unixsock-stream",
         "transport_ws",
+        "transport_vsock",
         "unstable",
         "default"
     ]
@@ -160,7 +161,7 @@ pub mod time {
 
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 
-    /// Generates a reception [`Timestamp`] with id=0x01.  
+    /// Generates a reception [`Timestamp`] with id=0x01.
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
     /// that doesn't contain any timestamp.
     pub fn new_reception_timestamp() -> Timestamp {
@@ -187,7 +188,8 @@ pub mod scouting;
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -198,7 +200,7 @@ pub mod scouting;
 /// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
-/// # })
+/// # }
 /// ```
 pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
@@ -224,15 +226,17 @@ where
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// # })
+/// # }
 /// ```
 ///
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use std::str::FromStr;
 /// use zenoh::prelude::r#async::*;
 ///
@@ -241,7 +245,7 @@ where
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
 /// let session = zenoh::open(config).res().await.unwrap();
-/// # })
+/// # }
 /// ```
 pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
 where
@@ -255,11 +259,12 @@ where
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct OpenBuilder<TryIntoConfig>

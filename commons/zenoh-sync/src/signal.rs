@@ -69,26 +69,25 @@ impl Default for Signal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_std::task;
     use std::time::Duration;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn signal_test() {
         let signal = Signal::new();
 
         // spawn publisher
-        let r#pub = task::spawn({
+        let r#pub = tokio::task::spawn({
             let signal = signal.clone();
 
             async move {
-                task::sleep(Duration::from_millis(200)).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
                 signal.trigger();
                 signal.trigger(); // second trigger should not break
             }
         });
 
         // spawn subscriber that waits immediately
-        let fast_sub = task::spawn({
+        let fast_sub = tokio::task::spawn({
             let signal = signal.clone();
 
             async move {
@@ -97,17 +96,17 @@ mod tests {
         });
 
         // spawn subscriber that waits after the publisher triggers the signal
-        let slow_sub = task::spawn({
+        let slow_sub = tokio::task::spawn({
             let signal = signal.clone();
 
             async move {
-                task::sleep(Duration::from_millis(400)).await;
+                tokio::time::sleep(Duration::from_millis(400)).await;
                 signal.wait().await;
             }
         });
 
         // check that the slow subscriber does not half
-        let result = async_std::future::timeout(
+        let result = tokio::time::timeout(
             Duration::from_millis(50000),
             futures::future::join3(r#pub, fast_sub, slow_sub),
         )

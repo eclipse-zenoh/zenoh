@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::net::{TcpListener, TcpStream, UdpSocket};
 use std::net::{IpAddr, Ipv6Addr};
-use std::time::Duration;
+use tokio::net::{TcpSocket, UdpSocket};
 use zenoh_core::zconfigurable;
 #[cfg(unix)]
 use zenoh_result::zerror;
@@ -22,73 +21,6 @@ use zenoh_result::{bail, ZResult};
 zconfigurable! {
     static ref WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE: u32 = 8192;
     static ref WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES: u32 = 3;
-}
-
-pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::io::AsRawFd;
-
-        let raw_socket = socket.as_raw_fd();
-        let linger = match dur {
-            Some(d) => libc::linger {
-                l_onoff: 1,
-                l_linger: d.as_secs() as libc::c_int,
-            },
-            None => libc::linger {
-                l_onoff: 0,
-                l_linger: 0,
-            },
-        };
-
-        // Set the SO_LINGER option
-        unsafe {
-            let ret = libc::setsockopt(
-                raw_socket,
-                libc::SOL_SOCKET,
-                libc::SO_LINGER,
-                &linger as *const libc::linger as *const libc::c_void,
-                std::mem::size_of_val(&linger) as libc::socklen_t,
-            );
-            match ret {
-                0 => Ok(()),
-                err_code => bail!("setsockopt returned {}", err_code),
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::io::AsRawSocket;
-        use winapi::um::winsock2;
-        use winapi::um::ws2tcpip;
-
-        let raw_socket = socket.as_raw_socket();
-        let linger = match dur {
-            Some(d) => winsock2::linger {
-                l_onoff: 1,
-                l_linger: d.as_secs() as u16,
-            },
-            None => winsock2::linger {
-                l_onoff: 0,
-                l_linger: 0,
-            },
-        };
-
-        unsafe {
-            let ret = winsock2::setsockopt(
-                raw_socket.try_into().unwrap(),
-                winsock2::SOL_SOCKET,
-                winsock2::SO_LINGER,
-                &linger as *const winsock2::linger as *const i8,
-                std::mem::size_of_val(&linger) as ws2tcpip::socklen_t,
-            );
-            match ret {
-                0 => Ok(()),
-                err_code => bail!("setsockopt returned {}", err_code),
-            }
-        }
-    }
 }
 
 #[cfg(windows)]
@@ -123,7 +55,6 @@ unsafe fn get_adapters_adresses(af_spec: i32) -> ZResult<Vec<u8>> {
 
     Ok(buffer)
 }
-
 pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
     #[cfg(unix)]
     {
@@ -492,52 +423,26 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
         .collect()
 }
 
-#[cfg(target_os = "linux")]
-fn set_bind_to_device(socket: std::os::raw::c_int, iface: Option<&str>) {
-    if let Some(iface) = iface {
-        // @TODO: switch to bind_device after tokio porting
-        log::debug!("Listen at the interface: {}", iface);
-        unsafe {
-            libc::setsockopt(
-                socket,
-                libc::SOL_SOCKET,
-                libc::SO_BINDTODEVICE,
-                iface.as_ptr() as *const std::os::raw::c_void,
-                iface.len() as libc::socklen_t,
-            );
-        }
-    }
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: &str) -> ZResult<()> {
+    socket.bind_device(Some(iface.as_bytes()))?;
+    Ok(())
 }
 
-#[cfg(target_os = "linux")]
-pub fn set_bind_to_device_tcp_listener(socket: &TcpListener, iface: Option<&str>) {
-    use std::os::fd::AsRawFd;
-    set_bind_to_device(socket.as_raw_fd(), iface);
-}
-
-#[cfg(target_os = "linux")]
-pub fn set_bind_to_device_tcp_stream(socket: &TcpStream, iface: Option<&str>) {
-    use std::os::fd::AsRawFd;
-    set_bind_to_device(socket.as_raw_fd(), iface);
-}
-
-#[cfg(target_os = "linux")]
-pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: Option<&str>) {
-    use std::os::fd::AsRawFd;
-    set_bind_to_device(socket.as_raw_fd(), iface);
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &str) -> ZResult<()> {
+    socket.bind_device(Some(iface.as_bytes()))?;
+    Ok(())
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_tcp_listener(_socket: &TcpListener, _iface: Option<&str>) {
-    log::warn!("Listen at the interface is not supported for this platform");
+pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: &str) -> ZResult<()> {
+    log::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS and Windows");
+    Ok(())
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_tcp_stream(_socket: &TcpStream, _iface: Option<&str>) {
-    log::warn!("Listen at the interface is not supported for this platform");
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-pub fn set_bind_to_device_udp_socket(_socket: &UdpSocket, _iface: Option<&str>) {
-    log::warn!("Listen at the interface is not supported for this platform");
+pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &str) -> ZResult<()> {
+    log::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS and Windows");
+    Ok(())
 }

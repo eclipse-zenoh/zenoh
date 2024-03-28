@@ -11,13 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
 use std::time::Duration;
 use zenoh::{config::Config, handlers::RingBuffer, prelude::r#async::*};
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();
@@ -35,9 +34,11 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("Pulling data every {:#?} seconds", interval);
+    println!(
+        "Pulling data every {:#?} seconds. Press CTRL-C to quit...",
+        interval
+    );
     loop {
-        print!(">> [Subscriber] Pulling ");
         match subscriber.recv() {
             Ok(Some(sample)) => {
                 let payload = sample
@@ -45,18 +46,22 @@ async fn main() {
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(
-                    "{} ('{}': '{}')",
+                    ">> [Subscriber] Pulled {} ('{}': '{}')",
                     sample.kind(),
                     sample.key_expr().as_str(),
                     payload,
                 );
             }
             Ok(None) => {
-                println!("nothing... sleep for {:#?}", interval);
-                sleep(interval).await;
+                println!(
+                    ">> [Subscriber] Pulled nothing... sleep for {:#?}",
+                    interval
+                );
+                tokio::time::sleep(interval).await;
             }
             Err(e) => {
-                println!("Pull error: {e}");
+                println!(">> [Subscriber] Pull error: {e}");
+                return;
             }
         }
     }

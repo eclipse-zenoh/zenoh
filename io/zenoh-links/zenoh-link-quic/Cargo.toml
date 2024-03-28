@@ -25,15 +25,17 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-rustls = { workspace = true }
-async-std = { workspace = true, features = ["unstable", "tokio1"] }
 async-trait = { workspace = true }
+base64 = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 quinn = { workspace = true }
-rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pemfile = { workspace = true }
+rustls-webpki = { workspace = true }
+secrecy = {workspace = true }
+tokio = { workspace = true, features = ["io-util", "net", "fs", "sync", "time"] }
+tokio-util = { workspace = true, features = ["rt"] }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
@@ -41,5 +43,8 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
-base64 = { workspace = true }
-secrecy = { workspace = true }
+zenoh-runtime = { workspace = true }
+
+# Lock due to quinn not supporting rustls 0.22 yet
+rustls = { version = "0.21", features = ["dangerous_configuration", "quic"] }
+tokio-rustls = "0.24.1"

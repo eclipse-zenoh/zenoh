@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task;
 use clap::Parser;
 use futures::future;
 use git_version::git_version;
@@ -107,7 +106,11 @@ fn load_plugin(
 }
 
 fn main() {
-    task::block_on(async {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
         let mut log_builder =
             env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
         #[cfg(feature = "stats")]
@@ -382,6 +385,7 @@ fn test_default_features() {
             " zenoh/transport_udp",
             " zenoh/transport_unixsock-stream",
             " zenoh/transport_ws",
+            // " zenoh/transport_vsock",
             " zenoh/unstable",
             " zenoh/default",
         )
@@ -407,6 +411,7 @@ fn test_no_default_features() {
             // " zenoh/transport_udp",
             // " zenoh/transport_unixsock-stream",
             // " zenoh/transport_ws",
+            // " zenoh/transport_vsock",
             " zenoh/unstable",
             // " zenoh/default",
         )

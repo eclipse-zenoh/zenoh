@@ -110,8 +110,8 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 }
 
 struct Timestate {
-    pub threshold: std::time::Duration,
-    pub latest_message_timestamp: std::time::Instant,
+    pub threshold: tokio::time::Duration,
+    pub latest_message_timestamp: tokio::time::Instant,
 }
 
 pub(crate) struct DownsamplingInterceptor {
@@ -140,7 +140,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
                     if let Some(id) = id {
                         let mut ke_state = zlock!(self.ke_state);
                         if let Some(state) = ke_state.get_mut(id) {
-                            let timestamp = std::time::Instant::now();
+                            let timestamp = tokio::time::Instant::now();
 
                             if timestamp - state.latest_message_timestamp >= state.threshold {
                                 state.latest_message_timestamp = timestamp;
@@ -169,11 +169,11 @@ impl DownsamplingInterceptor {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
         for (id, rule) in rules.into_iter().enumerate() {
-            let mut threshold = std::time::Duration::MAX;
-            let mut latest_message_timestamp = std::time::Instant::now();
+            let mut threshold = tokio::time::Duration::MAX;
+            let mut latest_message_timestamp = tokio::time::Instant::now();
             if rule.freq != 0.0 {
                 threshold =
-                    std::time::Duration::from_nanos((1. / rule.freq * NANOS_PER_SEC) as u64);
+                    tokio::time::Duration::from_nanos((1. / rule.freq * NANOS_PER_SEC) as u64);
                 latest_message_timestamp -= threshold;
             }
             ke_id.insert(&rule.key_expr, id);

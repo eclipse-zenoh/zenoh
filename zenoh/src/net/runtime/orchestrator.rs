@@ -12,16 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{Runtime, RuntimeSession};
-use async_std::net::UdpSocket;
-use async_std::prelude::FutureExt;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
+use tokio::net::UdpSocket;
 use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_config::{unwrap_or_default, ModeDependent};
+use zenoh_config::{
+    get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default, ModeDependent,
+};
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohId},
@@ -33,10 +34,6 @@ const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
-const CONNECTION_TIMEOUT: Duration = Duration::from_millis(10_000);
-const CONNECTION_RETRY_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
-const CONNECTION_RETRY_MAX_PERIOD: Duration = Duration::from_millis(4_000);
-const CONNECTION_RETRY_PERIOD_INCREASE_FACTOR: u32 = 2;
 const ROUTER_DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 
@@ -88,23 +85,7 @@ impl Runtime {
                     bail!("No peer specified and multicast scouting desactivated!")
                 }
             }
-            _ => {
-                for locator in &peers {
-                    match self
-                        .manager()
-                        .open_transport_unicast(locator.clone())
-                        .timeout(CONNECTION_TIMEOUT)
-                        .await
-                    {
-                        Ok(Ok(_)) => return Ok(()),
-                        Ok(Err(e)) => log::warn!("Unable to connect to {}! {}", locator, e),
-                        Err(e) => log::warn!("Unable to connect to {}! {}", locator, e),
-                    }
-                }
-                let e = zerror!("Unable to connect to any of {:?}! ", peers);
-                log::error!("{}", &e);
-                Err(e.into())
-            }
+            _ => self.connect_peers(&peers, true).await,
         }
     }
 
@@ -143,14 +124,12 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        for peer in peers {
-            self.spawn_peer_connector(peer).await?;
-        }
+        self.connect_peers(&peers, false).await?;
 
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
-        async_std::task::sleep(delay).await;
+        tokio::time::sleep(delay).await;
         Ok(())
     }
 
@@ -188,9 +167,7 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        for peer in peers {
-            self.spawn_peer_connector(peer).await?;
-        }
+        self.connect_peers(&peers, false).await?;
 
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
@@ -218,11 +195,10 @@ impl Runtime {
                 match (listen, autoconnect.is_empty()) {
                     (true, false) => {
                         self.spawn(async move {
-                            async_std::prelude::FutureExt::race(
-                                this.responder(&mcast_socket, &sockets),
-                                this.connect_all(&sockets, autoconnect, &addr),
-                            )
-                            .await;
+                            tokio::select! {
+                                _ = this.responder(&mcast_socket, &sockets) => {},
+                                _ = this.connect_all(&sockets, autoconnect, &addr) => {},
+                            }
                         });
                     }
                     (true, true) => {
@@ -240,6 +216,116 @@ impl Runtime {
             }
         }
         Ok(())
+    }
+
+    async fn connect_peers(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+        let timeout = self.get_global_connect_timeout();
+        if timeout.is_zero() {
+            self.connect_peers_impl(peers, single_link).await
+        } else {
+            let res = tokio::time::timeout(timeout, async {
+                self.connect_peers_impl(peers, single_link).await.ok()
+            })
+            .await;
+            match res {
+                Ok(_) => Ok(()),
+                Err(_) => {
+                    let e = zerror!(
+                        "{:?} Unable to connect to any of {:?}! ",
+                        self.manager().get_locators(),
+                        peers
+                    );
+                    log::error!("{}", &e);
+                    Err(e.into())
+                }
+            }
+        }
+    }
+
+    async fn connect_peers_impl(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+        if single_link {
+            self.connect_peers_single_link(peers).await
+        } else {
+            self.connect_peers_multiply_links(peers).await
+        }
+    }
+
+    async fn connect_peers_single_link(&self, peers: &[EndPoint]) -> ZResult<()> {
+        for peer in peers {
+            let endpoint = peer.clone();
+            let retry_config = self.get_connect_retry_config(&endpoint);
+            log::debug!(
+                "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
+                endpoint,
+                self.get_global_connect_timeout(),
+                retry_config
+            );
+            if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+                // try to connect and exit immediately without retry
+                if self
+                    .peer_connector(endpoint, retry_config.timeout())
+                    .await
+                    .is_ok()
+                {
+                    return Ok(());
+                }
+            } else {
+                // try to connect with retry waiting
+                self.peer_connector_retry(endpoint).await;
+                return Ok(());
+            }
+        }
+        let e = zerror!(
+            "{:?} Unable to connect to any of {:?}! ",
+            self.manager().get_locators(),
+            peers
+        );
+        log::error!("{}", &e);
+        Err(e.into())
+    }
+
+    async fn connect_peers_multiply_links(&self, peers: &[EndPoint]) -> ZResult<()> {
+        for peer in peers {
+            let endpoint = peer.clone();
+            let retry_config = self.get_connect_retry_config(&endpoint);
+            log::debug!(
+                "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
+                endpoint,
+                self.get_global_connect_timeout(),
+                retry_config
+            );
+            if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+                // try to connect and exit immediately without retry
+                if let Err(e) = self.peer_connector(endpoint, retry_config.timeout()).await {
+                    if retry_config.exit_on_failure {
+                        return Err(e);
+                    }
+                }
+            } else if retry_config.exit_on_failure {
+                // try to connect with retry waiting
+                self.peer_connector_retry(endpoint).await;
+            } else {
+                // try to connect in background
+                self.spawn_peer_connector(endpoint).await?
+            }
+        }
+        Ok(())
+    }
+
+    async fn peer_connector(&self, peer: EndPoint, timeout: std::time::Duration) -> ZResult<()> {
+        match tokio::time::timeout(timeout, self.manager().open_transport_unicast(peer.clone()))
+            .await
+        {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(e)) => {
+                log::warn!("Unable to connect to {}! {}", peer, e);
+                Err(e)
+            }
+            Err(e) => {
+                log::warn!("Unable to connect to {}! {}", peer, e);
+                Err(e.into())
+            }
+        }
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
@@ -291,24 +377,118 @@ impl Runtime {
         Ok(())
     }
 
+    fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
+        let guard = &self.state.config.lock();
+        zenoh_config::get_retry_config(guard, Some(endpoint), true)
+    }
+
+    fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
+        let guard = &self.state.config.lock();
+        zenoh_config::get_retry_config(guard, Some(endpoint), false)
+    }
+
+    fn get_global_connect_retry_config(&self) -> zenoh_config::ConnectionRetryConf {
+        let guard = &self.state.config.lock();
+        zenoh_config::get_retry_config(guard, None, false)
+    }
+
+    fn get_global_listener_timeout(&self) -> std::time::Duration {
+        let guard = &self.state.config.lock();
+        get_global_listener_timeout(guard)
+    }
+
+    fn get_global_connect_timeout(&self) -> std::time::Duration {
+        let guard = &self.state.config.lock();
+        get_global_connect_timeout(guard)
+    }
+
     async fn bind_listeners(&self, listeners: &[EndPoint]) -> ZResult<()> {
-        for listener in listeners {
-            let endpoint = listener.clone();
-            match self.manager().add_listener(endpoint).await {
-                Ok(listener) => log::debug!("Listener added: {}", listener),
-                Err(err) => {
-                    log::error!("Unable to open listener {}: {}", listener, err);
-                    return Err(err);
+        let timeout = self.get_global_listener_timeout();
+        if timeout.is_zero() {
+            self.bind_listeners_impl(listeners).await
+        } else {
+            let res = tokio::time::timeout(timeout, async {
+                self.bind_listeners_impl(listeners).await.ok()
+            })
+            .await;
+            match res {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    log::error!("Unable to open listeners: {}", e);
+                    Err(Box::new(e))
                 }
             }
         }
+    }
 
+    async fn bind_listeners_impl(&self, listeners: &[EndPoint]) -> ZResult<()> {
+        for listener in listeners {
+            let endpoint = listener.clone();
+            let retry_config = self.get_listen_retry_config(&endpoint);
+            log::debug!("Try to add listener: {:?}: {:?}", endpoint, retry_config);
+            if retry_config.timeout().is_zero() || self.get_global_listener_timeout().is_zero() {
+                // try to add listener and exit immediately without retry
+                if let Err(e) = self.add_listener(endpoint).await {
+                    if retry_config.exit_on_failure {
+                        return Err(e);
+                    }
+                };
+            } else if retry_config.exit_on_failure {
+                // try to add listener with retry waiting
+                self.add_listener_retry(endpoint, retry_config).await
+            } else {
+                // try to add listener in background
+                self.spawn_add_listener(endpoint, retry_config).await
+            }
+        }
+        self.print_locators();
+        Ok(())
+    }
+
+    async fn spawn_add_listener(
+        &self,
+        listener: EndPoint,
+        retry_config: zenoh_config::ConnectionRetryConf,
+    ) {
+        let this = self.clone();
+        self.spawn(async move {
+            this.add_listener_retry(listener, retry_config).await;
+            this.print_locators();
+        });
+    }
+
+    async fn add_listener_retry(
+        &self,
+        listener: EndPoint,
+        retry_config: zenoh_config::ConnectionRetryConf,
+    ) {
+        let mut period = retry_config.period();
+        loop {
+            if self.add_listener(listener.clone()).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(period.next_duration()).await;
+        }
+    }
+
+    async fn add_listener(&self, listener: EndPoint) -> ZResult<()> {
+        let endpoint = listener.clone();
+        match self.manager().add_listener(endpoint).await {
+            Ok(listener) => log::debug!("Listener added: {}", listener),
+            Err(err) => {
+                log::warn!("Unable to open listener {}: {}", listener, err);
+                return Err(err);
+            }
+        }
+        Ok(())
+    }
+
+    fn print_locators(&self) {
         let mut locators = self.state.locators.write().unwrap();
         *locators = self.manager().get_locators();
         for locator in &*locators {
             log::info!("Zenoh can be reached at: {}", locator);
         }
-        Ok(())
     }
 
     pub fn get_interfaces(names: &str) -> Vec<IpAddr> {
@@ -417,7 +597,15 @@ impl Runtime {
             }
         }
         log::info!("zenohd listening scout messages on {}", sockaddr);
-        Ok(std::net::UdpSocket::from(socket).into())
+
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
+        socket.set_nonblocking(true)?;
+
+        // UdpSocket::from_std requires a runtime even though it's a sync function
+        let udp_socket = zenoh_runtime::ZRuntime::Net
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
+        Ok(udp_socket)
     }
 
     pub fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
@@ -443,7 +631,15 @@ impl Runtime {
                 bail!(err => "Unable to bind udp port {}:0", addr);
             }
         }
-        Ok(std::net::UdpSocket::from(socket).into())
+
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
+        socket.set_nonblocking(true)?;
+
+        // UdpSocket::from_std requires a runtime even though it's a sync function
+        let udp_socket = zenoh_runtime::ZRuntime::Net
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
+        Ok(udp_socket)
     }
 
     async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {
@@ -452,23 +648,24 @@ impl Runtime {
             .await?
         {
             let this = self.clone();
-            self.spawn(async move { this.peer_connector(peer).await });
+            self.spawn(async move { this.peer_connector_retry(peer).await });
             Ok(())
         } else {
             bail!("Forbidden multicast endpoint in connect list!")
         }
     }
 
-    async fn peer_connector(&self, peer: EndPoint) {
-        let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
+    async fn peer_connector_retry(&self, peer: EndPoint) {
+        let retry_config = self.get_connect_retry_config(&peer);
+        let mut period = retry_config.period();
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            match self
-                .manager()
-                .open_transport_unicast(endpoint)
-                .timeout(CONNECTION_TIMEOUT)
-                .await
+            match tokio::time::timeout(
+                retry_config.timeout(),
+                self.manager().open_transport_unicast(endpoint),
+            )
+            .await
             {
                 Ok(Ok(transport)) => {
                     log::debug!("Successfully connected to configured peer {}", peer);
@@ -487,7 +684,7 @@ impl Runtime {
                         "Unable to connect to configured peer {}! {}. Retry in {:?}.",
                         peer,
                         e,
-                        delay
+                        period.duration()
                     );
                 }
                 Err(e) => {
@@ -495,15 +692,11 @@ impl Runtime {
                         "Unable to connect to configured peer {}! {}. Retry in {:?}.",
                         peer,
                         e,
-                        delay
+                        period.duration()
                     );
                 }
             }
-            async_std::task::sleep(delay).await;
-            delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
-            if delay > CONNECTION_RETRY_MAX_PERIOD {
-                delay = CONNECTION_RETRY_MAX_PERIOD;
-            }
+            tokio::time::sleep(period.next_duration()).await;
         }
     }
 
@@ -556,7 +749,7 @@ impl Runtime {
                         );
                     }
                 }
-                async_std::task::sleep(delay).await;
+                tokio::time::sleep(delay).await;
                 if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
                     delay *= SCOUT_PERIOD_INCREASE_FACTOR;
                 }
@@ -597,7 +790,10 @@ impl Runtime {
             }
             .boxed()
         }));
-        async_std::prelude::FutureExt::race(send, recvs).await;
+        tokio::select! {
+            _ = send => {},
+            _ = recvs => {},
+        }
     }
 
     #[must_use]
@@ -615,12 +811,14 @@ impl Runtime {
             };
 
             let endpoint = locator.to_owned().into();
+            let retry_config = self.get_connect_retry_config(&endpoint);
             let manager = self.manager();
             if is_multicast {
-                match manager
-                    .open_transport_multicast(endpoint)
-                    .timeout(CONNECTION_TIMEOUT)
-                    .await
+                match tokio::time::timeout(
+                    retry_config.timeout(),
+                    manager.open_transport_multicast(endpoint),
+                )
+                .await
                 {
                     Ok(Ok(transport)) => {
                         log::debug!(
@@ -633,10 +831,11 @@ impl Runtime {
                     Err(e) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                 }
             } else {
-                match manager
-                    .open_transport_unicast(endpoint)
-                    .timeout(CONNECTION_TIMEOUT)
-                    .await
+                match tokio::time::timeout(
+                    retry_config.timeout(),
+                    manager.open_transport_unicast(endpoint),
+                )
+                .await
                 {
                     Ok(Ok(transport)) => {
                         log::debug!(
@@ -707,10 +906,13 @@ impl Runtime {
             Ok(())
         };
         let timeout = async {
-            async_std::task::sleep(timeout).await;
+            tokio::time::sleep(timeout).await;
             bail!("timeout")
         };
-        async_std::prelude::FutureExt::race(scout, timeout).await
+        tokio::select! {
+            res = scout => { res },
+            res = timeout => { res }
+        }
     }
 
     async fn connect_all(
@@ -817,13 +1019,10 @@ impl Runtime {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
                 session.runtime.spawn(async move {
-                    let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
+                    let retry_config = runtime.get_global_connect_retry_config();
+                    let mut period = retry_config.period();
                     while runtime.start_client().await.is_err() {
-                        async_std::task::sleep(delay).await;
-                        delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
-                        if delay > CONNECTION_RETRY_MAX_PERIOD {
-                            delay = CONNECTION_RETRY_MAX_PERIOD;
-                        }
+                        tokio::time::sleep(period.next_duration()).await;
                     }
                 });
             }
@@ -844,7 +1043,7 @@ impl Runtime {
                         let runtime = session.runtime.clone();
                         session
                             .runtime
-                            .spawn(async move { runtime.peer_connector(endpoint).await });
+                            .spawn(async move { runtime.peer_connector_retry(endpoint).await });
                     }
                 }
             }
