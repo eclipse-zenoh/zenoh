@@ -15,10 +15,10 @@
 //! Query primitives.
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
+use crate::sample::builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait};
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::QoSBuilder;
-use crate::sample_builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait};
 use crate::Session;
 use std::collections::HashMap;
 use std::future::Ready;

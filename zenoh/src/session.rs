@@ -683,8 +683,7 @@ impl Session {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::r#async::*;
-    /// use zenoh::sample_builder::SampleBuilderTrait;
-    /// use zenoh::sample_builder::ValueBuilderTrait;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session

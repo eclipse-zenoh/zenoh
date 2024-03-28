@@ -18,11 +18,11 @@ use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::sample::SourceInfo;
-use crate::sample_builder::{
+use crate::sample::builder::{
     DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
     TimestampBuilderTrait, ValueBuilderTrait,
 };
+use crate::sample::SourceInfo;
 use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;

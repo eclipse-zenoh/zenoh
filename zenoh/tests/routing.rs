@@ -20,7 +20,7 @@ use std::sync::{atomic::AtomicUsize, Arc};
 use std::time::Duration;
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
-use zenoh::sample_builder::QoSBuilderTrait;
+use zenoh::sample::builder::QoSBuilderTrait;
 use zenoh::{value::Value, Result};
 use zenoh_core::zasync_executor_init;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};

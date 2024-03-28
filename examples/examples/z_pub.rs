@@ -16,7 +16,7 @@ use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::sample_builder::SampleBuilderTrait;
+use zenoh::sample::builder::SampleBuilderTrait;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]

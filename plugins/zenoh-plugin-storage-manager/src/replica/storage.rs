@@ -26,10 +26,10 @@ use zenoh::buffers::ZBuf;
 use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::query::{ConsolidationMode, QueryTarget};
-use zenoh::sample::{Sample, SampleKind};
-use zenoh::sample_builder::{
+use zenoh::sample::builder::{
     DeleteSampleBuilder, PutSampleBuilder, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait,
 };
+use zenoh::sample::{Sample, SampleKind};
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
 use zenoh::{Result as ZResult, Session, SessionDeclarations};

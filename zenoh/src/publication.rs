@@ -15,12 +15,12 @@
 //! Publishing primitives.
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
+use crate::sample::builder::{
+    QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+};
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
-use crate::sample_builder::{
-    QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
-};
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
@@ -73,7 +73,7 @@ pub struct DeleteBuilder<'a, 'b> {
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
-/// use zenoh::sample_builder::{ValueBuilderTrait, QoSBuilderTrait};
+/// use zenoh::sample::builder::{ValueBuilderTrait, QoSBuilderTrait};
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
@@ -932,7 +932,7 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
-/// use zenoh::sample_builder::QoSBuilderTrait;
+/// use zenoh::sample::builder::QoSBuilderTrait;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session

@@ -16,7 +16,7 @@
 use crate::encoding::Encoding;
 use crate::payload::Payload;
 use crate::prelude::{KeyExpr, Value};
-use crate::sample_builder::{QoSBuilderTrait, ValueBuilderTrait};
+use crate::sample::builder::{QoSBuilderTrait, ValueBuilderTrait};
 use crate::time::Timestamp;
 use crate::Priority;
 #[zenoh_macros::unstable]
@@ -25,6 +25,8 @@ use std::{convert::TryFrom, fmt};
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::network::declare::ext::QoSType;
 use zenoh_protocol::{core::CongestionControl, zenoh};
+
+pub mod builder;
 
 pub type SourceSn = u64;
 

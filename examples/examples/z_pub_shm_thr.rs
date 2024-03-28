@@ -15,7 +15,7 @@ use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
-use zenoh::sample_builder::QoSBuilderTrait;
+use zenoh::sample::builder::QoSBuilderTrait;
 use zenoh::shm::SharedMemoryManager;
 use zenoh_examples::CommonArgs;
 
