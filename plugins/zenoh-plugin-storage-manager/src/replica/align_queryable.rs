@@ -130,7 +130,7 @@ impl AlignQueryable {
                             query
                                 .reply(k, v.payload)
                                 .with_encoding(v.encoding)
-                                .with_timestamp(ts)
+                                .timestamp(ts)
                                 .res()
                                 .await
                                 .unwrap();

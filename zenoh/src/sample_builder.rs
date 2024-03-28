@@ -41,20 +41,17 @@ pub trait QoSBuilderTrait {
 }
 
 pub trait TimestampBuilderTrait {
-    /// Sets of clears timestamp
-    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self;
+    /// Sets of clears timestamp    
+    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self;
 }
 
 pub trait SampleBuilderTrait {
     /// Attach source information
     #[zenoh_macros::unstable]
-    fn with_source_info(self, source_info: SourceInfo) -> Self;
-    /// Attach or remove user-provided data in key-value format
-    #[zenoh_macros::unstable]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self;
+    fn source_info(self, source_info: SourceInfo) -> Self;
     /// Attach user-provided data in key-value format
     #[zenoh_macros::unstable]
-    fn with_attachment(self, attachment: Attachment) -> Self;
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self;
 }
 
 pub trait ValueBuilderTrait {
@@ -100,9 +97,9 @@ impl SampleBuilder {
 }
 
 impl TimestampBuilderTrait for SampleBuilder {
-    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
+    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
         Self(Sample {
-            timestamp,
+            timestamp: timestamp.into(),
             ..self.0
         })
     }
@@ -110,7 +107,7 @@ impl TimestampBuilderTrait for SampleBuilder {
 
 impl SampleBuilderTrait for SampleBuilder {
     #[zenoh_macros::unstable]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self(Sample {
             source_info,
             ..self.0
@@ -118,16 +115,11 @@ impl SampleBuilderTrait for SampleBuilder {
     }
 
     #[zenoh_macros::unstable]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self(Sample {
-            attachment,
+            attachment: attachment.into(),
             ..self.0
         })
-    }
-
-    #[zenoh_macros::unstable]
-    fn with_attachment(self, attachment: Attachment) -> Self {
-        self.with_attachment_opt(Some(attachment))
     }
 }
 
@@ -194,23 +186,19 @@ impl PutSampleBuilder {
 }
 
 impl TimestampBuilderTrait for PutSampleBuilder {
-    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
-        Self(self.0.with_timestamp(timestamp))
+    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
+        Self(self.0.timestamp(timestamp))
     }
 }
 
 impl SampleBuilderTrait for PutSampleBuilder {
     #[zenoh_macros::unstable]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
-        Self(self.0.with_source_info(source_info))
+    fn source_info(self, source_info: SourceInfo) -> Self {
+        Self(self.0.source_info(source_info))
     }
     #[zenoh_macros::unstable]
-    fn with_attachment(self, attachment: Attachment) -> Self {
-        Self(self.0.with_attachment(attachment))
-    }
-    #[zenoh_macros::unstable]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
-        Self(self.0.with_attachment_opt(attachment))
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
+        Self(self.0.attachment(attachment))
     }
 }
 
@@ -288,23 +276,19 @@ impl DeleteSampleBuilder {
 }
 
 impl TimestampBuilderTrait for DeleteSampleBuilder {
-    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
-        Self(self.0.with_timestamp(timestamp))
+    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
+        Self(self.0.timestamp(timestamp))
     }
 }
 
 impl SampleBuilderTrait for DeleteSampleBuilder {
     #[zenoh_macros::unstable]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
-        Self(self.0.with_source_info(source_info))
+    fn source_info(self, source_info: SourceInfo) -> Self {
+        Self(self.0.source_info(source_info))
     }
     #[zenoh_macros::unstable]
-    fn with_attachment(self, attachment: Attachment) -> Self {
-        Self(self.0.with_attachment(attachment))
-    }
-    #[zenoh_macros::unstable]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
-        Self(self.0.with_attachment_opt(attachment))
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
+        Self(self.0.attachment(attachment))
     }
 }
 

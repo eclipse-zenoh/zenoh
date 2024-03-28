@@ -147,54 +147,52 @@ impl QoSBuilderTrait for DeleteBuilder<'_, '_> {
 }
 
 impl TimestampBuilderTrait for PutBuilder<'_, '_> {
-    fn with_timestamp(self, timestamp: Option<uhlc::Timestamp>) -> Self {
-        Self { timestamp, ..self }
+    fn timestamp<T: Into<Option<uhlc::Timestamp>>>(self, timestamp: T) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            ..self
+        }
     }
 }
 
 impl SampleBuilderTrait for PutBuilder<'_, '_> {
     #[cfg(feature = "unstable")]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
             ..self
         }
     }
     #[cfg(feature = "unstable")]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
-        Self { attachment, ..self }
-    }
-    #[cfg(feature = "unstable")]
-    fn with_attachment(self, attachment: Attachment) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self {
-            attachment: Some(attachment),
+            attachment: attachment.into(),
             ..self
         }
     }
 }
 
 impl TimestampBuilderTrait for DeleteBuilder<'_, '_> {
-    fn with_timestamp(self, timestamp: Option<uhlc::Timestamp>) -> Self {
-        Self { timestamp, ..self }
+    fn timestamp<T: Into<Option<uhlc::Timestamp>>>(self, timestamp: T) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            ..self
+        }
     }
 }
 
 impl SampleBuilderTrait for DeleteBuilder<'_, '_> {
     #[cfg(feature = "unstable")]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
             ..self
         }
     }
     #[cfg(feature = "unstable")]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
-        Self { attachment, ..self }
-    }
-    #[cfg(feature = "unstable")]
-    fn with_attachment(self, attachment: Attachment) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self {
-            attachment: Some(attachment),
+            attachment: attachment.into(),
             ..self
         }
     }
@@ -754,14 +752,17 @@ pub struct DeletePublication<'a> {
 }
 
 impl TimestampBuilderTrait for PutPublication<'_> {
-    fn with_timestamp(self, timestamp: Option<uhlc::Timestamp>) -> Self {
-        Self { timestamp, ..self }
+    fn timestamp<T: Into<Option<uhlc::Timestamp>>>(self, timestamp: T) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            ..self
+        }
     }
 }
 
 impl SampleBuilderTrait for PutPublication<'_> {
     #[cfg(feature = "unstable")]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
             ..self
@@ -769,14 +770,9 @@ impl SampleBuilderTrait for PutPublication<'_> {
     }
 
     #[cfg(feature = "unstable")]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
-        Self { attachment, ..self }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn with_attachment(self, attachment: Attachment) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self {
-            attachment: Some(attachment),
+            attachment: attachment.into(),
             ..self
         }
     }
@@ -799,14 +795,17 @@ impl ValueBuilderTrait for PutPublication<'_> {
 }
 
 impl TimestampBuilderTrait for DeletePublication<'_> {
-    fn with_timestamp(self, timestamp: Option<uhlc::Timestamp>) -> Self {
-        Self { timestamp, ..self }
+    fn timestamp<T: Into<Option<uhlc::Timestamp>>>(self, timestamp: T) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            ..self
+        }
     }
 }
 
 impl SampleBuilderTrait for DeletePublication<'_> {
     #[cfg(feature = "unstable")]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
             ..self
@@ -814,14 +813,9 @@ impl SampleBuilderTrait for DeletePublication<'_> {
     }
 
     #[cfg(feature = "unstable")]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
-        Self { attachment, ..self }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn with_attachment(self, attachment: Attachment) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self {
-            attachment: Some(attachment),
+            attachment: attachment.into(),
             ..self
         }
     }

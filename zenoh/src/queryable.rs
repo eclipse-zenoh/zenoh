@@ -239,9 +239,9 @@ impl<'a> ReplySampleBuilder<'a> {
 }
 
 impl TimestampBuilderTrait for ReplySampleBuilder<'_> {
-    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
+    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_timestamp(timestamp),
+            sample_builder: self.sample_builder.timestamp(timestamp),
             ..self
         }
     }
@@ -249,25 +249,17 @@ impl TimestampBuilderTrait for ReplySampleBuilder<'_> {
 
 impl SampleBuilderTrait for ReplySampleBuilder<'_> {
     #[cfg(feature = "unstable")]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_source_info(source_info),
+            sample_builder: self.sample_builder.source_info(source_info),
             ..self
         }
     }
 
     #[cfg(feature = "unstable")]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_attachment_opt(attachment),
-            ..self
-        }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn with_attachment(self, attachment: Attachment) -> Self {
-        Self {
-            sample_builder: self.sample_builder.with_attachment(attachment),
+            sample_builder: self.sample_builder.attachment(attachment),
             ..self
         }
     }
@@ -324,9 +316,9 @@ pub struct ReplyBuilder<'a> {
 }
 
 impl TimestampBuilderTrait for ReplyBuilder<'_> {
-    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
+    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_timestamp(timestamp),
+            sample_builder: self.sample_builder.timestamp(timestamp),
             ..self
         }
     }
@@ -334,25 +326,17 @@ impl TimestampBuilderTrait for ReplyBuilder<'_> {
 
 impl SampleBuilderTrait for ReplyBuilder<'_> {
     #[cfg(feature = "unstable")]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_source_info(source_info),
+            sample_builder: self.sample_builder.source_info(source_info),
             ..self
         }
     }
 
     #[cfg(feature = "unstable")]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_attachment_opt(attachment),
-            ..self
-        }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn with_attachment(self, attachment: Attachment) -> Self {
-        Self {
-            sample_builder: self.sample_builder.with_attachment(attachment),
+            sample_builder: self.sample_builder.attachment(attachment),
             ..self
         }
     }
@@ -409,9 +393,9 @@ pub struct ReplyDelBuilder<'a> {
 }
 
 impl TimestampBuilderTrait for ReplyDelBuilder<'_> {
-    fn with_timestamp(self, timestamp: Option<Timestamp>) -> Self {
+    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_timestamp(timestamp),
+            sample_builder: self.sample_builder.timestamp(timestamp),
             ..self
         }
     }
@@ -419,25 +403,17 @@ impl TimestampBuilderTrait for ReplyDelBuilder<'_> {
 
 impl SampleBuilderTrait for ReplyDelBuilder<'_> {
     #[cfg(feature = "unstable")]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_source_info(source_info),
+            sample_builder: self.sample_builder.source_info(source_info),
             ..self
         }
     }
 
     #[cfg(feature = "unstable")]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_attachment_opt(attachment),
-            ..self
-        }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn with_attachment(self, attachment: Attachment) -> Self {
-        Self {
-            sample_builder: self.sample_builder.with_attachment(attachment),
+            sample_builder: self.sample_builder.attachment(attachment),
             ..self
         }
     }

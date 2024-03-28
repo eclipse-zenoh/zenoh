@@ -239,7 +239,7 @@ impl StorageService {
                             }
                         };
                         let timestamp = sample.timestamp().cloned().unwrap_or(new_reception_timestamp());
-                        let sample = SampleBuilder::from(sample).with_timestamp(timestamp).res_sync();
+                        let sample = SampleBuilder::from(sample).timestamp(timestamp).res_sync();
                         self.process_sample(sample).await;
                     },
                     // on query on key_expr
@@ -316,14 +316,14 @@ impl StorageService {
                         } = data.value;
                         PutSampleBuilder::new(KeyExpr::from(k.clone()), payload)
                             .with_encoding(encoding)
-                            .with_timestamp(data.timestamp)
+                            .timestamp(data.timestamp)
                             .res_sync()
                     }
                     Some(Update {
                         kind: SampleKind::Delete,
                         data,
                     }) => DeleteSampleBuilder::new(KeyExpr::from(k.clone()))
-                        .with_timestamp(data.timestamp)
+                        .timestamp(data.timestamp)
                         .res_sync(),
                     None => SampleBuilder::from(sample.clone())
                         .keyexpr(k.clone())
@@ -533,7 +533,7 @@ impl StorageService {
                             if let Err(e) = q
                                 .reply(key.clone(), payload)
                                 .with_encoding(encoding)
-                                .with_timestamp(entry.timestamp)
+                                .timestamp(entry.timestamp)
                                 .res_async()
                                 .await
                             {
@@ -568,7 +568,7 @@ impl StorageService {
                         if let Err(e) = q
                             .reply(q.key_expr().clone(), payload)
                             .with_encoding(encoding)
-                            .with_timestamp(entry.timestamp)
+                            .timestamp(entry.timestamp)
                             .res_async()
                             .await
                         {

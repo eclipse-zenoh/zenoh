@@ -112,7 +112,7 @@ impl Aligner {
                 } = value;
                 let sample = PutSampleBuilder::new(key, payload)
                     .with_encoding(encoding)
-                    .with_timestamp(ts)
+                    .timestamp(ts)
                     .res_sync();
                 log::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {

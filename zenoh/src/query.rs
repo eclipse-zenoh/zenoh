@@ -135,7 +135,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
 
 impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
     #[cfg(feature = "unstable")]
-    fn with_source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
             ..self
@@ -143,14 +143,9 @@ impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
     }
 
     #[cfg(feature = "unstable")]
-    fn with_attachment_opt(self, attachment: Option<Attachment>) -> Self {
-        Self { attachment, ..self }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn with_attachment(self, attachment: Attachment) -> Self {
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
         Self {
-            attachment: Some(attachment),
+            attachment: attachment.into(),
             ..self
         }
     }

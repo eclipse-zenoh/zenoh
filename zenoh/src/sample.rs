@@ -264,6 +264,17 @@ mod attachment {
         }
     }
     #[zenoh_macros::unstable]
+    impl From<AttachmentBuilder> for Option<Attachment> {
+        fn from(value: AttachmentBuilder) -> Self {
+            if value.inner.is_empty() {
+                None
+            } else {
+                Some(value.into())
+            }
+        }
+    }
+
+    #[zenoh_macros::unstable]
     #[derive(Clone)]
     pub struct Attachment {
         pub(crate) inner: ZBuf,

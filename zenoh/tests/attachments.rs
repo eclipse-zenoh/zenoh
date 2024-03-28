@@ -38,22 +38,22 @@ fn pubsub() {
         }
         zenoh
             .put("test/attachment", "put")
-            .with_attachment(
+            .attachment(Some(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            )
+            ))
             .res()
             .unwrap();
         publisher
             .put("publisher")
-            .with_attachment(
+            .attachment(Some(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            )
+            ))
             .res()
             .unwrap();
     }
@@ -84,7 +84,7 @@ fn queries() {
                     query.key_expr().clone(),
                     query.value().unwrap().payload.clone(),
                 )
-                .with_attachment(attachment)
+                .attachment(attachment)
                 .res()
                 .unwrap();
         })
