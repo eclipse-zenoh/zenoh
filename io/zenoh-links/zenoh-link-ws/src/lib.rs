@@ -17,7 +17,6 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use std::net::SocketAddr;
 use url::Url;
@@ -59,7 +58,7 @@ zconfigurable! {
 }
 
 pub async fn get_ws_addr(address: Address<'_>) -> ZResult<SocketAddr> {
-    match address.as_str().to_socket_addrs().await?.next() {
+    match tokio::net::lookup_host(address.as_str()).await?.next() {
         Some(addr) => Ok(addr),
         None => bail!("Couldn't resolve WebSocket locator address: {}", address),
     }

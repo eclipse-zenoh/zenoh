@@ -11,15 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
 use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkBody;
 use zenoh_protocol::{
@@ -56,12 +54,6 @@ const PRIORITY_ALL: [Priority; 8] = [
     Priority::DataLow,
     Priority::Background,
 ];
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 // Transport Handler for the router
 struct SHRouter {
@@ -265,7 +257,7 @@ async fn close_transport(
 
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -276,13 +268,13 @@ async fn close_transport(
     }
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUnicast) {
@@ -320,14 +312,14 @@ async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUn
             // Wait for the messages to arrive to the other side
             ztimeout!(async {
                 while router_handler.get_count() != MSG_COUNT {
-                    task::sleep(SLEEP_COUNT).await;
+                    tokio::time::sleep(SLEEP_COUNT).await;
                 }
             });
         }
     }
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 async fn run(endpoints: &[EndPoint]) {
@@ -338,44 +330,35 @@ async fn run(endpoints: &[EndPoint]) {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn priorities_tcp_only() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn priorities_tcp_only() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 10000).parse().unwrap()];
     // Run
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn conduits_unixpipe_only() {
+async fn conduits_unixpipe_only() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
     // Define the locators
     let endpoints: Vec<EndPoint> = vec!["unixpipe/conduits_unixpipe_only"
         .to_string()
         .parse()
         .unwrap()];
     // Run
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
-fn priorities_ws_only() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn priorities_ws_only() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 10010).parse().unwrap()];
     // Run
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }

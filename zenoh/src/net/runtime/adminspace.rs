@@ -21,7 +21,6 @@ use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
-use async_std::task;
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
@@ -207,7 +206,7 @@ impl AdminSpace {
             .set_plugin_validator(Arc::downgrade(&admin));
 
         let cfg_rx = admin.context.runtime.state.config.subscribe();
-        task::spawn({
+        tokio::task::spawn({
             let admin = admin.clone();
             async move {
                 while let Ok(change) = cfg_rx.recv_async().await {
@@ -543,7 +542,8 @@ fn router_data(context: &AdminContext, query: Query) {
         }
         json
     };
-    let transports: Vec<serde_json::Value> = task::block_on(transport_mgr.get_transports_unicast())
+    let transports: Vec<serde_json::Value> = zenoh_runtime::ZRuntime::Net
+        .block_in_place(transport_mgr.get_transports_unicast())
         .iter()
         .map(transport_to_json)
         .collect();
