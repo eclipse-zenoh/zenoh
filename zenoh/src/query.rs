@@ -167,8 +167,8 @@ impl QoSBuilderTrait for GetBuilder<'_, '_, DefaultHandler> {
         Self { qos, ..self }
     }
 
-    fn is_express(self, is_express: bool) -> Self {
-        let qos = self.qos.is_express(is_express);
+    fn express(self, is_express: bool) -> Self {
+        let qos = self.qos.express(is_express);
         Self { qos, ..self }
     }
 }

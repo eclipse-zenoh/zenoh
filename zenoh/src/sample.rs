@@ -614,7 +614,7 @@ impl QoSBuilderTrait for QoSBuilder {
         Self(QoS { inner })
     }
 
-    fn is_express(self, is_express: bool) -> Self {
+    fn express(self, is_express: bool) -> Self {
         let mut inner = self.0.inner;
         inner.set_is_express(is_express);
         Self(QoS { inner })

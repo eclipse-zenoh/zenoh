@@ -114,9 +114,9 @@ impl QoSBuilderTrait for PutBuilder<'_, '_> {
         }
     }
     #[inline]
-    fn is_express(self, is_express: bool) -> Self {
+    fn express(self, is_express: bool) -> Self {
         Self {
-            publisher: self.publisher.is_express(is_express),
+            publisher: self.publisher.express(is_express),
             ..self
         }
     }
@@ -138,9 +138,9 @@ impl QoSBuilderTrait for DeleteBuilder<'_, '_> {
         }
     }
     #[inline]
-    fn is_express(self, is_express: bool) -> Self {
+    fn express(self, is_express: bool) -> Self {
         Self {
-            publisher: self.publisher.is_express(is_express),
+            publisher: self.publisher.express(is_express),
             ..self
         }
     }
@@ -1016,7 +1016,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// When express is set to `true`, then the message will not be batched.
     /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
-    fn is_express(self, is_express: bool) -> Self {
+    fn express(self, is_express: bool) -> Self {
         Self { is_express, ..self }
     }
 }

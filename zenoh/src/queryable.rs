@@ -295,9 +295,9 @@ impl QoSBuilderTrait for ReplySampleBuilder<'_> {
         }
     }
 
-    fn is_express(self, is_express: bool) -> Self {
+    fn express(self, is_express: bool) -> Self {
         Self {
-            sample_builder: self.sample_builder.is_express(is_express),
+            sample_builder: self.sample_builder.express(is_express),
             ..self
         }
     }
@@ -387,9 +387,9 @@ impl QoSBuilderTrait for ReplyBuilder<'_> {
         }
     }
 
-    fn is_express(self, is_express: bool) -> Self {
+    fn express(self, is_express: bool) -> Self {
         Self {
-            sample_builder: self.sample_builder.is_express(is_express),
+            sample_builder: self.sample_builder.express(is_express),
             ..self
         }
     }
@@ -479,9 +479,9 @@ impl QoSBuilderTrait for ReplyDelBuilder<'_> {
         }
     }
 
-    fn is_express(self, is_express: bool) -> Self {
+    fn express(self, is_express: bool) -> Self {
         Self {
-            sample_builder: self.sample_builder.is_express(is_express),
+            sample_builder: self.sample_builder.express(is_express),
             ..self
         }
     }

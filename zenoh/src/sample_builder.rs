@@ -37,7 +37,7 @@ pub trait QoSBuilderTrait {
     /// Change the `express` policy to apply when routing the data.
     /// When express is set to `true`, then the message will not be batched.
     /// This usually has a positive impact on latency but negative impact on throughput.
-    fn is_express(self, is_express: bool) -> Self;
+    fn express(self, is_express: bool) -> Self;
 }
 
 pub trait TimestampBuilderTrait {
@@ -148,9 +148,9 @@ impl QoSBuilderTrait for SampleBuilder {
         let qos = qos.priority(priority).res_sync();
         Self(Sample { qos, ..self.0 })
     }
-    fn is_express(self, is_express: bool) -> Self {
+    fn express(self, is_express: bool) -> Self {
         let qos: QoSBuilder = self.0.qos.into();
-        let qos = qos.is_express(is_express).res_sync();
+        let qos = qos.express(is_express).res_sync();
         Self(Sample { qos, ..self.0 })
     }
 }
@@ -230,8 +230,8 @@ impl QoSBuilderTrait for PutSampleBuilder {
     fn priority(self, priority: Priority) -> Self {
         Self(self.0.priority(priority))
     }
-    fn is_express(self, is_express: bool) -> Self {
-        Self(self.0.is_express(is_express))
+    fn express(self, is_express: bool) -> Self {
+        Self(self.0.express(is_express))
     }
 }
 
@@ -327,8 +327,8 @@ impl QoSBuilderTrait for DeleteSampleBuilder {
     fn priority(self, priority: Priority) -> Self {
         Self(self.0.priority(priority))
     }
-    fn is_express(self, is_express: bool) -> Self {
-        Self(self.0.is_express(is_express))
+    fn express(self, is_express: bool) -> Self {
+        Self(self.0.express(is_express))
     }
 }
 
