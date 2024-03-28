@@ -138,7 +138,7 @@ impl Query {
         IntoPayload: Into<Payload>,
     {
         let sample_builder =
-            SampleBuilder::put(key_expr, payload).with_qos(response::ext::QoSType::RESPONSE.into());
+            SampleBuilder::put(key_expr, payload).qos(response::ext::QoSType::RESPONSE.into());
         ReplyBuilder {
             query: self,
             sample_builder,

@@ -171,14 +171,14 @@ impl PutSampleBuilder {
         }))
     }
     /// Allows to change keyexpr of [`Sample`]
-    pub fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
+    pub fn keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
         Self(self.0.keyexpr(key_expr))
     }
     // It's convenient to set QoS as a whole for internal usage. For user API there are `congestion_control`, `priority` and `express` methods.
-    pub(crate) fn with_qos(self, qos: QoS) -> Self {
+    pub(crate) fn qos(self, qos: QoS) -> Self {
         Self(SampleBuilder(Sample { qos, ..self.0 .0 }))
     }
 }
