@@ -41,7 +41,7 @@ pub trait QoSBuilderTrait {
 }
 
 pub trait TimestampBuilderTrait {
-    /// Sets of clears timestamp    
+    /// Sets of clears timestamp
     fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self;
 }
 
@@ -56,11 +56,9 @@ pub trait SampleBuilderTrait {
 
 pub trait ValueBuilderTrait {
     /// Set the [`Encoding`]
-    fn with_encoding(self, encoding: Encoding) -> Self;
+    fn with_encoding<T: Into<Encoding>>(self, encoding: T) -> Self;
     /// Sets the payload
-    fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<Payload>;
+    fn with_payload<T: Into<Payload>>(self, payload: T) -> Self;
 }
 
 #[derive(Debug)]
@@ -215,16 +213,13 @@ impl QoSBuilderTrait for PutSampleBuilder {
 }
 
 impl ValueBuilderTrait for PutSampleBuilder {
-    fn with_encoding(self, encoding: Encoding) -> Self {
+    fn with_encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self(SampleBuilder(Sample {
-            encoding,
+            encoding: encoding.into(),
             ..self.0 .0
         }))
     }
-    fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<Payload>,
-    {
+    fn with_payload<T: Into<Payload>>(self, payload: T) -> Self {
         Self(SampleBuilder(Sample {
             payload: payload.into(),
             ..self.0 .0

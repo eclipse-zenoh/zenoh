@@ -199,8 +199,11 @@ impl SampleBuilderTrait for DeleteBuilder<'_, '_> {
 }
 
 impl ValueBuilderTrait for PutBuilder<'_, '_> {
-    fn with_encoding(self, encoding: Encoding) -> Self {
-        Self { encoding, ..self }
+    fn with_encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            encoding: encoding.into(),
+            ..self
+        }
     }
 
     fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
@@ -779,8 +782,11 @@ impl SampleBuilderTrait for PutPublication<'_> {
 }
 
 impl ValueBuilderTrait for PutPublication<'_> {
-    fn with_encoding(self, encoding: Encoding) -> Self {
-        Self { encoding, ..self }
+    fn with_encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            encoding: encoding.into(),
+            ..self
+        }
     }
 
     fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self

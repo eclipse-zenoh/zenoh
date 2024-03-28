@@ -366,17 +366,14 @@ impl QoSBuilderTrait for ReplyBuilder<'_> {
 }
 
 impl ValueBuilderTrait for ReplyBuilder<'_> {
-    fn with_encoding(self, encoding: Encoding) -> Self {
+    fn with_encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             sample_builder: self.sample_builder.with_encoding(encoding),
             ..self
         }
     }
 
-    fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<Payload>,
-    {
+    fn with_payload<T: Into<Payload>>(self, payload: T) -> Self {
         Self {
             sample_builder: self.sample_builder.with_payload(payload),
             ..self

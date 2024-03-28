@@ -169,15 +169,12 @@ impl QoSBuilderTrait for GetBuilder<'_, '_, DefaultHandler> {
 }
 
 impl<Handler> ValueBuilderTrait for GetBuilder<'_, '_, Handler> {
-    fn with_encoding(self, encoding: Encoding) -> Self {
+    fn with_encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let value = Some(self.value.unwrap_or_default().with_encoding(encoding));
         Self { value, ..self }
     }
 
-    fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<Payload>,
-    {
+    fn with_payload<T: Into<Payload>>(self, payload: T) -> Self {
         let value = Some(self.value.unwrap_or_default().with_payload(payload));
         Self { value, ..self }
     }

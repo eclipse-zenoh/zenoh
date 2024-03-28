@@ -426,7 +426,7 @@ impl Primitives for AdminSpace {
                         parameters,
                         value: query
                             .ext_body
-                            .map(|b| Value::from(b.payload).with_encoding(b.encoding.into())),
+                            .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
                         qid: msg.id,
                         zid,
                         primitives,
