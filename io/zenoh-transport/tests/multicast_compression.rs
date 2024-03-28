@@ -16,7 +16,6 @@
 // on GitHub CI actions on Linux and Windows.
 #[cfg(all(target_family = "unix", feature = "transport_compression"))]
 mod tests {
-    use async_std::{prelude::FutureExt, task};
     use std::{
         any::Any,
         sync::{
@@ -25,7 +24,7 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_core::zasync_executor_init;
+    use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
@@ -54,12 +53,6 @@ mod tests {
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
-
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     // Transport Handler for the peer02
     struct SHPeer {
@@ -190,7 +183,7 @@ mod tests {
                 .await
                 .is_none()
             {
-                task::sleep(SLEEP_COUNT).await;
+                tokio::time::sleep(SLEEP_COUNT).await;
             }
         });
         let peer01_transport = peer01_manager
@@ -208,7 +201,7 @@ mod tests {
                 .await
                 .is_none()
             {
-                task::sleep(SLEEP_COUNT).await;
+                tokio::time::sleep(SLEEP_COUNT).await;
             }
         });
         let peer02_transport = peer02_manager
@@ -245,7 +238,7 @@ mod tests {
         assert!(peer01.manager.get_transports_multicast().await.is_empty());
         ztimeout!(async {
             while !peer02.transport.get_peers().unwrap().is_empty() {
-                task::sleep(SLEEP_COUNT).await;
+                tokio::time::sleep(SLEEP_COUNT).await;
             }
         });
 
@@ -255,7 +248,7 @@ mod tests {
         assert!(peer02.manager.get_transports_multicast().await.is_empty());
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 
     async fn test_transport(
@@ -293,21 +286,21 @@ mod tests {
             Reliability::Reliable => {
                 ztimeout!(async {
                     while peer02.handler.get_count() != MSG_COUNT {
-                        task::sleep(SLEEP_COUNT).await;
+                        tokio::time::sleep(SLEEP_COUNT).await;
                     }
                 });
             }
             Reliability::BestEffort => {
                 ztimeout!(async {
                     while peer02.handler.get_count() == 0 {
-                        task::sleep(SLEEP_COUNT).await;
+                        tokio::time::sleep(SLEEP_COUNT).await;
                     }
                 });
             }
         };
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 
     async fn run_single(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
@@ -336,13 +329,9 @@ mod tests {
     }
 
     #[cfg(feature = "transport_udp")]
-    #[test]
-    fn transport_multicast_compression_udp_only() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_multicast_compression_udp_only() {
         env_logger::init();
-
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
@@ -372,6 +361,6 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
+        run(&endpoints, &channel, &MSG_SIZE_NOFRAG).await;
     }
 }

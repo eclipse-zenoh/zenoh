@@ -17,7 +17,6 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use std::net::SocketAddr;
 use zenoh_core::zconfigurable;
@@ -65,9 +64,7 @@ zconfigurable! {
 }
 
 pub async fn get_tcp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {
-    let iter = address
-        .as_str()
-        .to_socket_addrs()
+    let iter = tokio::net::lookup_host(address.as_str().to_string())
         .await
         .map_err(|e| zerror!("{}", e))?
         .filter(|x| !x.ip().is_multicast());

@@ -31,7 +31,7 @@ unstable = []
 default = []
 
 [dependencies]
-async-std = { workspace = true, features = ["attributes", "unstable"] }
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
 bincode = { workspace = true }
 env_logger = { workspace = true }
 flume = { workspace = true }
@@ -47,6 +47,7 @@ zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true, features = ["derive"] }

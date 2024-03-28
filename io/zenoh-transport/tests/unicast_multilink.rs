@@ -13,9 +13,8 @@
 //
 #[cfg(feature = "transport_multilink")]
 mod tests {
-    use async_std::{prelude::FutureExt, task};
     use std::{convert::TryFrom, sync::Arc, time::Duration};
-    use zenoh_core::zasync_executor_init;
+    use zenoh_core::ztimeout;
     use zenoh_link::EndPoint;
     use zenoh_protocol::core::{WhatAmI, ZenohId};
     use zenoh_result::ZResult;
@@ -27,12 +26,6 @@ mod tests {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_millis(100);
-
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     #[cfg(test)]
     #[derive(Default)]
@@ -141,7 +134,7 @@ mod tests {
         println!("Transport Open Close [1a1]: {res:?}");
         assert!(res.is_ok());
         println!("Transport Open Close [1a2]");
-        let locators = router_manager.get_listeners();
+        let locators = router_manager.get_listeners().await;
         println!("Transport Open Close [1a2]: {locators:?}");
         assert_eq!(locators.len(), 1);
 
@@ -179,7 +172,7 @@ mod tests {
                         assert_eq!(links.len(), links_num);
                         break;
                     }
-                    None => task::sleep(SLEEP).await,
+                    None => tokio::time::sleep(SLEEP).await,
                 }
             }
         });
@@ -219,7 +212,7 @@ mod tests {
                 if links.len() == links_num {
                     break;
                 }
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
@@ -243,7 +236,7 @@ mod tests {
         // Verify that the transport has not been open on the router
         println!("Transport Open Close [3d1]");
         ztimeout!(async {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
             let transports = router_manager.get_transports_unicast().await;
             assert_eq!(transports.len(), 1);
             let s = transports
@@ -276,7 +269,7 @@ mod tests {
                 if index.is_none() {
                     break;
                 }
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
@@ -303,7 +296,7 @@ mod tests {
         // Verify that the transport has been open on the router
         println!("Transport Open Close [5d1]");
         ztimeout!(async {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
             let transports = router_manager.get_transports_unicast().await;
             assert_eq!(transports.len(), 1);
             let s = transports
@@ -346,7 +339,7 @@ mod tests {
         // Verify that the transport has been open on the router
         println!("Transport Open Close [6f1]");
         ztimeout!(async {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
             let transports = router_manager.get_transports_unicast().await;
             assert_eq!(transports.len(), 2);
             let s = transports
@@ -392,7 +385,7 @@ mod tests {
                 if transports.is_empty() {
                     break;
                 }
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
@@ -429,7 +422,7 @@ mod tests {
                         assert_eq!(links.len(), links_num);
                         break;
                     }
-                    None => task::sleep(SLEEP).await,
+                    None => tokio::time::sleep(SLEEP).await,
                 }
             }
         });
@@ -453,7 +446,7 @@ mod tests {
                 if transports.is_empty() {
                     break;
                 }
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
@@ -465,98 +458,80 @@ mod tests {
         assert!(res.is_ok());
 
         ztimeout!(async {
-            while !router_manager.get_listeners().is_empty() {
-                task::sleep(SLEEP).await;
+            while !router_manager.get_listeners().await.is_empty() {
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         ztimeout!(router_manager.close());
         ztimeout!(client01_manager.close());
         ztimeout!(client02_manager.close());
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 
     #[cfg(feature = "transport_tcp")]
-    #[test]
-    fn multilink_tcp_only() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn multilink_tcp_only() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 18000).parse().unwrap();
-        task::block_on(multilink_transport(&endpoint));
+        multilink_transport(&endpoint).await;
     }
 
     #[cfg(feature = "transport_udp")]
-    #[test]
-    fn multilink_udp_only() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn multilink_udp_only() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 18010).parse().unwrap();
-        task::block_on(multilink_transport(&endpoint));
+        multilink_transport(&endpoint).await;
     }
 
     #[cfg(feature = "transport_ws")]
-    #[test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
-    fn multilink_ws_only() {
+    async fn multilink_ws_only() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 18020).parse().unwrap();
-        task::block_on(multilink_transport(&endpoint));
+        multilink_transport(&endpoint).await;
     }
 
     #[cfg(feature = "transport_unixpipe")]
-    #[test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
-    fn multilink_unixpipe_only() {
+    async fn multilink_unixpipe_only() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         let endpoint: EndPoint = "unixpipe/multilink_unixpipe_only".parse().unwrap();
-        task::block_on(multilink_transport(&endpoint));
+        multilink_transport(&endpoint).await;
     }
 
     #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-    #[test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
-    fn multilink_unix_only() {
+    async fn multilink_unix_only() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         let f1 = "zenoh-test-unix-socket-9.sock";
         let _ = std::fs::remove_file(f1);
         let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
-        task::block_on(multilink_transport(&endpoint));
+        multilink_transport(&endpoint).await;
         let _ = std::fs::remove_file(f1);
         let _ = std::fs::remove_file(format!("{f1}.lock"));
     }
 
     #[cfg(feature = "transport_tls")]
-    #[test]
-    fn multilink_tls_only() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn multilink_tls_only() {
         use zenoh_link::tls::config::*;
 
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         // NOTE: this an auto-generated pair of certificate and key.
         //       The target domain is localhost, so it has no real
@@ -647,17 +622,13 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
             )
             .unwrap();
 
-        task::block_on(multilink_transport(&endpoint));
+        multilink_transport(&endpoint).await;
     }
 
     #[cfg(feature = "transport_quic")]
-    #[test]
-    fn multilink_quic_only() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn multilink_quic_only() {
         use zenoh_link::quic::config::*;
-
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         // NOTE: this an auto-generated pair of certificate and key.
         //       The target domain is localhost, so it has no real
@@ -749,6 +720,15 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
             )
             .unwrap();
 
-        task::block_on(multilink_transport(&endpoint));
+        multilink_transport(&endpoint).await;
+    }
+
+    #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn multilink_vsock_only() {
+        let _ = env_logger::try_init();
+
+        let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+        multilink_transport(&endpoint).await;
     }
 }

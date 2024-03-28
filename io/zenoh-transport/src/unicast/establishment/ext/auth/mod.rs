@@ -17,13 +17,13 @@ pub(crate) mod pubkey;
 pub(crate) mod usrpwd;
 
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
-use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 #[cfg(feature = "auth_pubkey")]
 pub use pubkey::*;
 use rand::{CryptoRng, Rng};
 use std::convert::TryInto;
 use std::marker::PhantomData;
+use tokio::sync::{Mutex, RwLock};
 #[cfg(feature = "auth_usrpwd")]
 pub use usrpwd::*;
 use zenoh_buffers::reader::SiphonableReader;
@@ -62,9 +62,7 @@ impl Auth {
 
         Ok(Self {
             #[cfg(feature = "auth_pubkey")]
-            pubkey: AuthPubKey::from_config(auth.pubkey())
-                .await?
-                .map(RwLock::new),
+            pubkey: AuthPubKey::from_config(auth.pubkey())?.map(RwLock::new),
             #[cfg(feature = "auth_usrpwd")]
             usrpwd: AuthUsrPwd::from_config(auth.usrpwd())
                 .await?

@@ -21,12 +21,12 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
-use async_executor::Task;
-use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkMessage;
@@ -59,8 +59,8 @@ pub(crate) struct TransportUnicastLowlatency {
     pub(super) stats: Arc<TransportStats>,
 
     // The handles for TX/RX tasks
-    pub(crate) handle_keepalive: Arc<RwLock<Option<Task<()>>>>,
-    pub(crate) handle_rx: Arc<RwLock<Option<JoinHandle<()>>>>,
+    pub(crate) token: CancellationToken,
+    pub(crate) tracker: TaskTracker,
 }
 
 impl TransportUnicastLowlatency {
@@ -78,8 +78,8 @@ impl TransportUnicastLowlatency {
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
-            handle_keepalive: Arc::new(RwLock::new(None)),
-            handle_rx: Arc::new(RwLock::new(None)),
+            token: CancellationToken::new(),
+            tracker: TaskTracker::new(),
         }) as Arc<dyn TransportUnicastTrait>
     }
 
@@ -127,8 +127,12 @@ impl TransportUnicastLowlatency {
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close and drop the link
-        self.stop_keepalive().await;
-        self.stop_rx().await;
+        self.token.cancel();
+        self.tracker.close();
+        self.tracker.wait().await;
+        // self.stop_keepalive().await;
+        // self.stop_rx().await;
+
         if let Some(val) = zasyncwrite!(self.link).as_ref() {
             let _ = val.close(Some(close::reason::GENERIC)).await;
         }
@@ -170,7 +174,9 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        let guard = async_std::task::block_on(async { zasyncread!(self.link) });
+        let handle = tokio::runtime::Handle::current();
+        let guard =
+            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
         if let Some(val) = guard.as_ref() {
             return [val.link()].to_vec();
         }
@@ -244,13 +250,13 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
             // start keepalive task
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            self.start_keepalive(&self.manager.tx_executor, keep_alive);
+            self.start_keepalive(keep_alive);
 
             // start RX task
             self.internal_start_rx(other_lease);
         });
 
-        return Ok((start_link, ack));
+        Ok((start_link, ack))
     }
 
     /*************************************/
