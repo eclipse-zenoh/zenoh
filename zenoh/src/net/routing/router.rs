@@ -23,7 +23,7 @@ use super::interceptor::InterceptorsChain;
 use super::runtime::Runtime;
 use crate::net::primitives::DeMux;
 use crate::net::primitives::DummyPrimitives;
-use crate::net::primitives::EPrimitives;
+use crate::net::primitives::EgressPrimitives;
 use crate::net::primitives::McastMux;
 use crate::net::primitives::Mux;
 use crate::net::routing::interceptor::IngressInterceptor;
@@ -70,7 +70,7 @@ impl Router {
 
     pub(crate) fn new_primitives(
         &self,
-        primitives: Arc<dyn EPrimitives + Send + Sync>,
+        primitives: Arc<dyn EgressPrimitives + Send + Sync>,
     ) -> Arc<Face> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);

@@ -57,7 +57,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::{net::primitives::Primitives, prelude::Selector, Session, Undeclarable};
+use crate::{net::primitives::IngressPrimitives, prelude::Selector, Session, Undeclarable};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
@@ -662,7 +662,7 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.send_declare(zenoh_protocol::network::Declare {
+        primitives.ingress_declare(zenoh_protocol::network::Declare {
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,

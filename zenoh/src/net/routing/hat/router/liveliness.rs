@@ -50,25 +50,27 @@ fn send_sourced_liveliness_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
-                        someface.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType {
-                                    node_id: routing_context,
+                        someface
+                            .primitives
+                            .egress_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType {
+                                        node_id: routing_context,
+                                    },
+                                    body: DeclareBody::DeclareToken(DeclareToken {
+                                        // NOTE(fuzzypixelz): In the original
+                                        // subscriber-based liveliness
+                                        // implementation, sourced subscriptions
+                                        // don't use an id, should this be the same
+                                        // for liveliness declarators?
+                                        id: 0,
+                                        wire_expr: key_expr,
+                                    }),
                                 },
-                                body: DeclareBody::DeclareToken(DeclareToken {
-                                    // NOTE(fuzzypixelz): In the original
-                                    // subscriber-based liveliness
-                                    // implementation, sourced subscriptions
-                                    // don't use an id, should this be the same
-                                    // for liveliness declarators?
-                                    id: 0,
-                                    wire_expr: key_expr,
-                                }),
-                            },
-                            res.expr(),
-                        ));
+                                res.expr(),
+                            ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -101,18 +103,20 @@ fn propagate_simple_liveliness_to(
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
             let key_expr = Resource::decl_key(res, dst_face);
-            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareToken(DeclareToken {
-                        id,
-                        wire_expr: key_expr,
-                    }),
-                },
-                res.expr(),
-            ));
+            dst_face
+                .primitives
+                .egress_declare(RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareToken(DeclareToken {
+                            id,
+                            wire_expr: key_expr,
+                        }),
+                    },
+                    res.expr(),
+                ));
         } else {
             let matching_interests = face_hat!(dst_face)
                 .remote_token_interests
@@ -131,18 +135,20 @@ fn propagate_simple_liveliness_to(
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
                     let key_expr = Resource::decl_key(res, dst_face);
-                    dst_face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareToken(DeclareToken {
-                                id,
-                                wire_expr: key_expr,
-                            }),
-                        },
-                        res.expr(),
-                    ));
+                    dst_face
+                        .primitives
+                        .egress_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareToken(DeclareToken {
+                                    id,
+                                    wire_expr: key_expr,
+                                }),
+                            },
+                            res.expr(),
+                        ));
                 }
             }
         }
@@ -357,25 +363,27 @@ fn send_forget_sourced_liveliness_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
-                        someface.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType {
-                                    node_id: routing_context.unwrap_or(0),
+                        someface
+                            .primitives
+                            .egress_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType {
+                                        node_id: routing_context.unwrap_or(0),
+                                    },
+                                    body: DeclareBody::UndeclareToken(UndeclareToken {
+                                        // NOTE(fuzzypixelz): In the original
+                                        // subscriber-based liveliness
+                                        // implementation, sourced subscriptions
+                                        // don't use an id, should this be the same
+                                        // for liveliness declarators?
+                                        id: 0,
+                                        ext_wire_expr: WireExprType { wire_expr },
+                                    }),
                                 },
-                                body: DeclareBody::UndeclareToken(UndeclareToken {
-                                    // NOTE(fuzzypixelz): In the original
-                                    // subscriber-based liveliness
-                                    // implementation, sourced subscriptions
-                                    // don't use an id, should this be the same
-                                    // for liveliness declarators?
-                                    id: 0,
-                                    ext_wire_expr: WireExprType { wire_expr },
-                                }),
-                            },
-                            res.expr(),
-                        ));
+                                res.expr(),
+                            ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -387,7 +395,7 @@ fn send_forget_sourced_liveliness_to_net_childs(
 fn propagate_forget_simple_liveliness(tables: &mut Tables, res: &Arc<Resource>) {
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(res) {
-            face.primitives.send_declare(RoutingContext::with_expr(
+            face.primitives.egress_declare(RoutingContext::with_expr(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
@@ -415,7 +423,7 @@ fn propagate_forget_simple_liveliness(tables: &mut Tables, res: &Arc<Resource>) 
                 })
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.primitives.egress_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -455,7 +463,7 @@ fn propagate_forget_simple_liveliness_to_peers(tables: &mut Tables, res: &Arc<Re
                 })
             {
                 if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.primitives.egress_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -613,7 +621,7 @@ pub(super) fn undeclare_client_liveliness(
             let mut face = &mut client_tokens[0];
             if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
                 if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.primitives.egress_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -641,7 +649,7 @@ pub(super) fn undeclare_client_liveliness(
                         })
                     }) {
                         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
-                            face.primitives.send_declare(RoutingContext::with_expr(
+                            face.primitives.egress_declare(RoutingContext::with_expr(
                                 Declare {
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
@@ -749,7 +757,7 @@ impl HatLivelinessTrait for HatCode {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
                         let wire_expr = Resource::decl_key(res, face);
-                        face.primitives.send_declare(RoutingContext::with_expr(
+                        face.primitives.egress_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
@@ -770,7 +778,7 @@ impl HatLivelinessTrait for HatCode {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                             face_hat_mut!(face).local_tokens.insert(token.clone(), id);
                             let wire_expr = Resource::decl_key(token, face);
-                            face.primitives.send_declare(RoutingContext::with_expr(
+                            face.primitives.egress_declare(RoutingContext::with_expr(
                                 Declare {
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
@@ -792,7 +800,7 @@ impl HatLivelinessTrait for HatCode {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face).local_tokens.insert(token.clone(), id);
                         let wire_expr = Resource::decl_key(token, face);
-                        face.primitives.send_declare(RoutingContext::with_expr(
+                        face.primitives.egress_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,

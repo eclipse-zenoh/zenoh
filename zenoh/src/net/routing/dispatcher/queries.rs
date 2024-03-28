@@ -622,7 +622,7 @@ pub fn route_query(
 
                     face.primitives
                         .clone()
-                        .send_response(RoutingContext::with_expr(
+                        .egress_response(RoutingContext::with_expr(
                             Response {
                                 rid: qid,
                                 wire_expr: wexpr,
@@ -646,7 +646,7 @@ pub fn route_query(
                     );
                     face.primitives
                         .clone()
-                        .send_response_final(RoutingContext::with_expr(
+                        .egress_response_final(RoutingContext::with_expr(
                             ResponseFinal {
                                 rid: qid,
                                 ext_qos: response::ext::QoSType::RESPONSE_FINAL,
@@ -672,7 +672,7 @@ pub fn route_query(
                         }
 
                         log::trace!("Propagate query {}:{} to {}", face, qid, outface);
-                        outface.primitives.send_request(RoutingContext::with_expr(
+                        outface.primitives.egress_request(RoutingContext::with_expr(
                             Request {
                                 id: *qid,
                                 wire_expr: key_expr.into(),
@@ -693,7 +693,7 @@ pub fn route_query(
                 drop(rtables);
                 face.primitives
                     .clone()
-                    .send_response_final(RoutingContext::with_expr(
+                    .egress_response_final(RoutingContext::with_expr(
                         ResponseFinal {
                             rid: qid,
                             ext_qos: response::ext::QoSType::RESPONSE_FINAL,
@@ -712,7 +712,7 @@ pub fn route_query(
             drop(rtables);
             face.primitives
                 .clone()
-                .send_response_final(RoutingContext::with_expr(
+                .egress_response_final(RoutingContext::with_expr(
                     ResponseFinal {
                         rid: qid,
                         ext_qos: response::ext::QoSType::RESPONSE_FINAL,
@@ -757,7 +757,7 @@ pub(crate) fn route_send_response(
                 .src_face
                 .primitives
                 .clone()
-                .send_response(RoutingContext::with_expr(
+                .egress_response(RoutingContext::with_expr(
                     Response {
                         rid: query.src_qid,
                         wire_expr: key_expr.to_owned(),
@@ -819,7 +819,7 @@ pub(crate) fn finalize_pending_query(query: Arc<Query>) {
             .src_face
             .primitives
             .clone()
-            .send_response_final(RoutingContext::with_expr(
+            .egress_response_final(RoutingContext::with_expr(
                 ResponseFinal {
                     rid: query.src_qid,
                     ext_qos: response::ext::QoSType::RESPONSE_FINAL,

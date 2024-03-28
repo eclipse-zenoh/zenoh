@@ -506,7 +506,7 @@ pub fn full_reentrant_route_data(
                                 inc_stats!(face, tx, admin, payload)
                             }
 
-                            outface.primitives.send_push(Push {
+                            outface.primitives.egress_push(Push {
                                 wire_expr: key_expr.into(),
                                 ext_qos,
                                 ext_tstamp: None,
@@ -534,7 +534,7 @@ pub fn full_reentrant_route_data(
                                 inc_stats!(face, tx, admin, payload)
                             }
 
-                            outface.primitives.send_push(Push {
+                            outface.primitives.egress_push(Push {
                                 wire_expr: key_expr,
                                 ext_qos,
                                 ext_tstamp: None,
@@ -558,7 +558,7 @@ pub fn full_reentrant_route_data(
                                     inc_stats!(face, tx, admin, payload)
                                 }
 
-                                outface.primitives.send_push(Push {
+                                outface.primitives.egress_push(Push {
                                     wire_expr: key_expr.into(),
                                     ext_qos,
                                     ext_tstamp: None,

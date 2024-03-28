@@ -13,7 +13,7 @@
 //
 
 //! Publishing primitives.
-use crate::net::primitives::Primitives;
+use crate::net::primitives::IngressPrimitives;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
@@ -893,7 +893,7 @@ fn resolve_put(
     let timestamp = publisher.session.runtime.new_timestamp();
 
     if publisher.destination != Locality::SessionLocal {
-        primitives.send_push(Push {
+        primitives.ingress_push(Push {
             wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
             ext_qos: ext::QoSType::new(
                 publisher.priority.into(),

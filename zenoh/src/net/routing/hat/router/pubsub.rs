@@ -55,21 +55,23 @@ fn send_sourced_subscription_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
-                        someface.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType {
-                                    node_id: routing_context,
+                        someface
+                            .primitives
+                            .egress_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType {
+                                        node_id: routing_context,
+                                    },
+                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                        id: 0, // Sourced subscriptions do not use ids
+                                        wire_expr: key_expr,
+                                        ext_info: *sub_info,
+                                    }),
                                 },
-                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                    id: 0, // Sourced subscriptions do not use ids
-                                    wire_expr: key_expr,
-                                    ext_info: *sub_info,
-                                }),
-                            },
-                            res.expr(),
-                        ));
+                                res.expr(),
+                            ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -103,19 +105,21 @@ fn propagate_simple_subscription_to(
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
             let key_expr = Resource::decl_key(res, dst_face);
-            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id,
-                        wire_expr: key_expr,
-                        ext_info: *sub_info,
-                    }),
-                },
-                res.expr(),
-            ));
+            dst_face
+                .primitives
+                .egress_declare(RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id,
+                            wire_expr: key_expr,
+                            ext_info: *sub_info,
+                        }),
+                    },
+                    res.expr(),
+                ));
         } else {
             let matching_interests = face_hat!(dst_face)
                 .remote_sub_interests
@@ -134,19 +138,21 @@ fn propagate_simple_subscription_to(
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
                     let key_expr = Resource::decl_key(res, dst_face);
-                    dst_face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id,
-                                wire_expr: key_expr,
-                                ext_info: *sub_info,
-                            }),
-                        },
-                        res.expr(),
-                    ));
+                    dst_face
+                        .primitives
+                        .egress_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id,
+                                    wire_expr: key_expr,
+                                    ext_info: *sub_info,
+                                }),
+                            },
+                            res.expr(),
+                        ));
                 }
             }
         }
@@ -378,20 +384,22 @@ fn send_forget_sourced_subscription_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
-                        someface.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType {
-                                    node_id: routing_context.unwrap_or(0),
+                        someface
+                            .primitives
+                            .egress_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType {
+                                        node_id: routing_context.unwrap_or(0),
+                                    },
+                                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                        id: 0, // Sourced subscriptions do not use ids
+                                        ext_wire_expr: WireExprType { wire_expr },
+                                    }),
                                 },
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // Sourced subscriptions do not use ids
-                                    ext_wire_expr: WireExprType { wire_expr },
-                                }),
-                            },
-                            res.expr(),
-                        ));
+                                res.expr(),
+                            ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -403,7 +411,7 @@ fn send_forget_sourced_subscription_to_net_childs(
 fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
-            face.primitives.send_declare(RoutingContext::with_expr(
+            face.primitives.egress_declare(RoutingContext::with_expr(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
@@ -431,7 +439,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                 })
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.primitives.egress_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -471,7 +479,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                 })
             {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.primitives.egress_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -623,7 +631,7 @@ pub(super) fn undeclare_client_subscription(
             let mut face = &mut client_subs[0];
             if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.primitives.egress_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -651,7 +659,7 @@ pub(super) fn undeclare_client_subscription(
                         })
                     }) {
                         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
-                            face.primitives.send_declare(RoutingContext::with_expr(
+                            face.primitives.egress_declare(RoutingContext::with_expr(
                                 Declare {
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
@@ -703,7 +711,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                 face_hat_mut!(face).local_subs.insert(sub.clone(), id);
                 let key_expr = Resource::decl_key(sub, face);
-                face.primitives.send_declare(RoutingContext::with_expr(
+                face.primitives.egress_declare(RoutingContext::with_expr(
                     Declare {
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
@@ -841,20 +849,22 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                         })
                                     };
                                 if forget {
-                                    dst_face.primitives.send_declare(RoutingContext::with_expr(
-                                        Declare {
-                                            ext_qos: ext::QoSType::DECLARE,
-                                            ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                                            body: DeclareBody::UndeclareSubscriber(
-                                                UndeclareSubscriber {
-                                                    id,
-                                                    ext_wire_expr: WireExprType::null(),
-                                                },
-                                            ),
-                                        },
-                                        res.expr(),
-                                    ));
+                                    dst_face
+                                        .primitives
+                                        .egress_declare(RoutingContext::with_expr(
+                                            Declare {
+                                                ext_qos: ext::QoSType::DECLARE,
+                                                ext_tstamp: None,
+                                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                                body: DeclareBody::UndeclareSubscriber(
+                                                    UndeclareSubscriber {
+                                                        id,
+                                                        ext_wire_expr: WireExprType::null(),
+                                                    },
+                                                ),
+                                            },
+                                            res.expr(),
+                                        ));
 
                                     face_hat_mut!(dst_face).local_subs.remove(res);
                                 }
@@ -866,19 +876,23 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 let sub_info = SubscriberInfo {
                                     reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
                                 };
-                                dst_face.primitives.send_declare(RoutingContext::with_expr(
-                                    Declare {
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                            id,
-                                            wire_expr: key_expr,
-                                            ext_info: sub_info,
-                                        }),
-                                    },
-                                    res.expr(),
-                                ));
+                                dst_face
+                                    .primitives
+                                    .egress_declare(RoutingContext::with_expr(
+                                        Declare {
+                                            ext_qos: ext::QoSType::DECLARE,
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                                            body: DeclareBody::DeclareSubscriber(
+                                                DeclareSubscriber {
+                                                    id,
+                                                    wire_expr: key_expr,
+                                                    ext_info: sub_info,
+                                                },
+                                            ),
+                                        },
+                                        res.expr(),
+                                    ));
                             }
                         }
                     }
@@ -948,7 +962,7 @@ impl HatPubSubTrait for HatCode {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face).local_subs.insert((*res).clone(), id);
                         let wire_expr = Resource::decl_key(res, face);
-                        face.primitives.send_declare(RoutingContext::with_expr(
+                        face.primitives.egress_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
@@ -973,7 +987,7 @@ impl HatPubSubTrait for HatCode {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                             face_hat_mut!(face).local_subs.insert(sub.clone(), id);
                             let wire_expr = Resource::decl_key(sub, face);
-                            face.primitives.send_declare(RoutingContext::with_expr(
+                            face.primitives.egress_declare(RoutingContext::with_expr(
                                 Declare {
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
@@ -999,7 +1013,7 @@ impl HatPubSubTrait for HatCode {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face).local_subs.insert(sub.clone(), id);
                         let wire_expr = Resource::decl_key(sub, face);
-                        face.primitives.send_declare(RoutingContext::with_expr(
+                        face.primitives.egress_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,

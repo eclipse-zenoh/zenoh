@@ -20,7 +20,7 @@ use crate::info::*;
 use crate::key_expr::KeyExprInner;
 #[zenoh_macros::unstable]
 use crate::liveliness::{Liveliness, LivelinessTokenState};
-use crate::net::primitives::Primitives;
+use crate::net::primitives::IngressPrimitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
 use crate::payload::Payload;
@@ -536,7 +536,7 @@ impl Session {
             self.runtime.close().await?;
 
             let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
+            primitives.ingress_close();
 
             Ok(())
         })
@@ -874,7 +874,7 @@ impl Session {
                     state.local_resources.insert(expr_id, res);
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
-                    primitives.send_declare(Declare {
+                    primitives.ingress_declare(Declare {
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -946,7 +946,7 @@ impl Session {
         if let Some(res) = declared_pub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.send_declare(Declare {
+            primitives.ingress_declare(Declare {
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -975,7 +975,7 @@ impl Session {
                 }) {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
-                    primitives.send_declare(Declare {
+                    primitives.ingress_declare(Declare {
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1105,7 +1105,7 @@ impl Session {
             //     key_expr.to_wire(self)
             // };
 
-            primitives.send_declare(Declare {
+            primitives.ingress_declare(Declare {
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1128,7 +1128,7 @@ impl Session {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
 
-            primitives.send_declare(Declare {
+            primitives.ingress_declare(Declare {
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1178,7 +1178,7 @@ impl Session {
                 }) {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
-                    primitives.send_declare(Declare {
+                    primitives.ingress_declare(Declare {
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1203,7 +1203,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
 
-                primitives.send_declare(Declare {
+                primitives.ingress_declare(Declare {
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1246,7 +1246,7 @@ impl Session {
                 complete,
                 distance: 0,
             };
-            primitives.send_declare(Declare {
+            primitives.ingress_declare(Declare {
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1267,7 +1267,7 @@ impl Session {
             if qable_state.origin != Locality::SessionLocal {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
-                primitives.send_declare(Declare {
+                primitives.ingress_declare(Declare {
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1302,7 +1302,7 @@ impl Session {
         state.tokens.insert(tok_state.id, tok_state.clone());
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.send_declare(Declare {
+        primitives.ingress_declare(Declare {
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1325,7 +1325,7 @@ impl Session {
             if !twin_tok {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
-                primitives.send_declare(Declare {
+                primitives.ingress_declare(Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -1705,7 +1705,7 @@ impl Session {
                     ext_attachment = Some(attachment.into());
                 }
             }
-            primitives.send_request(Request {
+            primitives.ingress_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
                 ext_qos: request::ext::QoSType::REQUEST,
@@ -1984,8 +1984,8 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     }
 }
 
-impl Primitives for Session {
-    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
+impl IngressPrimitives for Session {
+    fn ingress_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
                 trace!("recv DeclareKeyExpr {} {:?}", m.id, m.wire_expr);
@@ -2177,7 +2177,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn ingress_push(&self, msg: Push) {
         trace!("recv Push {:?}", msg);
         match msg.payload {
             PushBody::Put(m) => {
@@ -2219,7 +2219,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_request(&self, msg: Request) {
+    fn ingress_request(&self, msg: Request) {
         trace!("recv Request {:?}", msg);
         match msg.payload {
             RequestBody::Query(m) => self.handle_query(
@@ -2236,7 +2236,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_response(&self, msg: Response) {
+    fn ingress_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
         match msg.payload {
             ResponseBody::Err(e) => {
@@ -2473,7 +2473,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_response_final(&self, msg: ResponseFinal) {
+    fn ingress_response_final(&self, msg: ResponseFinal) {
         trace!("recv ResponseFinal {:?}", msg);
         let mut state = zwrite!(self.state);
         match state.queries.get_mut(&msg.rid) {
@@ -2496,7 +2496,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_close(&self) {
+    fn ingress_close(&self) {
         trace!("recv Close");
     }
 }
@@ -2667,35 +2667,35 @@ pub trait SessionDeclarations<'s, 'a> {
     fn info(&'s self) -> SessionInfo<'a>;
 }
 
-impl crate::net::primitives::EPrimitives for Session {
+impl crate::net::primitives::EgressPrimitives for Session {
     #[inline]
-    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
-        (self as &dyn Primitives).send_declare(ctx.msg)
+    fn egress_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
+        (self as &dyn IngressPrimitives).ingress_declare(ctx.msg)
     }
 
     #[inline]
-    fn send_push(&self, msg: Push) {
-        (self as &dyn Primitives).send_push(msg)
+    fn egress_push(&self, msg: Push) {
+        (self as &dyn IngressPrimitives).ingress_push(msg)
     }
 
     #[inline]
-    fn send_request(&self, ctx: crate::net::routing::RoutingContext<Request>) {
-        (self as &dyn Primitives).send_request(ctx.msg)
+    fn egress_request(&self, ctx: crate::net::routing::RoutingContext<Request>) {
+        (self as &dyn IngressPrimitives).ingress_request(ctx.msg)
     }
 
     #[inline]
-    fn send_response(&self, ctx: crate::net::routing::RoutingContext<Response>) {
-        (self as &dyn Primitives).send_response(ctx.msg)
+    fn egress_response(&self, ctx: crate::net::routing::RoutingContext<Response>) {
+        (self as &dyn IngressPrimitives).ingress_response(ctx.msg)
     }
 
     #[inline]
-    fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
-        (self as &dyn Primitives).send_response_final(ctx.msg)
+    fn egress_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
+        (self as &dyn IngressPrimitives).ingress_response_final(ctx.msg)
     }
 
     #[inline]
-    fn send_close(&self) {
-        (self as &dyn Primitives).send_close()
+    fn egress_close(&self) {
+        (self as &dyn IngressPrimitives).ingress_close()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
