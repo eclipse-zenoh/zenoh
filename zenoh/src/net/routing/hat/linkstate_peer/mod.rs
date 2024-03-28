@@ -51,7 +51,7 @@ use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, Ze
 use zenoh_protocol::{
     common::ZExtBody,
     network::{
-        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+        declare::{queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId},
         oam::id::OAM_LINKSTATE,
         Oam,
     },
@@ -465,8 +465,10 @@ impl HatContext {
 struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
+    remote_sub_interests: HashMap<InterestId, (Option<Arc<Resource>>, bool)>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
+    remote_qabl_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
@@ -476,8 +478,10 @@ impl HatFace {
         Self {
             link_id: 0,
             next_id: AtomicU32::new(0),
+            remote_sub_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
+            remote_qabl_interests: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),
         }

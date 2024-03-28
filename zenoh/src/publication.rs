@@ -25,6 +25,7 @@ use crate::{
     handlers::{Callback, DefaultHandler, IntoHandler},
     Id,
 };
+use std::fmt;
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::push::ext;
@@ -157,7 +158,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
         let publisher = Publisher {
             session,
             #[cfg(feature = "unstable")]
-            eid: 0, // This is a one shot Publisher
+            id: 0, // This is a one shot Publisher
             key_expr: key_expr?,
             congestion_control,
             priority,
@@ -192,6 +193,22 @@ use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use zenoh_result::Error;
+
+pub(crate) struct PublisherState {
+    pub(crate) id: Id,
+    pub(crate) remote_id: Id,
+    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) destination: Locality,
+}
+
+impl fmt::Debug for PublisherState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Publisher")
+            .field("id", &self.id)
+            .field("key_expr", &self.key_expr)
+            .finish()
+    }
+}
 
 #[zenoh_macros::unstable]
 #[derive(Clone)]
@@ -254,8 +271,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
-    #[cfg(feature = "unstable")]
-    pub(crate) eid: EntityId,
+    pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
@@ -283,7 +299,7 @@ impl<'a> Publisher<'a> {
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
             zid: self.session.zid(),
-            eid: self.eid,
+            eid: self.id,
         }
     }
 
@@ -588,11 +604,9 @@ impl Resolvable for PublisherUndeclaration<'_> {
 impl SyncResolve for PublisherUndeclaration<'_> {
     fn res_sync(mut self) -> <Self as Resolvable>::To {
         let Publisher {
-            session, key_expr, ..
+            session, id: eid, ..
         } = &self.publisher;
-        session
-            .undeclare_publication_intent(key_expr.clone())
-            .res_sync()?;
+        session.undeclare_publisher_inner(*eid)?;
         self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
         Ok(())
     }
@@ -609,10 +623,7 @@ impl AsyncResolve for PublisherUndeclaration<'_> {
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
         if !self.key_expr.is_empty() {
-            let _ = self
-                .session
-                .undeclare_publication_intent(self.key_expr.clone())
-                .res_sync();
+            let _ = self.session.undeclare_publisher_inner(self.id);
         }
     }
 }
@@ -841,23 +852,19 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                 }
             }
         }
-        self.session
-            .declare_publication_intent(key_expr.clone())
-            .res_sync()?;
-        #[cfg(feature = "unstable")]
-        let eid = self.session.runtime.next_id();
-        let publisher = Publisher {
-            session: self.session,
-            #[cfg(feature = "unstable")]
-            eid,
-            key_expr,
-            congestion_control: self.congestion_control,
-            priority: self.priority,
-            is_express: self.is_express,
-            destination: self.destination,
-        };
-        log::trace!("publish({:?})", publisher.key_expr);
-        Ok(publisher)
+        let session = self.session;
+        session
+            .declare_publisher_inner(key_expr.clone(), self.destination)
+            .map(|eid| Publisher {
+                session,
+                #[cfg(feature = "unstable")]
+                id: eid,
+                key_expr,
+                congestion_control: self.congestion_control,
+                priority: self.priority,
+                is_express: self.is_express,
+                destination: self.destination,
+            })
     }
 }
 
