@@ -16,7 +16,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::sample::builder::QoSBuilderTrait;
-use zenoh_core::zasync_executor_init;
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

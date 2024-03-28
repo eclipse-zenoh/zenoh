@@ -11,29 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use futures::future::try_join_all;
-use futures::FutureExt as _;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicUsize, Arc};
 use std::time::Duration;
-use std::{
-    str::FromStr,
-    sync::{atomic::AtomicUsize, atomic::Ordering, Arc},
-    time::Duration,
-};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
 use zenoh::sample::builder::QoSBuilderTrait;
-use zenoh::{
-    config::{Config, ModeDependentValue},
-    prelude::r#async::*,
-    Result,
-};
-use zenoh::{value::Value, Result};
-use zenoh_core::zasync_executor_init;
+use zenoh::Result;
 use zenoh_core::ztimeout;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
 use zenoh_result::bail;
