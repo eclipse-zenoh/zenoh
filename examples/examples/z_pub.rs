@@ -39,12 +39,12 @@ async fn main() {
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
         let mut put = publisher.put(buf);
         if let Some(attachment) = &attachment {
-            put = put.attachment(
+            put = put.attachment(Some(
                 attachment
                     .split('&')
                     .map(|pair| split_once(pair, '='))
                     .collect(),
-            )
+            ))
         }
         put.res().await.unwrap();
     }
