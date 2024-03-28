@@ -65,7 +65,7 @@ impl PolicyEnforcer {
         if self.acl_enabled {
             if let Some(rules) = acl_config.rules {
                 if rules.is_empty() {
-                    log::warn!("ACL ruleset in config file is empty!!!");
+                    log::warn!("[ACCESS LOG]: ACL ruleset in config file is empty!!!");
                     self.policy_map = None;
                     self.subject_map = None;
                 }
@@ -101,7 +101,7 @@ impl PolicyEnforcer {
                 self.policy_map = Some(main_policy);
                 self.subject_map = Some(subject_map);
             } else {
-                log::warn!("No ACL rules have been specified!!!");
+                log::warn!("[ACCESS LOG]: No ACL rules have been specified!!!");
             }
         }
         Ok(())
@@ -150,8 +150,7 @@ impl PolicyEnforcer {
         subject: i32,
         action: Action,
         key_expr: &str,
-        default_decision: bool,
-    ) -> ZResult<bool> {
+    ) -> ZResult<Permission> {
         match &self.policy_map {
             Some(policy_map) => {
                 match policy_map.0.get(&subject) {
@@ -163,27 +162,32 @@ impl PolicyEnforcer {
                             .nodes_including(keyexpr::new(&key_expr)?)
                             .count();
                         if deny_result != 0 {
-                            return Ok(false);
+                            return Ok(Permission::Deny);
                         }
                         //if default_permission is Allow, ignore checks for Allow
                         if self.default_permission == Permission::Allow {
-                            Ok(true)
+                            Ok(Permission::Allow)
                         } else {
                             let allow_result = permission_vec[Permission::Allow as usize]
                                 .nodes_including(keyexpr::new(&key_expr)?)
                                 .count();
-                            Ok(allow_result != 0)
+
+                            if allow_result != 0 {
+                                Ok(Permission::Allow)
+                            } else {
+                                Ok(Permission::Deny)
+                            }
                         }
                     }
-                    None => Ok(default_decision),
+                    None => Ok(self.default_permission.clone()),
                 }
             }
             None => {
                 //when list is present (not null) but empty
                 if self.default_permission == Permission::Allow {
-                    Ok(true)
+                    Ok(Permission::Allow)
                 } else {
-                    Ok(false)
+                    Ok(Permission::Deny)
                 }
             }
         }

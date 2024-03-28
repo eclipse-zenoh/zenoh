@@ -41,13 +41,13 @@ pub(crate) struct AclEnforcer {
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,
-    default_decision: bool,
+    //default_permission: bool,
     zid: ZenohId,
 }
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<i32>,
-    default_decision: bool,
+    //default_permission: bool,
     zid: ZenohId,
 }
 
@@ -58,18 +58,18 @@ pub(crate) fn acl_interceptor_factories(acl_config: AclConfig) -> ZResult<Vec<In
         let mut policy_enforcer = PolicyEnforcer::new();
         match policy_enforcer.init(acl_config) {
             Ok(_) => {
-                log::info!("Access control is enabled and initialized");
+                log::info!("[ACCESS LOG]: Access control is enabled and initialized");
                 res.push(Box::new(AclEnforcer {
                     enforcer: Arc::new(policy_enforcer),
                 }))
             }
             Err(e) => log::error!(
-                "Access control enabled but not initialized with error {}!",
+                "[ACCESS LOG]: Access control enabled but not initialized with error {}!",
                 e
             ),
         }
     } else {
-        log::warn!("Access Control is disabled in config!");
+        log::warn!("[ACCESS LOG]: Access Control is disabled in config!");
     }
 
     Ok(res)
@@ -86,7 +86,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 zid = id;
             }
             Err(e) => {
-                log::error!("Failed to get zid with error :{}", e);
+                log::error!("[ACCESS LOG]: Failed to get zid with error :{}", e);
                 return (None, None);
             }
         }
@@ -106,7 +106,10 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 }
             }
             Err(e) => {
-                log::error!("Couldn't get interface list with error: {}", e);
+                log::error!(
+                    "[ACCESS LOG]: Couldn't get interface list with error: {}",
+                    e
+                );
                 return (None, None);
             }
         }
@@ -114,19 +117,12 @@ impl InterceptorFactoryTrait for AclEnforcer {
             Some(Box::new(IngressAclEnforcer {
                 policy_enforcer: self.enforcer.clone(),
                 interface_list: interface_list.clone(),
-                default_decision: match self.enforcer.default_permission {
-                    Permission::Allow => true,
-                    Permission::Deny => false,
-                },
+
                 zid,
             })),
             Some(Box::new(EgressAclEnforcer {
                 policy_enforcer: self.enforcer.clone(),
                 interface_list,
-                default_decision: match self.enforcer.default_permission {
-                    Permission::Allow => true,
-                    Permission::Deny => false,
-                },
                 zid,
             })),
         )
@@ -136,12 +132,12 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         _transport: &TransportMulticast,
     ) -> Option<EgressInterceptor> {
-        log::debug!("multicast is not enabled in interceptor");
+        log::debug!("[ACCESS LOG]: Transport Multicast is not enabled in interceptor");
         None
     }
 
     fn new_peer_multicast(&self, _transport: &TransportMulticast) -> Option<IngressInterceptor> {
-        log::debug!("multicast is not enabled in interceptor");
+        log::debug!("[ACCESS LOG]: Peer Multicast is not enabled in interceptor");
 
         None
     }
@@ -164,67 +160,63 @@ impl InterceptorTrait for IngressAclEnforcer {
             ..
         }) = &ctx.msg.body
         {
-            let mut decision = self.default_decision;
+            let mut decision = self.policy_enforcer.default_permission.clone();
             for subject in &self.interface_list {
-                match self.policy_enforcer.policy_decision_point(
-                    *subject,
-                    Action::Put,
-                    key_expr,
-                    self.default_decision,
-                ) {
-                    Ok(true) => {
-                        decision = true;
+                match self
+                    .policy_enforcer
+                    .policy_decision_point(*subject, Action::Put, key_expr)
+                {
+                    Ok(Permission::Allow) => {
+                        decision = Permission::Allow;
                         break;
                     }
-                    Ok(false) => {
-                        decision = false;
+                    Ok(Permission::Deny) => {
+                        decision = Permission::Deny;
                         continue;
                     }
                     Err(e) => {
-                        log::debug!("Authorization incomplete due to error {}", e);
+                        log::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
 
-            if !decision {
-                log::debug!("{} is unauthorized to Put", self.zid);
+            if decision == Permission::Deny {
+                log::debug!("[ACCESS LOG]: {} is unauthorized to Put", self.zid);
                 return None;
             }
-            log::trace!("{} is authorized access to Put", self.zid);
+            log::trace!("[ACCESS LOG]: {} is authorized access to Put", self.zid);
         } else if let NetworkBody::Request(Request {
             payload: RequestBody::Query(_),
             ..
         }) = &ctx.msg.body
         {
-            let mut decision = self.default_decision;
+            let mut decision = self.policy_enforcer.default_permission.clone();
             for subject in &self.interface_list {
-                match self.policy_enforcer.policy_decision_point(
-                    *subject,
-                    Action::Get,
-                    key_expr,
-                    self.default_decision,
-                ) {
-                    Ok(true) => {
-                        decision = true;
+                match self
+                    .policy_enforcer
+                    .policy_decision_point(*subject, Action::Get, key_expr)
+                {
+                    Ok(Permission::Allow) => {
+                        decision = Permission::Allow;
                         break;
                     }
-                    Ok(false) => {
-                        decision = false;
+                    Ok(Permission::Deny) => {
+                        decision = Permission::Deny;
                         continue;
                     }
                     Err(e) => {
-                        log::debug!("Authorization incomplete due to error {}", e);
+                        log::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
-            if !decision {
-                log::warn!("{} is unauthorized to Query/Get", self.zid);
+            if decision == Permission::Deny {
+                log::warn!("[ACCESS LOG]: {} is unauthorized to Query/Get", self.zid);
                 return None;
             }
 
-            log::trace!("{} is authorized access to Query", self.zid);
+            log::trace!("[ACCESS LOG]: {} is authorized access to Query", self.zid);
         }
         Some(ctx)
     }
@@ -247,72 +239,83 @@ impl InterceptorTrait for EgressAclEnforcer {
             ..
         }) = &ctx.msg.body
         {
-            let mut decision = self.default_decision;
+            let mut decision = self.policy_enforcer.default_permission.clone();
             for subject in &self.interface_list {
                 match self.policy_enforcer.policy_decision_point(
                     *subject,
                     Action::DeclareSubscriber,
                     key_expr,
-                    self.default_decision,
                 ) {
-                    Ok(true) => {
-                        decision = true;
+                    Ok(Permission::Allow) => {
+                        decision = Permission::Allow;
                         break;
                     }
-                    Ok(false) => {
-                        decision = false;
+                    Ok(Permission::Deny) => {
+                        decision = Permission::Deny;
                         continue;
                     }
                     Err(e) => {
-                        log::debug!("Authorization incomplete due to error {}", e);
+                        log::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
-            if !decision {
-                log::debug!("{} is unauthorized to be Subscriber", self.zid);
+            if decision == Permission::Deny {
+                log::debug!(
+                    "[ACCESS LOG]: {} is unauthorized to be Subscriber",
+                    self.zid
+                );
                 return None;
             }
 
-            log::trace!("{} is authorized access to be Subscriber", self.zid);
+            log::trace!(
+                "[ACCESS LOG]: {} is authorized access to be Subscriber",
+                self.zid
+            );
         } else if let NetworkBody::Request(Request {
             payload: RequestBody::Query(_),
             ..
         }) = &ctx.msg.body
         {
-            let mut decision = self.default_decision;
+            let mut decision = self.policy_enforcer.default_permission.clone();
             for subject in &self.interface_list {
                 match self.policy_enforcer.policy_decision_point(
                     *subject,
                     Action::DeclareQueryable,
                     key_expr,
-                    self.default_decision,
                 ) {
-                    Ok(true) => {
-                        decision = true;
+                    Ok(Permission::Allow) => {
+                        decision = Permission::Allow;
                         break;
                     }
-                    Ok(false) => {
-                        decision = false;
+                    Ok(Permission::Deny) => {
+                        decision = Permission::Deny;
                         continue;
                     }
                     Err(e) => {
-                        log::debug!("Authorization incomplete due to error {}", e);
+                        log::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
-            if !decision {
-                log::debug!("{} is unauthorized to be Queryable", self.zid);
+            if decision == Permission::Deny {
+                log::debug!("[ACCESS LOG]: {} is unauthorized to be Queryable", self.zid);
                 return None;
             }
 
-            log::trace!("{} is authorized access to be Queryable", self.zid);
+            log::trace!(
+                "[ACCESS LOG]: {} is authorized access to be Queryable",
+                self.zid
+            );
         }
 
         Some(ctx)
     }
 }
+
+// pub fn decide_permission() -> ZResult<Permission> {
+//     Ok(Permission::Deny)
+// }
 
 #[cfg(tests)]
 mod tests {
