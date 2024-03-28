@@ -51,15 +51,12 @@ pub struct SharedMemoryClientSetBuilder;
 impl SharedMemoryClientSetBuilder {
     /// Add client to the storage (without including the default client set)
     #[zenoh_macros::unstable_doc]
-    pub fn with_client<Tclient>(
+    pub fn with_client(
         self,
         id: ProtocolID,
-        client: Box<Tclient>,
-    ) -> SharedMemoryClientStorageBuilder
-    where
-        Tclient: SharedMemoryClient + 'static,
-    {
-        let clients = HashMap::from([(id, client as Box<dyn SharedMemoryClient>)]);
+        client: Box<dyn SharedMemoryClient>,
+    ) -> SharedMemoryClientStorageBuilder {
+        let clients = HashMap::from([(id, client)]);
         SharedMemoryClientStorageBuilder::new(clients)
     }
 
@@ -85,10 +82,11 @@ impl SharedMemoryClientStorageBuilder {
 
     /// Add client to the storage
     #[zenoh_macros::unstable_doc]
-    pub fn with_client<Tclient>(mut self, id: ProtocolID, client: Box<Tclient>) -> ZResult<Self>
-    where
-        Tclient: SharedMemoryClient + 'static,
-    {
+    pub fn with_client(
+        mut self,
+        id: ProtocolID,
+        client: Box<dyn SharedMemoryClient>,
+    ) -> ZResult<Self> {
         match self.clients.entry(id) {
             std::collections::hash_map::Entry::Occupied(occupied) => {
                 bail!("Client already exists for id {id}: {:?}!", occupied)
