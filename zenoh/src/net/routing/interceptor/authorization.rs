@@ -80,7 +80,6 @@ impl PolicyEnforcer {
                         let mut action_rule: Vec<KeTreeRule> = Vec::new();
                         for _j in 0..NUMBER_OF_PERMISSIONS {
                             let permission_rule = KeTreeRule::new();
-                            //
                             action_rule.push(permission_rule);
                         }
                         rule.0.push(action_rule);

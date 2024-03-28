@@ -80,65 +80,61 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        let mut zid: ZenohId = ZenohId::default();
         match transport.get_zid() {
-            Ok(id) => {
-                zid = id;
-            }
-            Err(e) => {
-                log::error!("[ACCESS LOG]: Failed to get zid with error :{}", e);
-                return (None, None);
-            }
-        }
-        let mut interface_list: Vec<i32> = Vec::new();
-        match transport.get_links() {
-            Ok(links) => {
-                for link in links {
-                    let enforcer = self.enforcer.clone();
-                    if let Some(subject_map) = &enforcer.subject_map {
-                        for face in link.interfaces {
-                            let subject = &Subject::Interface(face);
-                            if let Some(val) = subject_map.get(subject) {
-                                interface_list.push(*val);
+            Ok(zid) => {
+                let mut interface_list: Vec<i32> = Vec::new();
+                match transport.get_links() {
+                    Ok(links) => {
+                        for link in links {
+                            let enforcer = self.enforcer.clone();
+                            if let Some(subject_map) = &enforcer.subject_map {
+                                for face in link.interfaces {
+                                    let subject = &Subject::Interface(face);
+                                    if let Some(val) = subject_map.get(subject) {
+                                        interface_list.push(*val);
+                                    }
+                                }
                             }
                         }
                     }
+                    Err(e) => {
+                        log::error!(
+                            "[ACCESS LOG]: Couldn't get interface list with error: {}",
+                            e
+                        );
+                        return (None, None);
+                    }
                 }
+                (
+                    Some(Box::new(IngressAclEnforcer {
+                        policy_enforcer: self.enforcer.clone(),
+                        interface_list: interface_list.clone(),
+                        zid,
+                    })),
+                    Some(Box::new(EgressAclEnforcer {
+                        policy_enforcer: self.enforcer.clone(),
+                        interface_list,
+                        zid,
+                    })),
+                )
             }
             Err(e) => {
-                log::error!(
-                    "[ACCESS LOG]: Couldn't get interface list with error: {}",
-                    e
-                );
-                return (None, None);
+                log::error!("[ACCESS LOG]: Failed to get zid with error :{}", e);
+                (None, None)
             }
         }
-        (
-            Some(Box::new(IngressAclEnforcer {
-                policy_enforcer: self.enforcer.clone(),
-                interface_list: interface_list.clone(),
-
-                zid,
-            })),
-            Some(Box::new(EgressAclEnforcer {
-                policy_enforcer: self.enforcer.clone(),
-                interface_list,
-                zid,
-            })),
-        )
     }
 
     fn new_transport_multicast(
         &self,
         _transport: &TransportMulticast,
     ) -> Option<EgressInterceptor> {
-        log::debug!("[ACCESS LOG]: Transport Multicast is not enabled in interceptor");
+        log::debug!("[ACCESS LOG]: Transport Multicast is disabled in interceptor");
         None
     }
 
     fn new_peer_multicast(&self, _transport: &TransportMulticast) -> Option<IngressInterceptor> {
-        log::debug!("[ACCESS LOG]: Peer Multicast is not enabled in interceptor");
-
+        log::debug!("[ACCESS LOG]: Peer Multicast is disabled in interceptor");
         None
     }
 }
@@ -308,17 +304,6 @@ impl InterceptorTrait for EgressAclEnforcer {
                 self.zid
             );
         }
-
         Some(ctx)
     }
-}
-
-// pub fn decide_permission() -> ZResult<Permission> {
-//     Ok(Permission::Deny)
-// }
-
-#[cfg(tests)]
-mod tests {
-
-    pub fn allow_then_deny() {}
 }
