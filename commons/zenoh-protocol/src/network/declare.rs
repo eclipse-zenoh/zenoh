@@ -31,7 +31,7 @@ pub mod flag {
 }
 
 /// Flags:
-/// - I: Interest       If I==1 then the declare is in a response of an Interest with future==false
+/// - I: Interest       If I==1 then the declare is in a response to an Interest with future==false
 /// - X: Reserved
 /// - Z: Extension      If Z==1 then at least one extension is present
 ///
