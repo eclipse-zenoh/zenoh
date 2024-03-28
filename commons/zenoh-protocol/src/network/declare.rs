@@ -25,7 +25,7 @@ pub use subscriber::*;
 pub use token::*;
 
 pub mod flag {
-    pub const I: u8 = 1 << 5; // 0x20 Interest      if I==1 then the declare is in a response of an Interest with future==false
+    pub const I: u8 = 1 << 5; // 0x20 Interest      if I==1 then the declare is in a response to an Interest with future==false
                               // pub const X: u8 = 1 << 6; // 0x40 Reserved
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
