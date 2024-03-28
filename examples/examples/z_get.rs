@@ -28,10 +28,6 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Sending Query '{selector}'...");
-    // let replies = match value {
-    //     Some(value) => session.get(&selector).payload(value),
-    //     None => session.get(&selector),
-    // }
     let replies = session
         .get(&selector)
         .value(value.map(Value::from))
