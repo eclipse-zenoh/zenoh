@@ -579,6 +579,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives0.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -606,6 +607,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives0.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -627,6 +629,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives1.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -654,6 +657,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives1.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -675,6 +679,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives2.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
