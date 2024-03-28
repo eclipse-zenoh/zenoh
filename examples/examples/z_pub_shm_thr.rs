@@ -19,7 +19,7 @@ use zenoh::sample::builder::QoSBuilderTrait;
 use zenoh::shm::SharedMemoryManager;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();

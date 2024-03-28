@@ -14,9 +14,6 @@
 use crate::config;
 #[cfg(not(target_os = "macos"))]
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
-use async_io::Async;
-use async_std::fs::remove_file;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use filepath::FilePath;
 use nix::libc;
@@ -26,11 +23,17 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::{File, OpenOptions};
+use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::sync::Arc;
+use tokio::fs::remove_file;
+use tokio::io::unix::AsyncFd;
+use tokio::io::Interest;
+use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_runtime::ZRuntime;
 
 use unix_named_pipe::{create, open_write};
 
@@ -90,12 +93,12 @@ impl Invitation {
 }
 
 struct PipeR {
-    pipe: Async<File>,
+    pipe: AsyncFd<File>,
 }
 
 impl Drop for PipeR {
     fn drop(&mut self) {
-        if let Ok(path) = self.pipe.as_mut().path() {
+        if let Ok(path) = self.pipe.get_ref().path() {
             let _ = unlink(&path);
         }
     }
@@ -105,38 +108,38 @@ impl PipeR {
         // create, open and lock named pipe
         let pipe_file = Self::create_and_open_unique_pipe_for_read(path, access_mode).await?;
         // create async_io wrapper for pipe's file descriptor
-        let pipe = Async::new(pipe_file)?;
+        let pipe = AsyncFd::new(pipe_file)?;
         Ok(Self { pipe })
     }
 
     async fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> ZResult<usize> {
         let result = self
             .pipe
-            .read_with_mut(|pipe| match pipe.read(&mut buf[..]) {
-                Ok(0) => Err(async_std::io::ErrorKind::WouldBlock.into()),
+            .async_io_mut(Interest::READABLE, |pipe| match pipe.read(&mut buf[..]) {
+                Ok(0) => Err(ErrorKind::WouldBlock.into()),
                 Ok(val) => Ok(val),
                 Err(e) => Err(e),
             })
             .await?;
-        ZResult::Ok(result)
+        Ok(result)
     }
 
     async fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> ZResult<()> {
         let mut r: usize = 0;
         self.pipe
-            .read_with_mut(|pipe| match pipe.read(&mut buf[r..]) {
-                Ok(0) => Err(async_std::io::ErrorKind::WouldBlock.into()),
+            .async_io_mut(Interest::READABLE, |pipe| match pipe.read(&mut buf[r..]) {
+                Ok(0) => Err(ErrorKind::WouldBlock.into()),
                 Ok(val) => {
                     r += val;
                     if r == buf.len() {
                         return Ok(());
                     }
-                    Err(async_std::io::ErrorKind::WouldBlock.into())
+                    Err(ErrorKind::WouldBlock.into())
                 }
                 Err(e) => Err(e),
             })
             .await?;
-        ZResult::Ok(())
+        Ok(())
     }
 
     async fn create_and_open_unique_pipe_for_read(path_r: &str, access_mode: u32) -> ZResult<File> {
@@ -176,45 +179,45 @@ impl PipeR {
 }
 
 struct PipeW {
-    pipe: Async<File>,
+    pipe: AsyncFd<File>,
 }
 impl PipeW {
     async fn new(path: &str) -> ZResult<Self> {
         // create, open and lock named pipe
         let pipe_file = Self::open_unique_pipe_for_write(path)?;
         // create async_io wrapper for pipe's file descriptor
-        let pipe = Async::new(pipe_file)?;
+        let pipe = AsyncFd::new(pipe_file)?;
         Ok(Self { pipe })
     }
 
     async fn write<'a>(&'a mut self, buf: &'a [u8]) -> ZResult<usize> {
         let result = self
             .pipe
-            .write_with_mut(|pipe| match pipe.write(buf) {
-                Ok(0) => Err(async_std::io::ErrorKind::WouldBlock.into()),
+            .async_io_mut(Interest::WRITABLE, |pipe| match pipe.write(buf) {
+                Ok(0) => Err(ErrorKind::WouldBlock.into()),
                 Ok(val) => Ok(val),
                 Err(e) => Err(e),
             })
             .await?;
-        ZResult::Ok(result)
+        Ok(result)
     }
 
     async fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> ZResult<()> {
         let mut r: usize = 0;
         self.pipe
-            .write_with_mut(|pipe| match pipe.write(&buf[r..]) {
-                Ok(0) => Err(async_std::io::ErrorKind::WouldBlock.into()),
+            .async_io_mut(Interest::WRITABLE, |pipe| match pipe.write(&buf[r..]) {
+                Ok(0) => Err(ErrorKind::WouldBlock.into()),
                 Ok(val) => {
                     r += val;
                     if r == buf.len() {
                         return Ok(());
                     }
-                    Err(async_std::io::ErrorKind::WouldBlock.into())
+                    Err(ErrorKind::WouldBlock.into())
                 }
                 Err(e) => Err(e),
             })
             .await?;
-        ZResult::Ok(())
+        Ok(())
     }
 
     fn open_unique_pipe_for_write(path: &str) -> ZResult<File> {
@@ -280,44 +283,50 @@ async fn handle_incoming_connections(
 }
 
 struct UnicastPipeListener {
-    listening_task_handle: JoinHandle<ZResult<()>>,
     uplink_locator: Locator,
+    token: CancellationToken,
 }
 impl UnicastPipeListener {
     async fn listen(endpoint: EndPoint, manager: Arc<NewLinkChannelSender>) -> ZResult<Self> {
-        let (path_uplink, path_downlink, access_mode) = parse_pipe_endpoint(&endpoint);
-        let local = Locator::new(
-            endpoint.protocol(),
-            path_uplink.as_str(),
-            endpoint.metadata(),
-        )?;
+        let (path, access_mode) = endpoint_to_pipe_path(&endpoint);
+        let (path_uplink, path_downlink) = split_pipe_path(&path);
+        let local = Locator::new(endpoint.protocol(), path, endpoint.metadata())?;
 
         // create request channel
         let mut request_channel = PipeR::new(&path_uplink, access_mode).await?;
 
+        let token = CancellationToken::new();
+        let c_token = token.clone();
+
+        // WARN: The spawn_blocking is mandatory verified by the ping/pong test
         // create listening task
-        let listening_task_handle = async_std::task::spawn(async move {
-            loop {
-                let _ = handle_incoming_connections(
-                    &endpoint,
-                    &manager,
-                    &mut request_channel,
-                    &path_downlink,
-                    &path_uplink,
-                    access_mode,
-                )
-                .await;
-            }
+        tokio::task::spawn_blocking(move || {
+            ZRuntime::Acceptor.block_on(async move {
+                loop {
+                    tokio::select! {
+                        _ = handle_incoming_connections(
+                            &endpoint,
+                            &manager,
+                            &mut request_channel,
+                            &path_downlink,
+                            &path_uplink,
+                            access_mode,
+                        ) => {}
+
+                        _ = c_token.cancelled() => break
+                    }
+                }
+            })
         });
 
         Ok(Self {
-            listening_task_handle,
             uplink_locator: local,
+            token,
         })
     }
 
-    async fn stop_listening(self) {
-        self.listening_task_handle.cancel().await;
+    fn stop_listening(self) {
+        self.token.cancel();
     }
 }
 
@@ -369,7 +378,8 @@ async fn dedicate_pipe(
 struct UnicastPipeClient;
 impl UnicastPipeClient {
     async fn connect_to(endpoint: EndPoint) -> ZResult<UnicastPipe> {
-        let (path_uplink, path_downlink, access_mode) = parse_pipe_endpoint(&endpoint);
+        let (path, access_mode) = endpoint_to_pipe_path(&endpoint);
+        let (path_uplink, path_downlink) = split_pipe_path(&path);
 
         // open the request channel
         // this channel would be used to invite listener to the dedicated channel
@@ -528,14 +538,14 @@ impl fmt::Debug for UnicastPipe {
 
 pub struct LinkManagerUnicastPipe {
     manager: Arc<NewLinkChannelSender>,
-    listeners: async_std::sync::RwLock<HashMap<EndPoint, UnicastPipeListener>>,
+    listeners: tokio::sync::RwLock<HashMap<EndPoint, UnicastPipeListener>>,
 }
 
 impl LinkManagerUnicastPipe {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager: Arc::new(manager),
-            listeners: async_std::sync::RwLock::new(HashMap::new()),
+            listeners: tokio::sync::RwLock::new(HashMap::new()),
         }
     }
 }
@@ -563,38 +573,38 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
         let removed = zasyncwrite!(self.listeners).remove(endpoint);
         match removed {
             Some(val) => {
-                val.stop_listening().await;
+                val.stop_listening();
                 Ok(())
             }
             None => bail!("No listener found for endpoint {}", endpoint),
         }
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        async_std::task::block_on(async { zasyncread!(self.listeners) })
-            .keys()
-            .cloned()
-            .collect()
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners).keys().cloned().collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
-        async_std::task::block_on(async { zasyncread!(self.listeners) })
+    async fn get_locators(&self) -> Vec<Locator> {
+        zasyncread!(self.listeners)
             .values()
             .map(|v| v.uplink_locator.clone())
             .collect()
     }
 }
 
-fn parse_pipe_endpoint(endpoint: &EndPoint) -> (String, String, u32) {
-    let address = endpoint.address();
-    let path = address.as_str();
-    let path_uplink = path.to_string() + "_uplink";
-    let path_downlink = path.to_string() + "_downlink";
+fn endpoint_to_pipe_path(endpoint: &EndPoint) -> (String, u32) {
+    let path = endpoint.address().to_string();
     let access_mode = endpoint
         .config()
         .get(config::FILE_ACCESS_MASK)
         .map_or(*FILE_ACCESS_MASK, |val| {
             val.parse().unwrap_or(*FILE_ACCESS_MASK)
         });
-    (path_uplink, path_downlink, access_mode)
+    (path, access_mode)
+}
+
+fn split_pipe_path(path: &str) -> (String, String) {
+    let path_uplink = format!("{path}_uplink");
+    let path_downlink = format!("{path}_downlink");
+    (path_uplink, path_downlink)
 }

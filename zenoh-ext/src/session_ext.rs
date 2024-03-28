@@ -57,7 +57,8 @@ impl<'a> SessionExt<'a, 'a> for Session {
 impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     /// Examples:
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::config::ModeDependentValue::Unique;
     /// use zenoh_ext::SessionExt;
@@ -66,10 +67,10 @@ impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     /// config.timestamping.set_enabled(Some(Unique(true)));
     /// let session = zenoh::open(config).res().await.unwrap().into_arc();
     /// let publication_cache = session.declare_publication_cache("key/expression").res().await.unwrap();
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     publication_cache.key_expr();
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
         &'s self,
