@@ -448,10 +448,12 @@ impl HatBaseTrait for HatCode {
 }
 
 struct HatContext {
+    #[allow(dead_code)]
     router_subs: HashSet<ZenohId>,
     peer_subs: HashSet<ZenohId>,
     peer_qabls: HashMap<ZenohId, QueryableInfoType>,
     router_tokens: HashSet<ZenohId>,
+    #[allow(dead_code)]
     peer_tokens: HashSet<ZenohId>,
 }
 

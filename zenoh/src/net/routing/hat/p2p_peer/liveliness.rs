@@ -24,6 +24,8 @@ use crate::net::routing::{
 
 use super::HatCode;
 
+// TODO(fuzzypixelz): Remove this
+#[allow(unused_variables)]
 impl HatLivelinessTrait for HatCode {
     fn declare_liveliness(
         &self,
