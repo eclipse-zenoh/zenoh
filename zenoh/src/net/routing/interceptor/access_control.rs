@@ -1,10 +1,30 @@
+//
+// Copyright (c) 2024 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This module is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
+
 use crate::KeyExpr;
 use std::any::Any;
 use std::sync::Arc;
 use zenoh_config::{AclConfig, Action, Permission, Subject, ZenohId};
 use zenoh_protocol::{
-    network::{NetworkBody, NetworkMessage, Push, Request, Response},
-    zenoh::{PushBody, RequestBody, ResponseBody},
+    network::{NetworkBody, NetworkMessage, Push, Request},
+    zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
@@ -61,41 +81,49 @@ impl InterceptorFactoryTrait for AclEnforcer {
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         let mut zid: ZenohId = ZenohId::default();
-        if let Ok(id) = transport.get_zid() {
-            zid = id;
-        } else {
-            log::error!("Error in trying to get zid");
+        match transport.get_zid() {
+            Ok(id) => {
+                zid = id;
+            }
+            Err(e) => {
+                log::error!("Failed to get zid with error :{}", e);
+                return (None, None);
+            }
         }
         let mut interface_list: Vec<i32> = Vec::new();
-        if let Ok(links) = transport.get_links() {
-            for link in links {
-                let enforcer = self.enforcer.clone();
-                if let Some(subject_map) = &enforcer.subject_map {
-                    for face in link.interfaces {
-                        let subject = &Subject::Interface(face);
-                        match subject_map.get(subject) {
-                            Some(val) => interface_list.push(*val),
-                            None => continue,
+        match transport.get_links() {
+            Ok(links) => {
+                for link in links {
+                    let enforcer = self.enforcer.clone();
+                    if let Some(subject_map) = &enforcer.subject_map {
+                        for face in link.interfaces {
+                            let subject = &Subject::Interface(face);
+                            if let Some(val) = subject_map.get(subject) {
+                                interface_list.push(*val);
+                            }
                         }
                     }
                 }
             }
+            Err(e) => {
+                log::error!("Couldn't get interface list with error: {}", e);
+                return (None, None);
+            }
         }
-        let policy_enforcer = self.enforcer.clone();
         (
             Some(Box::new(IngressAclEnforcer {
-                policy_enforcer: policy_enforcer.clone(),
+                policy_enforcer: self.enforcer.clone(),
                 interface_list: interface_list.clone(),
-                default_decision: match policy_enforcer.default_permission {
+                default_decision: match self.enforcer.default_permission {
                     Permission::Allow => true,
                     Permission::Deny => false,
                 },
                 zid,
             })),
             Some(Box::new(EgressAclEnforcer {
-                policy_enforcer: policy_enforcer.clone(),
+                policy_enforcer: self.enforcer.clone(),
                 interface_list,
-                default_decision: match policy_enforcer.default_permission {
+                default_decision: match self.enforcer.default_permission {
                     Permission::Allow => true,
                     Permission::Deny => false,
                 },
@@ -108,10 +136,13 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         _transport: &TransportMulticast,
     ) -> Option<EgressInterceptor> {
+        log::debug!("multicast is not enabled in interceptor");
         None
     }
 
     fn new_peer_multicast(&self, _transport: &TransportMulticast) -> Option<IngressInterceptor> {
+        log::debug!("multicast is not enabled in interceptor");
+
         None
     }
 }
@@ -131,18 +162,9 @@ impl InterceptorTrait for IngressAclEnforcer {
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
-        })
-        | NetworkBody::Request(Request {
-            payload: RequestBody::Put(_),
-            ..
-        })
-        | NetworkBody::Response(Response {
-            payload: ResponseBody::Put(_),
-            ..
         }) = &ctx.msg.body
         {
             let mut decision = self.default_decision;
-
             for subject in &self.interface_list {
                 match self.policy_enforcer.policy_decision_point(
                     *subject,
@@ -154,19 +176,22 @@ impl InterceptorTrait for IngressAclEnforcer {
                         decision = true;
                         break;
                     }
-                    Ok(false) => continue,
+                    Ok(false) => {
+                        decision = false;
+                        continue;
+                    }
                     Err(e) => {
-                        log::error!("Authorization incomplete due to error {}", e);
+                        log::debug!("Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
 
             if !decision {
-                log::warn!("{} is unauthorized to Put", self.zid);
+                log::debug!("{} is unauthorized to Put", self.zid);
                 return None;
             }
-            log::info!("{} is authorized access to Put", self.zid);
+            log::trace!("{} is authorized access to Put", self.zid);
         } else if let NetworkBody::Request(Request {
             payload: RequestBody::Query(_),
             ..
@@ -184,9 +209,12 @@ impl InterceptorTrait for IngressAclEnforcer {
                         decision = true;
                         break;
                     }
-                    Ok(false) => continue,
+                    Ok(false) => {
+                        decision = false;
+                        continue;
+                    }
                     Err(e) => {
-                        log::error!("Authorization incomplete due to error {}", e);
+                        log::debug!("Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
@@ -196,7 +224,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 return None;
             }
 
-            log::info!("{} is authorized access to Query", self.zid);
+            log::trace!("{} is authorized access to Query", self.zid);
         }
         Some(ctx)
     }
@@ -205,7 +233,6 @@ impl InterceptorTrait for IngressAclEnforcer {
 impl InterceptorTrait for EgressAclEnforcer {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(key_expr.to_string()))
-        // None
     }
     fn intercept(
         &self,
@@ -232,19 +259,22 @@ impl InterceptorTrait for EgressAclEnforcer {
                         decision = true;
                         break;
                     }
-                    Ok(false) => continue,
+                    Ok(false) => {
+                        decision = false;
+                        continue;
+                    }
                     Err(e) => {
-                        log::error!("Authorization incomplete due to error {}", e);
+                        log::debug!("Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
             if !decision {
-                log::warn!("{} is unauthorized to be Subscriber", self.zid);
+                log::debug!("{} is unauthorized to be Subscriber", self.zid);
                 return None;
             }
 
-            log::info!("{} is authorized access to be Subscriber", self.zid);
+            log::trace!("{} is authorized access to be Subscriber", self.zid);
         } else if let NetworkBody::Request(Request {
             payload: RequestBody::Query(_),
             ..
@@ -262,21 +292,30 @@ impl InterceptorTrait for EgressAclEnforcer {
                         decision = true;
                         break;
                     }
-                    Ok(false) => continue,
+                    Ok(false) => {
+                        decision = false;
+                        continue;
+                    }
                     Err(e) => {
-                        log::error!("Authorization incomplete due to error {}", e);
+                        log::debug!("Authorization incomplete due to error {}", e);
                         return None;
                     }
                 }
             }
             if !decision {
-                log::warn!("{} is unauthorized to be Queryable", self.zid);
+                log::debug!("{} is unauthorized to be Queryable", self.zid);
                 return None;
             }
 
-            log::info!("{} is authorized access to be Queryable", self.zid);
+            log::trace!("{} is authorized access to be Queryable", self.zid);
         }
 
         Some(ctx)
     }
+}
+
+#[cfg(tests)]
+mod tests {
+
+    pub fn allow_then_deny() {}
 }

@@ -100,11 +100,8 @@ pub struct DownsamplingItemConf {
     pub flow: DownsamplingFlow,
 }
 
-//adding datatypes needed for ACL Config
-
 #[derive(Serialize, Debug, Deserialize, Clone)]
-
-pub struct ConfigRule {
+pub struct AclConfigRules {
     pub interface: Vec<String>,
     pub key_expr: Vec<String>,
     pub action: Vec<Action>,
@@ -112,19 +109,17 @@ pub struct ConfigRule {
 }
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct PolicyRule {
-    pub subject: Subject, //Subject
+    pub subject: Subject,
     pub key_expr: String,
-    pub action: Action,         //Action
-    pub permission: Permission, //Permission
+    pub action: Action,
+    pub permission: Permission,
 }
 
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(untagged)]
 #[serde(rename_all = "snake_case")]
-
 pub enum Subject {
     Interface(String),
-    //Username(String)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
@@ -139,7 +134,6 @@ pub const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum (change according 
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "lowercase")]
-
 pub enum Permission {
     Allow,
     Deny,
@@ -480,7 +474,7 @@ validated_struct::validator! {
             pub acl: AclConfig {
                 pub enabled: bool,
                 pub default_permission: Permission,
-                pub rules: Option<Vec<ConfigRule>>
+                pub rules: Option<Vec<AclConfigRules>>
             }
         },
         /// Configuration of the admin space.

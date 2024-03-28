@@ -1,0 +1,49 @@
+{
+  mode: "router",
+  listen: {
+    endpoints: [
+      "tcp/127.0.0.1:7447",
+    ],
+  },
+  scouting: {
+    multicast: {
+      enabled: false,
+    },
+    gossip: {
+      enabled: false,
+    },
+  },
+  transport: {
+    acl: {
+      "enabled": true,
+      "default_permission": "deny",
+      "rules":
+      [
+        {
+          "permission": "allow",
+          "action": [
+            "put",
+          ],
+          "key_expr": [
+            "demo/example/**"
+          ],
+          "interface": [
+            "lo0"
+          ]
+        },
+        {
+          "permission": "deny",
+          "action": [
+            "declare_subscriber"
+          ],
+          "key_expr": [
+            "demo/example/**"
+          ],
+          "interface": [
+            "lo0"
+          ]
+        },
+      ]
+    }
+  },
+}

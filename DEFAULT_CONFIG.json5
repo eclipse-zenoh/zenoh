@@ -8,7 +8,7 @@
   /// WARNING: this id must be unique in your zenoh network.
   // id: "1234567890abcdef",
   /// The node's mode (router, peer or client)
-  mode: "peer",
+  mode: "router",
   /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenohd and available in admin space @/router/<id>
   metadata: {
     name: "strawberry",
@@ -21,22 +21,22 @@
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value or different values for router, peer and client.
-    timeout_ms: { router: -1, peer: -1, client: 0 },
+    timeout_ms: { router: -1, peer: -1, client: 0
+    },
 
     endpoints: [
       // "<proto>/<address>"
     ],
-
     /// Global connect configuration, 
     /// Accepts a single value or different values for router, peer and client.
     /// The configuration can also be specified for the separate endpoint
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#retry_period_init_ms=20000;retry_period_max_ms=10000"
-     
     /// exit from application, if timeout exceed
-    exit_on_failure: { router: false, peer: false, client: true },
+    exit_on_failure: { router: false, peer: false, client: true
+    },
     /// connect establishing retry configuration 
-    retry: { 
+    retry: {
       /// intial wait timeout until next connect try
       period_init_ms: 1000,
       /// maximum wait timeout until next connect try
@@ -58,17 +58,15 @@
     endpoints: [
       // "<proto>/<address>"
     ],
-
     /// Global listen configuration, 
     /// Accepts a single value or different values for router, peer and client.
     /// The configuration can also be specified for the separate endpoint
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#exit_on_failure=false;retry_period_max_ms=1000"
-    
     /// exit from application, if timeout exceed
     exit_on_failure: true,
     /// listen retry configuration 
-    retry: { 
+    retry: {
       /// intial wait timeout until next try
       period_init_ms: 1000,
       /// maximum wait timeout until next try
@@ -86,7 +84,7 @@
     /// The multicast scouting configuration.
     multicast: {
       /// Whether multicast scouting is enabled or not
-      enabled: true,
+      enabled: false,
       /// The socket which should be used for multicast scouting
       address: "224.0.0.224:7446",
       /// The network interface which should be used for multicast scouting
@@ -97,12 +95,12 @@
       autoconnect: { router: "", peer: "router|peer"
       },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
-      listen: true,
+      listen: false,
     },
     /// The gossip scouting configuration.
     gossip: {
       /// Whether gossip scouting is enabled or not
-      enabled: true,
+      enabled: false,
       /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
       /// When false, gossip scouting informations are only propagated to the next hop.
       /// Activating multihop gossip implies more scouting traffic and a lower scalability.
@@ -330,38 +328,49 @@
         known_keys_file: null,
       },
     },
-    // acl: {
-    //   "enabled": false, //[true/false] acl will be activated only if this is set to true
-    //   "default_permission": "deny", //[deny/allow] default permission is deny (even if this is left empty or not specified)
-    //   "rules": //[action,permission,key_expression,subject]
-    //   [
-    //     {
-    //       "action": [
-    //         "put",
-    //         "get"
-    //       ],
-    //       "permission": "allow",
-    //       "key_expr": [
-    //         "test/thr"
-    //       ],
-    //       "interface": [
-    //         "lo0"
-    //       ]
-    //     },
-    //     {
-    //       "action": [
-    //         "declare_subscriber"
-    //       ],
-    //       "permission": "allow",
-    //       "interface": [
-    //         "lo0"
-    //       ],
-    //       "key_expr": [
-    //         "test/thr"
-    //       ]
-    //     }
-    //   ]
-    // }
+    acl: {
+      "enabled": true, //[true/false] acl will be activated only if this is set to true
+      "default_permission": "deny", //[deny/allow] default permission is deny (even if this is left empty or not specified)
+      "rules": 
+      [
+        {
+          "action": [
+            "put"
+          ],
+          "permission": "allow",
+          "key_expr": [
+            "test/thr"
+          ],
+          "interface": [
+            "lo0"
+          ]
+        },
+        {
+          "action": [
+            "declare_subscriber"
+          ],
+          "permission": "allow",
+          "interface": [
+            "lo0"
+          ],
+          "key_expr": [
+            "test/thr"
+          ]
+        },
+        // {
+        //   "action": [
+        //     "get"
+        //   ],
+        //   "permission": "allow",
+        //   "key_expr": [
+        //     "demo/example/**"
+        //   ],
+        //   "interface": [
+        //     "lo0"
+        //   ]
+        // }
+      ]
+    }
   },
   /// Configure the Admin Space
   /// Unstable: this configuration part works as advertised, but may change in a future release

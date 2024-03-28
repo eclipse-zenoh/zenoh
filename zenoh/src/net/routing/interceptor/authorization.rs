@@ -1,7 +1,27 @@
+//
+// Copyright (c) 2024 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This module is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
+
 use ahash::RandomState;
 use std::collections::HashMap;
 use zenoh_config::{
-    AclConfig, Action, ConfigRule, Permission, PolicyRule, Subject, NUMBER_OF_ACTIONS,
+    AclConfig, AclConfigRules, Action, Permission, PolicyRule, Subject, NUMBER_OF_ACTIONS,
     NUMBER_OF_PERMISSIONS,
 };
 use zenoh_keyexpr::keyexpr;
@@ -9,7 +29,7 @@ use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
 
 pub struct PolicyForSubject(Vec<Vec<KeTreeRule>>); //vec of actions over vec of permission for tree of ke for this
-pub struct PolicyMap(pub HashMap<i32, PolicyForSubject, RandomState>); //index of subject (i32) instead of subject (String)
+pub struct PolicyMap(HashMap<i32, PolicyForSubject, RandomState>); //index of subject (i32) instead of subject (String)
 
 type KeTreeRule = KeBoxTree<bool>;
 
@@ -21,7 +41,6 @@ pub struct PolicyEnforcer {
 }
 
 #[derive(Debug, Clone)]
-
 pub struct PolicyInformation {
     subject_map: HashMap<Subject, i32, RandomState>,
     policy_rules: Vec<PolicyRule>,
@@ -93,7 +112,7 @@ impl PolicyEnforcer {
     */
     pub fn policy_information_point(
         &self,
-        config_rule_set: Vec<ConfigRule>,
+        config_rule_set: Vec<AclConfigRules>,
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
