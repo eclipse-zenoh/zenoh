@@ -35,7 +35,7 @@ fn main() {
     let publisher = session
         .declare_publisher(key_expr_pong)
         .congestion_control(CongestionControl::Block)
-        .express(express)
+        .is_express(express)
         .res()
         .unwrap();
 

@@ -14,6 +14,7 @@
 
 use crate::sample::Attachment;
 use crate::sample::QoS;
+use crate::sample::QoSBuilder;
 use crate::sample::SourceInfo;
 use crate::Encoding;
 use crate::KeyExpr;
@@ -36,14 +37,17 @@ pub trait QoSBuilderTrait {
     /// Change the `express` policy to apply when routing the data.
     /// When express is set to `true`, then the message will not be batched.
     /// This usually has a positive impact on latency but negative impact on throughput.
-    fn express(self, is_express: bool) -> Self;
+    fn is_express(self, is_express: bool) -> Self;
 }
 
-pub trait SampleBuilderTrait {
+pub trait TimestampBuilderTrait {
     /// Sets of clears timestamp
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self;
     /// Sets timestamp
     fn with_timestamp(self, timestamp: Timestamp) -> Self;
+}
+
+pub trait SampleBuilderTrait {
     /// Attach source information
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self;
@@ -55,15 +59,14 @@ pub trait SampleBuilderTrait {
     fn with_attachment(self, attachment: Attachment) -> Self;
 }
 
-pub trait PutSampleBuilderTrait: SampleBuilderTrait {
+pub trait ValueBuilderTrait {
     /// Set the [`Encoding`]
     fn with_encoding(self, encoding: Encoding) -> Self;
+    /// Sets the payload
     fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
     where
         IntoPayload: Into<Payload>;
 }
-
-pub trait DeleteSampleBuilderTrait: SampleBuilderTrait {}
 
 #[derive(Debug)]
 pub struct SampleBuilder(Sample);
@@ -98,7 +101,7 @@ impl SampleBuilder {
     }
 }
 
-impl SampleBuilderTrait for SampleBuilder {
+impl TimestampBuilderTrait for SampleBuilder {
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self(Sample {
             timestamp,
@@ -109,7 +112,9 @@ impl SampleBuilderTrait for SampleBuilder {
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         self.with_timestamp_opt(Some(timestamp))
     }
+}
 
+impl SampleBuilderTrait for SampleBuilder {
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self(Sample {
@@ -134,22 +139,19 @@ impl SampleBuilderTrait for SampleBuilder {
 
 impl QoSBuilderTrait for SampleBuilder {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        Self(Sample {
-            qos: self.0.qos.with_congestion_control(congestion_control),
-            ..self.0
-        })
+        let qos: QoSBuilder = self.0.qos.into();
+        let qos = qos.congestion_control(congestion_control).res_sync();
+        Self(Sample { qos, ..self.0 })
     }
     fn priority(self, priority: Priority) -> Self {
-        Self(Sample {
-            qos: self.0.qos.with_priority(priority),
-            ..self.0
-        })
+        let qos: QoSBuilder = self.0.qos.into();
+        let qos = qos.priority(priority).res_sync();
+        Self(Sample { qos, ..self.0 })
     }
-    fn express(self, is_express: bool) -> Self {
-        Self(Sample {
-            qos: self.0.qos.with_express(is_express),
-            ..self.0
-        })
+    fn is_express(self, is_express: bool) -> Self {
+        let qos: QoSBuilder = self.0.qos.into();
+        let qos = qos.is_express(is_express).res_sync();
+        Self(Sample { qos, ..self.0 })
     }
 }
 
@@ -197,13 +199,16 @@ impl PutSampleBuilder {
     }
 }
 
-impl SampleBuilderTrait for PutSampleBuilder {
+impl TimestampBuilderTrait for PutSampleBuilder {
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self(self.0.with_timestamp(timestamp))
     }
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self(self.0.with_timestamp_opt(timestamp))
     }
+}
+
+impl SampleBuilderTrait for PutSampleBuilder {
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self(self.0.with_source_info(source_info))
@@ -225,12 +230,12 @@ impl QoSBuilderTrait for PutSampleBuilder {
     fn priority(self, priority: Priority) -> Self {
         Self(self.0.priority(priority))
     }
-    fn express(self, is_express: bool) -> Self {
-        Self(self.0.express(is_express))
+    fn is_express(self, is_express: bool) -> Self {
+        Self(self.0.is_express(is_express))
     }
 }
 
-impl PutSampleBuilderTrait for PutSampleBuilder {
+impl ValueBuilderTrait for PutSampleBuilder {
     fn with_encoding(self, encoding: Encoding) -> Self {
         Self(SampleBuilder(Sample {
             encoding,
@@ -291,13 +296,16 @@ impl DeleteSampleBuilder {
     }
 }
 
-impl SampleBuilderTrait for DeleteSampleBuilder {
+impl TimestampBuilderTrait for DeleteSampleBuilder {
     fn with_timestamp(self, timestamp: Timestamp) -> Self {
         Self(self.0.with_timestamp(timestamp))
     }
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self(self.0.with_timestamp_opt(timestamp))
     }
+}
+
+impl SampleBuilderTrait for DeleteSampleBuilder {
     #[zenoh_macros::unstable]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self(self.0.with_source_info(source_info))
@@ -319,12 +327,10 @@ impl QoSBuilderTrait for DeleteSampleBuilder {
     fn priority(self, priority: Priority) -> Self {
         Self(self.0.priority(priority))
     }
-    fn express(self, is_express: bool) -> Self {
-        Self(self.0.express(is_express))
+    fn is_express(self, is_express: bool) -> Self {
+        Self(self.0.is_express(is_express))
     }
 }
-
-impl DeleteSampleBuilderTrait for DeleteSampleBuilder {}
 
 impl From<Sample> for SampleBuilder {
     fn from(sample: Sample) -> Self {

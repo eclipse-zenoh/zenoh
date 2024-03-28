@@ -15,6 +15,8 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
+use zenoh_protocol::network::request;
+
 use crate::{query::Reply, Id};
 
 #[zenoh_macros::unstable]
@@ -740,18 +742,19 @@ where
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-
         self.session
             .query(
                 &self.key_expr?.into(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 QueryTarget::DEFAULT,
                 QueryConsolidation::DEFAULT,
+                request::ext::QoSType::REQUEST.into(),
                 Locality::default(),
                 self.timeout,
                 None,
                 #[cfg(feature = "unstable")]
                 None,
+                SourceInfo::empty(),
                 callback,
             )
             .map(|_| receiver)

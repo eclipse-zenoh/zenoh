@@ -42,7 +42,7 @@ fn main() {
         .declare_publisher("test/thr")
         .congestion_control(CongestionControl::Block)
         .priority(prio)
-        .express(args.express)
+        .is_express(args.express)
         .res()
         .unwrap();
 

@@ -20,8 +20,8 @@ use std::str;
 use std::str::FromStr;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
-use zenoh::sample_builder::PutSampleBuilderTrait;
-use zenoh::sample_builder::SampleBuilderTrait;
+use zenoh::sample_builder::TimestampBuilderTrait;
+use zenoh::sample_builder::ValueBuilderTrait;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 

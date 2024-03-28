@@ -19,7 +19,7 @@ use crate::prelude::*;
 use crate::sample::Attachment;
 use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
 use crate::sample_builder::{
-    DeleteSampleBuilderTrait, PutSampleBuilderTrait, QoSBuilderTrait, SampleBuilderTrait,
+    QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
 };
 use crate::SessionRef;
 use crate::Undeclarable;
@@ -114,9 +114,9 @@ impl QoSBuilderTrait for PutBuilder<'_, '_> {
         }
     }
     #[inline]
-    fn express(self, is_express: bool) -> Self {
+    fn is_express(self, is_express: bool) -> Self {
         Self {
-            publisher: self.publisher.express(is_express),
+            publisher: self.publisher.is_express(is_express),
             ..self
         }
     }
@@ -138,24 +138,27 @@ impl QoSBuilderTrait for DeleteBuilder<'_, '_> {
         }
     }
     #[inline]
-    fn express(self, is_express: bool) -> Self {
+    fn is_express(self, is_express: bool) -> Self {
         Self {
-            publisher: self.publisher.express(is_express),
+            publisher: self.publisher.is_express(is_express),
+            ..self
+        }
+    }
+}
+
+impl TimestampBuilderTrait for PutBuilder<'_, '_> {
+    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
+        Self { timestamp, ..self }
+    }
+    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
+        Self {
+            timestamp: Some(timestamp),
             ..self
         }
     }
 }
 
 impl SampleBuilderTrait for PutBuilder<'_, '_> {
-    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
-        Self { timestamp, ..self }
-    }
-    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
-        Self {
-            timestamp: Some(timestamp),
-            ..self
-        }
-    }
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -171,21 +174,24 @@ impl SampleBuilderTrait for PutBuilder<'_, '_> {
     fn with_attachment(self, attachment: Attachment) -> Self {
         Self {
             attachment: Some(attachment),
+            ..self
+        }
+    }
+}
+
+impl TimestampBuilderTrait for DeleteBuilder<'_, '_> {
+    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
+        Self { timestamp, ..self }
+    }
+    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
+        Self {
+            timestamp: Some(timestamp),
             ..self
         }
     }
 }
 
 impl SampleBuilderTrait for DeleteBuilder<'_, '_> {
-    fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
-        Self { timestamp, ..self }
-    }
-    fn with_timestamp(self, timestamp: uhlc::Timestamp) -> Self {
-        Self {
-            timestamp: Some(timestamp),
-            ..self
-        }
-    }
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -206,7 +212,7 @@ impl SampleBuilderTrait for DeleteBuilder<'_, '_> {
     }
 }
 
-impl PutSampleBuilderTrait for PutBuilder<'_, '_> {
+impl ValueBuilderTrait for PutBuilder<'_, '_> {
     fn with_encoding(self, encoding: Encoding) -> Self {
         Self { encoding, ..self }
     }
@@ -221,8 +227,6 @@ impl PutSampleBuilderTrait for PutBuilder<'_, '_> {
         }
     }
 }
-
-impl DeleteSampleBuilderTrait for DeleteBuilder<'_, '_> {}
 
 impl PutBuilder<'_, '_> {
     /// Restrict the matching subscribers that will receive the published data
@@ -761,7 +765,7 @@ pub struct DeletePublication<'a> {
     pub(crate) attachment: Option<Attachment>,
 }
 
-impl SampleBuilderTrait for PutPublication<'_> {
+impl TimestampBuilderTrait for PutPublication<'_> {
     fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
         Self { timestamp, ..self }
     }
@@ -772,7 +776,9 @@ impl SampleBuilderTrait for PutPublication<'_> {
             ..self
         }
     }
+}
 
+impl SampleBuilderTrait for PutPublication<'_> {
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -795,7 +801,7 @@ impl SampleBuilderTrait for PutPublication<'_> {
     }
 }
 
-impl PutSampleBuilderTrait for PutPublication<'_> {
+impl ValueBuilderTrait for PutPublication<'_> {
     fn with_encoding(self, encoding: Encoding) -> Self {
         Self { encoding, ..self }
     }
@@ -811,7 +817,7 @@ impl PutSampleBuilderTrait for PutPublication<'_> {
     }
 }
 
-impl SampleBuilderTrait for DeletePublication<'_> {
+impl TimestampBuilderTrait for DeletePublication<'_> {
     fn with_timestamp_opt(self, timestamp: Option<uhlc::Timestamp>) -> Self {
         Self { timestamp, ..self }
     }
@@ -822,7 +828,9 @@ impl SampleBuilderTrait for DeletePublication<'_> {
             ..self
         }
     }
+}
 
+impl SampleBuilderTrait for DeletePublication<'_> {
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -844,8 +852,6 @@ impl SampleBuilderTrait for DeletePublication<'_> {
         }
     }
 }
-
-impl DeleteSampleBuilderTrait for DeletePublication<'_> {}
 
 impl Resolvable for PutPublication<'_> {
     type To = ZResult<()>;
@@ -1010,7 +1016,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// When express is set to `true`, then the message will not be batched.
     /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
-    fn express(self, is_express: bool) -> Self {
+    fn is_express(self, is_express: bool) -> Self {
         Self { is_express, ..self }
     }
 }

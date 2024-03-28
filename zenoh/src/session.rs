@@ -784,18 +784,21 @@ impl Session {
             let conf = self.runtime.config().lock();
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
+        let qos: QoS = request::ext::QoSType::REQUEST.into();
         GetBuilder {
             session: self,
             selector,
             scope: Ok(None),
             target: QueryTarget::DEFAULT,
             consolidation: QueryConsolidation::DEFAULT,
+            qos: qos.into(),
             destination: Locality::default(),
             timeout,
             value: None,
             #[cfg(feature = "unstable")]
             attachment: None,
             handler: DefaultHandler,
+            source_info: SourceInfo::empty(),
         }
     }
 }
@@ -1567,10 +1570,12 @@ impl Session {
         scope: &Option<KeyExpr<'_>>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        qos: QoS,
         destination: Locality,
         timeout: Duration,
         value: Option<Value>,
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
@@ -1649,7 +1654,7 @@ impl Session {
             primitives.send_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
-                ext_qos: request::ext::QoSType::REQUEST,
+                ext_qos: qos.into(),
                 ext_tstamp: None,
                 ext_nodeid: request::ext::NodeIdType::DEFAULT,
                 ext_target: target,
@@ -1658,7 +1663,7 @@ impl Session {
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
                     consolidation,
                     parameters: selector.parameters().to_string(),
-                    ext_sinfo: None,
+                    ext_sinfo: source.into(),
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,

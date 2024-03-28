@@ -20,8 +20,8 @@ use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::sample::SourceInfo;
 use crate::sample_builder::{
-    DeleteSampleBuilder, DeleteSampleBuilderTrait, PutSampleBuilder, PutSampleBuilderTrait,
-    QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
+    DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
+    TimestampBuilderTrait, ValueBuilderTrait,
 };
 use crate::Id;
 use crate::SessionRef;
@@ -238,7 +238,7 @@ impl<'a> ReplySampleBuilder<'a> {
     }
 }
 
-impl SampleBuilderTrait for ReplySampleBuilder<'_> {
+impl TimestampBuilderTrait for ReplySampleBuilder<'_> {
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
@@ -252,7 +252,9 @@ impl SampleBuilderTrait for ReplySampleBuilder<'_> {
             ..self
         }
     }
+}
 
+impl SampleBuilderTrait for ReplySampleBuilder<'_> {
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -293,9 +295,9 @@ impl QoSBuilderTrait for ReplySampleBuilder<'_> {
         }
     }
 
-    fn express(self, is_express: bool) -> Self {
+    fn is_express(self, is_express: bool) -> Self {
         Self {
-            sample_builder: self.sample_builder.express(is_express),
+            sample_builder: self.sample_builder.is_express(is_express),
             ..self
         }
     }
@@ -328,7 +330,7 @@ pub struct ReplyBuilder<'a> {
     sample_builder: PutSampleBuilder,
 }
 
-impl SampleBuilderTrait for ReplyBuilder<'_> {
+impl TimestampBuilderTrait for ReplyBuilder<'_> {
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
@@ -342,7 +344,9 @@ impl SampleBuilderTrait for ReplyBuilder<'_> {
             ..self
         }
     }
+}
 
+impl SampleBuilderTrait for ReplyBuilder<'_> {
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -383,15 +387,15 @@ impl QoSBuilderTrait for ReplyBuilder<'_> {
         }
     }
 
-    fn express(self, is_express: bool) -> Self {
+    fn is_express(self, is_express: bool) -> Self {
         Self {
-            sample_builder: self.sample_builder.express(is_express),
+            sample_builder: self.sample_builder.is_express(is_express),
             ..self
         }
     }
 }
 
-impl PutSampleBuilderTrait for ReplyBuilder<'_> {
+impl ValueBuilderTrait for ReplyBuilder<'_> {
     fn with_encoding(self, encoding: Encoding) -> Self {
         Self {
             sample_builder: self.sample_builder.with_encoding(encoding),
@@ -418,7 +422,7 @@ pub struct ReplyDelBuilder<'a> {
     sample_builder: DeleteSampleBuilder,
 }
 
-impl SampleBuilderTrait for ReplyDelBuilder<'_> {
+impl TimestampBuilderTrait for ReplyDelBuilder<'_> {
     fn with_timestamp_opt(self, timestamp: Option<Timestamp>) -> Self {
         Self {
             sample_builder: self.sample_builder.with_timestamp_opt(timestamp),
@@ -432,7 +436,9 @@ impl SampleBuilderTrait for ReplyDelBuilder<'_> {
             ..self
         }
     }
+}
 
+impl SampleBuilderTrait for ReplyDelBuilder<'_> {
     #[cfg(feature = "unstable")]
     fn with_source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -473,15 +479,13 @@ impl QoSBuilderTrait for ReplyDelBuilder<'_> {
         }
     }
 
-    fn express(self, is_express: bool) -> Self {
+    fn is_express(self, is_express: bool) -> Self {
         Self {
-            sample_builder: self.sample_builder.express(is_express),
+            sample_builder: self.sample_builder.is_express(is_express),
             ..self
         }
     }
 }
-
-impl DeleteSampleBuilderTrait for ReplyDelBuilder<'_> {}
 
 /// A builder returned by [`Query::reply_err()`](Query::reply_err).
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]

@@ -27,7 +27,7 @@ use zenoh::key_expr::KeyExpr;
 use zenoh::query::{ConsolidationMode, QueryTarget};
 use zenoh::sample::{Sample, SampleKind};
 use zenoh::sample_builder::{
-    DeleteSampleBuilder, PutSampleBuilder, PutSampleBuilderTrait, SampleBuilder, SampleBuilderTrait,
+    DeleteSampleBuilder, PutSampleBuilder, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait,
 };
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
@@ -719,7 +719,7 @@ fn construct_update(data: String) -> Update {
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).with_encoding(result.2);
+    let value = Value::new(payload).with_encoding(result.2.into());
     let data = StoredData {
         value,
         timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()

@@ -20,7 +20,7 @@ use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
-use crate::sample_builder::PutSampleBuilderTrait;
+use crate::sample_builder::ValueBuilderTrait;
 use crate::value::Value;
 use async_std::task;
 use log::{error, trace};
@@ -426,7 +426,7 @@ impl Primitives for AdminSpace {
                         parameters,
                         value: query
                             .ext_body
-                            .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
+                            .map(|b| Value::from(b.payload).with_encoding(b.encoding.into())),
                         qid: msg.id,
                         zid,
                         primitives,

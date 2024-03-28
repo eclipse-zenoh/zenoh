@@ -16,13 +16,16 @@
 use crate::encoding::Encoding;
 use crate::payload::Payload;
 use crate::prelude::{KeyExpr, Value};
+use crate::sample_builder::{QoSBuilderTrait, ValueBuilderTrait};
 use crate::time::Timestamp;
 use crate::Priority;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::{core::CongestionControl, network::push::ext::QoSType, zenoh};
+use zenoh_protocol::network::declare::ext::QoSType;
+use zenoh_protocol::{core::CongestionControl, zenoh};
 
 pub type SourceSn = u64;
 
@@ -566,6 +569,58 @@ pub struct QoS {
     inner: QoSType,
 }
 
+#[derive(Debug)]
+pub struct QoSBuilder(QoS);
+
+impl From<QoS> for QoSBuilder {
+    fn from(qos: QoS) -> Self {
+        QoSBuilder(qos)
+    }
+}
+
+impl From<QoSBuilder> for QoS {
+    fn from(builder: QoSBuilder) -> Self {
+        builder.0
+    }
+}
+
+impl Resolvable for QoSBuilder {
+    type To = QoS;
+}
+
+impl SyncResolve for QoSBuilder {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        self.0
+    }
+}
+
+impl AsyncResolve for QoSBuilder {
+    type Future = futures::future::Ready<Self::To>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.0)
+    }
+}
+
+impl QoSBuilderTrait for QoSBuilder {
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
+        let mut inner = self.0.inner;
+        inner.set_congestion_control(congestion_control);
+        Self(QoS { inner })
+    }
+
+    fn priority(self, priority: Priority) -> Self {
+        let mut inner = self.0.inner;
+        inner.set_priority(priority.into());
+        Self(QoS { inner })
+    }
+
+    fn is_express(self, is_express: bool) -> Self {
+        let mut inner = self.0.inner;
+        inner.set_is_express(is_express);
+        Self(QoS { inner })
+    }
+}
+
 impl QoS {
     /// Gets priority of the message.
     pub fn priority(&self) -> Priority {
@@ -589,24 +644,6 @@ impl QoS {
     /// Gets express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
     pub fn express(&self) -> bool {
         self.inner.is_express()
-    }
-
-    /// Sets priority value.
-    pub fn with_priority(mut self, priority: Priority) -> Self {
-        self.inner.set_priority(priority.into());
-        self
-    }
-
-    /// Sets congestion control value.
-    pub fn with_congestion_control(mut self, congestion_control: CongestionControl) -> Self {
-        self.inner.set_congestion_control(congestion_control);
-        self
-    }
-
-    /// Sets express flag vlaue.
-    pub fn with_express(mut self, is_express: bool) -> Self {
-        self.inner.set_is_express(is_express);
-        self
     }
 }
 

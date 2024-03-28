@@ -13,7 +13,7 @@
 //
 
 //! Value primitives.
-use crate::{encoding::Encoding, payload::Payload};
+use crate::{encoding::Encoding, payload::Payload, sample_builder::ValueBuilderTrait};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the [`Payload`] should be interpreted.
 #[non_exhaustive]
@@ -36,7 +36,6 @@ impl Value {
             encoding: Encoding::default(),
         }
     }
-
     /// Creates an empty [`Value`].
     pub const fn empty() -> Self {
         Value {
@@ -44,15 +43,20 @@ impl Value {
             encoding: Encoding::default(),
         }
     }
+}
 
-    /// Sets the encoding of this [`Value`]`.
-    #[inline(always)]
-    pub fn with_encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
+impl ValueBuilderTrait for Value {
+    fn with_encoding(self, encoding: Encoding) -> Self {
+        Self { encoding, ..self }
+    }
+    fn with_payload<IntoPayload>(self, payload: IntoPayload) -> Self
     where
-        IntoEncoding: Into<Encoding>,
+        IntoPayload: Into<Payload>,
     {
-        self.encoding = encoding.into();
-        self
+        Self {
+            payload: payload.into(),
+            ..self
+        }
     }
 }
 
@@ -65,5 +69,11 @@ where
             payload: t.into(),
             encoding: Encoding::default(),
         }
+    }
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Value::empty()
     }
 }
