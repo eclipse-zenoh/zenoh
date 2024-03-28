@@ -15,6 +15,7 @@ use async_std::prelude::FutureExt;
 use async_std::task;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
+use zenoh::sample_builder::QoSBuilderTrait;
 use zenoh::{publication::Priority, SessionDeclarations};
 use zenoh_core::zasync_executor_init;
 

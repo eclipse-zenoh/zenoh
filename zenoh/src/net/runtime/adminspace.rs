@@ -20,6 +20,7 @@ use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
+use crate::sample_builder::ValueBuilderTrait;
 use crate::value::Value;
 use async_std::task;
 use log::{error, trace};
@@ -425,7 +426,7 @@ impl Primitives for AdminSpace {
                         parameters,
                         value: query
                             .ext_body
-                            .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
+                            .map(|b| Value::from(b.payload).encoding(b.encoding)),
                         qid: msg.id,
                         zid,
                         primitives,
@@ -577,7 +578,7 @@ fn router_data(context: &AdminContext, query: Query) {
     };
     if let Err(e) = query
         .reply(reply_key, payload)
-        .with_encoding(Encoding::APPLICATION_JSON)
+        .encoding(Encoding::APPLICATION_JSON)
         .res_sync()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);

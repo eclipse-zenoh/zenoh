@@ -17,6 +17,8 @@ use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
+use crate::sample::QoSBuilder;
+use crate::sample_builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait};
 use crate::Session;
 use std::collections::HashMap;
 use std::future::Ready;
@@ -120,12 +122,62 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
+    pub(crate) qos: QoSBuilder,
     pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
     pub(crate) value: Option<Value>,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
+    #[cfg(feature = "unstable")]
+    pub(crate) source_info: SourceInfo,
+}
+
+impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
+    #[cfg(feature = "unstable")]
+    fn source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            source_info,
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
+        Self {
+            attachment: attachment.into(),
+            ..self
+        }
+    }
+}
+
+impl QoSBuilderTrait for GetBuilder<'_, '_, DefaultHandler> {
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
+        let qos = self.qos.congestion_control(congestion_control);
+        Self { qos, ..self }
+    }
+
+    fn priority(self, priority: Priority) -> Self {
+        let qos = self.qos.priority(priority);
+        Self { qos, ..self }
+    }
+
+    fn express(self, is_express: bool) -> Self {
+        let qos = self.qos.express(is_express);
+        Self { qos, ..self }
+    }
+}
+
+impl<Handler> ValueBuilderTrait for GetBuilder<'_, '_, Handler> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        let value = Some(self.value.unwrap_or_default().encoding(encoding));
+        Self { value, ..self }
+    }
+
+    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+        let value = Some(self.value.unwrap_or_default().payload(payload));
+        Self { value, ..self }
+    }
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -156,11 +208,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             scope,
             target,
             consolidation,
+            qos,
             destination,
             timeout,
             value,
             #[cfg(feature = "unstable")]
             attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
             handler: _,
         } = self;
         GetBuilder {
@@ -169,11 +224,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             scope,
             target,
             consolidation,
+            qos,
             destination,
             timeout,
             value,
             #[cfg(feature = "unstable")]
             attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
             handler: callback,
         }
     }
@@ -239,11 +297,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             scope,
             target,
             consolidation,
+            qos,
             destination,
             timeout,
             value,
             #[cfg(feature = "unstable")]
             attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
             handler: _,
         } = self;
         GetBuilder {
@@ -252,11 +313,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             scope,
             target,
             consolidation,
+            qos,
             destination,
             timeout,
             value,
             #[cfg(feature = "unstable")]
             attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
             handler,
         }
     }
@@ -315,29 +379,11 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// expressions that don't intersect with the query's.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
-        let Self {
-            session,
-            selector,
-            scope,
-            target,
-            consolidation,
-            destination,
-            timeout,
-            value,
-            attachment,
-            handler,
-        } = self;
         Self {
-            session,
-            selector: selector.and_then(|s| s.accept_any_keyexpr(accept == ReplyKeyExpr::Any)),
-            scope,
-            target,
-            consolidation,
-            destination,
-            timeout,
-            value,
-            attachment,
-            handler,
+            selector: self
+                .selector
+                .and_then(|s| s.accept_any_keyexpr(accept == ReplyKeyExpr::Any)),
+            ..self
         }
     }
 }
@@ -382,11 +428,13 @@ where
                 &self.scope?,
                 self.target,
                 self.consolidation,
+                self.qos.into(),
                 self.destination,
                 self.timeout,
                 self.value,
                 #[cfg(feature = "unstable")]
                 self.attachment,
+                self.source_info,
                 callback,
             )
             .map(|_| receiver)

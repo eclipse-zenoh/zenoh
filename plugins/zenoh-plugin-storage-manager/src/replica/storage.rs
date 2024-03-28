@@ -21,11 +21,18 @@ use futures::select;
 use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
+use zenoh::buffers::buffer::SplitBuffer;
 use zenoh::buffers::ZBuf;
+use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
-use zenoh::query::ConsolidationMode;
-use zenoh::time::{Timestamp, NTP64};
-use zenoh::{Result as ZResult, Session};
+use zenoh::query::{ConsolidationMode, QueryTarget};
+use zenoh::sample::{Sample, SampleKind};
+use zenoh::sample_builder::{
+    DeleteSampleBuilder, PutSampleBuilder, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait,
+};
+use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
+use zenoh::value::Value;
+use zenoh::{Result as ZResult, Session, SessionDeclarations};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
@@ -219,14 +226,15 @@ impl StorageService {
                 select!(
                     // on sample for key_expr
                     sample = storage_sub.recv_async() => {
-                        let mut sample = match sample {
+                        let sample = match sample {
                             Ok(sample) => sample,
                             Err(e) => {
                                 log::error!("Error in sample: {}", e);
                                 continue;
                             }
                         };
-                        sample.ensure_timestamp();
+                        let timestamp = sample.timestamp().cloned().unwrap_or(new_reception_timestamp());
+                        let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
                         self.process_sample(sample).await;
                     },
                     // on query on key_expr
@@ -290,23 +298,31 @@ impl StorageService {
                 );
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
-                let sample_to_store = match self
+                let sample_to_store: Sample = match self
                     .ovderriding_wild_update(&k, sample.timestamp().unwrap())
                     .await
                 {
-                    Some(overriding_update) => {
+                    Some(Update {
+                        kind: SampleKind::Put,
+                        data,
+                    }) => {
                         let Value {
                             payload, encoding, ..
-                        } = overriding_update.data.value;
-                        Sample::new(KeyExpr::from(k.clone()), payload)
-                            .with_encoding(encoding)
-                            .with_timestamp(overriding_update.data.timestamp)
-                            .with_kind(overriding_update.kind)
+                        } = data.value;
+                        PutSampleBuilder::new(KeyExpr::from(k.clone()), payload)
+                            .encoding(encoding)
+                            .timestamp(data.timestamp)
+                            .into()
                     }
-                    None => Sample::new(KeyExpr::from(k.clone()), sample.payload().clone())
-                        .with_encoding(sample.encoding().clone())
-                        .with_timestamp(*sample.timestamp().unwrap())
-                        .with_kind(sample.kind()),
+                    Some(Update {
+                        kind: SampleKind::Delete,
+                        data,
+                    }) => DeleteSampleBuilder::new(KeyExpr::from(k.clone()))
+                        .timestamp(data.timestamp)
+                        .into(),
+                    None => SampleBuilder::from(sample.clone())
+                        .keyexpr(k.clone())
+                        .into(),
                 };
 
                 let stripped_key = match self.strip_prefix(sample_to_store.key_expr()) {
@@ -323,7 +339,7 @@ impl StorageService {
                             .put(
                                 stripped_key,
                                 Value::new(sample_to_store.payload().clone())
-                                    .with_encoding(sample_to_store.encoding().clone()),
+                                    .encoding(sample_to_store.encoding().clone()),
                                 *sample_to_store.timestamp().unwrap(),
                             )
                             .await
@@ -509,10 +525,13 @@ impl StorageService {
                             let Value {
                                 payload, encoding, ..
                             } = entry.value;
-                            let sample = Sample::new(key.clone(), payload)
-                                .with_encoding(encoding)
-                                .with_timestamp(entry.timestamp);
-                            if let Err(e) = q.reply_sample(sample).res().await {
+                            if let Err(e) = q
+                                .reply(key.clone(), payload)
+                                .encoding(encoding)
+                                .timestamp(entry.timestamp)
+                                .res()
+                                .await
+                            {
                                 log::warn!(
                                     "Storage '{}' raised an error replying a query: {}",
                                     self.name,
@@ -541,10 +560,13 @@ impl StorageService {
                         let Value {
                             payload, encoding, ..
                         } = entry.value;
-                        let sample = Sample::new(q.key_expr().clone(), payload)
-                            .with_encoding(encoding)
-                            .with_timestamp(entry.timestamp);
-                        if let Err(e) = q.reply_sample(sample).res().await {
+                        if let Err(e) = q
+                            .reply(q.key_expr().clone(), payload)
+                            .encoding(encoding)
+                            .timestamp(entry.timestamp)
+                            .res()
+                            .await
+                        {
                             log::warn!(
                                 "Storage '{}' raised an error replying a query: {}",
                                 self.name,
@@ -692,7 +714,7 @@ fn construct_update(data: String) -> Update {
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).with_encoding(result.2);
+    let value = Value::new(payload).encoding(result.2);
     let data = StoredData {
         value,
         timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()

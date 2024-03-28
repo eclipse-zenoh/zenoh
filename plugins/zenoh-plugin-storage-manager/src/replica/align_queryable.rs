@@ -20,6 +20,8 @@ use std::str;
 use std::str::FromStr;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
+use zenoh::sample_builder::TimestampBuilderTrait;
+use zenoh::sample_builder::ValueBuilderTrait;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 
@@ -127,8 +129,8 @@ impl AlignQueryable {
                         AlignData::Data(k, (v, ts)) => {
                             query
                                 .reply(k, v.payload)
-                                .with_encoding(v.encoding)
-                                .with_timestamp(ts)
+                                .encoding(v.encoding)
+                                .timestamp(ts)
                                 .res()
                                 .await
                                 .unwrap();

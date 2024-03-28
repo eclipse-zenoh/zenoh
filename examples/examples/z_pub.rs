@@ -16,6 +16,7 @@ use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh::sample_builder::SampleBuilderTrait;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -38,12 +39,12 @@ async fn main() {
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
         let mut put = publisher.put(buf);
         if let Some(attachment) = &attachment {
-            put = put.with_attachment(
+            put = put.attachment(Some(
                 attachment
                     .split('&')
                     .map(|pair| split_once(pair, '='))
                     .collect(),
-            )
+            ))
         }
         put.res().await.unwrap();
     }
