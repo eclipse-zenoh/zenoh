@@ -17,9 +17,15 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+//!
+mod access_control;
+use access_control::acl_interceptor_factories;
+
+mod authorization;
 use super::RoutingContext;
 use crate::KeyExpr;
 use std::any::Any;
+
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
@@ -58,8 +64,8 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
 
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
-
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
+    res.extend(acl_interceptor_factories(config.transport().acl().clone())?);
 
     Ok(res)
 }

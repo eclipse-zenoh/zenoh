@@ -100,6 +100,46 @@ pub struct DownsamplingItemConf {
     pub flow: DownsamplingFlow,
 }
 
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigRules {
+    pub interface: Vec<String>,
+    pub key_expr: Vec<String>,
+    pub action: Vec<Action>,
+    pub permission: Permission,
+}
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub struct PolicyRule {
+    pub subject: Subject,
+    pub key_expr: String,
+    pub action: Action,
+    pub permission: Permission,
+}
+
+#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[serde(untagged)]
+#[serde(rename_all = "snake_case")]
+pub enum Subject {
+    Interface(String),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Action {
+    Put,
+    DeclareSubscriber,
+    Get,
+    DeclareQueryable,
+}
+pub const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum (change according to Action size)
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Permission {
+    Allow,
+    Deny,
+}
+pub const NUMBER_OF_PERMISSIONS: usize = 2; //size of permission enum (permanently fixed to 2)
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -431,6 +471,11 @@ validated_struct::validator! {
                     known_keys_file: Option<String>,
                 },
             },
+            pub acl: AclConfig {
+                pub enabled: bool,
+                pub default_permission: Permission,
+                pub rules: Option<Vec<AclConfigRules>>
+            }
         },
         /// Configuration of the admin space.
         pub adminspace: #[derive(Default)]
