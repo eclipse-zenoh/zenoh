@@ -228,7 +228,7 @@ impl<'a> ReplySampleBuilder<'a> {
             query: self.query,
             sample_builder: self.sample_builder.into(),
         };
-        builder.with_payload(payload)
+        builder.payload(payload)
     }
     pub fn delete(self) -> ReplyDelBuilder<'a> {
         ReplyDelBuilder {
@@ -366,16 +366,16 @@ impl QoSBuilderTrait for ReplyBuilder<'_> {
 }
 
 impl ValueBuilderTrait for ReplyBuilder<'_> {
-    fn with_encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_encoding(encoding),
+            sample_builder: self.sample_builder.encoding(encoding),
             ..self
         }
     }
 
-    fn with_payload<T: Into<Payload>>(self, payload: T) -> Self {
+    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
         Self {
-            sample_builder: self.sample_builder.with_payload(payload),
+            sample_builder: self.sample_builder.payload(payload),
             ..self
         }
     }

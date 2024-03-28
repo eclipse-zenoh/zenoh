@@ -315,7 +315,7 @@ impl StorageService {
                             payload, encoding, ..
                         } = data.value;
                         PutSampleBuilder::new(KeyExpr::from(k.clone()), payload)
-                            .with_encoding(encoding)
+                            .encoding(encoding)
                             .timestamp(data.timestamp)
                             .res_sync()
                     }
@@ -344,7 +344,7 @@ impl StorageService {
                             .put(
                                 stripped_key,
                                 Value::new(sample_to_store.payload().clone())
-                                    .with_encoding(sample_to_store.encoding().clone()),
+                                    .encoding(sample_to_store.encoding().clone()),
                                 *sample_to_store.timestamp().unwrap(),
                             )
                             .await
@@ -532,7 +532,7 @@ impl StorageService {
                             } = entry.value;
                             if let Err(e) = q
                                 .reply(key.clone(), payload)
-                                .with_encoding(encoding)
+                                .encoding(encoding)
                                 .timestamp(entry.timestamp)
                                 .res_async()
                                 .await
@@ -567,7 +567,7 @@ impl StorageService {
                         } = entry.value;
                         if let Err(e) = q
                             .reply(q.key_expr().clone(), payload)
-                            .with_encoding(encoding)
+                            .encoding(encoding)
                             .timestamp(entry.timestamp)
                             .res_async()
                             .await
@@ -719,7 +719,7 @@ fn construct_update(data: String) -> Update {
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).with_encoding(result.2);
+    let value = Value::new(payload).encoding(result.2);
     let data = StoredData {
         value,
         timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()

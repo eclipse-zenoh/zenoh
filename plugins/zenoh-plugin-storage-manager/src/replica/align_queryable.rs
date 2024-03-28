@@ -129,7 +129,7 @@ impl AlignQueryable {
                         AlignData::Data(k, (v, ts)) => {
                             query
                                 .reply(k, v.payload)
-                                .with_encoding(v.encoding)
+                                .encoding(v.encoding)
                                 .timestamp(ts)
                                 .res()
                                 .await

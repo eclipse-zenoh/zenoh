@@ -570,7 +570,7 @@ impl Sample {
 
 impl From<Sample> for Value {
     fn from(sample: Sample) -> Self {
-        Value::new(sample.payload).with_encoding(sample.encoding)
+        Value::new(sample.payload).encoding(sample.encoding)
     }
 }
 

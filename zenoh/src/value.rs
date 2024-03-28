@@ -46,13 +46,13 @@ impl Value {
 }
 
 impl ValueBuilderTrait for Value {
-    fn with_encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             encoding: encoding.into(),
             ..self
         }
     }
-    fn with_payload<T: Into<Payload>>(self, payload: T) -> Self {
+    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
         Self {
             payload: payload.into(),
             ..self

@@ -111,7 +111,7 @@ impl Aligner {
                     payload, encoding, ..
                 } = value;
                 let sample = PutSampleBuilder::new(key, payload)
-                    .with_encoding(encoding)
+                    .encoding(encoding)
                     .timestamp(ts)
                     .res_sync();
                 log::debug!("[ALIGNER] Adding {:?} to storage", sample);
