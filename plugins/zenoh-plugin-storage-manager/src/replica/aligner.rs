@@ -21,7 +21,7 @@ use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
-use zenoh::sample::builder::{PutSampleBuilder, TimestampBuilderTrait, ValueBuilderTrait};
+use zenoh::sample::builder::{SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait};
 use zenoh::time::Timestamp;
 use zenoh::Session;
 
@@ -109,7 +109,7 @@ impl Aligner {
                 let Value {
                     payload, encoding, ..
                 } = value;
-                let sample = PutSampleBuilder::new(key, payload)
+                let sample = SampleBuilder::put(key, payload)
                     .encoding(encoding)
                     .timestamp(ts)
                     .into();

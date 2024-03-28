@@ -26,9 +26,7 @@ use zenoh::buffers::ZBuf;
 use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::query::{ConsolidationMode, QueryTarget};
-use zenoh::sample::builder::{
-    DeleteSampleBuilder, PutSampleBuilder, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait,
-};
+use zenoh::sample::builder::{SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait};
 use zenoh::sample::{Sample, SampleKind};
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
@@ -309,7 +307,7 @@ impl StorageService {
                         let Value {
                             payload, encoding, ..
                         } = data.value;
-                        PutSampleBuilder::new(KeyExpr::from(k.clone()), payload)
+                        SampleBuilder::put(KeyExpr::from(k.clone()), payload)
                             .encoding(encoding)
                             .timestamp(data.timestamp)
                             .into()
@@ -317,7 +315,7 @@ impl StorageService {
                     Some(Update {
                         kind: SampleKind::Delete,
                         data,
-                    }) => DeleteSampleBuilder::new(KeyExpr::from(k.clone()))
+                    }) => SampleBuilder::delete(KeyExpr::from(k.clone()))
                         .timestamp(data.timestamp)
                         .into(),
                     None => SampleBuilder::from(sample.clone())

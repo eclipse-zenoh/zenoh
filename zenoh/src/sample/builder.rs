@@ -62,22 +62,21 @@ pub trait ValueBuilderTrait {
 pub struct SampleBuilder(Sample);
 
 impl SampleBuilder {
-    pub fn new<IntoKeyExpr>(key_expr: IntoKeyExpr) -> Self
+    pub fn put<IntoKeyExpr, IntoPayload>(
+        key_expr: IntoKeyExpr,
+        payload: IntoPayload,
+    ) -> PutSampleBuilder
+    where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
+        IntoPayload: Into<Payload>,
+    {
+        PutSampleBuilder::new(key_expr, payload)
+    }
+    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> DeleteSampleBuilder
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
-        Self(Sample {
-            key_expr: key_expr.into(),
-            payload: Payload::empty(),
-            kind: SampleKind::default(),
-            encoding: Encoding::default(),
-            timestamp: None,
-            qos: QoS::default(),
-            #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
-            attachment: None,
-        })
+        DeleteSampleBuilder::new(key_expr)
     }
     /// Allows to change keyexpr of [`Sample`]
     pub fn keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
@@ -149,7 +148,7 @@ impl From<SampleBuilder> for PutSampleBuilder {
 }
 
 impl PutSampleBuilder {
-    pub fn new<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
+    fn new<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoPayload: Into<Payload>,

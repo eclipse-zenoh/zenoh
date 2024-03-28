@@ -137,8 +137,8 @@ impl Query {
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoPayload: Into<Payload>,
     {
-        let sample_builder = PutSampleBuilder::new(key_expr, payload)
-            .with_qos(response::ext::QoSType::RESPONSE.into());
+        let sample_builder =
+            SampleBuilder::put(key_expr, payload).with_qos(response::ext::QoSType::RESPONSE.into());
         ReplyBuilder {
             query: self,
             sample_builder,
