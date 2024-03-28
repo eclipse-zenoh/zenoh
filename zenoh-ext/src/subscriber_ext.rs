@@ -48,7 +48,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
 
     /// Create a [`FetchingSubscriber`](super::FetchingSubscriber).
     ///
-    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
     /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
     /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
@@ -58,7 +58,8 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh_ext::*;
     ///
@@ -78,7 +79,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {:?}", sample);
     /// }
-    /// # })
+    /// # }
     /// ```
     fn fetching<
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
@@ -93,7 +94,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// Create a [`FetchingSubscriber`](super::FetchingSubscriber) that will perform a query (`session.get()`) as it's
     /// initial fetch.
     ///
-    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `QueryingSubscriberBuilder`), the `FetchingSubscriber`
     /// will issue a query on a given key expression (by default it uses the same key expression than it subscribes to).
     /// The results of the query will be merged with the received publications and made available in the receiver.
@@ -103,7 +104,8 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh_ext::*;
     ///
@@ -117,7 +119,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {:?}", sample);
     /// }
-    /// # })
+    /// # }
     /// ```
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler>;
 }
@@ -127,7 +129,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
 
     /// Create a [`FetchingSubscriber`](super::FetchingSubscriber).
     ///
-    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
     /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
     /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
@@ -137,7 +139,8 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh_ext::*;
     ///
@@ -157,7 +160,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {:?}", sample);
     /// }
-    /// # })
+    /// # }
     /// ```
     fn fetching<
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
@@ -184,7 +187,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// Create a [`FetchingSubscriber`](super::FetchingSubscriber) that will perform a query (`session.get()`) as it's
     /// initial fetch.
     ///
-    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `QueryingSubscriberBuilder`), the `FetchingSubscriber`
     /// will issue a query on a given key expression (by default it uses the same key expression than it subscribes to).
     /// The results of the query will be merged with the received publications and made available in the receiver.
@@ -194,7 +197,8 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh_ext::*;
     ///
@@ -208,7 +212,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {:?}", sample);
     /// }
-    /// # })
+    /// # }
     /// ```
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler> {
         QueryingSubscriberBuilder {
@@ -237,7 +241,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
 
     /// Create a fetching liveliness subscriber ([`FetchingSubscriber`](super::FetchingSubscriber)).
     ///
-    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
     /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
     /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
@@ -248,7 +252,8 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh_ext::*;
     ///
@@ -270,7 +275,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {:?}", sample);
     /// }
-    /// # })
+    /// # }
     /// ```
     fn fetching<
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
@@ -297,7 +302,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// Create a fetching liveliness subscriber ([`FetchingSubscriber`](super::FetchingSubscriber)) that will perform a
     /// liveliness query (`session.liveliness().get()`) as it's initial fetch.
     ///
-    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `QueryingSubscriberBuilder`), the `FetchingSubscriber`
     /// will issue a liveliness query on a given key expression (by default it uses the same key expression than it subscribes to).
     /// The results of the query will be merged with the received publications and made available in the receiver.
@@ -308,7 +313,8 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh_ext::*;
     ///
@@ -323,7 +329,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {:?}", sample);
     /// }
-    /// # })
+    /// # }
     /// ```
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler> {
         QueryingSubscriberBuilder {
