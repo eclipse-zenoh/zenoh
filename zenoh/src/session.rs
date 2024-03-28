@@ -683,12 +683,13 @@ impl Session {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::r#async::*;
-    /// use zenoh::sample_builder::PutSampleBuilderTrait;
+    /// use zenoh::sample_builder::SampleBuilderTrait;
+    /// use zenoh::sample_builder::ValueBuilderTrait;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session
     ///     .put("key/expression", "payload")
-    ///     .with_encoding(Encoding::TEXT_PLAIN)
+    ///     .encoding(Encoding::TEXT_PLAIN)
     ///     .res()
     ///     .await
     ///     .unwrap();
