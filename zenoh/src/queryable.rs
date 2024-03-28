@@ -294,8 +294,7 @@ impl Resolvable for ReplySampleBuilder<'_> {
 
 impl SyncResolve for ReplySampleBuilder<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let sample = self.sample_builder.res_sync();
-        self.query._reply_sample(sample)
+        self.query._reply_sample(self.sample_builder.into())
     }
 }
 
@@ -453,8 +452,7 @@ impl<'a> Resolvable for ReplyBuilder<'a> {
 
 impl SyncResolve for ReplyBuilder<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let sample = self.sample_builder.res_sync();
-        self.query._reply_sample(sample)
+        self.query._reply_sample(self.sample_builder.into())
     }
 }
 
@@ -464,8 +462,7 @@ impl<'a> Resolvable for ReplyDelBuilder<'a> {
 
 impl SyncResolve for ReplyDelBuilder<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let sample = self.sample_builder.res_sync();
-        self.query._reply_sample(sample)
+        self.query._reply_sample(self.sample_builder.into())
     }
 }
 

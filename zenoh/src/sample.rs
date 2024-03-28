@@ -22,7 +22,6 @@ use crate::Priority;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::network::declare::ext::QoSType;
 use zenoh_protocol::{core::CongestionControl, zenoh};
@@ -592,23 +591,6 @@ impl From<QoS> for QoSBuilder {
 impl From<QoSBuilder> for QoS {
     fn from(builder: QoSBuilder) -> Self {
         builder.0
-    }
-}
-
-impl Resolvable for QoSBuilder {
-    type To = QoS;
-}
-
-impl SyncResolve for QoSBuilder {
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        self.0
-    }
-}
-
-impl AsyncResolve for QoSBuilder {
-    type Future = futures::future::Ready<Self::To>;
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.0)
     }
 }
 

@@ -24,9 +24,6 @@ use crate::Sample;
 use crate::SampleKind;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
-use zenoh_core::AsyncResolve;
-use zenoh_core::Resolvable;
-use zenoh_core::SyncResolve;
 use zenoh_protocol::core::CongestionControl;
 
 pub trait QoSBuilderTrait {
@@ -124,17 +121,17 @@ impl SampleBuilderTrait for SampleBuilder {
 impl QoSBuilderTrait for SampleBuilder {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos: QoSBuilder = self.0.qos.into();
-        let qos = qos.congestion_control(congestion_control).res_sync();
+        let qos = qos.congestion_control(congestion_control).into();
         Self(Sample { qos, ..self.0 })
     }
     fn priority(self, priority: Priority) -> Self {
         let qos: QoSBuilder = self.0.qos.into();
-        let qos = qos.priority(priority).res_sync();
+        let qos = qos.priority(priority).into();
         Self(Sample { qos, ..self.0 })
     }
     fn express(self, is_express: bool) -> Self {
         let qos: QoSBuilder = self.0.qos.into();
-        let qos = qos.express(is_express).res_sync();
+        let qos = qos.express(is_express).into();
         Self(Sample { qos, ..self.0 })
     }
 }
@@ -325,53 +322,20 @@ impl TryFrom<Sample> for DeleteSampleBuilder {
     }
 }
 
-impl Resolvable for SampleBuilder {
-    type To = Sample;
-}
-
-impl Resolvable for PutSampleBuilder {
-    type To = Sample;
-}
-
-impl Resolvable for DeleteSampleBuilder {
-    type To = Sample;
-}
-
-impl SyncResolve for SampleBuilder {
-    fn res_sync(self) -> Self::To {
-        self.0
+impl From<SampleBuilder> for Sample {
+    fn from(sample_builder: SampleBuilder) -> Self {
+        sample_builder.0
     }
 }
 
-impl SyncResolve for PutSampleBuilder {
-    fn res_sync(self) -> Self::To {
-        self.0.res_sync()
+impl From<PutSampleBuilder> for Sample {
+    fn from(put_sample_builder: PutSampleBuilder) -> Self {
+        put_sample_builder.0 .0
     }
 }
 
-impl SyncResolve for DeleteSampleBuilder {
-    fn res_sync(self) -> Self::To {
-        self.0.res_sync()
-    }
-}
-
-impl AsyncResolve for SampleBuilder {
-    type Future = futures::future::Ready<Self::To>;
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.0)
-    }
-}
-
-impl AsyncResolve for PutSampleBuilder {
-    type Future = futures::future::Ready<Self::To>;
-    fn res_async(self) -> Self::Future {
-        self.0.res_async()
-    }
-}
-
-impl AsyncResolve for DeleteSampleBuilder {
-    type Future = futures::future::Ready<Self::To>;
-    fn res_async(self) -> Self::Future {
-        self.0.res_async()
+impl From<DeleteSampleBuilder> for Sample {
+    fn from(delete_sample_builder: DeleteSampleBuilder) -> Self {
+        delete_sample_builder.0 .0
     }
 }

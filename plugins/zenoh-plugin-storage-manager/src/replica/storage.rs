@@ -24,6 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::buffer::SplitBuffer;
 use zenoh::buffers::ZBuf;
 use zenoh::key_expr::KeyExpr;
+use zenoh::prelude::r#async::*;
 use zenoh::query::{ConsolidationMode, QueryTarget};
 use zenoh::sample::{Sample, SampleKind};
 use zenoh::sample_builder::{
@@ -34,7 +35,6 @@ use zenoh::value::Value;
 use zenoh::{Result as ZResult, Session, SessionDeclarations};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
-use zenoh_core::{AsyncResolve, SyncResolve};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
 use zenoh_keyexpr::keyexpr_tree::{support::NonWild, support::UnknownWildness, KeBoxTree};
@@ -144,12 +144,7 @@ impl StorageService {
         t.add_async(gc).await;
 
         // subscribe on key_expr
-        let storage_sub = match self
-            .session
-            .declare_subscriber(&self.key_expr)
-            .res_async()
-            .await
-        {
+        let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 log::error!("Error starting storage '{}': {}", self.name, e);
@@ -162,7 +157,7 @@ impl StorageService {
             .session
             .declare_queryable(&self.key_expr)
             .complete(self.complete)
-            .res_async()
+            .res()
             .await
         {
             Ok(storage_queryable) => storage_queryable,
@@ -239,7 +234,7 @@ impl StorageService {
                             }
                         };
                         let timestamp = sample.timestamp().cloned().unwrap_or(new_reception_timestamp());
-                        let sample = SampleBuilder::from(sample).timestamp(timestamp).res_sync();
+                        let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
                         self.process_sample(sample).await;
                     },
                     // on query on key_expr
@@ -303,7 +298,7 @@ impl StorageService {
                 );
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
-                let sample_to_store = match self
+                let sample_to_store: Sample = match self
                     .ovderriding_wild_update(&k, sample.timestamp().unwrap())
                     .await
                 {
@@ -317,17 +312,17 @@ impl StorageService {
                         PutSampleBuilder::new(KeyExpr::from(k.clone()), payload)
                             .encoding(encoding)
                             .timestamp(data.timestamp)
-                            .res_sync()
+                            .into()
                     }
                     Some(Update {
                         kind: SampleKind::Delete,
                         data,
                     }) => DeleteSampleBuilder::new(KeyExpr::from(k.clone()))
                         .timestamp(data.timestamp)
-                        .res_sync(),
+                        .into(),
                     None => SampleBuilder::from(sample.clone())
                         .keyexpr(k.clone())
-                        .res_sync(),
+                        .into(),
                 };
 
                 let stripped_key = match self.strip_prefix(sample_to_store.key_expr()) {
@@ -534,7 +529,7 @@ impl StorageService {
                                 .reply(key.clone(), payload)
                                 .encoding(encoding)
                                 .timestamp(entry.timestamp)
-                                .res_async()
+                                .res()
                                 .await
                             {
                                 log::warn!(
@@ -569,7 +564,7 @@ impl StorageService {
                             .reply(q.key_expr().clone(), payload)
                             .encoding(encoding)
                             .timestamp(entry.timestamp)
-                            .res_async()
+                            .res()
                             .await
                         {
                             log::warn!(
@@ -584,7 +579,7 @@ impl StorageService {
                     let err_message =
                         format!("Storage '{}' raised an error on query: {}", self.name, e);
                     log::warn!("{}", err_message);
-                    if let Err(e) = q.reply_err(err_message).res_async().await {
+                    if let Err(e) = q.reply_err(err_message).res().await {
                         log::warn!(
                             "Storage '{}' raised an error replying a query: {}",
                             self.name,
@@ -666,7 +661,7 @@ impl StorageService {
                 .get(KeyExpr::from(&self.key_expr).with_parameters("_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
-                .res_async()
+                .res()
                 .await
             {
                 Ok(replies) => replies,

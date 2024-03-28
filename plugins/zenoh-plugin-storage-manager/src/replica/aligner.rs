@@ -24,7 +24,6 @@ use zenoh::prelude::r#async::*;
 use zenoh::sample_builder::{PutSampleBuilder, TimestampBuilderTrait, ValueBuilderTrait};
 use zenoh::time::Timestamp;
 use zenoh::Session;
-use zenoh_core::{AsyncResolve, SyncResolve};
 
 pub struct Aligner {
     session: Arc<Session>,
@@ -113,7 +112,7 @@ impl Aligner {
                 let sample = PutSampleBuilder::new(key, payload)
                     .encoding(encoding)
                     .timestamp(ts)
-                    .res_sync();
+                    .into();
                 log::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
                     log::error!("[ALIGNER] Error adding sample to storage: {}", e)
@@ -331,7 +330,7 @@ impl Aligner {
             .get(&selector)
             .consolidation(zenoh::query::ConsolidationMode::None)
             .accept_replies(zenoh::query::ReplyKeyExpr::Any)
-            .res_async()
+            .res()
             .await
         {
             Ok(replies) => {

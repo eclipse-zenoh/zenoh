@@ -665,8 +665,9 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
                     let timestamp = s.timestamp().cloned().unwrap_or(new_reception_timestamp());
-                    let s = SampleBuilder::from(s).timestamp(timestamp).res_sync();
-                    state.merge_queue.push(s);
+                    state
+                        .merge_queue
+                        .push(SampleBuilder::from(s).timestamp(timestamp).into());
                 }
             }
         };
