@@ -36,7 +36,8 @@ fn retry_config_overriding() {
         .insert_json5("listen/exit_on_failure", "false")
         .unwrap();
 
-    let expected = [ConnectionRetryConf {
+    let expected = [
+        ConnectionRetryConf {
             period_init_ms: 3000,
             period_max_ms: 6000,
             period_increase_factor: 1.5,
@@ -55,7 +56,8 @@ fn retry_config_overriding() {
             period_max_ms: 60000,
             period_increase_factor: 15.,
             exit_on_failure: true,
-        }];
+        },
+    ];
 
     for (i, endpoint) in config.listen().endpoints().iter().enumerate() {
         let retry_config = zenoh_config::get_retry_config(&config, Some(endpoint), true);
