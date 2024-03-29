@@ -19,8 +19,8 @@ use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::sample::builder::{
-    DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
-    TimestampBuilderTrait, ValueBuilderTrait,
+    OpDelete, OpPut, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
+    ValueBuilderTrait,
 };
 use crate::sample::SourceInfo;
 use crate::Id;
@@ -115,10 +115,10 @@ impl Query {
     #[inline(always)]
     #[cfg(feature = "unstable")]
     #[doc(hidden)]
-    pub fn reply_sample(&self, sample: Sample) -> ReplySampleBuilder<'_> {
-        ReplySampleBuilder {
+    pub fn reply_sample(&self, sample: Sample) -> ReplySample<'_> {
+        ReplySample {
             query: self,
-            sample_builder: sample.into(),
+            sample,
         }
     }
 
@@ -168,7 +168,7 @@ impl Query {
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
         let sample_builder =
-            DeleteSampleBuilder::new(key_expr).with_qos(response::ext::QoSType::RESPONSE.into());
+            SampleBuilder::delete(key_expr).qos(response::ext::QoSType::RESPONSE.into());
         ReplyDelBuilder {
             query: self,
             sample_builder,
@@ -214,91 +214,22 @@ impl fmt::Display for Query {
     }
 }
 
-pub struct ReplySampleBuilder<'a> {
+pub struct ReplySample<'a> {
     query: &'a Query,
-    sample_builder: SampleBuilder,
+    sample: Sample,
 }
 
-impl<'a> ReplySampleBuilder<'a> {
-    pub fn put<IntoPayload>(self, payload: IntoPayload) -> ReplyBuilder<'a>
-    where
-        IntoPayload: Into<Payload>,
-    {
-        let builder = ReplyBuilder {
-            query: self.query,
-            sample_builder: self.sample_builder.into(),
-        };
-        builder.payload(payload)
-    }
-    pub fn delete(self) -> ReplyDelBuilder<'a> {
-        ReplyDelBuilder {
-            query: self.query,
-            sample_builder: self.sample_builder.into(),
-        }
-    }
-}
-
-impl TimestampBuilderTrait for ReplySampleBuilder<'_> {
-    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
-        Self {
-            sample_builder: self.sample_builder.timestamp(timestamp),
-            ..self
-        }
-    }
-}
-
-impl SampleBuilderTrait for ReplySampleBuilder<'_> {
-    #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self {
-            sample_builder: self.sample_builder.source_info(source_info),
-            ..self
-        }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
-        Self {
-            sample_builder: self.sample_builder.attachment(attachment),
-            ..self
-        }
-    }
-}
-
-impl QoSBuilderTrait for ReplySampleBuilder<'_> {
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        Self {
-            sample_builder: self.sample_builder.congestion_control(congestion_control),
-            ..self
-        }
-    }
-
-    fn priority(self, priority: Priority) -> Self {
-        Self {
-            sample_builder: self.sample_builder.priority(priority),
-            ..self
-        }
-    }
-
-    fn express(self, is_express: bool) -> Self {
-        Self {
-            sample_builder: self.sample_builder.express(is_express),
-            ..self
-        }
-    }
-}
-
-impl Resolvable for ReplySampleBuilder<'_> {
+impl Resolvable for ReplySample<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for ReplySampleBuilder<'_> {
+impl SyncResolve for ReplySample<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        self.query._reply_sample(self.sample_builder.into())
+        self.query._reply_sample(self.sample)
     }
 }
 
-impl AsyncResolve for ReplySampleBuilder<'_> {
+impl AsyncResolve for ReplySample<'_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -311,7 +242,7 @@ impl AsyncResolve for ReplySampleBuilder<'_> {
 #[derive(Debug)]
 pub struct ReplyBuilder<'a> {
     query: &'a Query,
-    sample_builder: PutSampleBuilder,
+    sample_builder: SampleBuilder<OpPut>,
 }
 
 impl TimestampBuilderTrait for ReplyBuilder<'_> {
@@ -392,7 +323,7 @@ impl ValueBuilderTrait for ReplyBuilder<'_> {
 #[derive(Debug)]
 pub struct ReplyDelBuilder<'a> {
     query: &'a Query,
-    sample_builder: DeleteSampleBuilder,
+    sample_builder: SampleBuilder<OpDelete>,
 }
 
 impl TimestampBuilderTrait for ReplyDelBuilder<'_> {
