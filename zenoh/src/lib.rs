@@ -110,25 +110,54 @@ pub const FEATURES: &str = concat_enabled_features!(
 pub mod prelude;
 pub use prelude::common::*;
 
+mod api;
 mod net;
 mod plugins;
-mod primitives;
+
+pub use zenoh_result::ZResult as Result;
 
 pub mod session {
-    pub use crate::primitives::session::open;
-    pub use crate::primitives::session::Session;
-    pub use crate::primitives::session::SessionDeclarations;
+    pub use crate::api::session::open;
+    pub use crate::api::session::Session;
+    pub use crate::api::session::SessionDeclarations;
+}
+
+pub mod key_expr {
+    pub use zenoh_keyexpr::*;
+    pub use zenoh_macros::kedefine;
+    pub use zenoh_macros::keformat;
 }
 
 pub mod sample {
-    pub use crate::primitives::sample::builder::{
+    pub use crate::api::sample::builder::{
         QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
     };
     #[zenoh_macros::unstable]
-    pub use crate::primitives::sample::Attachment;
+    pub use crate::api::sample::Attachment;
     #[zenoh_macros::unstable]
-    pub use crate::primitives::sample::Locality;
+    pub use crate::api::sample::Locality;
     #[zenoh_macros::unstable]
-    pub use crate::primitives::sample::SourceInfo;
-    pub use crate::primitives::sample::{Sample, SampleKind};
+    pub use crate::api::sample::SourceInfo;
+    pub use crate::api::sample::{Sample, SampleKind};
+}
+
+pub mod queryable {
+    pub use crate::api::queryable::Query;
+}
+
+pub mod query {
+    pub use crate::api::query::Reply;
+}
+
+pub mod publication {
+    pub use crate::api::publication::Priority;
+}
+
+pub mod handlers {
+    pub use crate::api::handlers::IntoHandler;
+    pub use crate::api::handlers::RingBuffer;
+}
+
+pub mod config {
+    pub use zenoh_config::*;
 }

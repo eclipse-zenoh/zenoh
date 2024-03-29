@@ -13,7 +13,7 @@
 //
 
 //! Query primitives.
-use crate::primitives::{
+use crate::api::{
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,

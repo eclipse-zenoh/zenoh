@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
-use crate::net::primitives::Primitives;
-use crate::plugins::sealed as plugins;
-use crate::primitives::{
+use crate::api::{
     encoding::Encoding,
     key_expr::KeyExpr,
     payload::Payload,
@@ -22,6 +20,8 @@ use crate::primitives::{
     sample::builder::ValueBuilderTrait,
     value::Value,
 };
+use crate::net::primitives::Primitives;
+use crate::plugins::sealed as plugins;
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;

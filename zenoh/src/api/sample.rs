@@ -13,7 +13,7 @@
 //
 
 //! Sample primitives
-use crate::primitives::{
+use crate::api::{
     encoding::Encoding,
     key_expr::KeyExpr,
     payload::Payload,

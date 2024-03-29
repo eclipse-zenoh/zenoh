@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime};
-use crate::primitives::liveliness::PREFIX_LIVELINESS;
-use crate::primitives::{
+use crate::api::liveliness::PREFIX_LIVELINESS;
+use crate::api::{
     admin,
     encoding::Encoding,
     handlers::{Callback, DefaultHandler},
@@ -32,6 +31,7 @@ use crate::primitives::{
     value::Value,
     Id,
 };
+use crate::net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime};
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -1228,7 +1228,7 @@ impl Session {
         &self,
         key_expr: &KeyExpr,
     ) -> ZResult<Arc<LivelinessTokenState>> {
-        use crate::primitives::liveliness::KE_PREFIX_LIVELINESS;
+        use crate::api::liveliness::KE_PREFIX_LIVELINESS;
 
         let mut state = zwrite!(self.state);
         log::trace!("declare_liveliness({:?})", key_expr);

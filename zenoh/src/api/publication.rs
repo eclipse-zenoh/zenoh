@@ -13,8 +13,7 @@
 //
 
 //! Publishing primitives.
-use crate::net::primitives::Primitives;
-use crate::primitives::{
+use crate::api::{
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::{KeyExpr, KeyExprInner},
@@ -27,6 +26,7 @@ use crate::primitives::{
     value::Value,
     Id,
 };
+use crate::net::primitives::Primitives;
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_keyexpr::keyexpr;

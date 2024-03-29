@@ -15,7 +15,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh_core::ztimeout;
-use zenoh_result::ZResult as Result;
+use zenoh_link::Locator;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);

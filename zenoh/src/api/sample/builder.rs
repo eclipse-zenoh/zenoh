@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::primitives::{
+use crate::api::{
     encoding::Encoding,
     key_expr::KeyExpr,
     payload::Payload,

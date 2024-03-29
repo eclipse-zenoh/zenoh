@@ -13,6 +13,7 @@
 //
 #[test]
 fn reuse() {
+    use zenoh::prelude::r#async::*;
     zenoh::kedefine!(
         pub gkeys: "zenoh/${group:*}/${member:*}",
     );

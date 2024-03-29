@@ -14,9 +14,7 @@
 
 //! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 
-use crate::primitives::{
-    key_expr::KeyExpr, query::_REPLY_KEY_EXPR_ANY_SEL_PARAM, queryable::Query,
-};
+use crate::api::{key_expr::KeyExpr, query::_REPLY_KEY_EXPR_ANY_SEL_PARAM, queryable::Query};
 use std::{
     borrow::{Borrow, Cow},
     collections::HashMap,

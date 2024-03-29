@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
-use crate::primitives::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 
 use futures::StreamExt;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};

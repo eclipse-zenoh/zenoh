@@ -15,7 +15,7 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
-use crate::primitives::{
+use crate::api::{
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     query::{QueryConsolidation, QueryTarget, Reply},

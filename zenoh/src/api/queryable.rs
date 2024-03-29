@@ -13,8 +13,7 @@
 //
 
 //! Queryable primitives.
-use crate::net::primitives::Primitives;
-use crate::primitives::{
+use crate::api::{
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
@@ -33,6 +32,7 @@ use crate::primitives::{
     value::Value,
     Id,
 };
+use crate::net::primitives::Primitives;
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;

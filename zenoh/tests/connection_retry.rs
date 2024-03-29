@@ -1,5 +1,6 @@
 use zenoh::config::ConnectionRetryConf;
 use zenoh::prelude::sync::*;
+use zenoh_link::EndPoint;
 
 #[test]
 fn retry_config_overriding() {

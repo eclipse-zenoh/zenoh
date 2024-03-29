@@ -23,13 +23,22 @@
 //! ```
 
 pub(crate) mod common {
+    pub use crate::config::{Config, ValidatedMap};
+
     #[zenoh_macros::unstable]
     pub use crate::sample::Attachment;
     pub use crate::sample::{
-        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+        Locality, QoSBuilderTrait, Sample, SampleBuilderTrait, SampleKind, SourceInfo,
+        TimestampBuilderTrait, ValueBuilderTrait,
     };
+
+    pub use crate::query::Reply;
+
     pub use crate::session::{open, Session, SessionDeclarations};
-    pub use zenoh_config::Config;
+
+    pub use crate::publication::Priority;
+
+    pub use crate::key_expr::kedefine;
 
     //     /// A zenoh error.
     //     // pub use zenoh_result::Error;

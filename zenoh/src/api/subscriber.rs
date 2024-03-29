@@ -13,7 +13,7 @@
 //
 
 //! Subscribing primitives.
-use crate::primitives::{
+use crate::api::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     sample::{Locality, Sample},

@@ -13,7 +13,7 @@
 //
 
 //! Callback handler trait.
-use crate::primitives::session::API_DATA_RECEPTION_CHANNEL_SIZE;
+use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 use std::sync::{Arc, Mutex, Weak};
 use zenoh_collections::RingBuffer as RingBufferInner;
 use zenoh_result::ZResult;

@@ -18,14 +18,14 @@ mod admin;
 pub mod session;
 #[macro_use]
 pub mod encoding;
-mod handlers;
+pub mod handlers;
 mod info;
 pub mod key_expr;
 #[cfg(feature = "unstable")]
 mod liveliness;
 pub mod payload;
-mod publication;
-mod query;
+pub mod publication;
+pub mod query;
 pub mod queryable;
 pub mod sample;
 mod scouting;

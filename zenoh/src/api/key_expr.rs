@@ -43,11 +43,11 @@
 //! [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
 //! as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 
-use crate::net::primitives::Primitives;
-use crate::primitives::{
+use crate::api::{
     selector::Selector,
     session::{Session, Undeclarable},
 };
+use crate::net::primitives::Primitives;
 use std::{
     convert::{TryFrom, TryInto},
     future::Ready,
