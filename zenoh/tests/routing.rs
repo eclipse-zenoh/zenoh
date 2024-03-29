@@ -137,7 +137,7 @@ impl Task {
                     tokio::select! {
                         _  = token.cancelled() => break,
                         query = queryable.recv_async() => {
-                            query?.reply(KeyExpr::try_from(ke.to_owned())?, payload.clone()).res_async().await?;
+                            query?.reply(ke.to_owned(), payload.clone()).res_async().await?;
                         },
                     }
                 }
