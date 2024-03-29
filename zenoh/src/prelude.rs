@@ -22,48 +22,68 @@
 //! use zenoh::prelude::r#async::*;
 //! ```
 
-pub use common::*;
 pub(crate) mod common {
-    pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    pub use zenoh_buffers::{
-        buffer::{Buffer, SplitBuffer},
-        reader::HasReader,
-        writer::HasWriter,
-    };
-    pub use zenoh_core::Resolve;
-
-    pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
-    #[zenoh_macros::unstable]
-    pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
-
-    pub use crate::config::{self, Config, ValidatedMap};
-    pub use crate::handlers::IntoHandler;
-    pub use crate::selector::{Parameter, Parameters, Selector};
-    pub use crate::session::{Session, SessionDeclarations};
-
-    pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
-
-    pub use crate::encoding::Encoding;
-    /// The encoding of a zenoh `Value`.
-    pub use crate::payload::{Deserialize, Payload, Serialize};
-    pub use crate::value::Value;
-
-    #[zenoh_macros::unstable]
-    pub use crate::sample::Locality;
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) use crate::sample::Locality;
-    #[zenoh_macros::unstable]
-    pub use crate::sample::SourceInfo;
-    pub use crate::sample::{Sample, SampleKind};
-
-    pub use crate::publication::Priority;
-    #[zenoh_macros::unstable]
-    pub use crate::publication::PublisherDeclarations;
-    pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
-
     pub use crate::sample::builder::{
         QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
     };
+    #[zenoh_macros::unstable]
+    pub use crate::sample::Attachment;
+    pub use crate::session::{open, Session, SessionDeclarations};
+    pub use zenoh_config::Config;
+
+    //     /// A zenoh error.
+    //     // pub use zenoh_result::Error;
+    //     /// A zenoh result.
+    //     // pub use zenoh_result::ZResult as Result;
+    // #[cfg(feature = "shared-memory")]
+    // pub use zenoh_shm as shm;
+
+    //     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
+    //     pub use zenoh_buffers::{
+    //         buffer::{Buffer, SplitBuffer},
+    //         reader::HasReader,
+    //         writer::HasWriter,
+    //     };
+    //     pub use zenoh_core::Resolve;
+    //     pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
+
+    //     pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
+    //     #[zenoh_macros::unstable]
+    //     pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
+
+    //     pub use crate::config::{self, Config, ValidatedMap};
+    //     pub use crate::handlers::IntoHandler;
+    //     pub use crate::selector::{Parameter, Parameters, Selector};
+    //     pub use crate::session::{Session, SessionDeclarations};
+
+    //     pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+
+    //     pub use crate::encoding::Encoding;
+    //     /// The encoding of a zenoh `Value`.
+    //     pub use crate::payload::{Deserialize, Payload, Serialize};
+    //     pub use crate::value::Value;
+
+    //     #[zenoh_macros::unstable]
+    //     pub use crate::sample::Locality;
+    //     #[cfg(not(feature = "unstable"))]
+    //     pub(crate) use crate::sample::Locality;
+    //     #[zenoh_macros::unstable]
+    //     pub use crate::sample::SourceInfo;
+    //     pub use crate::sample::{Sample, SampleKind};
+
+    //     pub use crate::publication::Priority;
+    //     #[zenoh_macros::unstable]
+    //     pub use crate::publication::PublisherDeclarations;
+    //     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
+
+    //     pub use crate::sample::builder::{
+    //         QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+    //     };
+    // /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
+    // /// reading and writing data.
+    //  pub use zenoh_buffers as buffers;
+    // pub use scouting::scout;
+    // pub use session::open;
 }
 
 /// Prelude to import when using Zenoh's sync API.

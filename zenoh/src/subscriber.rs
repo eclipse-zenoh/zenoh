@@ -15,11 +15,10 @@
 //! Subscribing primitives.
 use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::key_expr::KeyExpr;
-use crate::prelude::Locality;
-use crate::sample::Sample;
+use crate::sample::{Locality, Sample};
+use crate::session::SessionRef;
+use crate::session::Undeclarable;
 use crate::Id;
-use crate::Undeclarable;
-use crate::{Result as ZResult, SessionRef};
 use std::fmt;
 use std::future::Ready;
 use std::ops::{Deref, DerefMut};
@@ -28,6 +27,7 @@ use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
+use zenoh_result::ZResult;
 
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;
@@ -312,7 +312,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Sample>,
+        Handler: IntoHandler<'static, Sample>,
     {
         let SubscriberBuilder {
             session,

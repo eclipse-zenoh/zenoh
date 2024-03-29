@@ -13,19 +13,23 @@
 //
 
 //! Queryable primitives.
-
 use crate::encoding::Encoding;
-use crate::handlers::{locked, DefaultHandler};
+use crate::handlers::{locked, DefaultHandler, IntoHandler};
+use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::prelude::*;
+use crate::payload::Payload;
+use crate::publication::Priority;
 use crate::sample::builder::{
     DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
     TimestampBuilderTrait, ValueBuilderTrait,
 };
-use crate::sample::SourceInfo;
+use crate::sample::{Locality, SourceInfo};
+use crate::sample::{Sample, SampleKind};
+use crate::selector::{Parameters, Selector};
+use crate::session::SessionRef;
+use crate::session::Undeclarable;
+use crate::value::Value;
 use crate::Id;
-use crate::SessionRef;
-use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{query::ReplyKeyExpr, sample::Attachment};
 use std::fmt;
@@ -33,7 +37,10 @@ use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
 use uhlc::Timestamp;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_config::ZenohId;
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_protocol::core::CongestionControl;
+use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::{
     core::{EntityId, WireExpr},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
@@ -805,7 +812,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Query>,
+        Handler: IntoHandler<'static, Query>,
     {
         let QueryableBuilder {
             session,

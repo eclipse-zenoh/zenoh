@@ -79,19 +79,10 @@ extern crate zenoh_core;
 #[macro_use]
 extern crate zenoh_result;
 
-pub(crate) type Id = u32;
+type Id = u32;
 
 use git_version::git_version;
-#[cfg(feature = "unstable")]
-use prelude::*;
-pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
-use zenoh_result::ZResult;
 use zenoh_util::concat_enabled_features;
-
-/// A zenoh error.
-pub use zenoh_result::Error;
-/// A zenoh result.
-pub use zenoh_result::ZResult as Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -117,43 +108,30 @@ pub const FEATURES: &str = concat_enabled_features!(
     ]
 );
 
+pub mod prelude;
+pub use prelude::common::*;
+
+mod session;
+pub use session::open;
+
 mod admin;
 #[macro_use]
-mod session;
-pub use session::*;
-
-pub mod key_expr;
-pub(crate) mod net;
-pub use net::runtime;
-pub mod selector;
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-pub use zenoh_config as config;
-pub(crate) mod encoding;
-pub mod handlers;
-pub mod info;
+// mod session;
+mod encoding;
+mod handlers;
+mod info;
+mod key_expr;
 #[cfg(feature = "unstable")]
-pub mod liveliness;
-pub mod payload;
-pub mod plugins;
-pub mod prelude;
-pub mod publication;
-pub mod query;
-pub mod queryable;
-pub mod sample;
-pub mod subscriber;
-pub mod value;
-#[cfg(feature = "shared-memory")]
-pub use zenoh_shm as shm;
-
-/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
-/// reading and writing data.
-pub use zenoh_buffers as buffers;
-
-/// Time related types and functions.
-pub mod time;
-
-/// Scouting primitives.
-pub mod scouting;
-
-pub use scouting::scout;
-pub use session::open;
+mod liveliness;
+mod net;
+mod payload;
+mod plugins;
+mod publication;
+mod query;
+mod queryable;
+mod sample;
+mod scouting;
+mod selector;
+mod subscriber;
+mod time;
+mod value;

@@ -57,7 +57,11 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::{net::primitives::Primitives, prelude::Selector, Session, Undeclarable};
+use crate::{
+    net::primitives::Primitives,
+    selector::Selector,
+    session::{Session, Undeclarable},
+};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
@@ -323,8 +327,8 @@ impl FromStr for KeyExpr<'static> {
         Ok(Self(KeyExprInner::Owned(s.parse()?)))
     }
 }
-impl<'a> From<super::KeyExpr<'a>> for OwnedKeyExpr {
-    fn from(val: super::KeyExpr<'a>) -> Self {
+impl<'a> From<KeyExpr<'a>> for OwnedKeyExpr {
+    fn from(val: KeyExpr<'a>) -> Self {
         match val.0 {
             KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                 key_expr.into()
@@ -553,7 +557,7 @@ impl<'a> KeyExpr<'a> {
             _ => false,
         }
     }
-    pub(crate) fn to_wire(&'a self, session: &crate::Session) -> WireExpr<'a> {
+    pub(crate) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,

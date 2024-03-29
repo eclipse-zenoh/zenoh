@@ -11,12 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
 
 use futures::StreamExt;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
 use tokio::net::UdpSocket;
+use zenoh_config::Config;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
@@ -59,9 +60,8 @@ pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     config: TryIntoConfig,
 ) -> ScoutBuilder<DefaultHandler>
 where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error:
-        Into<zenoh_result::Error>,
+    TryIntoConfig: std::convert::TryInto<Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<Config>>::Error: Into<zenoh_result::Error>,
 {
     ScoutBuilder {
         what: what.into(),
@@ -92,7 +92,7 @@ where
 #[derive(Debug)]
 pub struct ScoutBuilder<Handler> {
     pub(crate) what: WhatAmIMatcher,
-    pub(crate) config: ZResult<crate::config::Config>,
+    pub(crate) config: ZResult<Config>,
     pub(crate) handler: Handler,
 }
 
@@ -183,7 +183,7 @@ impl ScoutBuilder<DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Hello>,
+        Handler: IntoHandler<'static, Hello>,
     {
         let ScoutBuilder {
             what,
@@ -200,7 +200,7 @@ impl ScoutBuilder<DefaultHandler> {
 
 impl<Handler> Resolvable for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Scout<Handler::Handler>>;
@@ -208,7 +208,7 @@ where
 
 impl<Handler> SyncResolve for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
@@ -219,7 +219,7 @@ where
 
 impl<Handler> AsyncResolve for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;

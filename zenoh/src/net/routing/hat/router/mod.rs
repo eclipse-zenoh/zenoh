@@ -34,6 +34,7 @@ use super::{
     HatBaseTrait, HatTrait,
 };
 use crate::{
+    net::runtime::Runtime,
     net::{
         codec::Zenoh080Routing,
         protocol::linkstate::LinkStateList,
@@ -43,7 +44,6 @@ use crate::{
             router::{compute_data_routes, compute_query_routes, RoutesIndexes},
         },
     },
-    runtime::Runtime,
 };
 use std::{
     any::Any,

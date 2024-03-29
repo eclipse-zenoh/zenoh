@@ -13,11 +13,11 @@
 //
 
 //! Payload primitives.
-use crate::buffers::ZBuf;
 use std::{
     borrow::Cow, convert::Infallible, fmt::Debug, ops::Deref, string::FromUtf8Error, sync::Arc,
 };
 use zenoh_buffers::buffer::Buffer;
+use zenoh_buffers::ZBuf;
 use zenoh_buffers::{
     buffer::SplitBuffer, reader::HasReader, writer::HasWriter, ZBufReader, ZSlice,
 };

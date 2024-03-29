@@ -12,11 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::admin;
-use crate::config::Config;
-use crate::config::Notifier;
 use crate::encoding::Encoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
+use crate::key_expr::KeyExpr;
 use crate::key_expr::KeyExprInner;
 #[zenoh_macros::unstable]
 use crate::liveliness::{Liveliness, LivelinessTokenState};
@@ -24,8 +23,6 @@ use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
 use crate::payload::Payload;
-use crate::prelude::Locality;
-use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -33,16 +30,17 @@ use crate::queryable::*;
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::sample::DataInfoIntoSample;
+use crate::sample::Locality;
 use crate::sample::QoS;
+use crate::sample::Sample;
+use crate::sample::SampleKind;
+use crate::sample::SourceInfo;
+use crate::selector::Parameters;
+use crate::selector::Selector;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
+use crate::value::Value;
 use crate::Id;
-use crate::Priority;
-use crate::Sample;
-use crate::SampleKind;
-use crate::Selector;
-use crate::SourceInfo;
-use crate::Value;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -57,7 +55,7 @@ use std::time::Duration;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::unwrap_or_default;
+use zenoh_config::{unwrap_or_default, Config, Notifier};
 use zenoh_core::Resolvable;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 #[cfg(feature = "unstable")]
@@ -2618,8 +2616,8 @@ impl crate::net::primitives::EPrimitives for Session {
 /// ```
 pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
 where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
 {
     OpenBuilder { config }
 }
@@ -2638,27 +2636,27 @@ where
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct OpenBuilder<TryIntoConfig>
 where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
 {
     config: TryIntoConfig,
 }
 
 impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
 where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
 {
     type To = ZResult<Session>;
 }
 
 impl<TryIntoConfig> SyncResolve for OpenBuilder<TryIntoConfig>
 where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let config: crate::config::Config = self
+        let config: Config = self
             .config
             .try_into()
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
@@ -2668,8 +2666,8 @@ where
 
 impl<TryIntoConfig> AsyncResolve for OpenBuilder<TryIntoConfig>
 where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
 {
     type Future = Ready<Self::To>;
 

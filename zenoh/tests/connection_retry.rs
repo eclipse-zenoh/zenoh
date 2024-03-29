@@ -1,5 +1,4 @@
-use config::ConnectionRetryConf;
-
+use zenoh::config::ConnectionRetryConf;
 use zenoh::prelude::sync::*;
 
 #[test]

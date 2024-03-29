@@ -13,7 +13,6 @@
 //
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
-use zenoh::query::Reply;
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(10);

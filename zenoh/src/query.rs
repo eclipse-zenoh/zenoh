@@ -13,17 +13,25 @@
 //
 
 //! Query primitives.
-use crate::handlers::{locked, Callback, DefaultHandler};
-use crate::prelude::*;
+use crate::encoding::Encoding;
+use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
+use crate::key_expr::KeyExpr;
+use crate::payload::Payload;
+use crate::publication::Priority;
 use crate::sample::builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait};
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
-use crate::sample::QoSBuilder;
-use crate::Session;
+use crate::sample::{Locality, QoSBuilder, Sample, SourceInfo};
+use crate::selector::Selector;
+use crate::session::Session;
+use crate::value::Value;
 use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
+use zenoh_config::ZenohId;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_keyexpr::OwnedKeyExpr;
+use zenoh_protocol::core::CongestionControl;
 use zenoh_result::ZResult;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).

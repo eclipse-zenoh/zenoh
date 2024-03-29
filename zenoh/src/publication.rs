@@ -13,16 +13,20 @@
 //
 
 //! Publishing primitives.
+use crate::encoding::Encoding;
+use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::prelude::*;
+use crate::payload::Payload;
 use crate::sample::builder::{
     QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
 };
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
-use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
-use crate::SessionRef;
-use crate::Undeclarable;
+use crate::sample::Locality;
+use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind, SourceInfo};
+use crate::session::SessionRef;
+use crate::session::Undeclarable;
+use crate::value::Value;
 #[cfg(feature = "unstable")]
 use crate::{
     handlers::{Callback, DefaultHandler, IntoHandler},
@@ -30,6 +34,9 @@ use crate::{
 };
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::core::EntityGlobalId;
+use zenoh_protocol::core::EntityId;
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
@@ -1460,7 +1467,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, MatchingStatus>,
+        Handler: IntoHandler<'static, MatchingStatus>,
     {
         let MatchingListenerBuilder {
             publisher,
@@ -1675,6 +1682,14 @@ impl Drop for MatchingListenerInner<'_> {
 
 #[cfg(test)]
 mod tests {
+    use zenoh_config::Config;
+    use zenoh_core::SyncResolve;
+
+    use crate::{
+        sample::SampleKind,
+        session::{open, SessionDeclarations},
+    };
+
     #[test]
     fn priority_from() {
         use super::Priority as APrio;
@@ -1701,8 +1716,6 @@ mod tests {
 
     #[test]
     fn sample_kind_integrity_in_publication() {
-        use crate::{open, prelude::sync::*};
-
         const KEY_EXPR: &str = "test/sample_kind_integrity/publication";
         const VALUE: &str = "zenoh";
 
@@ -1729,8 +1742,6 @@ mod tests {
 
     #[test]
     fn sample_kind_integrity_in_put_builder() {
-        use crate::{open, prelude::sync::*};
-
         const KEY_EXPR: &str = "test/sample_kind_integrity/put_builder";
         const VALUE: &str = "zenoh";
 

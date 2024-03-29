@@ -17,7 +17,6 @@ use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::payload::Payload;
 use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::sample::builder::ValueBuilderTrait;
@@ -30,7 +29,8 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_config::{ConfigValidator, PluginLoad, ValidatedMap, WhatAmI};
+use zenoh_core::SyncResolve;
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::network::declare::QueryableId;
 use zenoh_protocol::{
@@ -70,7 +70,7 @@ pub struct AdminSpace {
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
-    Start(crate::config::PluginLoad),
+    Start(PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -93,7 +93,7 @@ impl ConfigValidator for AdminSpace {
 impl AdminSpace {
     fn start_plugin(
         plugin_mgr: &mut plugins::PluginsManager,
-        config: &crate::config::PluginLoad,
+        config: &PluginLoad,
         start_args: &Runtime,
     ) -> ZResult<()> {
         let name = &config.name;

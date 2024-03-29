@@ -12,20 +12,21 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crate::encoding::Encoding;
+use crate::key_expr::KeyExpr;
+use crate::payload::Payload;
+use crate::publication::Priority;
 use crate::sample::Attachment;
 use crate::sample::QoS;
 use crate::sample::QoSBuilder;
+use crate::sample::Sample;
 use crate::sample::SourceInfo;
-use crate::Encoding;
-use crate::KeyExpr;
-use crate::Payload;
-use crate::Priority;
-use crate::Sample;
-use crate::SampleKind;
-use crate::Value;
+use crate::value::Value;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
+
+use super::SampleKind;
 
 pub trait QoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.

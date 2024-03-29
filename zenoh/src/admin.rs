@@ -13,11 +13,12 @@
 //
 use crate::{
     encoding::Encoding,
-    keyexpr,
-    prelude::sync::{KeyExpr, Locality, SampleKind},
+    key_expr::KeyExpr,
+    payload::Payload,
     queryable::Query,
-    sample::DataInfo,
-    Payload, Session, ZResult,
+    sample::{DataInfo, Locality, SampleKind},
+    session::Session,
+    zenoh_result::ZResult,
 };
 use std::{
     collections::hash_map::DefaultHasher,
@@ -25,6 +26,7 @@ use std::{
     sync::Arc,
 };
 use zenoh_core::SyncResolve;
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,

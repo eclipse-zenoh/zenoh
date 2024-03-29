@@ -18,7 +18,9 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use super::RoutingContext;
-use crate::KeyExpr;
+use crate::{
+    key_expr::KeyExpr, net::routing::interceptor::downsampling::downsampling_interceptor_factories,
+};
 use std::any::Any;
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
@@ -26,7 +28,6 @@ use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub mod downsampling;
-use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
 
 pub(crate) trait InterceptorTrait {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>>;

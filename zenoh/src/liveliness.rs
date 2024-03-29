@@ -15,30 +15,33 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
-use zenoh_protocol::network::request;
-
+use crate::handlers::locked;
+use crate::handlers::DefaultHandler;
+use crate::handlers::IntoHandler;
+use crate::key_expr::KeyExpr;
+use crate::query::QueryConsolidation;
+use crate::query::QueryTarget;
+use crate::sample::Locality;
+use crate::sample::Sample;
+use crate::sample::SourceInfo;
+use crate::session::Session;
+use crate::session::SessionRef;
+use crate::session::Undeclarable;
+use crate::subscriber::Subscriber;
+use crate::subscriber::SubscriberInner;
 use crate::{query::Reply, Id};
-
-#[zenoh_macros::unstable]
-use {
-    crate::{
-        handlers::locked,
-        handlers::DefaultHandler,
-        prelude::*,
-        subscriber::{Subscriber, SubscriberInner},
-        SessionRef, Undeclarable,
-    },
-    std::convert::TryInto,
-    std::future::Ready,
-    std::sync::Arc,
-    std::time::Duration,
-    zenoh_config::unwrap_or_default,
-    zenoh_core::AsyncResolve,
-    zenoh_core::Resolvable,
-    zenoh_core::Result as ZResult,
-    zenoh_core::SyncResolve,
-    zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo,
-};
+use std::convert::TryInto;
+use std::future::Ready;
+use std::sync::Arc;
+use std::time::Duration;
+use zenoh_config::unwrap_or_default;
+use zenoh_core::Resolvable;
+use zenoh_core::Result as ZResult;
+use zenoh_core::SyncResolve;
+use zenoh_core::{AsyncResolve, Resolve};
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
+use zenoh_protocol::network::request;
 
 #[zenoh_macros::unstable]
 pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;
