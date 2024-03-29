@@ -23,8 +23,6 @@
 extern crate alloc;
 
 mod bbuf;
-#[cfg(feature = "shared-memory")]
-mod shm;
 mod slice;
 pub mod vec;
 mod zbuf;

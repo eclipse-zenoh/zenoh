@@ -26,11 +26,10 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = ["std"]
-shared-memory = ["zenoh-shm"]
+shared-memory = []
 std = []
 test = ["rand"]
 
 [dependencies]
 rand = { workspace = true, optional = true }
 zenoh-collections = { workspace = true, default-features = false }
-zenoh-shm = { workspace = true, optional = true }

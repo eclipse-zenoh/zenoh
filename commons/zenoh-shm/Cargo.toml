@@ -30,6 +30,21 @@ description = "Internal crate for zenoh."
 
 [features]
 test = ["num_cpus"]
+# NOTE(fuzzypixelz): Feature "shared-memory" should be enabled by dependants. It
+# is disabled by default to avoid having a zenoh-buffers crate with
+# "shared-memory" feature enabled in the workspace. 
+#
+# This is because Cargo will then unify the zenoh-buffers crate with the
+# "shared-memory" feature and the zenoh-buffers crate without the
+# "shared-memory" feature. These two crates have incompatible declarations of
+# the `zenoh_buffers::ZSliceBuffer` trait and thus unifying them will break at
+# least non-users of the "zenoh-buffers/shared-memory" feature. 
+#
+# If this crate is compiled without enabling "shared-memory", it will simply
+# panic at some point.
+#
+# https://doc.rust-lang.org/cargo/reference/features.html#feature-unification
+shared-memory = ["zenoh-buffers/shared-memory"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -42,6 +57,7 @@ tokio = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
+zenoh-buffers = { workspace = true }
 rand = { workspace = true }
 lazy_static = { workspace = true }
 num-traits = { workspace = true }

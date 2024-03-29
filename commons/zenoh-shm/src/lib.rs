@@ -13,11 +13,15 @@
 //
 use api::{common::types::ProtocolID, provider::chunk::ChunkDescriptor};
 use header::descriptor::{HeaderDescriptor, OwnedHeaderDescriptor};
-use std::sync::{
-    atomic::{AtomicPtr, Ordering},
-    Arc,
+use std::{
+    any::Any,
+    sync::{
+        atomic::{AtomicPtr, Ordering},
+        Arc,
+    },
 };
 use watchdog::{confirmator::ConfirmedDescriptor, descriptor::Descriptor};
+use zenoh_buffers::ZSliceBuffer;
 
 #[macro_export]
 macro_rules! tested_module {
@@ -203,5 +207,38 @@ impl AsRef<[u8]> for SharedMemoryBuf {
 impl AsMut<[u8]> for SharedMemoryBuf {
     fn as_mut(&mut self) -> &mut [u8] {
         unsafe { self.as_mut_slice_inner() }
+    }
+}
+
+impl ZSliceBuffer for SharedMemoryBuf {
+    fn as_slice(&self) -> &[u8] {
+        self.as_ref()
+    }
+
+    #[cfg(feature = "shared-memory")]
+    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8] {
+        self.as_mut()
+    }
+
+    #[cfg(feature = "shared-memory")]
+    fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
+        if self.is_valid() && self.is_unique() {
+            return Some(self.as_mut());
+        }
+        None
+    }
+
+    #[cfg(not(feature = "shared-memory"))]
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        unreachable!("zenoh-shm should be compiled with the shared-memory feature")
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    #[cfg(feature = "shared-memory")]
+    fn is_valid(&self) -> bool {
+        self.is_valid()
     }
 }
