@@ -113,6 +113,7 @@ use face_hat_mut;
 
 struct HatTables {
     peer_subs: HashSet<Arc<Resource>>,
+    peer_tokens: HashSet<Arc<Resource>>,
     peer_qabls: HashSet<Arc<Resource>>,
     peers_net: Option<Network>,
     peers_trees_task: Option<JoinHandle<()>>,
@@ -122,6 +123,7 @@ impl HatTables {
     fn new() -> Self {
         Self {
             peer_subs: HashSet::new(),
+            peer_tokens: HashSet::new(),
             peer_qabls: HashSet::new(),
             peers_net: None,
             peers_trees_task: None,
@@ -475,6 +477,9 @@ struct HatFace {
     remote_sub_interests: HashMap<InterestId, (Option<Arc<Resource>>, bool)>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
+    remote_token_interests: HashMap<InterestId, (Option<Arc<Resource>>, bool)>,
+    local_tokens: HashMap<Arc<Resource>, SubscriberId>,
+    remote_tokens: HashMap<SubscriberId, Arc<Resource>>,
     remote_qabl_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
@@ -491,6 +496,9 @@ impl HatFace {
             remote_qabl_interests: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),
+            remote_token_interests: HashMap::new(),
+            local_tokens: HashMap::new(),
+            remote_tokens: HashMap::new(),
         }
     }
 }
