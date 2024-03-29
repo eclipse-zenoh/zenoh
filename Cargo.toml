@@ -39,6 +39,7 @@ members = [
   "io/zenoh-links/zenoh-link-unixsock_stream/",
   "io/zenoh-links/zenoh-link-ws/",
   "io/zenoh-links/zenoh-link-unixpipe/",
+  "io/zenoh-links/zenoh-link-vsock/",
   "io/zenoh-transport",
   "plugins/zenoh-backend-example",
   "plugins/zenoh-plugin-example",
@@ -154,10 +155,11 @@ tokio = { version = "1.35.1", default-features = false } # Default features are 
 tokio-util = "0.7.10"
 tokio-tungstenite = "0.21"
 tokio-rustls = "0.25.0"
+# tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
 thread-priority = "0.15"
 console-subscriber = "0.2"
 typenum = "1.16.0"
-uhlc = { version = "0.6.0", default-features = false } # Default features are disabled due to usage in no_std crates
+uhlc = { version = "0.7.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.3.1"
 urlencoding = "2.1.2"
@@ -194,6 +196,7 @@ zenoh-link-udp = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-udp
 zenoh-link-ws = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-ws" }
 zenoh-link-unixpipe = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-unixpipe" }
 zenoh-link-serial = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-serial" }
+zenoh-link-vsock = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-vsock" }
 zenoh-link = { version = "0.11.0-dev", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "0.11.0-dev", path = "io/zenoh-link-commons" }
 zenoh = { version = "0.11.0-dev", path = "zenoh", default-features = false }

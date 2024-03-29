@@ -1942,9 +1942,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
 dependencies = [
  "libc",
  "log",
@@ -2009,6 +2009,7 @@ dependencies = [
  "bitflags 2.4.0",
  "cfg-if 1.0.0",
  "libc",
+ "memoffset 0.9.0",
 ]
 
 [[package]]
@@ -3798,6 +3799,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-vsock"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e336ac4b36df625d5429a735dd5847732fe5f62010e3ce0c50f3705d44730f8"
+dependencies = [
+ "bytes",
+ "futures",
+ "libc",
+ "tokio",
+ "vsock",
+]
+
+[[package]]
 name = "toml_datetime"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3890,9 +3904,9 @@ checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
 
 [[package]]
 name = "uhlc"
-version = "0.6.3"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1eadef1fa26cbbae1276c46781e8f4d888bdda434779c18ae6c2a0e69991885"
+checksum = "99b6df3f3e948b40e20c38a6d1fd6d8f91b3573922fc164e068ad3331560487e"
 dependencies = [
  "humantime",
  "lazy_static",
@@ -4088,6 +4102,16 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "vsock"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2dfb6e7a74830912f1f4a7655227c9ded1ea4e9136676311fedf54bedb412f35"
+dependencies = [
+ "libc",
+ "nix 0.27.1",
+]
 
 [[package]]
 name = "waker-fn"
@@ -4533,7 +4557,6 @@ version = "0.11.0-dev"
 dependencies = [
  "rand 0.8.5",
  "zenoh-collections",
- "zenoh-shm",
 ]
 
 [[package]]
@@ -4561,6 +4584,7 @@ version = "0.11.0-dev"
 dependencies = [
  "flume",
  "json5",
+ "log",
  "num_cpus",
  "secrecy",
  "serde",
@@ -4666,6 +4690,7 @@ dependencies = [
  "zenoh-link-udp",
  "zenoh-link-unixpipe",
  "zenoh-link-unixsock_stream",
+ "zenoh-link-vsock",
  "zenoh-link-ws",
  "zenoh-protocol",
  "zenoh-result",
@@ -4847,6 +4872,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-link-vsock"
+version = "0.11.0-dev"
+dependencies = [
+ "async-trait",
+ "libc",
+ "log",
+ "tokio",
+ "tokio-util",
+ "tokio-vsock",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol",
+ "zenoh-result",
+ "zenoh-runtime",
+ "zenoh-sync",
+ "zenoh-util",
+]
+
+[[package]]
 name = "zenoh-link-ws"
 version = "0.11.0-dev"
 dependencies = [
@@ -5004,10 +5048,9 @@ dependencies = [
 name = "zenoh-shm"
 version = "0.11.0-dev"
 dependencies = [
- "allocator-api2",
- "async-std",
  "async-trait",
  "bincode",
+ "crc",
  "lazy_static",
  "libc",
  "lockfree",
@@ -5019,7 +5062,10 @@ dependencies = [
  "shared_memory",
  "stabby",
  "thread-priority",
+ "tokio",
+ "zenoh-buffers",
  "zenoh-core",
+ "zenoh-macros",
  "zenoh-result",
  "zenoh-shm",
 ]

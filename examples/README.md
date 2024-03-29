@@ -21,7 +21,7 @@
 
    Typical usage:
    ```bash
-      z_scout
+   z_scout
    ```
 
 ### z_info
@@ -30,7 +30,7 @@
 
    Typical usage:
    ```bash
-      z_info
+   z_info
    ```
 
 
@@ -42,11 +42,11 @@
 
    Typical usage:
    ```bash
-      z_put
+   z_put
    ```
    or
    ```bash
-      z_put -k demo/example/test -v 'Hello World'
+   z_put -k demo/example/test -v 'Hello World'
    ```
 
 ### z_pub
@@ -56,11 +56,11 @@
 
    Typical usage:
    ```bash
-      z_pub
+   z_pub
    ```
    or
    ```bash
-      z_pub -k demo/example/test -v 'Hello World'
+   z_pub -k demo/example/test -v 'Hello World'
    ```
 
 ### z_sub
@@ -70,11 +70,11 @@
 
    Typical usage:
    ```bash
-      z_sub
+   z_sub
    ```
    or
    ```bash
-      z_sub -k 'demo/**'
+   z_sub -k 'demo/**'
    ```
 
 ### z_pull
@@ -85,11 +85,11 @@
 
    Typical usage:
    ```bash
-      z_pull
+   z_pull
    ```
    or
    ```bash
-      z_pull -k 'demo/**'
+   z_pull -k 'demo/**'
    ```
 
 ### z_get
@@ -100,11 +100,11 @@
 
    Typical usage:
    ```bash
-      z_get
+   z_get
    ```
    or
    ```bash
-      z_get -s 'demo/**'
+   z_get -s 'demo/**'
    ```
 
 ### z_queryable
@@ -115,11 +115,11 @@
 
    Typical usage:
    ```bash
-      z_queryable
+   z_queryable
    ```
    or
    ```bash
-      z_queryable -k demo/example/queryable -v 'This is the result'
+   z_queryable -k demo/example/queryable -v 'This is the result'
    ```
 
 ### z_storage
@@ -132,11 +132,11 @@
 
    Typical usage:
    ```bash
-      z_storage
+   z_storage
    ```
    or
    ```bash
-      z_storage -k 'demo/**'
+   z_storage -k 'demo/**'
    ```
 
 ### z_pub_shm & z_sub
@@ -146,12 +146,12 @@
 
    Typical Subscriber usage:
    ```bash
-      z_sub
+   z_sub
    ```
 
    Typical Publisher usage:
    ```bash
-      z_pub_shm
+   z_pub_shm
    ```
 
 ### z_pub_thr & z_sub_thr
@@ -162,12 +162,12 @@
 
    Typical Subscriber usage:
    ```bash
-      z_sub_thr
+   z_sub_thr
    ```
 
    Typical Publisher usage:
    ```bash
-      z_pub_thr 1024
+   z_pub_thr 1024
    ```
 
 ### z_ping & z_pong
@@ -179,14 +179,16 @@
    The pong application waits for samples on the first key expression and replies by
    writing back the received data on the second key expression.
 
+  :warning: z_pong needs to start first to avoid missing the kickoff from z_ping.
+
    Typical Pong usage:
    ```bash
-      z_pong
+   z_pong
    ```
 
    Typical Ping usage:
    ```bash
-      z_ping 1024
+   z_ping 1024
    ```
 
 ### z_pub_shm_thr & z_sub_thr
@@ -199,12 +201,12 @@
 
    Typical Subscriber usage:
    ```bash
-      z_sub_thr
+   z_sub_thr
    ```
 
    Typical Publisher usage:
    ```bash
-      z_pub_shm_thr
+   z_pub_shm_thr
    ```
 
 ### z_liveliness
@@ -216,11 +218,11 @@
 
    Typical usage:
    ```bash
-      z_liveliness
+   z_liveliness
    ```
    or
    ```bash
-      z_liveliness -k 'group1/member1'
+   z_liveliness -k 'group1/member1'
    ```
 
 ### z_get_liveliness
@@ -230,11 +232,11 @@
 
    Typical usage:
    ```bash
-      z_get_liveliness
+   z_get_liveliness
    ```
    or
    ```bash
-      z_get_liveliness -k 'group1/**'
+   z_get_liveliness -k 'group1/**'
    ```
 
 ### z_sub_liveliness
@@ -248,9 +250,9 @@
 
    Typical usage:
    ```bash
-      z_sub_liveliness
+   z_sub_liveliness
    ```
    or
    ```bash
-      z_sub_liveliness -k 'group1/**'
+   z_sub_liveliness -k 'group1/**'
    ```

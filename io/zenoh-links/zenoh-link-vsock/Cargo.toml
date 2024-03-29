@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 ZettaScale Technology
+# Copyright (c) 2024 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -13,7 +13,7 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zenoh-config"
+name = "zenoh-link-vsock"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
@@ -22,18 +22,23 @@ edition = { workspace = true }
 license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["net", "io-util", "rt", "time"] }
+tokio-util = { workspace = true, features = ["rt"] }
 log = { workspace = true }
-flume = { workspace = true }
-json5 = { workspace = true }
-num_cpus = { workspace = true }
-serde = { workspace = true, features = ["default"] }
-serde_json = { workspace = true }
-serde_yaml = { workspace = true }
-validated_struct = { workspace = true, features = ["json5", "json_get"] }
+libc = { workspace = true }
 zenoh-core = { workspace = true }
+zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
+zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
-secrecy = { workspace = true }
+zenoh-runtime = { workspace = true }
+
+# Workspaces does not support platform dependent dependencies, and 
+# tokio-vsock not compiled on other platforms, so we put it there
+[target.'cfg(target_os = "linux")'.dependencies]
+tokio-vsock = "0.5.0" 

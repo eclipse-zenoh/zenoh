@@ -324,6 +324,7 @@ impl TransportLinkMulticastUniversal {
             let tpc = TransmissionPipelineConf {
                 batch: self.link.config.batch,
                 queue_size: self.transport.manager.config.queue_size,
+                wait_before_drop: self.transport.manager.config.wait_before_drop,
                 backoff: self.transport.manager.config.queue_backoff,
             };
             // The pipeline

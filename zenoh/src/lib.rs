@@ -122,6 +122,7 @@ pub const FEATURES: &str = concat_enabled_features!(
         "transport_udp",
         "transport_unixsock-stream",
         "transport_ws",
+        "transport_vsock",
         "unstable",
         "default"
     ]

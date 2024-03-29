@@ -98,6 +98,7 @@ pub struct TransportManagerConfig {
     pub whatami: WhatAmI,
     pub resolution: Resolution,
     pub batch_size: u16,
+    pub wait_before_drop: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
     pub defrag_buff_size: usize,
@@ -126,6 +127,7 @@ pub struct TransportManagerBuilder {
     whatami: WhatAmI,
     resolution: Resolution,
     batch_size: u16,
+    wait_before_drop: Duration,
     queue_size: QueueSizeConf,
     queue_backoff: Duration,
     defrag_buff_size: usize,
@@ -163,6 +165,11 @@ impl TransportManagerBuilder {
 
     pub fn batch_size(mut self, batch_size: u16) -> Self {
         self.batch_size = batch_size;
+        self
+    }
+
+    pub fn wait_before_drop(mut self, wait_before_drop: Duration) -> Self {
+        self.wait_before_drop = wait_before_drop;
         self
     }
 
@@ -224,7 +231,11 @@ impl TransportManagerBuilder {
         self = self.batch_size(*link.tx().batch_size());
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
+        self = self.wait_before_drop(Duration::from_micros(
+            *link.tx().queue().congestion_control().wait_before_drop(),
+        ));
         self = self.queue_size(link.tx().queue().size().clone());
+        self = self.queue_backoff(Duration::from_nanos(*link.tx().queue().backoff()));
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
 
@@ -280,6 +291,7 @@ impl TransportManagerBuilder {
             whatami: self.whatami,
             resolution: self.resolution,
             batch_size: self.batch_size,
+            wait_before_drop: self.wait_before_drop,
             queue_size,
             queue_backoff: self.queue_backoff,
             defrag_buff_size: self.defrag_buff_size,
@@ -318,12 +330,14 @@ impl Default for TransportManagerBuilder {
         let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
         let backoff = *queue.backoff();
+        let wait_before_drop = *queue.congestion_control().wait_before_drop();
         Self {
             version: VERSION,
             zid: ZenohId::rand(),
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
+            wait_before_drop: Duration::from_micros(wait_before_drop),
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
