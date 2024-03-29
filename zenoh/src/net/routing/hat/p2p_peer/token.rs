@@ -315,7 +315,7 @@ impl HatTokenTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: &mut Arc<Resource>,
-        node_id: NodeId,
+        _node_id: NodeId,
     ) {
         declare_client_token(tables, face, id, res)
     }
@@ -325,8 +325,8 @@ impl HatTokenTrait for HatCode {
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
         id: TokenId,
-        res: Option<Arc<Resource>>,
-        node_id: NodeId,
+        _res: Option<Arc<Resource>>,
+        _node_id: NodeId,
     ) {
         forget_client_token(tables, face, id)
     }
@@ -429,7 +429,7 @@ impl HatTokenTrait for HatCode {
 
     fn undeclare_token_interest(
         &self,
-        tables: &mut Tables,
+        _tables: &mut Tables,
         face: &mut Arc<FaceState>,
         id: zenoh_protocol::network::declare::InterestId,
     ) {
