@@ -48,7 +48,6 @@ pub mod header;
 pub mod posix_shm;
 pub mod reader;
 pub mod watchdog;
-pub mod zsliceshm_access;
 
 /// Informations about a [`SharedMemoryBuf`].
 ///
