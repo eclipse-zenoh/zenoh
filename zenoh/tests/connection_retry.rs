@@ -36,8 +36,7 @@ fn retry_config_overriding() {
         .insert_json5("listen/exit_on_failure", "false")
         .unwrap();
 
-    let expected = vec![
-        // global value
+    let expected = [
         ConnectionRetryConf {
             period_init_ms: 3000,
             period_max_ms: 6000,
