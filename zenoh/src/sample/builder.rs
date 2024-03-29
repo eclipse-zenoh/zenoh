@@ -70,8 +70,6 @@ pub mod op {
     #[derive(Debug)]
     pub struct Delete;
     #[derive(Debug)]
-    pub struct Error;
-    #[derive(Debug)]
     pub struct Any;
 }
 
