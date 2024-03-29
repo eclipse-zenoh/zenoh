@@ -226,7 +226,7 @@ impl ZSlice {
     /// Will return None if ZSlice data is shared and thus cannot be safely mutably accessed.
     #[inline]
     #[must_use]
-    pub fn try_mutate(&mut self) -> Option<ZSliceMut<'_>> {
+    pub fn try_as_mut(&mut self) -> Option<ZSliceMut<'_>> {
         if let Some(mutable) = Arc::get_mut(&mut self.buf) {
             #[cfg(not(feature = "shared-memory"))]
             return Some(ZSliceMut::new(
@@ -252,7 +252,7 @@ impl ZSlice {
     /// get_mut_unchecked once available.
     #[inline]
     #[must_use]
-    pub unsafe fn mutate_unchecked(&mut self) -> ZSliceMut<'_> {
+    pub unsafe fn as_mut_unchecked(&mut self) -> ZSliceMut<'_> {
         // todo: switch to Arc::get_mut_unchecked when it gets stable
         return Arc::get_mut(&mut self.buf)
             .map(|val_mut| {

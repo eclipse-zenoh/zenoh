@@ -58,6 +58,7 @@ impl<'a> ZSliceMut<'a> {
     }
 }
 
+// TODO: add deallocate locking mechanism here
 impl<'a> Drop for ZSliceMut<'a> {
     fn drop(&mut self) {}
 }
