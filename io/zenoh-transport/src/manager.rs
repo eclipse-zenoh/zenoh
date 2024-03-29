@@ -365,9 +365,6 @@ impl TransportManager {
             let this = this.clone();
             let token = this.token.clone();
             async move {
-                // while let Ok(link) = new_unicast_link_receiver.recv_async().await {
-                //     this.handle_new_link_unicast(link).await;
-                // }
                 loop {
                     tokio::select! {
                         res = new_unicast_link_receiver.recv_async() => {
@@ -444,8 +441,8 @@ impl TransportManager {
 
     // TODO(yuyuan): Can we make this async as above?
     pub fn get_locators(&self) -> Vec<Locator> {
-        let mut lsu = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_unicast());
-        let mut lsm = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_multicast());
+        let mut lsu = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_unicast());
+        let mut lsm = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }
