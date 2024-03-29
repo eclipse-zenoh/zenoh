@@ -125,7 +125,7 @@ jobs:
         run: >
           gh pr merge "${{ steps.cpr.outputs.pull-request-number }}"
             --repo "eclipse-zenoh/${{ matrix.dependant }}"
-            --subject "Sync `Cargo.lock` with eclipse-zenoh/zenoh@${{ needs.fetch.outputs.zenoh-head-hash }} from ${{ needs.fetch.outputs.zenoh-head-date }} (${{ steps.cpr.outputs.pull-request-number }})"
+            --subject "Sync `Cargo.lock` with eclipse-zenoh/zenoh@${{ needs.fetch.outputs.zenoh-head-hash }} from `${{ needs.fetch.outputs.zenoh-head-date }}` (#${{ steps.cpr.outputs.pull-request-number }})"
             --squash
             --auto
         env:
