@@ -708,11 +708,11 @@ where
         self.backend.defragment()
     }
 
-    /// Map externally-allocated chunk into SharedMemoryBuf.
+    /// Map externally-allocated chunk into ZSliceShm.
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
-    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<SharedMemoryBuf> {
+    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<ZSliceShm> {
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
 
@@ -724,7 +724,7 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(wrapped)
+        Ok(ZSliceShm::new(wrapped))
     }
 
     /// Try to collect free chunks.
