@@ -774,13 +774,13 @@ impl Session {
     /// }
     /// # }
     /// ```
-    pub fn get<'a, 'b: 'a, IntoSelector>(
+    pub fn get<'a, 'b: 'a, TryIntoSelector>(
         &'a self,
-        selector: IntoSelector,
+        selector: TryIntoSelector,
     ) -> GetBuilder<'a, 'b, DefaultHandler>
     where
-        IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
+        TryIntoSelector: TryInto<Selector<'b>>,
+        <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
         let timeout = {
