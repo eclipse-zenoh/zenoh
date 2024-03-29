@@ -103,7 +103,7 @@ jobs:
         # NOTE: If there is a pending PR, this action will simply update it with a forced push.
         uses: peter-evans/create-pull-request@v6
         with:
-          title: Sync Cargo lockfile with Zenoh's
+          title: Sync `Cargo.lock` with `eclipse-zenoh/zenoh@${{ needs.fetch.outputs.zenoh-head-hash }}` from `${{ needs.fetch.outputs.zenoh-head-date }}`"
           body: >
             This pull request synchronizes ${{ matrix.dependant }}'s Cargo lockfile with zenoh's.
             This is done to ensure ABI compatibility between Zenoh applications, backends & plugins.
@@ -125,7 +125,6 @@ jobs:
         run: >
           gh pr merge "${{ steps.cpr.outputs.pull-request-number }}"
             --repo "eclipse-zenoh/${{ matrix.dependant }}"
-            --subject "Sync `Cargo.lock` with eclipse-zenoh/zenoh@${{ needs.fetch.outputs.zenoh-head-hash }} from `${{ needs.fetch.outputs.zenoh-head-date }}` (#${{ steps.cpr.outputs.pull-request-number }})"
             --squash
             --auto
         env:
