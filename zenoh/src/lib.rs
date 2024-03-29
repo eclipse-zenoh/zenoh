@@ -79,8 +79,6 @@ extern crate zenoh_core;
 #[macro_use]
 extern crate zenoh_result;
 
-type Id = u32;
-
 use git_version::git_version;
 use zenoh_util::concat_enabled_features;
 
@@ -108,30 +106,29 @@ pub const FEATURES: &str = concat_enabled_features!(
     ]
 );
 
+// Reexport prelude::common into root of "zenoh::"
 pub mod prelude;
 pub use prelude::common::*;
 
-mod session;
-pub use session::open;
-
-mod admin;
-#[macro_use]
-// mod session;
-mod encoding;
-mod handlers;
-mod info;
-mod key_expr;
-#[cfg(feature = "unstable")]
-mod liveliness;
 mod net;
-mod payload;
 mod plugins;
-mod publication;
-mod query;
-mod queryable;
-mod sample;
-mod scouting;
-mod selector;
-mod subscriber;
-mod time;
-mod value;
+mod primitives;
+
+pub mod session {
+    pub use crate::primitives::session::open;
+    pub use crate::primitives::session::Session;
+    pub use crate::primitives::session::SessionDeclarations;
+}
+
+pub mod sample {
+    pub use crate::primitives::sample::builder::{
+        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+    };
+    #[zenoh_macros::unstable]
+    pub use crate::primitives::sample::Attachment;
+    #[zenoh_macros::unstable]
+    pub use crate::primitives::sample::Locality;
+    #[zenoh_macros::unstable]
+    pub use crate::primitives::sample::SourceInfo;
+    pub use crate::primitives::sample::{Sample, SampleKind};
+}

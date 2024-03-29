@@ -13,25 +13,26 @@
 //
 
 //! Queryable primitives.
-use crate::encoding::Encoding;
-use crate::handlers::{locked, DefaultHandler, IntoHandler};
-use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
-use crate::publication::Priority;
-use crate::sample::builder::{
-    DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
-    TimestampBuilderTrait, ValueBuilderTrait,
+use crate::primitives::{
+    encoding::Encoding,
+    handlers::{locked, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    payload::Payload,
+    publication::Priority,
+    query::ReplyKeyExpr,
+    sample::{
+        builder::{
+            DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder,
+            SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+        },
+        Attachment, Locality, Sample, SampleKind, SourceInfo,
+    },
+    selector::{Parameters, Selector},
+    session::{SessionRef, Undeclarable},
+    value::Value,
+    Id,
 };
-use crate::sample::{Locality, SourceInfo};
-use crate::sample::{Sample, SampleKind};
-use crate::selector::{Parameters, Selector};
-use crate::session::SessionRef;
-use crate::session::Undeclarable;
-use crate::value::Value;
-use crate::Id;
-#[cfg(feature = "unstable")]
-use crate::{query::ReplyKeyExpr, sample::Attachment};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
@@ -47,6 +48,8 @@ use zenoh_protocol::{
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
 use zenoh_result::ZResult;
+
+use super::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 pub(crate) struct QueryInner {
     /// The key expression of this Query.
@@ -196,7 +199,7 @@ impl Query {
     }
     fn _accepts_any_replies(&self) -> ZResult<bool> {
         self.parameters()
-            .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM])
+            .get_bools([_REPLY_KEY_EXPR_ANY_SEL_PARAM])
             .map(|a| a[0])
     }
 }

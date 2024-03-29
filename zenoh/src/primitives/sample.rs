@@ -13,13 +13,15 @@
 //
 
 //! Sample primitives
-use crate::encoding::Encoding;
-use crate::key_expr::KeyExpr;
-use crate::payload::Payload;
-use crate::publication::Priority;
-use crate::sample::builder::{QoSBuilderTrait, ValueBuilderTrait};
-use crate::time::Timestamp;
-use crate::value::Value;
+use crate::primitives::{
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    payload::Payload,
+    publication::Priority,
+    sample::builder::{QoSBuilderTrait, ValueBuilderTrait},
+    time::Timestamp,
+    value::Value,
+};
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
@@ -149,7 +151,6 @@ pub struct SourceInfo {
 #[test]
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
-    use crate::sample::{SourceInfo, SourceSn};
     use zenoh_protocol::core::ZenohId;
 
     assert_eq!(std::mem::size_of::<ZenohId>(), 16);

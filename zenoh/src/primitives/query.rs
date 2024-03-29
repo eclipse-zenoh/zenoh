@@ -13,18 +13,20 @@
 //
 
 //! Query primitives.
-use crate::encoding::Encoding;
-use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
-use crate::key_expr::KeyExpr;
-use crate::payload::Payload;
-use crate::publication::Priority;
-use crate::sample::builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait};
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
-use crate::sample::{Locality, QoSBuilder, Sample, SourceInfo};
-use crate::selector::Selector;
-use crate::session::Session;
-use crate::value::Value;
+use crate::primitives::{
+    encoding::Encoding,
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    payload::Payload,
+    publication::Priority,
+    sample::{
+        builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait},
+        Attachment, Locality, QoSBuilder, Sample, SourceInfo,
+    },
+    selector::Selector,
+    session::Session,
+    value::Value,
+};
 use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;

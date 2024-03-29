@@ -13,23 +13,18 @@
 //
 
 //! Publishing primitives.
-use crate::encoding::Encoding;
-use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
-use crate::sample::builder::{
-    QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
-};
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
-use crate::sample::Locality;
-use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind, SourceInfo};
-use crate::session::SessionRef;
-use crate::session::Undeclarable;
-use crate::value::Value;
-#[cfg(feature = "unstable")]
-use crate::{
-    handlers::{Callback, DefaultHandler, IntoHandler},
+use crate::primitives::{
+    encoding::Encoding,
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    key_expr::{KeyExpr, KeyExprInner},
+    payload::Payload,
+    sample::{
+        builder::{QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait},
+        Attachment, DataInfo, Locality, QoS, Sample, SampleFields, SampleKind, SourceInfo,
+    },
+    session::{SessionRef, Undeclarable},
+    value::Value,
     Id,
 };
 use std::future::Ready;
@@ -1075,9 +1070,8 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                 .try_into()
                 .expect("How did you get a key expression with a length over 2^32!?");
             key_expr = match key_expr.0 {
-                crate::key_expr::KeyExprInner::Borrowed(key_expr)
-                | crate::key_expr::KeyExprInner::BorrowedWire { key_expr, .. } => {
-                    KeyExpr(crate::key_expr::KeyExprInner::BorrowedWire {
+                KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
+                    KeyExpr(KeyExprInner::BorrowedWire {
                         key_expr,
                         expr_id,
                         mapping: Mapping::Sender,
@@ -1085,9 +1079,8 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                         session_id,
                     })
                 }
-                crate::key_expr::KeyExprInner::Owned(key_expr)
-                | crate::key_expr::KeyExprInner::Wire { key_expr, .. } => {
-                    KeyExpr(crate::key_expr::KeyExprInner::Wire {
+                KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => {
+                    KeyExpr(KeyExprInner::Wire {
                         key_expr,
                         expr_id,
                         mapping: Mapping::Sender,
@@ -1435,7 +1428,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     where
         CallbackMut: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
-        self.callback(crate::handlers::locked(callback))
+        self.callback(locked(callback))
     }
 
     /// Receive the MatchingStatuses for this listener with a [`Handler`](crate::prelude::IntoHandler).

@@ -14,9 +14,9 @@
 use super::super::router::*;
 use super::tables::TablesLock;
 use super::{resource::*, tables};
-use crate::key_expr::KeyExpr;
 use crate::net::primitives::{McastMux, Mux, Primitives};
 use crate::net::routing::interceptor::{InterceptorTrait, InterceptorsChain};
+use crate::primitives::key_expr::KeyExpr;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;

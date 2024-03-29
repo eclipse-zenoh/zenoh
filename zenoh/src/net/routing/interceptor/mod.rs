@@ -19,7 +19,8 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use super::RoutingContext;
 use crate::{
-    key_expr::KeyExpr, net::routing::interceptor::downsampling::downsampling_interceptor_factories,
+    net::routing::interceptor::downsampling::downsampling_interceptor_factories,
+    primitives::key_expr::KeyExpr,
 };
 use std::any::Any;
 use zenoh_config::Config;

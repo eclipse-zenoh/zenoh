@@ -11,36 +11,27 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::admin;
-use crate::encoding::Encoding;
-use crate::handlers::{Callback, DefaultHandler};
-use crate::info::*;
-use crate::key_expr::KeyExpr;
-use crate::key_expr::KeyExprInner;
-#[zenoh_macros::unstable]
-use crate::liveliness::{Liveliness, LivelinessTokenState};
-use crate::net::primitives::Primitives;
-use crate::net::routing::dispatcher::face::Face;
-use crate::net::runtime::Runtime;
-use crate::payload::Payload;
-use crate::publication::*;
-use crate::query::*;
-use crate::queryable::*;
-#[cfg(feature = "unstable")]
-use crate::sample::Attachment;
-use crate::sample::DataInfo;
-use crate::sample::DataInfoIntoSample;
-use crate::sample::Locality;
-use crate::sample::QoS;
-use crate::sample::Sample;
-use crate::sample::SampleKind;
-use crate::sample::SourceInfo;
-use crate::selector::Parameters;
-use crate::selector::Selector;
-use crate::selector::TIME_RANGE_KEY;
-use crate::subscriber::*;
-use crate::value::Value;
-use crate::Id;
+use crate::net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime};
+use crate::primitives::liveliness::PREFIX_LIVELINESS;
+use crate::primitives::{
+    admin,
+    encoding::Encoding,
+    handlers::{Callback, DefaultHandler},
+    info::*,
+    key_expr::{KeyExpr, KeyExprInner},
+    liveliness::{Liveliness, LivelinessTokenState},
+    payload::Payload,
+    publication::*,
+    query::*,
+    queryable::*,
+    sample::DataInfoIntoSample,
+    sample::{Attachment, DataInfo},
+    sample::{Locality, QoS, Sample, SampleKind, SourceInfo},
+    selector::{Parameters, Selector, TIME_RANGE_KEY},
+    subscriber::*,
+    value::Value,
+    Id,
+};
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -1006,10 +997,8 @@ impl Session {
         #[cfg(not(feature = "unstable"))]
         let declared_sub = origin != Locality::SessionLocal;
         #[cfg(feature = "unstable")]
-        let declared_sub = origin != Locality::SessionLocal
-            && !key_expr
-                .as_str()
-                .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+        let declared_sub =
+            origin != Locality::SessionLocal && !key_expr.as_str().starts_with(PREFIX_LIVELINESS);
 
         let declared_sub =
             declared_sub
@@ -1135,10 +1124,7 @@ impl Session {
             let send_forget = sub_state.origin != Locality::SessionLocal;
             #[cfg(feature = "unstable")]
             let send_forget = sub_state.origin != Locality::SessionLocal
-                && !sub_state
-                    .key_expr
-                    .as_str()
-                    .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+                && !sub_state.key_expr.as_str().starts_with(PREFIX_LIVELINESS);
             if send_forget {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
@@ -1242,10 +1228,12 @@ impl Session {
         &self,
         key_expr: &KeyExpr,
     ) -> ZResult<Arc<LivelinessTokenState>> {
+        use crate::primitives::liveliness::KE_PREFIX_LIVELINESS;
+
         let mut state = zwrite!(self.state);
         log::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
-        let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
+        let key_expr = KeyExpr::from(*KE_PREFIX_LIVELINESS / key_expr);
         let tok_state = Arc::new(LivelinessTokenState {
             id,
             key_expr: key_expr.clone().into_owned(),
@@ -1989,10 +1977,7 @@ impl Primitives for Session {
                             state.remote_subscribers.insert(m.id, expr.clone());
                             self.update_status_up(&state, &expr);
 
-                            if expr
-                                .as_str()
-                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                            {
+                            if expr.as_str().starts_with(PREFIX_LIVELINESS) {
                                 drop(state);
                                 self.handle_data(
                                     false,
@@ -2018,10 +2003,7 @@ impl Primitives for Session {
                     if let Some(expr) = state.remote_subscribers.remove(&m.id) {
                         self.update_status_down(&state, &expr);
 
-                        if expr
-                            .as_str()
-                            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                        {
+                        if expr.as_str().starts_with(PREFIX_LIVELINESS) {
                             drop(state);
                             let data_info = DataInfo {
                                 kind: SampleKind::Delete,
@@ -2157,7 +2139,7 @@ impl Primitives for Session {
                             query
                                 .selector
                                 .parameters()
-                                .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
+                                .get_bools([_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
                             Ok([true])
                         ) && !query.selector.key_expr.intersects(&key_expr)
                         {

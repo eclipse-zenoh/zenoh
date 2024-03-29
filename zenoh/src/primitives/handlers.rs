@@ -13,11 +13,10 @@
 //
 
 //! Callback handler trait.
+use crate::primitives::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 use std::sync::{Arc, Mutex, Weak};
 use zenoh_collections::RingBuffer as RingBufferInner;
 use zenoh_result::ZResult;
-
-use crate::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 /// An alias for `Arc<T>`.
 pub type Dyn<T> = std::sync::Arc<T>;

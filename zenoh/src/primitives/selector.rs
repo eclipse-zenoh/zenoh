@@ -14,7 +14,9 @@
 
 //! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 
-use crate::{key_expr::KeyExpr, queryable::Query};
+use crate::primitives::{
+    key_expr::KeyExpr, query::_REPLY_KEY_EXPR_ANY_SEL_PARAM, queryable::Query,
+};
 use std::{
     borrow::{Borrow, Cow},
     collections::HashMap,
@@ -212,7 +214,6 @@ impl<'a> Selector<'a> {
     }
     #[cfg(any(feature = "unstable", test))]
     pub(crate) fn accept_any_keyexpr(self, any: bool) -> ZResult<Selector<'static>> {
-        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
         let mut s = self.into_owned();
         let any_selparam = s.parameter_index(_REPLY_KEY_EXPR_ANY_SEL_PARAM)?;
         match (any, any_selparam) {
@@ -262,7 +263,7 @@ fn selector_accessors() {
             map_selector.time_range().unwrap()
         );
         let without_any = selector.to_string();
-        let with_any = selector.to_string() + "&" + crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        let with_any = selector.to_string() + "&" + _REPLY_KEY_EXPR_ANY_SEL_PARAM;
         selector = selector.accept_any_keyexpr(false).unwrap();
         assert_eq!(selector.to_string(), without_any);
         selector = selector.accept_any_keyexpr(true).unwrap();

@@ -11,17 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-use crate::encoding::Encoding;
-use crate::key_expr::KeyExpr;
-use crate::payload::Payload;
-use crate::publication::Priority;
-use crate::sample::Attachment;
-use crate::sample::QoS;
-use crate::sample::QoSBuilder;
-use crate::sample::Sample;
-use crate::sample::SourceInfo;
-use crate::value::Value;
+use crate::primitives::{
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    payload::Payload,
+    publication::Priority,
+    sample::{Attachment, QoS, QoSBuilder, Sample, SourceInfo},
+    value::Value,
+};
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;

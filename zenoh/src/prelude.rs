@@ -23,11 +23,11 @@
 //! ```
 
 pub(crate) mod common {
-    pub use crate::sample::builder::{
-        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
-    };
     #[zenoh_macros::unstable]
     pub use crate::sample::Attachment;
+    pub use crate::sample::{
+        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+    };
     pub use crate::session::{open, Session, SessionDeclarations};
     pub use zenoh_config::Config;
 

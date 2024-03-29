@@ -15,21 +15,15 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
-use crate::handlers::locked;
-use crate::handlers::DefaultHandler;
-use crate::handlers::IntoHandler;
-use crate::key_expr::KeyExpr;
-use crate::query::QueryConsolidation;
-use crate::query::QueryTarget;
-use crate::sample::Locality;
-use crate::sample::Sample;
-use crate::sample::SourceInfo;
-use crate::session::Session;
-use crate::session::SessionRef;
-use crate::session::Undeclarable;
-use crate::subscriber::Subscriber;
-use crate::subscriber::SubscriberInner;
-use crate::{query::Reply, Id};
+use crate::primitives::{
+    handlers::{locked, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    query::{QueryConsolidation, QueryTarget, Reply},
+    sample::{Locality, Sample, SourceInfo},
+    session::{Session, SessionRef, Undeclarable},
+    subscriber::{Subscriber, SubscriberInner},
+    Id,
+};
 use std::convert::TryInto;
 use std::future::Ready;
 use std::sync::Arc;
@@ -523,7 +517,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::handlers::IntoHandler<'static, Sample>,
+        Handler: IntoHandler<'static, Sample>,
     {
         let LivelinessSubscriberBuilder {
             session,

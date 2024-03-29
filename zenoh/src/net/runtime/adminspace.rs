@@ -12,15 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
-use crate::encoding::Encoding;
-use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
-use crate::plugins::sealed::{self as plugins};
-use crate::queryable::Query;
-use crate::queryable::QueryInner;
-use crate::sample::builder::ValueBuilderTrait;
-use crate::value::Value;
+use crate::plugins::sealed as plugins;
+use crate::primitives::{
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    payload::Payload,
+    queryable::{Query, QueryInner},
+    sample::builder::ValueBuilderTrait,
+    value::Value,
+};
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
