@@ -64,12 +64,16 @@ pub trait ValueBuilderTrait {
     fn value<T: Into<Value>>(self, value: T) -> Self;
 }
 
-#[derive(Debug)]
-pub struct OpPut;
-#[derive(Debug)]
-pub struct OpDelete;
-#[derive(Debug)]
-pub struct OpAny;
+pub mod op {
+    #[derive(Debug)]
+    pub struct Put;
+    #[derive(Debug)]
+    pub struct Delete;
+    #[derive(Debug)]
+    pub struct Error;
+    #[derive(Debug)]
+    pub struct Any;
+}
 
 #[derive(Debug)]
 pub struct SampleBuilder<T> {
@@ -77,11 +81,11 @@ pub struct SampleBuilder<T> {
     _t: PhantomData<T>,
 }
 
-impl SampleBuilder<OpPut> {
+impl SampleBuilder<op::Put> {
     pub fn put<IntoKeyExpr, IntoPayload>(
         key_expr: IntoKeyExpr,
         payload: IntoPayload,
-    ) -> SampleBuilder<OpPut>
+    ) -> SampleBuilder<op::Put>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoPayload: Into<Payload>,
@@ -99,13 +103,13 @@ impl SampleBuilder<OpPut> {
                 #[cfg(feature = "unstable")]
                 attachment: None,
             },
-            _t: PhantomData::<OpPut>,
+            _t: PhantomData::<op::Put>,
         }
     }
 }
 
-impl SampleBuilder<OpDelete> {
-    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> SampleBuilder<OpDelete>
+impl SampleBuilder<op::Delete> {
+    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> SampleBuilder<op::Delete>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
@@ -122,7 +126,7 @@ impl SampleBuilder<OpDelete> {
                 #[cfg(feature = "unstable")]
                 attachment: None,
             },
-            _t: PhantomData::<OpDelete>,
+            _t: PhantomData::<op::Delete>,
         }
     }
 }
@@ -138,6 +142,14 @@ impl<T> SampleBuilder<T> {
                 key_expr: key_expr.into(),
                 ..self.sample
             },
+            _t: PhantomData::<T>,
+        }
+    }
+
+    // Allows to change qos as a whole of [`Sample`]
+    pub fn qos(self, qos: QoS) -> Self {
+        Self {
+            sample: Sample { qos, ..self.sample },
             _t: PhantomData::<T>,
         }
     }
@@ -179,15 +191,6 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
     }
 }
 
-impl<T> SampleBuilder<T> {
-    pub fn qos(self, qos: QoS) -> Self {
-        Self {
-            sample: Sample { qos, ..self.sample },
-            _t: PhantomData::<T>,
-        }
-    }
-}
-
 impl<T> QoSBuilderTrait for SampleBuilder<T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
@@ -215,14 +218,14 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
     }
 }
 
-impl ValueBuilderTrait for SampleBuilder<OpPut> {
+impl ValueBuilderTrait for SampleBuilder<op::Put> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             sample: Sample {
                 encoding: encoding.into(),
                 ..self.sample
             },
-            _t: PhantomData::<OpPut>,
+            _t: PhantomData::<op::Put>,
         }
     }
     fn payload<T: Into<Payload>>(self, payload: T) -> Self {
@@ -231,7 +234,7 @@ impl ValueBuilderTrait for SampleBuilder<OpPut> {
                 payload: payload.into(),
                 ..self.sample
             },
-            _t: PhantomData::<OpPut>,
+            _t: PhantomData::<op::Put>,
         }
     }
     fn value<T: Into<Value>>(self, value: T) -> Self {
@@ -242,21 +245,21 @@ impl ValueBuilderTrait for SampleBuilder<OpPut> {
                 encoding,
                 ..self.sample
             },
-            _t: PhantomData::<OpPut>,
+            _t: PhantomData::<op::Put>,
         }
     }
 }
 
-impl From<Sample> for SampleBuilder<OpAny> {
+impl From<Sample> for SampleBuilder<op::Any> {
     fn from(sample: Sample) -> Self {
         SampleBuilder {
             sample,
-            _t: PhantomData::<OpAny>,
+            _t: PhantomData::<op::Any>,
         }
     }
 }
 
-impl TryFrom<Sample> for SampleBuilder<OpPut> {
+impl TryFrom<Sample> for SampleBuilder<op::Put> {
     type Error = zresult::Error;
     fn try_from(sample: Sample) -> Result<Self, Self::Error> {
         if sample.kind != SampleKind::Put {
@@ -264,12 +267,12 @@ impl TryFrom<Sample> for SampleBuilder<OpPut> {
         }
         Ok(SampleBuilder {
             sample,
-            _t: PhantomData::<OpPut>,
+            _t: PhantomData::<op::Put>,
         })
     }
 }
 
-impl TryFrom<Sample> for SampleBuilder<OpDelete> {
+impl TryFrom<Sample> for SampleBuilder<op::Delete> {
     type Error = zresult::Error;
     fn try_from(sample: Sample) -> Result<Self, Self::Error> {
         if sample.kind != SampleKind::Delete {
@@ -277,7 +280,7 @@ impl TryFrom<Sample> for SampleBuilder<OpDelete> {
         }
         Ok(SampleBuilder {
             sample,
-            _t: PhantomData::<OpDelete>,
+            _t: PhantomData::<op::Delete>,
         })
     }
 }
