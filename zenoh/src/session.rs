@@ -1135,7 +1135,7 @@ impl Session {
                 body: DeclareBody::DeclareInterest(DeclareInterest {
                     id,
                     wire_expr: Some(key_expr.to_wire(self).to_owned()),
-                    interest: Interest::KEYEXPRS + Interest::SUBSCRIBERS + Interest::FUTURE,
+                    interest: Interest::KEYEXPRS + Interest::FUTURE + Interest::TOKENS,
                 }),
             });
         }
