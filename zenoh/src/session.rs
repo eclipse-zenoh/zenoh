@@ -81,6 +81,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_task::TaskController;
 use zenoh_util::core::AsyncResolve;
 
 zconfigurable! {
@@ -392,6 +393,7 @@ pub struct Session {
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
     pub(crate) alive: bool,
+    task_controller: TaskController,
 }
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
@@ -412,6 +414,7 @@ impl Session {
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
+                task_controller: TaskController::default(),
             };
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
@@ -515,14 +518,18 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # }
     /// ```
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
+    pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
+            self.task_controller.terminate_all(Duration::from_secs(10));
             self.runtime.close().await?;
 
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
-
+            let mut state = zwrite!(self.state);
+            state.primitives.as_ref().unwrap().send_close();
+            // clean up to break cyclic references from self.state to itself
+            state.primitives.take();
+            state.queryables.clear();
+            self.alive = false;
             Ok(())
         })
     }
@@ -803,6 +810,7 @@ impl Session {
             state: self.state.clone(),
             id: self.id,
             alive: false,
+            task_controller: self.task_controller.clone(),
         }
     }
 
@@ -1499,30 +1507,34 @@ impl Session {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
-                zenoh_runtime::ZRuntime::RX.spawn({
-                    let session = self.clone();
-                    let msub = msub.clone();
-                    async move {
-                        match msub.current.lock() {
-                            Ok(mut current) => {
-                                if !*current {
-                                    if let Ok(status) =
-                                        session.matching_status(&msub.key_expr, msub.destination)
-                                    {
-                                        if status.matching_subscribers() {
-                                            *current = true;
-                                            let callback = msub.callback.clone();
-                                            (callback)(status)
+                self.task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::RX, {
+                        let session = self.clone();
+                        let msub = msub.clone();
+                        async move {
+                            match msub.current.lock() {
+                                Ok(mut current) => {
+                                    if !*current {
+                                        if let Ok(status) = session
+                                            .matching_status(&msub.key_expr, msub.destination)
+                                        {
+                                            if status.matching_subscribers() {
+                                                *current = true;
+                                                let callback = msub.callback.clone();
+                                                (callback)(status)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                                Err(e) => {
+                                    log::error!(
+                                        "Error trying to acquire MathginListener lock: {}",
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    });
             }
         }
     }
@@ -1533,30 +1545,34 @@ impl Session {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
-                zenoh_runtime::ZRuntime::RX.spawn({
-                    let session = self.clone();
-                    let msub = msub.clone();
-                    async move {
-                        match msub.current.lock() {
-                            Ok(mut current) => {
-                                if *current {
-                                    if let Ok(status) =
-                                        session.matching_status(&msub.key_expr, msub.destination)
-                                    {
-                                        if !status.matching_subscribers() {
-                                            *current = false;
-                                            let callback = msub.callback.clone();
-                                            (callback)(status)
+                self.task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::RX, {
+                        let session = self.clone();
+                        let msub = msub.clone();
+                        async move {
+                            match msub.current.lock() {
+                                Ok(mut current) => {
+                                    if *current {
+                                        if let Ok(status) = session
+                                            .matching_status(&msub.key_expr, msub.destination)
+                                        {
+                                            if !status.matching_subscribers() {
+                                                *current = false;
+                                                let callback = msub.callback.clone();
+                                                (callback)(status)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                                Err(e) => {
+                                    log::error!(
+                                        "Error trying to acquire MathginListener lock: {}",
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    });
             }
         }
     }
@@ -1752,27 +1768,33 @@ impl Session {
             _ => 1,
         };
 
-        zenoh_runtime::ZRuntime::Net.spawn({
-            let state = self.state.clone();
-            let zid = self.runtime.zid();
-            async move {
-                tokio::time::sleep(timeout).await;
-                let mut state = zwrite!(state);
-                if let Some(query) = state.queries.remove(&qid) {
-                    std::mem::drop(state);
-                    log::debug!("Timeout on query {}! Send error and close.", qid);
-                    if query.reception_mode == ConsolidationMode::Latest {
-                        for (_, reply) in query.replies.unwrap().into_iter() {
-                            (query.callback)(reply);
+        let token = self.task_controller.get_cancellation_token();
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                let state = self.state.clone();
+                let zid = self.runtime.zid();
+                async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(timeout) => {
+                            let mut state = zwrite!(state);
+                            if let Some(query) = state.queries.remove(&qid) {
+                                std::mem::drop(state);
+                                log::debug!("Timeout on query {}! Send error and close.", qid);
+                                if query.reception_mode == ConsolidationMode::Latest {
+                                    for (_, reply) in query.replies.unwrap().into_iter() {
+                                        (query.callback)(reply);
+                                    }
+                                }
+                                (query.callback)(Reply {
+                                    sample: Err("Timeout".into()),
+                                    replier_id: zid,
+                                });
+                            }
                         }
+                        _ = token.cancelled() => {}
                     }
-                    (query.callback)(Reply {
-                        sample: Err("Timeout".into()),
-                        replier_id: zid,
-                    });
                 }
-            }
-        });
+            });
 
         let selector = match scope {
             Some(scope) => Selector {
