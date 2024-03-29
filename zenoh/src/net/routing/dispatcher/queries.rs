@@ -600,9 +600,15 @@ pub fn route_query(
                                 qid: *qid,
                             };
                             if timeout != zenoh_config::defaults::query::no_timeout {
-                                zenoh_runtime::ZRuntime::Net.spawn(async move {
-                                    tokio::time::sleep(timeout).await;
-                                    cleanup.run().await
+                                let cancellation_token =
+                                    face.task_controller.get_cancellation_token();
+                                face.task_controller.spawn_with_rt(
+                                zenoh_runtime::ZRuntime::Net,
+                                async move {
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(timeout) => { cleanup.run().await }
+                                        _ = cancellation_token.cancelled() => {}
+                                    }
                                 });
                             }
                             #[cfg(feature = "stats")]
@@ -639,9 +645,15 @@ pub fn route_query(
                                 qid: *qid,
                             };
                             if timeout != zenoh_config::defaults::query::no_timeout {
-                                zenoh_runtime::ZRuntime::Net.spawn(async move {
-                                    tokio::time::sleep(timeout).await;
-                                    cleanup.run().await
+                                let cancellation_token =
+                                    face.task_controller.get_cancellation_token();
+                                face.task_controller.spawn_with_rt(
+                                zenoh_runtime::ZRuntime::Net,
+                                async move {
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(timeout) => { cleanup.run().await }
+                                        _ = cancellation_token.cancelled() => {}
+                                    }
                                 });
                             }
                             #[cfg(feature = "stats")]
