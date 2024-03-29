@@ -23,6 +23,7 @@ fn main() {
     let version_rs = std::path::PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("version.rs");
     let mut version_rs = OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .open(version_rs)
         .unwrap();
