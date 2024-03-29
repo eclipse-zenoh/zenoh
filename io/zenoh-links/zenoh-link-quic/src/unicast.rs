@@ -34,6 +34,7 @@ use zenoh_link_commons::{
     ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
 pub struct LinkUnicastQuic {
@@ -135,7 +136,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *QUIC_DEFAULT_MTU
     }
 
