@@ -122,9 +122,10 @@ fn declare_client_token(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareToken(DeclareToken {
-                        // NOTE(fuzzypixelz): Here there was a TODO saying "use
-                        // proper subscriber id" so I used the token id
-                        id,
+                        // TODO(fuzzypixelz): In the subscription-based
+                        // implementation of liveliness, there was a comment
+                        // here that stated "use proper SubscriberId"
+                        id: 0,
                         wire_expr: res.expr().into(),
                     }),
                 },
