@@ -51,7 +51,7 @@ zconfigurable! {
 }
 
 pub(crate) trait HatTrait:
-    HatBaseTrait + HatPubSubTrait + HatQueriesTrait + HatLivelinessTrait
+    HatBaseTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {
 }
 
@@ -238,8 +238,8 @@ pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + S
     }
 }
 
-pub trait HatLivelinessTrait {
-    fn declare_liveliness(
+pub trait HatTokenTrait {
+    fn declare_token(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -248,7 +248,7 @@ pub trait HatLivelinessTrait {
         node_id: NodeId,
     );
 
-    fn undeclare_liveliness(
+    fn undeclare_token(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -258,7 +258,7 @@ pub trait HatLivelinessTrait {
     );
 
     #[allow(clippy::too_many_arguments)] // TODO refactor
-    fn declare_liveliness_interest(
+    fn declare_token_interest(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -269,7 +269,7 @@ pub trait HatLivelinessTrait {
         aggregate: bool,
     );
 
-    fn undeclare_liveliness_interest(
+    fn undeclare_token_interest(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,

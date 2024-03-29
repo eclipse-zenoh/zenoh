@@ -12,11 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::super::router::*;
-use super::liveliness::{
-    declare_liveliness, declare_liveliness_interest, undeclare_liveliness,
-    undeclare_liveliness_interest,
-};
 use super::tables::TablesLock;
+use super::token::{
+    declare_token, declare_token_interest, undeclare_token, undeclare_token_interest,
+};
 use super::{resource::*, tables};
 use crate::net::primitives::{IngressPrimitives, McastMux, Mux};
 use crate::net::routing::interceptor::{InterceptorTrait, InterceptorsChain};
@@ -220,7 +219,7 @@ impl IngressPrimitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
-                declare_liveliness(
+                declare_token(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
@@ -230,7 +229,7 @@ impl IngressPrimitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
-                undeclare_liveliness(
+                undeclare_token(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
@@ -261,7 +260,7 @@ impl IngressPrimitives for Face {
                     );
                 }
                 if m.interest.tokens() {
-                    declare_liveliness_interest(
+                    declare_token_interest(
                         ctrl_lock.as_ref(),
                         &self.tables,
                         &mut self.state.clone(),
@@ -318,7 +317,7 @@ impl IngressPrimitives for Face {
                     &mut self.state.clone(),
                     m.id,
                 );
-                undeclare_liveliness_interest(
+                undeclare_token_interest(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),

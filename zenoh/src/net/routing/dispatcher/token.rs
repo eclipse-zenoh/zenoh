@@ -27,7 +27,7 @@ use super::{
     tables::{NodeId, TablesLock},
 };
 
-pub(crate) fn declare_liveliness(
+pub(crate) fn declare_token(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -42,7 +42,7 @@ pub(crate) fn declare_liveliness(
     {
         Some(mut prefix) => {
             log::debug!(
-                "{} Declare liveliness {} ({}{})",
+                "{} Declare token {} ({}{})",
                 face,
                 id,
                 prefix.expr(),
@@ -69,13 +69,13 @@ pub(crate) fn declare_liveliness(
                     (res, wtables)
                 };
 
-            hat_code.declare_liveliness(&mut wtables, face, id, &mut res, node_id);
+            hat_code.declare_token(&mut wtables, face, id, &mut res, node_id);
             drop(wtables);
 
             // NOTE(fuzzypixelz): I removed all data route handling.
         }
         None => log::error!(
-            "{} Declare liveliness {} for unknown scope {}!",
+            "{} Declare token {} for unknown scope {}!",
             face,
             id,
             expr.scope
@@ -83,7 +83,7 @@ pub(crate) fn declare_liveliness(
     }
 }
 
-pub(crate) fn undeclare_liveliness(
+pub(crate) fn undeclare_token(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -100,7 +100,7 @@ pub(crate) fn undeclare_liveliness(
                 Some(res) => Some(res),
                 None => {
                     log::error!(
-                        "{} Undeclare unknown liveliness token {}{}!",
+                        "{} Undeclare unknown token token {}{}!",
                         face,
                         prefix.expr(),
                         expr.wire_expr.suffix
@@ -120,14 +120,14 @@ pub(crate) fn undeclare_liveliness(
     };
 
     let mut wtables = zwrite!(tables.tables);
-    hat_code.undeclare_liveliness(&mut wtables, face, id, res, node_id);
+    hat_code.undeclare_token(&mut wtables, face, id, res, node_id);
 
     // NOTE(fuzzypixelz): I removed all data route handling.
     // NOTE(fuzzypixelz): Unlike in `undeclare_liveliness` this doesn't return the ressource.
 }
 
 #[allow(clippy::too_many_arguments)] // TODO refactor
-pub(crate) fn declare_liveliness_interest(
+pub(crate) fn declare_token_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -145,7 +145,7 @@ pub(crate) fn declare_liveliness_interest(
         {
             Some(mut prefix) => {
                 log::debug!(
-                    "{} Declare liveliness interest {} ({}{})",
+                    "{} Declare token interest {} ({}{})",
                     face,
                     id,
                     prefix.expr(),
@@ -175,7 +175,7 @@ pub(crate) fn declare_liveliness_interest(
                     (res, wtables)
                 };
 
-                hat_code.declare_liveliness_interest(
+                hat_code.declare_token_interest(
                     &mut wtables,
                     face,
                     id,
@@ -186,7 +186,7 @@ pub(crate) fn declare_liveliness_interest(
                 );
             }
             None => log::error!(
-                "{} Declare liveliness interest {} for unknown scope {}!",
+                "{} Declare token interest {} for unknown scope {}!",
                 face,
                 id,
                 expr.scope
@@ -194,19 +194,11 @@ pub(crate) fn declare_liveliness_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_liveliness_interest(
-            &mut wtables,
-            face,
-            id,
-            None,
-            current,
-            future,
-            aggregate,
-        );
+        hat_code.declare_token_interest(&mut wtables, face, id, None, current, future, aggregate);
     }
 }
 
-pub(crate) fn undeclare_liveliness_interest(
+pub(crate) fn undeclare_token_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -214,5 +206,5 @@ pub(crate) fn undeclare_liveliness_interest(
 ) {
     log::debug!("{} Undeclare liveliness interest {}", face, id,);
     let mut wtables = zwrite!(tables.tables);
-    hat_code.undeclare_liveliness_interest(&mut wtables, face, id);
+    hat_code.undeclare_token_interest(&mut wtables, face, id);
 }

@@ -23,7 +23,7 @@ use zenoh_sync::get_mut_unchecked;
 
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
-    hat::HatLivelinessTrait,
+    hat::HatTokenTrait,
     router::{NodeId, Resource, SessionContext},
     RoutingContext, PREFIX_LIVELINESS,
 };
@@ -31,7 +31,7 @@ use crate::net::routing::{
 use super::{face_hat, face_hat_mut, HatCode, HatFace};
 
 #[inline]
-fn propagate_simple_liveliness_to(
+fn propagate_simple_token_to(
     _tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
@@ -62,22 +62,18 @@ fn propagate_simple_liveliness_to(
     }
 }
 
-fn propagate_simple_liveliness(
-    tables: &mut Tables,
-    res: &Arc<Resource>,
-    src_face: &mut Arc<FaceState>,
-) {
+fn propagate_simple_token(tables: &mut Tables, res: &Arc<Resource>, src_face: &mut Arc<FaceState>) {
     for mut dst_face in tables
         .faces
         .values()
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        propagate_simple_liveliness_to(tables, &mut dst_face, res, src_face);
+        propagate_simple_token_to(tables, &mut dst_face, res, src_face);
     }
 }
 
-fn register_client_liveliness(
+fn register_client_token(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -104,15 +100,15 @@ fn register_client_liveliness(
     face_hat_mut!(face).remote_tokens.insert(id, res.clone());
 }
 
-fn declare_client_liveliness(
+fn declare_client_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
     res: &mut Arc<Resource>,
 ) {
-    register_client_liveliness(tables, face, id, res);
+    register_client_token(tables, face, id, res);
 
-    propagate_simple_liveliness(tables, res, face);
+    propagate_simple_token(tables, res, face);
 
     // This introduced a buffer overflow on windows
     // @TODO: Let's deactivate this on windows until Fixed
@@ -151,7 +147,7 @@ fn client_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
         .collect()
 }
 
-fn propagate_forget_simple_liveliness(tables: &mut Tables, res: &Arc<Resource>) {
+fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
     for face in tables.faces.values_mut() {
         if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
             face.primitives.egress_declare(RoutingContext::with_expr(
@@ -170,7 +166,7 @@ fn propagate_forget_simple_liveliness(tables: &mut Tables, res: &Arc<Resource>) 
     }
 }
 
-pub(super) fn undeclare_client_liveliness(
+pub(super) fn undeclare_client_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -186,7 +182,7 @@ pub(super) fn undeclare_client_liveliness(
 
         let mut client_tokens = client_tokens(res);
         if client_tokens.is_empty() {
-            propagate_forget_simple_liveliness(tables, res);
+            propagate_forget_simple_token(tables, res);
         }
         if client_tokens.len() == 1 {
             let face = &mut client_tokens[0];
@@ -210,14 +206,14 @@ pub(super) fn undeclare_client_liveliness(
     }
 }
 
-fn forget_client_liveliness(tables: &mut Tables, face: &mut Arc<FaceState>, id: TokenId) {
+fn forget_client_token(tables: &mut Tables, face: &mut Arc<FaceState>, id: TokenId) {
     if let Some(mut res) = face_hat_mut!(face).remote_tokens.remove(&id) {
-        undeclare_client_liveliness(tables, face, &mut res);
+        undeclare_client_token(tables, face, &mut res);
     }
 }
 
-impl HatLivelinessTrait for HatCode {
-    fn declare_liveliness(
+impl HatTokenTrait for HatCode {
+    fn declare_token(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -225,10 +221,10 @@ impl HatLivelinessTrait for HatCode {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
     ) {
-        declare_client_liveliness(tables, face, id, res);
+        declare_client_token(tables, face, id, res);
     }
 
-    fn undeclare_liveliness(
+    fn undeclare_token(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -236,10 +232,10 @@ impl HatLivelinessTrait for HatCode {
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
     ) {
-        forget_client_liveliness(tables, face, id)
+        forget_client_token(tables, face, id)
     }
 
-    fn declare_liveliness_interest(
+    fn declare_token_interest(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -288,7 +284,7 @@ impl HatLivelinessTrait for HatCode {
         }
     }
 
-    fn undeclare_liveliness_interest(
+    fn undeclare_token_interest(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,

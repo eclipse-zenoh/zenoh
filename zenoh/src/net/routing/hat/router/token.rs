@@ -24,7 +24,7 @@ use zenoh_sync::get_mut_unchecked;
 
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
-    hat::HatLivelinessTrait,
+    hat::HatTokenTrait,
     router::{NodeId, Resource, SessionContext},
     RoutingContext, PREFIX_LIVELINESS,
 };
@@ -35,7 +35,7 @@ use super::{
 };
 
 #[inline]
-fn send_sourced_liveliness_to_net_childs(
+fn send_sourced_token_to_net_childs(
     tables: &Tables,
     net: &Network,
     childs: &[NodeIndex],
@@ -80,7 +80,7 @@ fn send_sourced_liveliness_to_net_childs(
 }
 
 #[inline]
-fn propagate_simple_liveliness_to(
+fn propagate_simple_token_to(
     tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
@@ -155,11 +155,7 @@ fn propagate_simple_liveliness_to(
     }
 }
 
-fn propagate_simple_liveliness(
-    tables: &mut Tables,
-    res: &Arc<Resource>,
-    src_face: &mut Arc<FaceState>,
-) {
+fn propagate_simple_token(tables: &mut Tables, res: &Arc<Resource>, src_face: &mut Arc<FaceState>) {
     let full_peer_net = hat!(tables).full_net(WhatAmI::Peer);
     for mut dst_face in tables
         .faces
@@ -167,11 +163,11 @@ fn propagate_simple_liveliness(
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        propagate_simple_liveliness_to(tables, &mut dst_face, res, src_face, full_peer_net);
+        propagate_simple_token_to(tables, &mut dst_face, res, src_face, full_peer_net);
     }
 }
 
-fn propagate_sourced_liveliness(
+fn propagate_sourced_token(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
@@ -182,7 +178,7 @@ fn propagate_sourced_liveliness(
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
-                send_sourced_liveliness_to_net_childs(
+                send_sourced_token_to_net_childs(
                     tables,
                     net,
                     &net.trees[tree_sid.index()].childs,
@@ -207,7 +203,7 @@ fn propagate_sourced_liveliness(
     }
 }
 
-fn register_router_liveliness(
+fn register_router_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -221,27 +217,27 @@ fn register_router_liveliness(
         }
 
         // Propagate liveliness to routers
-        propagate_sourced_liveliness(tables, res, Some(face), &router, WhatAmI::Router);
+        propagate_sourced_token(tables, res, Some(face), &router, WhatAmI::Router);
     }
     // Propagate liveliness to peers
     if hat!(tables).full_net(WhatAmI::Peer) && face.whatami != WhatAmI::Peer {
-        register_peer_liveliness(tables, face, res, tables.zid)
+        register_peer_token(tables, face, res, tables.zid)
     }
 
     // Propagate liveliness to clients
-    propagate_simple_liveliness(tables, res, face);
+    propagate_simple_token(tables, res, face);
 }
 
-fn declare_router_liveliness(
+fn declare_router_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     router: ZenohId,
 ) {
-    register_router_liveliness(tables, face, res, router);
+    register_router_token(tables, face, res, router);
 }
 
-fn register_peer_liveliness(
+fn register_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -255,22 +251,22 @@ fn register_peer_liveliness(
         }
 
         // Propagate liveliness to peers
-        propagate_sourced_liveliness(tables, res, Some(face), &peer, WhatAmI::Peer);
+        propagate_sourced_token(tables, res, Some(face), &peer, WhatAmI::Peer);
     }
 }
 
-fn declare_peer_liveliness(
+fn declare_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     peer: ZenohId,
 ) {
-    register_peer_liveliness(tables, face, res, peer);
+    register_peer_token(tables, face, res, peer);
     let zid = tables.zid;
-    register_router_liveliness(tables, face, res, zid);
+    register_router_token(tables, face, res, zid);
 }
 
-fn register_client_liveliness(
+fn register_client_token(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -297,15 +293,15 @@ fn register_client_liveliness(
     face_hat_mut!(face).remote_tokens.insert(id, res.clone());
 }
 
-fn declare_client_liveliness(
+fn declare_client_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
     res: &mut Arc<Resource>,
 ) {
-    register_client_liveliness(tables, face, id, res);
+    register_client_token(tables, face, id, res);
     let zid = tables.zid;
-    register_router_liveliness(tables, face, res, zid);
+    register_router_token(tables, face, res, zid);
 }
 
 #[inline]
@@ -348,7 +344,7 @@ fn remote_client_tokens(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
 }
 
 #[inline]
-fn send_forget_sourced_liveliness_to_net_childs(
+fn send_forget_sourced_token_to_net_childs(
     tables: &Tables,
     net: &Network,
     childs: &[NodeIndex],
@@ -392,7 +388,7 @@ fn send_forget_sourced_liveliness_to_net_childs(
     }
 }
 
-fn propagate_forget_simple_liveliness(tables: &mut Tables, res: &Arc<Resource>) {
+fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(res) {
             face.primitives.egress_declare(RoutingContext::with_expr(
@@ -441,7 +437,7 @@ fn propagate_forget_simple_liveliness(tables: &mut Tables, res: &Arc<Resource>) 
     }
 }
 
-fn propagate_forget_simple_liveliness_to_peers(tables: &mut Tables, res: &Arc<Resource>) {
+fn propagate_forget_simple_token_to_peers(tables: &mut Tables, res: &Arc<Resource>) {
     if !hat!(tables).full_net(WhatAmI::Peer)
         && res_hat!(res).router_tokens.len() == 1
         && res_hat!(res).router_tokens.contains(&tables.zid)
@@ -481,7 +477,7 @@ fn propagate_forget_simple_liveliness_to_peers(tables: &mut Tables, res: &Arc<Re
     }
 }
 
-fn propagate_forget_sourced_liveliness(
+fn propagate_forget_sourced_token(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
@@ -492,7 +488,7 @@ fn propagate_forget_sourced_liveliness(
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
-                send_forget_sourced_liveliness_to_net_childs(
+                send_forget_sourced_token_to_net_childs(
                     tables,
                     net,
                     &net.trees[tree_sid.index()].childs,
@@ -502,7 +498,7 @@ fn propagate_forget_sourced_liveliness(
                 );
             } else {
                 log::trace!(
-                    "Propagating forget liveliness {}: tree for node {} sid:{} not yet ready",
+                    "Propagating forget token {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
                     source
@@ -510,14 +506,14 @@ fn propagate_forget_sourced_liveliness(
             }
         }
         None => log::error!(
-            "Error propagating forget liveliness {}: cannot get index of {}!",
+            "Error propagating forget token {}: cannot get index of {}!",
             res.expr(),
             source
         ),
     }
 }
 
-fn unregister_router_liveliness(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohId) {
+fn unregister_router_token(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohId) {
     res_hat_mut!(res)
         .router_tokens
         .retain(|token| token != router);
@@ -528,36 +524,36 @@ fn unregister_router_liveliness(tables: &mut Tables, res: &mut Arc<Resource>, ro
             .retain(|token| !Arc::ptr_eq(token, res));
 
         if hat_mut!(tables).full_net(WhatAmI::Peer) {
-            undeclare_peer_liveliness(tables, None, res, &tables.zid.clone());
+            undeclare_peer_token(tables, None, res, &tables.zid.clone());
         }
-        propagate_forget_simple_liveliness(tables, res);
+        propagate_forget_simple_token(tables, res);
     }
 
-    propagate_forget_simple_liveliness_to_peers(tables, res);
+    propagate_forget_simple_token_to_peers(tables, res);
 }
 
-fn undeclare_router_liveliness(
+fn undeclare_router_token(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     router: &ZenohId,
 ) {
     if res_hat!(res).router_tokens.contains(router) {
-        unregister_router_liveliness(tables, res, router);
-        propagate_forget_sourced_liveliness(tables, res, face, router, WhatAmI::Router);
+        unregister_router_token(tables, res, router);
+        propagate_forget_sourced_token(tables, res, face, router, WhatAmI::Router);
     }
 }
 
-fn forget_router_liveliness(
+fn forget_router_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     router: &ZenohId,
 ) {
-    undeclare_router_liveliness(tables, Some(face), res, router);
+    undeclare_router_token(tables, Some(face), res, router);
 }
 
-fn unregister_peer_liveliness(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
+fn unregister_peer_token(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
     res_hat_mut!(res).peer_tokens.retain(|token| token != peer);
 
     if res_hat!(res).peer_tokens.is_empty() {
@@ -567,34 +563,34 @@ fn unregister_peer_liveliness(tables: &mut Tables, res: &mut Arc<Resource>, peer
     }
 }
 
-fn undeclare_peer_liveliness(
+fn undeclare_peer_token(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     peer: &ZenohId,
 ) {
     if res_hat!(res).peer_tokens.contains(peer) {
-        unregister_peer_liveliness(tables, res, peer);
-        propagate_forget_sourced_liveliness(tables, res, face, peer, WhatAmI::Peer);
+        unregister_peer_token(tables, res, peer);
+        propagate_forget_sourced_token(tables, res, face, peer, WhatAmI::Peer);
     }
 }
 
-fn forget_peer_liveliness(
+fn forget_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     peer: &ZenohId,
 ) {
-    undeclare_peer_liveliness(tables, Some(face), res, peer);
+    undeclare_peer_token(tables, Some(face), res, peer);
     let client_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
     let peer_tokens = remote_peer_tokens(tables, res);
     let zid = tables.zid;
     if !client_tokens && !peer_tokens {
-        undeclare_router_liveliness(tables, None, res, &zid);
+        undeclare_router_token(tables, None, res, &zid);
     }
 }
 
-pub(super) fn undeclare_client_liveliness(
+pub(super) fn undeclare_client_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -612,9 +608,9 @@ pub(super) fn undeclare_client_liveliness(
         let router_tokens = remote_router_tokens(tables, res);
         let peer_tokens = remote_peer_tokens(tables, res);
         if client_tokens.is_empty() && !peer_tokens {
-            undeclare_router_liveliness(tables, None, res, &tables.zid.clone());
+            undeclare_router_token(tables, None, res, &tables.zid.clone());
         } else {
-            propagate_forget_simple_liveliness_to_peers(tables, res);
+            propagate_forget_simple_token_to_peers(tables, res);
         }
 
         if client_tokens.len() == 1 && !router_tokens && !peer_tokens {
@@ -669,14 +665,14 @@ pub(super) fn undeclare_client_liveliness(
     }
 }
 
-fn forget_client_liveliness(tables: &mut Tables, face: &mut Arc<FaceState>, id: TokenId) {
+fn forget_client_token(tables: &mut Tables, face: &mut Arc<FaceState>, id: TokenId) {
     if let Some(mut res) = face_hat_mut!(face).remote_tokens.remove(&id) {
-        undeclare_client_liveliness(tables, face, &mut res);
+        undeclare_client_token(tables, face, &mut res);
     }
 }
 
-impl HatLivelinessTrait for HatCode {
-    fn declare_liveliness(
+impl HatTokenTrait for HatCode {
+    fn declare_token(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -687,23 +683,23 @@ impl HatLivelinessTrait for HatCode {
         match face.whatami {
             WhatAmI::Router => {
                 if let Some(router) = get_router(tables, face, node_id) {
-                    declare_router_liveliness(tables, face, res, router)
+                    declare_router_token(tables, face, res, router)
                 }
             }
             WhatAmI::Peer => {
                 if hat!(tables).full_net(WhatAmI::Peer) {
                     if let Some(peer) = get_peer(tables, face, node_id) {
-                        declare_peer_liveliness(tables, face, res, peer)
+                        declare_peer_token(tables, face, res, peer)
                     }
                 } else {
-                    declare_client_liveliness(tables, face, id, res)
+                    declare_client_token(tables, face, id, res)
                 }
             }
-            _ => declare_client_liveliness(tables, face, id, res),
+            _ => declare_client_token(tables, face, id, res),
         }
     }
 
-    fn undeclare_liveliness(
+    fn undeclare_token(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -715,7 +711,7 @@ impl HatLivelinessTrait for HatCode {
             WhatAmI::Router => {
                 if let Some(mut res) = res {
                     if let Some(router) = get_router(tables, face, node_id) {
-                        forget_router_liveliness(tables, face, &mut res, &router);
+                        forget_router_token(tables, face, &mut res, &router);
                     }
                 }
             }
@@ -723,18 +719,18 @@ impl HatLivelinessTrait for HatCode {
                 if hat!(tables).full_net(WhatAmI::Peer) {
                     if let Some(mut res) = res {
                         if let Some(peer) = get_peer(tables, face, node_id) {
-                            forget_peer_liveliness(tables, face, &mut res, &peer);
+                            forget_peer_token(tables, face, &mut res, &peer);
                         }
                     }
                 } else {
-                    forget_client_liveliness(tables, face, id);
+                    forget_client_token(tables, face, id);
                 }
             }
-            _ => forget_client_liveliness(tables, face, id),
+            _ => forget_client_token(tables, face, id),
         }
     }
 
-    fn declare_liveliness_interest(
+    fn declare_token_interest(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -820,7 +816,7 @@ impl HatLivelinessTrait for HatCode {
         }
     }
 
-    fn undeclare_liveliness_interest(
+    fn undeclare_token_interest(
         &self,
         _tables: &mut Tables,
         face: &mut Arc<FaceState>,

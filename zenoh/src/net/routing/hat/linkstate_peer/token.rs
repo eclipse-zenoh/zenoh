@@ -18,7 +18,7 @@ use zenoh_protocol::network::declare::TokenId;
 
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
-    hat::HatLivelinessTrait,
+    hat::HatTokenTrait,
     router::{NodeId, Resource},
 };
 
@@ -26,8 +26,8 @@ use super::HatCode;
 
 // TODO(fuzzypixelz): Remove this
 #[allow(unused_variables)]
-impl HatLivelinessTrait for HatCode {
-    fn declare_liveliness(
+impl HatTokenTrait for HatCode {
+    fn declare_token(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -38,7 +38,7 @@ impl HatLivelinessTrait for HatCode {
         todo!()
     }
 
-    fn undeclare_liveliness(
+    fn undeclare_token(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -49,7 +49,7 @@ impl HatLivelinessTrait for HatCode {
         todo!()
     }
 
-    fn declare_liveliness_interest(
+    fn declare_token_interest(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
@@ -62,7 +62,7 @@ impl HatLivelinessTrait for HatCode {
         todo!()
     }
 
-    fn undeclare_liveliness_interest(
+    fn undeclare_token_interest(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
