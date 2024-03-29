@@ -86,7 +86,12 @@ pub mod timestamping {
 
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
-pub const queries_default_timeout: u64 = 10000;
+pub mod query {
+    use std::time::Duration;
+
+    pub const default_timeout_ms: u64 = 10_000;
+    pub const no_timeout: Duration = Duration::from_millis(u64::MAX);
+}
 
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]

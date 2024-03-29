@@ -247,8 +247,12 @@ validated_struct::validator! {
             drop_future_timestamp: Option<bool>,
         },
 
-        /// The default timeout to apply to queries in milliseconds.
-        queries_default_timeout: Option<u64>,
+        pub query: #[derive(Default)]
+        QueryConf {
+            /// The default timeout to apply to queries in milliseconds as 64bit unsigned integer.
+            /// The maximum value of unsigned 64bit, i.e. 18446744073709551615, disables the query timeout.
+            default_timeout_ms: Option<u64>,
+        },
 
         /// The routing strategy to use and it's configuration.
         pub routing: #[derive(Default)]

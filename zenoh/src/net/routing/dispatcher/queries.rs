@@ -599,10 +599,12 @@ pub fn route_query(
                                 face: Arc::downgrade(outface),
                                 qid: *qid,
                             };
-                            zenoh_runtime::ZRuntime::Net.spawn(async move {
-                                tokio::time::sleep(timeout).await;
-                                cleanup.run().await
-                            });
+                            if timeout != zenoh_config::defaults::query::no_timeout {
+                                zenoh_runtime::ZRuntime::Net.spawn(async move {
+                                    tokio::time::sleep(timeout).await;
+                                    cleanup.run().await
+                                });
+                            }
                             #[cfg(feature = "stats")]
                             if !admin {
                                 inc_req_stats!(outface, tx, user, body)
@@ -636,10 +638,12 @@ pub fn route_query(
                                 face: Arc::downgrade(outface),
                                 qid: *qid,
                             };
-                            zenoh_runtime::ZRuntime::Net.spawn(async move {
-                                tokio::time::sleep(timeout).await;
-                                cleanup.run().await
-                            });
+                            if timeout != zenoh_config::defaults::query::no_timeout {
+                                zenoh_runtime::ZRuntime::Net.spawn(async move {
+                                    tokio::time::sleep(timeout).await;
+                                    cleanup.run().await
+                                });
+                            }
                             #[cfg(feature = "stats")]
                             if !admin {
                                 inc_req_stats!(outface, tx, user, body)

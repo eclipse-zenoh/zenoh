@@ -778,7 +778,7 @@ impl Session {
         let selector = selector.try_into().map_err(Into::into);
         let timeout = {
             let conf = self.runtime.config().lock();
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
+            Duration::from_millis(unwrap_or_default!(conf.query().default_timeout_ms()))
         };
         GetBuilder {
             session: self,
@@ -1752,27 +1752,29 @@ impl Session {
             _ => 1,
         };
 
-        zenoh_runtime::ZRuntime::Net.spawn({
-            let state = self.state.clone();
-            let zid = self.runtime.zid();
-            async move {
-                tokio::time::sleep(timeout).await;
-                let mut state = zwrite!(state);
-                if let Some(query) = state.queries.remove(&qid) {
-                    std::mem::drop(state);
-                    log::debug!("Timeout on query {}! Send error and close.", qid);
-                    if query.reception_mode == ConsolidationMode::Latest {
-                        for (_, reply) in query.replies.unwrap().into_iter() {
-                            (query.callback)(reply);
+        if timeout != zenoh_config::defaults::query::no_timeout {
+            zenoh_runtime::ZRuntime::Net.spawn({
+                let state = self.state.clone();
+                let zid = self.runtime.zid();
+                async move {
+                    tokio::time::sleep(timeout).await;
+                    let mut state = zwrite!(state);
+                    if let Some(query) = state.queries.remove(&qid) {
+                        std::mem::drop(state);
+                        log::debug!("Timeout on query {}! Send error and close.", qid);
+                        if query.reception_mode == ConsolidationMode::Latest {
+                            for (_, reply) in query.replies.unwrap().into_iter() {
+                                (query.callback)(reply);
+                            }
                         }
+                        (query.callback)(Reply {
+                            sample: Err("Timeout".into()),
+                            replier_id: zid,
+                        });
                     }
-                    (query.callback)(Reply {
-                        sample: Err("Timeout".into()),
-                        replier_id: zid,
-                    });
                 }
-            }
-        });
+            });
+        }
 
         let selector = match scope {
             Some(scope) => Selector {

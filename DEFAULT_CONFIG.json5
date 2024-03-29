@@ -130,8 +130,12 @@
     drop_future_timestamp: false,
   },
 
-  /// The default timeout to apply to queries in milliseconds.
-  queries_default_timeout: 10000,
+  /// Configuration of query parameters.
+  query: {
+    /// The default timeout to apply to queries in milliseconds as 64bit unsigned integer.
+    /// The maximum value of unsigned 64bit, i.e. 18446744073709551615, disables the query timeout.
+    default_timeout_ms: 10000,
+  },
 
   /// The routing strategy to use and it's configuration.
   routing: {
