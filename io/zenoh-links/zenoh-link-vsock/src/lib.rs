@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::Locator;
+use zenoh_protocol::{core::Locator, transport::BatchSize};
 use zenoh_result::ZResult;
 
 #[cfg(target_os = "linux")]
@@ -47,7 +47,7 @@ impl LocatorInspector for VsockLocatorInspector {
 
 zconfigurable! {
     // Default MTU in bytes.
-    static ref VSOCK_DEFAULT_MTU: u16 = u16::MAX;
+    static ref VSOCK_DEFAULT_MTU: BatchSize = BatchSize::MAX;
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref VSOCK_ACCEPT_THROTTLE_TIME: u64 = 100_000;
