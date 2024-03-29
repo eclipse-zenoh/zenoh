@@ -14,12 +14,13 @@
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
 
-use futures::StreamExt;
+use std::time::Duration;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
 use tokio::net::UdpSocket;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
+use zenoh_task::TerminatableTask;
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub use zenoh_protocol::core::WhatAmI;
@@ -204,7 +205,7 @@ where
 /// ```
 pub(crate) struct ScoutInner {
     #[allow(dead_code)]
-    pub(crate) stop_sender: flume::Sender<()>,
+    pub(crate) scout_task: Option<TerminatableTask>,
 }
 
 impl ScoutInner {
@@ -226,8 +227,16 @@ impl ScoutInner {
     /// # }
     /// ```
     pub fn stop(self) {
-        // This drops the inner `stop_sender` and hence stops the scouting receiver
         std::mem::drop(self);
+    }
+}
+
+impl Drop for ScoutInner {
+    fn drop(&mut self) {
+        if self.scout_task.is_some() {
+            let task = self.scout_task.take();
+            task.unwrap().terminate(Duration::from_secs(10));
+        }
     }
 }
 
@@ -307,7 +316,6 @@ fn scout(
         zenoh_config::defaults::scouting::multicast::interface,
         |s| s.as_ref(),
     );
-    let (stop_sender, stop_receiver) = flume::bounded::<()>(1);
     let ifaces = Runtime::get_interfaces(ifaces);
     if !ifaces.is_empty() {
         let sockets: Vec<UdpSocket> = ifaces
@@ -315,25 +323,29 @@ fn scout(
             .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
             .collect();
         if !sockets.is_empty() {
-            zenoh_runtime::ZRuntime::Acceptor.spawn(async move {
-                let mut stop_receiver = stop_receiver.stream();
-                let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
-                    let callback = callback.clone();
-                    async move {
-                        callback(hello);
-                        Loop::Continue
+            let cancellation_token = TerminatableTask::create_cancellation_token();
+            let cancellation_token_clone = cancellation_token.clone();
+            let task = TerminatableTask::spawn(
+                zenoh_runtime::ZRuntime::Acceptor,
+                async move {
+                    let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
+                        let callback = callback.clone();
+                        async move {
+                            callback(hello);
+                            Loop::Continue
+                        }
+                    });
+                    tokio::select! {
+                        _ = scout => {},
+                        _ = cancellation_token_clone.cancelled() => { log::trace!("stop scout({}, {})", what, &config); },
                     }
-                });
-                let stop = async move {
-                    stop_receiver.next().await;
-                    log::trace!("stop scout({}, {})", what, &config);
-                };
-                tokio::select! {
-                    _ = scout => {},
-                    _ = stop => {},
-                }
+                },
+                cancellation_token.clone(),
+            );
+            return Ok(ScoutInner {
+                scout_task: Some(task),
             });
         }
     }
-    Ok(ScoutInner { stop_sender })
+    Ok(ScoutInner { scout_task: None })
 }
