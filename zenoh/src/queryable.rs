@@ -19,8 +19,8 @@ use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::sample::builder::{
-    DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
-    TimestampBuilderTrait, ValueBuilderTrait,
+    op, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
+    ValueBuilderTrait,
 };
 use crate::sample::SourceInfo;
 use crate::Id;
@@ -115,10 +115,10 @@ impl Query {
     #[inline(always)]
     #[cfg(feature = "unstable")]
     #[doc(hidden)]
-    pub fn reply_sample(&self, sample: Sample) -> ReplySampleBuilder<'_> {
-        ReplySampleBuilder {
+    pub fn reply_sample(&self, sample: Sample) -> ReplySample<'_> {
+        ReplySample {
             query: self,
-            sample_builder: sample.into(),
+            sample,
         }
     }
 
@@ -132,18 +132,19 @@ impl Query {
         &self,
         key_expr: IntoKeyExpr,
         payload: IntoPayload,
-    ) -> ReplyBuilder<'_>
+    ) -> ReplySampleBuilder<'_, op::Put>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoPayload: Into<Payload>,
     {
         let sample_builder =
             SampleBuilder::put(key_expr, payload).qos(response::ext::QoSType::RESPONSE.into());
-        ReplyBuilder {
+        ReplySampleBuilder {
             query: self,
             sample_builder,
         }
     }
+
     /// Sends a error reply to this Query.
     ///
     #[inline(always)]
@@ -163,13 +164,16 @@ impl Query {
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
-    pub fn reply_del<IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> ReplyDelBuilder<'_>
+    pub fn reply_del<IntoKeyExpr>(
+        &self,
+        key_expr: IntoKeyExpr,
+    ) -> ReplySampleBuilder<'_, op::Delete>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
         let sample_builder =
-            DeleteSampleBuilder::new(key_expr).with_qos(response::ext::QoSType::RESPONSE.into());
-        ReplyDelBuilder {
+            SampleBuilder::delete(key_expr).qos(response::ext::QoSType::RESPONSE.into());
+        ReplySampleBuilder {
             query: self,
             sample_builder,
         }
@@ -214,91 +218,22 @@ impl fmt::Display for Query {
     }
 }
 
-pub struct ReplySampleBuilder<'a> {
+pub struct ReplySample<'a> {
     query: &'a Query,
-    sample_builder: SampleBuilder,
+    sample: Sample,
 }
 
-impl<'a> ReplySampleBuilder<'a> {
-    pub fn put<IntoPayload>(self, payload: IntoPayload) -> ReplyBuilder<'a>
-    where
-        IntoPayload: Into<Payload>,
-    {
-        let builder = ReplyBuilder {
-            query: self.query,
-            sample_builder: self.sample_builder.into(),
-        };
-        builder.payload(payload)
-    }
-    pub fn delete(self) -> ReplyDelBuilder<'a> {
-        ReplyDelBuilder {
-            query: self.query,
-            sample_builder: self.sample_builder.into(),
-        }
-    }
-}
-
-impl TimestampBuilderTrait for ReplySampleBuilder<'_> {
-    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
-        Self {
-            sample_builder: self.sample_builder.timestamp(timestamp),
-            ..self
-        }
-    }
-}
-
-impl SampleBuilderTrait for ReplySampleBuilder<'_> {
-    #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self {
-            sample_builder: self.sample_builder.source_info(source_info),
-            ..self
-        }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
-        Self {
-            sample_builder: self.sample_builder.attachment(attachment),
-            ..self
-        }
-    }
-}
-
-impl QoSBuilderTrait for ReplySampleBuilder<'_> {
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        Self {
-            sample_builder: self.sample_builder.congestion_control(congestion_control),
-            ..self
-        }
-    }
-
-    fn priority(self, priority: Priority) -> Self {
-        Self {
-            sample_builder: self.sample_builder.priority(priority),
-            ..self
-        }
-    }
-
-    fn express(self, is_express: bool) -> Self {
-        Self {
-            sample_builder: self.sample_builder.express(is_express),
-            ..self
-        }
-    }
-}
-
-impl Resolvable for ReplySampleBuilder<'_> {
+impl Resolvable for ReplySample<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for ReplySampleBuilder<'_> {
+impl SyncResolve for ReplySample<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        self.query._reply_sample(self.sample_builder.into())
+        self.query._reply_sample(self.sample)
     }
 }
 
-impl AsyncResolve for ReplySampleBuilder<'_> {
+impl AsyncResolve for ReplySample<'_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -309,13 +244,13 @@ impl AsyncResolve for ReplySampleBuilder<'_> {
 /// A builder returned by [`Query::reply()`](Query::reply)
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct ReplyBuilder<'a> {
+pub struct ReplySampleBuilder<'a, T> {
     query: &'a Query,
-    sample_builder: PutSampleBuilder,
+    sample_builder: SampleBuilder<T>,
 }
 
-impl TimestampBuilderTrait for ReplyBuilder<'_> {
-    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
+impl<T> TimestampBuilderTrait for ReplySampleBuilder<'_, T> {
+    fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
             sample_builder: self.sample_builder.timestamp(timestamp),
             ..self
@@ -323,7 +258,7 @@ impl TimestampBuilderTrait for ReplyBuilder<'_> {
     }
 }
 
-impl SampleBuilderTrait for ReplyBuilder<'_> {
+impl<T> SampleBuilderTrait for ReplySampleBuilder<'_, T> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -333,7 +268,7 @@ impl SampleBuilderTrait for ReplyBuilder<'_> {
     }
 
     #[cfg(feature = "unstable")]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
+    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
         Self {
             sample_builder: self.sample_builder.attachment(attachment),
             ..self
@@ -341,7 +276,7 @@ impl SampleBuilderTrait for ReplyBuilder<'_> {
     }
 }
 
-impl QoSBuilderTrait for ReplyBuilder<'_> {
+impl<T> QoSBuilderTrait for ReplySampleBuilder<'_, T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
             sample_builder: self.sample_builder.congestion_control(congestion_control),
@@ -364,7 +299,7 @@ impl QoSBuilderTrait for ReplyBuilder<'_> {
     }
 }
 
-impl ValueBuilderTrait for ReplyBuilder<'_> {
+impl ValueBuilderTrait for ReplySampleBuilder<'_, op::Put> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             sample_builder: self.sample_builder.encoding(encoding),
@@ -387,61 +322,21 @@ impl ValueBuilderTrait for ReplyBuilder<'_> {
     }
 }
 
-/// A builder returned by [`Query::reply_del()`](Query::reply)
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[derive(Debug)]
-pub struct ReplyDelBuilder<'a> {
-    query: &'a Query,
-    sample_builder: DeleteSampleBuilder,
+impl<'a, T> Resolvable for ReplySampleBuilder<'a, T> {
+    type To = ZResult<()>;
 }
 
-impl TimestampBuilderTrait for ReplyDelBuilder<'_> {
-    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
-        Self {
-            sample_builder: self.sample_builder.timestamp(timestamp),
-            ..self
-        }
+impl<T> SyncResolve for ReplySampleBuilder<'_, T> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        self.query._reply_sample(self.sample_builder.into())
     }
 }
 
-impl SampleBuilderTrait for ReplyDelBuilder<'_> {
-    #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self {
-            sample_builder: self.sample_builder.source_info(source_info),
-            ..self
-        }
-    }
+impl<'a, T> AsyncResolve for ReplySampleBuilder<'a, T> {
+    type Future = Ready<Self::To>;
 
-    #[cfg(feature = "unstable")]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
-        Self {
-            sample_builder: self.sample_builder.attachment(attachment),
-            ..self
-        }
-    }
-}
-
-impl QoSBuilderTrait for ReplyDelBuilder<'_> {
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        Self {
-            sample_builder: self.sample_builder.congestion_control(congestion_control),
-            ..self
-        }
-    }
-
-    fn priority(self, priority: Priority) -> Self {
-        Self {
-            sample_builder: self.sample_builder.priority(priority),
-            ..self
-        }
-    }
-
-    fn express(self, is_express: bool) -> Self {
-        Self {
-            sample_builder: self.sample_builder.express(is_express),
-            ..self
-        }
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
     }
 }
 
@@ -453,35 +348,60 @@ pub struct ReplyErrBuilder<'a> {
     value: Value,
 }
 
-impl<'a> Resolvable for ReplyBuilder<'a> {
+impl ValueBuilderTrait for ReplyErrBuilder<'_> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            value: self.value.encoding(encoding),
+            ..self
+        }
+    }
+
+    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+        Self {
+            value: self.value.payload(payload),
+            ..self
+        }
+    }
+
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        Self {
+            value: value.into(),
+            ..self
+        }
+    }
+}
+
+impl<'a> Resolvable for ReplyErrBuilder<'a> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for ReplyBuilder<'_> {
+impl SyncResolve for ReplyErrBuilder<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        self.query._reply_sample(self.sample_builder.into())
+        self.query.inner.primitives.send_response(Response {
+            rid: self.query.inner.qid,
+            wire_expr: WireExpr {
+                scope: 0,
+                suffix: std::borrow::Cow::Owned(self.query.key_expr().as_str().to_owned()),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Err(zenoh::Err {
+                encoding: self.value.encoding.into(),
+                ext_sinfo: None,
+                ext_unknown: vec![],
+                payload: self.value.payload.into(),
+            }),
+            ext_qos: response::ext::QoSType::RESPONSE,
+            ext_tstamp: None,
+            ext_respid: Some(response::ext::ResponderIdType {
+                zid: self.query.inner.zid,
+                eid: self.query.eid,
+            }),
+        });
+        Ok(())
     }
 }
 
-impl<'a> Resolvable for ReplyDelBuilder<'a> {
-    type To = ZResult<()>;
-}
-
-impl SyncResolve for ReplyDelBuilder<'_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        self.query._reply_sample(self.sample_builder.into())
-    }
-}
-
-impl<'a> AsyncResolve for ReplyBuilder<'a> {
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
-    }
-}
-
-impl<'a> AsyncResolve for ReplyDelBuilder<'a> {
+impl<'a> AsyncResolve for ReplyErrBuilder<'a> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -543,43 +463,6 @@ impl Query {
             }),
         });
         Ok(())
-    }
-}
-
-impl<'a> Resolvable for ReplyErrBuilder<'a> {
-    type To = ZResult<()>;
-}
-
-impl SyncResolve for ReplyErrBuilder<'_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        self.query.inner.primitives.send_response(Response {
-            rid: self.query.inner.qid,
-            wire_expr: WireExpr {
-                scope: 0,
-                suffix: std::borrow::Cow::Owned(self.query.key_expr().as_str().to_owned()),
-                mapping: Mapping::Sender,
-            },
-            payload: ResponseBody::Err(zenoh::Err {
-                encoding: self.value.encoding.into(),
-                ext_sinfo: None,
-                ext_unknown: vec![],
-                payload: self.value.payload.into(),
-            }),
-            ext_qos: response::ext::QoSType::RESPONSE,
-            ext_tstamp: None,
-            ext_respid: Some(response::ext::ResponderIdType {
-                zid: self.query.inner.zid,
-                eid: self.query.eid,
-            }),
-        });
-        Ok(())
-    }
-}
-impl<'a> AsyncResolve for ReplyErrBuilder<'a> {
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
     }
 }
 
