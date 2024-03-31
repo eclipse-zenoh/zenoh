@@ -123,7 +123,12 @@ impl DataInfoIntoSample for Option<DataInfo> {
         IntoPayload: Into<Payload>,
     {
         if let Some(data_info) = self {
-            data_info.into_sample(key_expr, payload, attachment)
+            data_info.into_sample(
+                key_expr,
+                payload,
+                #[cfg(feature = "unstable")]
+                attachment,
+            )
         } else {
             Sample {
                 key_expr: key_expr.into(),
@@ -175,6 +180,7 @@ impl SourceInfo {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl From<SourceInfo> for Option<zenoh::put::ext::SourceInfoType> {
     fn from(source_info: SourceInfo) -> Option<zenoh::put::ext::SourceInfoType> {
         if source_info.is_empty() {

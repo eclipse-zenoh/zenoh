@@ -11,21 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[zenoh_macros::unstable]
+use crate::api::liveliness::{Liveliness, LivelinessTokenState, PREFIX_LIVELINESS};
+#[zenoh_macros::unstable]
+use crate::api::sample::attachment::Attachment;
+#[zenoh_macros::unstable]
+use crate::api::sample::SourceInfo;
 use crate::api::{
     admin,
     encoding::Encoding,
     handlers::{Callback, DefaultHandler},
     info::*,
     key_expr::{KeyExpr, KeyExprInner},
-    liveliness::{Liveliness, LivelinessTokenState, PREFIX_LIVELINESS},
     payload::Payload,
     publication::*,
     query::*,
     queryable::*,
-    sample::{
-        attachment::Attachment, DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind,
-        SourceInfo,
-    },
+    sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::{Parameters, Selector, TIME_RANGE_KEY},
     subscriber::*,
     value::Value,
@@ -797,6 +799,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             attachment: None,
             handler: DefaultHandler,
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
         }
     }
@@ -1663,6 +1666,7 @@ impl Session {
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
                     consolidation,
                     parameters: selector.parameters().to_string(),
+                    #[cfg(feature = "unstable")]
                     ext_sinfo: source.into(),
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]

@@ -16,10 +16,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
 use zenoh::config;
+use zenoh::config::EndPoint;
+use zenoh::config::WhatAmI;
 use zenoh::core::ztimeout;
 use zenoh::core::AsyncResolve;
-use zenoh::sample::QoSBuilderTrait;
-use zenoh::session::{open, Session};
+use zenoh::key_expr::KeyExpr;
+use zenoh::sample::{CongestionControl, QoSBuilderTrait};
+use zenoh::session::{open, Session, SessionDeclarations};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

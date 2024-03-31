@@ -13,6 +13,8 @@
 //
 
 //! Query primitives.
+#[zenoh_macros::unstable]
+use crate::api::sample::SourceInfo;
 use crate::api::{
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -22,7 +24,7 @@ use crate::api::{
     sample::{
         attachment::Attachment,
         builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait},
-        Locality, QoSBuilder, Sample, SourceInfo,
+        Locality, QoSBuilder, Sample,
     },
     selector::Selector,
     session::Session,

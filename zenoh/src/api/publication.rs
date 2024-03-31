@@ -13,15 +13,18 @@
 //
 
 //! Publishing primitives.
+#[zenoh_macros::unstable]
+use crate::api::sample::attachment::Attachment;
+#[zenoh_macros::unstable]
+use crate::api::sample::SourceInfo;
 use crate::api::{
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::{KeyExpr, KeyExprInner},
     payload::Payload,
     sample::{
-        attachment::Attachment,
         builder::{QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait},
-        DataInfo, Locality, QoS, Sample, SampleFields, SampleKind, SourceInfo,
+        DataInfo, Locality, QoS, Sample, SampleFields, SampleKind,
     },
     session::{SessionRef, Undeclarable},
     value::Value,

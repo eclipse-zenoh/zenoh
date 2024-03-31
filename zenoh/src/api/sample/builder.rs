@@ -11,12 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[zenoh_macros::unstable]
+use crate::api::sample::Attachment;
+#[zenoh_macros::unstable]
+use crate::api::sample::SourceInfo;
 use crate::api::{
     encoding::Encoding,
     key_expr::KeyExpr,
     payload::Payload,
     publication::Priority,
-    sample::{Attachment, QoS, QoSBuilder, Sample, SourceInfo},
+    sample::{QoS, QoSBuilder, Sample},
     value::Value,
 };
 use uhlc::Timestamp;

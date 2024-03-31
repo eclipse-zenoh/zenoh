@@ -13,20 +13,23 @@
 //
 
 //! Queryable primitives.
+#[zenoh_macros::unstable]
+use crate::api::query::ReplyKeyExpr;
+#[zenoh_macros::unstable]
+use crate::api::sample::SourceInfo;
 use crate::api::{
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     payload::Payload,
     publication::Priority,
-    query::ReplyKeyExpr,
     sample::{
         attachment::Attachment,
         builder::{
             DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder,
             SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
         },
-        Locality, Sample, SampleKind, SourceInfo,
+        Locality, Sample, SampleKind,
     },
     selector::{Parameters, Selector},
     session::{SessionRef, Undeclarable},

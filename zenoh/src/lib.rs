@@ -128,7 +128,8 @@ pub mod session {
 
 pub mod key_expr {
     pub use crate::api::key_expr::KeyExpr;
-    pub use zenoh_keyexpr::key_expr;
+    pub use zenoh_keyexpr::key_expr::format::KeFormat;
+    pub use zenoh_keyexpr::keyexpr;
     pub use zenoh_keyexpr::OwnedKeyExpr;
     pub use zenoh_macros::{kedefine, keformat};
 }

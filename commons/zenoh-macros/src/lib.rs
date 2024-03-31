@@ -85,7 +85,7 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
         let id = &source[spec.spec_start..(spec.spec_start + spec.id_end as usize)];
         let set_id = quote::format_ident!("{}", id);
         quote! {
-            pub fn #set_id <S: ::core::fmt::Display>(&mut self, value: S) -> Result<&mut Self, ::zenoh::key_expr::format::FormatSetError> {
+            pub fn #set_id <S: ::core::fmt::Display>(&mut self, value: S) -> Result<&mut Self, ::zenoh_keyexpr::key_expr::format::FormatSetError> {
                 match self.0.set(#id, value) {
                     Ok(_) => Ok(self),
                     Err(e) => Err(e)
@@ -109,18 +109,18 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
             quote! {
                 #[doc = #doc]
                 /// Since the pattern is `**`, this may return `None` if the pattern didn't consume any chunks.
-                pub fn #get_id (&self) -> Option<& ::zenoh::key_expr::keyexpr> {
+                pub fn #get_id (&self) -> Option<& ::zenoh_keyexpr::key_expr::keyexpr> {
                     unsafe {
                         let s =self._0.get(#id).unwrap_unchecked();
-                        (!s.is_empty()).then(|| ::zenoh::key_expr::keyexpr::from_str_unchecked(s))
+                        (!s.is_empty()).then(|| ::zenoh_keyexpr::key_expr::keyexpr::from_str_unchecked(s))
                     }
                 }
             }
         } else {
             quote! {
                 #[doc = #doc]
-                pub fn #get_id (&self) -> &::zenoh::key_expr::keyexpr {
-                    unsafe {::zenoh::key_expr::keyexpr::from_str_unchecked(self._0.get(#id).unwrap_unchecked())}
+                pub fn #get_id (&self) -> &::zenoh_keyexpr::key_expr::keyexpr {
+                    unsafe {::zenoh_keyexpr::key_expr::keyexpr::from_str_unchecked(self._0.get(#id).unwrap_unchecked())}
                 }
             }
         }
@@ -136,7 +136,7 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
             segment_end,
         } = spec;
         quote! {
-            ::zenoh::key_expr::format::macro_support::SegmentBuilder {
+            ::zenoh_keyexpr::key_expr::format::macro_support::SegmentBuilder {
                 segment_start: #segment_start,
                 prefix_end: #prefix_end,
                 spec_start: #spec_start,
@@ -152,9 +152,9 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
     let formatter_doc = format!("And instance of a formatter for `{source}`.");
 
     quote! {
-            use ::zenoh::Result as ZResult;
-            const FORMAT_INNER: ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> = unsafe {
-                ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])
+            use ::zenoh_core::Result as ZResult;
+            const FORMAT_INNER: ::zenoh_keyexpr::key_expr::format::KeFormat<'static, [::zenoh_keyexpr::key_expr::format::Segment<'static>; #len]> = unsafe {
+                ::zenoh_keyexpr::key_expr::format::macro_support::const_new(#source, [#(#segments)*])
             };
             #[doc = #format_doc]
             #[derive(Copy, Clone, Hash)]
@@ -162,7 +162,7 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
 
             #[doc = #formatter_doc]
             #[derive(Clone)]
-            pub struct Formatter(::zenoh::key_expr::format::KeFormatter<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>);
+            pub struct Formatter(::zenoh_keyexpr::key_expr::format::KeFormatter<'static, [::zenoh_keyexpr::key_expr::format::Segment<'static>; #len]>);
             impl ::core::fmt::Debug for Format {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                     ::core::fmt::Debug::fmt(&FORMAT_INNER, f)
@@ -179,11 +179,11 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
                 }
             }
             impl ::core::ops::Deref for Format {
-                type Target = ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>;
+                type Target = ::zenoh_keyexpr::key_expr::format::KeFormat<'static, [::zenoh_keyexpr::key_expr::format::Segment<'static>; #len]>;
                 fn deref(&self) -> &Self::Target {&FORMAT_INNER}
             }
             impl ::core::ops::Deref for Formatter {
-                type Target = ::zenoh::key_expr::format::KeFormatter<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>;
+                type Target = ::zenoh_keyexpr::key_expr::format::KeFormatter<'static, [::zenoh_keyexpr::key_expr::format::Segment<'static>; #len]>;
                 fn deref(&self) -> &Self::Target {&self.0}
             }
             impl ::core::ops::DerefMut for Formatter {
@@ -192,9 +192,9 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
             impl Formatter {
                 #(#setters)*
             }
-            pub struct Parsed<'s>{_0: ::zenoh::key_expr::format::Parsed<'s, [::zenoh::key_expr::format::Segment<'s>; #len]>}
+            pub struct Parsed<'s>{_0: ::zenoh_keyexpr::key_expr::format::Parsed<'s, [::zenoh_keyexpr::key_expr::format::Segment<'s>; #len]>}
             impl<'s> ::core::ops::Deref for Parsed<'s> {
-                type Target = ::zenoh::key_expr::format::Parsed<'s, [::zenoh::key_expr::format::Segment<'s>; #len]>;
+                type Target = ::zenoh_keyexpr::key_expr::format::Parsed<'s, [::zenoh_keyexpr::key_expr::format::Segment<'s>; #len]>;
                 fn deref(&self) -> &Self::Target {&self._0}
             }
             impl Parsed<'_> {
@@ -204,17 +204,17 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
                 pub fn formatter() -> Formatter {
                     Formatter(Format.formatter())
                 }
-                pub fn parse<'s>(target: &'s ::zenoh::key_expr::keyexpr) -> ZResult<Parsed<'s>> {
+                pub fn parse<'s>(target: &'s ::zenoh_keyexpr::key_expr::keyexpr) -> ZResult<Parsed<'s>> {
                     Ok(Parsed{_0: Format.parse(target)?})
                 }
-                pub fn into_inner(self) -> ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> {
+                pub fn into_inner(self) -> ::zenoh_keyexpr::key_expr::format::KeFormat<'static, [::zenoh_keyexpr::key_expr::format::Segment<'static>; #len]> {
                     FORMAT_INNER
                 }
             }
             pub fn formatter() -> Formatter {
                 Format::formatter()
             }
-            pub fn parse<'s>(target: &'s ::zenoh::key_expr::keyexpr) -> ZResult<Parsed<'s>> {
+            pub fn parse<'s>(target: &'s ::zenoh_keyexpr::key_expr::keyexpr) -> ZResult<Parsed<'s>> {
                 Format::parse(target)
             }
     }
@@ -348,7 +348,9 @@ pub fn ke(tokens: TokenStream) -> TokenStream {
     let value: LitStr = syn::parse(tokens).unwrap();
     let ke = value.value();
     match zenoh_keyexpr::keyexpr::new(&ke) {
-        Ok(_) => quote!(unsafe {::zenoh::key_expr::keyexpr::from_str_unchecked(#ke)}).into(),
+        Ok(_) => {
+            quote!(unsafe {::zenoh_keyexpr::key_expr::keyexpr::from_str_unchecked(#ke)}).into()
+        }
         Err(e) => panic!("{}", e),
     }
 }

@@ -56,9 +56,13 @@ pub(crate) mod common {
 
     #[zenoh_macros::unstable]
     pub use crate::sample::Attachment;
+    #[zenoh_macros::unstable]
+    pub use crate::sample::Locality;
+    #[zenoh_macros::unstable]
+    pub use crate::sample::SourceInfo;
     pub use crate::sample::{
-        Locality, QoSBuilderTrait, Sample, SampleBuilderTrait, SampleKind, SourceInfo,
-        TimestampBuilderTrait, ValueBuilderTrait,
+        QoSBuilderTrait, Sample, SampleBuilderTrait, SampleKind, TimestampBuilderTrait,
+        ValueBuilderTrait,
     };
 
     pub use crate::query::Reply;
