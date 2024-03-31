@@ -30,6 +30,7 @@ use zenoh_link_commons::{
     LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Mvar;
 
@@ -200,7 +201,7 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *UDP_DEFAULT_MTU
     }
 

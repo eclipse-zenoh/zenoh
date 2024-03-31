@@ -880,6 +880,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
+                        interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1092,6 +1093,7 @@ impl Session {
             // };
 
             primitives.send_declare(Declare {
+                interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1148,6 +1150,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
+                        interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1199,6 +1202,7 @@ impl Session {
                 distance: 0,
             };
             primitives.send_declare(Declare {
+                interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1220,6 +1224,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
+                    interest_id: None,
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1255,6 +1260,7 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(Declare {
+            interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1279,6 +1285,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,

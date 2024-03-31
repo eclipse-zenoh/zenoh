@@ -22,7 +22,7 @@ use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
     core::{EndPoint, Locator},
-    transport::TransportMessage,
+    transport::{BatchSize, TransportMessage},
 };
 use zenoh_result::{zerror, ZResult};
 
@@ -44,7 +44,7 @@ pub struct LinkMulticast(pub Arc<dyn LinkMulticastTrait>);
 
 #[async_trait]
 pub trait LinkMulticastTrait: Send + Sync {
-    fn get_mtu(&self) -> u16;
+    fn get_mtu(&self) -> BatchSize;
     fn get_src(&self) -> &Locator;
     fn get_dst(&self) -> &Locator;
     fn is_reliable(&self) -> bool;

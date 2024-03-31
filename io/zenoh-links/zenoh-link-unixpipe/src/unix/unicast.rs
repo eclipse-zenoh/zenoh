@@ -33,6 +33,7 @@ use tokio::io::Interest;
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_runtime::ZRuntime;
 
 use unix_named_pipe::{create, open_write};
@@ -45,7 +46,7 @@ use zenoh_result::{bail, ZResult};
 
 use super::FILE_ACCESS_MASK;
 
-const LINUX_PIPE_MAX_MTU: u16 = 65_535;
+const LINUX_PIPE_MAX_MTU: BatchSize = BatchSize::MAX;
 const LINUX_PIPE_DEDICATE_TRIES: usize = 100;
 
 static PIPE_INVITATION: &[u8] = &[0xDE, 0xAD, 0xBE, 0xEF];
@@ -498,7 +499,7 @@ impl LinkUnicastTrait for UnicastPipe {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         LINUX_PIPE_MAX_MTU
     }
 

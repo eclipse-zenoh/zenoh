@@ -22,6 +22,7 @@ use std::net::SocketAddr;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::core::{endpoint::Address, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{zerror, ZResult};
 
 mod unicast;
@@ -33,7 +34,7 @@ pub use unicast::*;
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the TCP MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
-const TCP_MAX_MTU: u16 = u16::MAX;
+const TCP_MAX_MTU: BatchSize = BatchSize::MAX;
 
 pub const TCP_LOCATOR_PREFIX: &str = "tcp";
 
@@ -52,7 +53,7 @@ impl LocatorInspector for TcpLocatorInspector {
 
 zconfigurable! {
     // Default MTU (TCP PDU) in bytes.
-    static ref TCP_DEFAULT_MTU: u16 = TCP_MAX_MTU;
+    static ref TCP_DEFAULT_MTU: BatchSize = TCP_MAX_MTU;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:

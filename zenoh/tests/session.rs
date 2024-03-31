@@ -165,10 +165,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
                     "ok_del" => {
                         tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async {
-                                ztimeout!(query
-                                    .reply_del(KeyExpr::try_from(key_expr).unwrap())
-                                    .res_async())
-                                .unwrap()
+                                ztimeout!(query.reply_del(key_expr).res_async()).unwrap()
                             })
                         });
                     }

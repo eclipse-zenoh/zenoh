@@ -128,13 +128,14 @@ impl Query {
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
-    pub fn reply<IntoKeyExpr, IntoPayload>(
+    pub fn reply<'b, TryIntoKeyExpr, IntoPayload>(
         &self,
-        key_expr: IntoKeyExpr,
+        key_expr: TryIntoKeyExpr,
         payload: IntoPayload,
-    ) -> ReplyBuilder<'_>
+    ) -> ReplyBuilder<'_, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
         IntoPayload: Into<Payload>,
     {
         let sample_builder =
@@ -165,7 +166,8 @@ impl Query {
     #[inline(always)]
     pub fn reply_del<IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> ReplyDelBuilder<'_>
     where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let sample_builder =
             DeleteSampleBuilder::new(key_expr).with_qos(response::ext::QoSType::RESPONSE.into());
@@ -309,7 +311,7 @@ impl AsyncResolve for ReplySampleBuilder<'_> {
 /// A builder returned by [`Query::reply()`](Query::reply)
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct ReplyBuilder<'a> {
+pub struct ReplyBuilder<'a, 'b> {
     query: &'a Query,
     sample_builder: PutSampleBuilder,
 }
@@ -453,11 +455,11 @@ pub struct ReplyErrBuilder<'a> {
     value: Value,
 }
 
-impl<'a> Resolvable for ReplyBuilder<'a> {
+impl<'a, 'b> Resolvable for ReplyBuilder<'a, 'b> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for ReplyBuilder<'_> {
+impl<'a, 'b> SyncResolve for ReplyBuilder<'a, 'b> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         self.query._reply_sample(self.sample_builder.into())
     }

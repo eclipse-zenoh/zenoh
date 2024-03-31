@@ -19,14 +19,17 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_protocol::core::{Resolution, WhatAmI, ZenohId};
+use zenoh_protocol::{
+    core::{Resolution, WhatAmI, ZenohId},
+    transport::BatchSize,
+};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Cookie {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) resolution: Resolution,
-    pub(crate) batch_size: u16,
+    pub(crate) batch_size: BatchSize,
     pub(crate) nonce: u64,
     // Extensions
     pub(crate) ext_qos: ext::qos::StateAccept,
@@ -82,7 +85,7 @@ where
         let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
         let resolution: u8 = self.read(&mut *reader)?;
         let resolution = Resolution::from(resolution);
-        let batch_size: u16 = self.read(&mut *reader)?;
+        let batch_size: BatchSize = self.read(&mut *reader)?;
         let nonce: u64 = self.read(&mut *reader)?;
         // Extensions
         let ext_qos: ext::qos::StateAccept = self.read(&mut *reader)?;

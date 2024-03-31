@@ -93,6 +93,7 @@ fn propagate_simple_queryable(
             let key_expr = Resource::decl_key(res, &mut dst_face);
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -164,6 +165,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -203,6 +205,7 @@ pub(super) fn undeclare_client_queryable(
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
+                        interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
