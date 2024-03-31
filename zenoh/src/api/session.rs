@@ -11,21 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::api::liveliness::PREFIX_LIVELINESS;
 use crate::api::{
     admin,
     encoding::Encoding,
     handlers::{Callback, DefaultHandler},
     info::*,
     key_expr::{KeyExpr, KeyExprInner},
-    liveliness::{Liveliness, LivelinessTokenState},
+    liveliness::{Liveliness, LivelinessTokenState, PREFIX_LIVELINESS},
     payload::Payload,
     publication::*,
     query::*,
     queryable::*,
-    sample::DataInfoIntoSample,
-    sample::{Attachment, DataInfo},
-    sample::{Locality, QoS, Sample, SampleKind, SourceInfo},
+    sample::{
+        attachment::Attachment, DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind,
+        SourceInfo,
+    },
     selector::{Parameters, Selector, TIME_RANGE_KEY},
     subscriber::*,
     value::Value,

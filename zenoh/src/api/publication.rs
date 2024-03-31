@@ -19,8 +19,9 @@ use crate::api::{
     key_expr::{KeyExpr, KeyExprInner},
     payload::Payload,
     sample::{
+        attachment::Attachment,
         builder::{QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait},
-        Attachment, DataInfo, Locality, QoS, Sample, SampleFields, SampleKind, SourceInfo,
+        DataInfo, Locality, QoS, Sample, SampleFields, SampleKind, SourceInfo,
     },
     session::{SessionRef, Undeclarable},
     value::Value,

@@ -20,8 +20,9 @@ use crate::api::{
     payload::Payload,
     publication::Priority,
     sample::{
+        attachment::Attachment,
         builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait},
-        Attachment, Locality, QoSBuilder, Sample, SourceInfo,
+        Locality, QoSBuilder, Sample, SourceInfo,
     },
     selector::Selector,
     session::Session,

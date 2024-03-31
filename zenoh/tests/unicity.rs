@@ -15,9 +15,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
-use zenoh::prelude::r#async::*;
-use zenoh::sample::builder::QoSBuilderTrait;
-use zenoh_core::ztimeout;
+use zenoh::config;
+use zenoh::core::ztimeout;
+use zenoh::core::AsyncResolve;
+use zenoh::sample::QoSBuilderTrait;
+use zenoh::session::{open, Session};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -30,14 +32,14 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     config.listen.endpoints = vec!["tcp/127.0.0.1:27447".parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening s01 session");
-    let s01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s01 = ztimeout!(open(config).res_async()).unwrap();
 
     let mut config = config::peer();
     config.listen.endpoints = vec!["tcp/127.0.0.1:27448".parse().unwrap()];
     config.connect.endpoints = vec!["tcp/127.0.0.1:27447".parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening s02 session");
-    let s02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s02 = ztimeout!(open(config).res_async()).unwrap();
 
     let mut config = config::peer();
     config.connect.endpoints = vec![
@@ -46,7 +48,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     ];
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][03a] Opening s03 session");
-    let s03 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s03 = ztimeout!(open(config).res_async()).unwrap();
 
     (s01, s02, s03)
 }
@@ -58,7 +60,7 @@ async fn open_router_session() -> Session {
     config.listen.endpoints = vec!["tcp/127.0.0.1:37447".parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][00a] Opening router session");
-    ztimeout!(zenoh::open(config).res_async()).unwrap()
+    ztimeout!(open(config).res_async()).unwrap()
 }
 
 async fn close_router_session(s: Session) {
@@ -70,15 +72,15 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     // Open the sessions
     let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
     println!("[  ][01a] Opening s01 session");
-    let s01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s01 = ztimeout!(open(config).res_async()).unwrap();
 
     let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
     println!("[  ][02a] Opening s02 session");
-    let s02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s02 = ztimeout!(open(config).res_async()).unwrap();
 
     let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
     println!("[  ][03a] Opening s03 session");
-    let s03 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s03 = ztimeout!(open(config).res_async()).unwrap();
 
     (s01, s02, s03)
 }

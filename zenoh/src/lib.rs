@@ -105,40 +105,53 @@ pub const FEATURES: &str = concat_enabled_features!(
         "default"
     ]
 );
-
-// Reexport prelude::common into root of "zenoh::"
-pub mod prelude;
-pub use prelude::common::*;
-
 mod api;
 mod net;
 mod plugins;
 
-pub use zenoh_result::ZResult as Result;
+pub mod prelude;
+// Reexport useful types from external zenoh crates into root namespace
+// pub use prelude::common::*;
+
+//
+// Explicitly define zenoh API split to logical modules
+//
+
+pub mod core {
+    pub use zenoh_core::{zlock, ztimeout, AsyncResolve, Result, SyncResolve};
+    pub use zenoh_result::bail;
+}
 
 pub mod session {
-    pub use crate::api::session::open;
-    pub use crate::api::session::Session;
-    pub use crate::api::session::SessionDeclarations;
+    pub use crate::api::session::{open, Session, SessionDeclarations};
 }
 
 pub mod key_expr {
-    pub use zenoh_keyexpr::*;
-    pub use zenoh_macros::kedefine;
-    pub use zenoh_macros::keformat;
+    pub use crate::api::key_expr::KeyExpr;
+    pub use zenoh_keyexpr::key_expr;
+    pub use zenoh_keyexpr::OwnedKeyExpr;
+    pub use zenoh_macros::{kedefine, keformat};
 }
 
 pub mod sample {
-    pub use crate::api::sample::builder::{
-        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+    pub use crate::api::{
+        sample::{
+            builder::{
+                QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+            },
+            Sample, SampleKind,
+        },
+        value::Value,
     };
+
     #[zenoh_macros::unstable]
-    pub use crate::api::sample::Attachment;
+    pub use crate::api::sample::attachment::Attachment;
     #[zenoh_macros::unstable]
     pub use crate::api::sample::Locality;
     #[zenoh_macros::unstable]
     pub use crate::api::sample::SourceInfo;
-    pub use crate::api::sample::{Sample, SampleKind};
+
+    pub use zenoh_protocol::core::CongestionControl;
 }
 
 pub mod queryable {
@@ -159,5 +172,8 @@ pub mod handlers {
 }
 
 pub mod config {
-    pub use zenoh_config::*;
+    pub use zenoh_config::{
+        client, default, peer, Config, ConnectionRetryConf, EndPoint, Locator, ModeDependentValue,
+        ValidatedMap, WhatAmI, WhatAmIMatcher,
+    };
 }

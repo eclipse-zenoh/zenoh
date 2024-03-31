@@ -16,13 +16,17 @@ use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicUsize, Arc};
 use std::time::Duration;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh::config::{Config, ModeDependentValue};
-use zenoh::prelude::r#async::*;
-use zenoh::sample::builder::QoSBuilderTrait;
-use zenoh::Result;
-use zenoh_core::ztimeout;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
-use zenoh_result::bail;
+use zenoh::config::{Config, WhatAmI};
+use zenoh::config::{ModeDependentValue, WhatAmIMatcher};
+use zenoh::core::bail;
+use zenoh::core::ztimeout;
+use zenoh::core::AsyncResolve;
+use zenoh::core::Result;
+use zenoh::key_expr::KeyExpr;
+use zenoh::sample::CongestionControl;
+use zenoh::sample::QoSBuilderTrait;
+use zenoh::session::SessionDeclarations;
+use zenoh::session::{open, Session};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
@@ -280,7 +284,7 @@ impl Recipe {
 
                     // In case of client can't connect to some peers/routers
                     loop {
-                        if let Ok(session) = zenoh::open(config.clone()).res_async().await {
+                        if let Ok(session) = open(config.clone()).res_async().await {
                             break session.into_arc();
                         } else {
                             tokio::time::sleep(Duration::from_secs(1)).await;

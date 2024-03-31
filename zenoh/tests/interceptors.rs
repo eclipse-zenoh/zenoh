@@ -12,7 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::sync::{Arc, Mutex};
-use zenoh_core::zlock;
+use zenoh::core::zlock;
+use zenoh::session::open;
 
 struct IntervalCounter {
     first_tick: bool,
@@ -90,7 +91,7 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    let zenoh_sub = zenoh::open(config_sub).res().unwrap();
+    let zenoh_sub = open(config_sub).res().unwrap();
 
     let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
     let counter_r100_clone = counter_r100.clone();
@@ -127,7 +128,7 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    let zenoh_pub = zenoh::open(config_pub).res().unwrap();
+    let zenoh_pub = open(config_pub).res().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples_by_keyexp/r100")
         .res()
@@ -208,7 +209,7 @@ fn downsampling_by_interface_impl(egress: bool) {
     if !egress {
         config_sub.insert_json5("downsampling", &ds_cfg).unwrap();
     };
-    let zenoh_sub = zenoh::open(config_sub).res().unwrap();
+    let zenoh_sub = open(config_sub).res().unwrap();
 
     let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
     let counter_r100_clone = counter_r100.clone();
@@ -236,7 +237,7 @@ fn downsampling_by_interface_impl(egress: bool) {
     if egress {
         config_pub.insert_json5("downsampling", &ds_cfg).unwrap();
     }
-    let zenoh_pub = zenoh::open(config_pub).res().unwrap();
+    let zenoh_pub = open(config_pub).res().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples_by_interface/r100")
         .res()
@@ -300,5 +301,5 @@ fn downsampling_config_error_wrong_strategy() {
         )
         .unwrap();
 
-    zenoh::open(config).res().unwrap();
+    open(config).res().unwrap();
 }

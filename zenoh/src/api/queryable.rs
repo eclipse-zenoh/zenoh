@@ -21,11 +21,12 @@ use crate::api::{
     publication::Priority,
     query::ReplyKeyExpr,
     sample::{
+        attachment::Attachment,
         builder::{
             DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder,
             SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
         },
-        Attachment, Locality, Sample, SampleKind, SourceInfo,
+        Locality, Sample, SampleKind, SourceInfo,
     },
     selector::{Parameters, Selector},
     session::{SessionRef, Undeclarable},

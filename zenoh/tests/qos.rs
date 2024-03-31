@@ -12,16 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
-use zenoh::prelude::r#async::*;
-use zenoh_core::ztimeout;
+use zenoh::core::AsyncResolve;
+use zenoh::publication::Priority;
+use zenoh::sample::{CongestionControl, QoSBuilderTrait};
+use zenoh::session::SessionDeclarations;
+use zenoh::{core::ztimeout, session::open};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn pubsub() {
-    let session1 = ztimeout!(zenoh::open(zenoh_config::peer()).res_async()).unwrap();
-    let session2 = ztimeout!(zenoh::open(zenoh_config::peer()).res_async()).unwrap();
+    let session1 = ztimeout!(open(zenoh_config::peer()).res_async()).unwrap();
+    let session2 = ztimeout!(open(zenoh_config::peer()).res_async()).unwrap();
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("test/qos")

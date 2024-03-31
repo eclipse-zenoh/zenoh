@@ -13,8 +13,11 @@
 //
 use std::time::Duration;
 use zenoh::config;
-use zenoh::prelude::r#async::*;
-use zenoh_core::ztimeout;
+use zenoh::core::ztimeout;
+use zenoh::core::AsyncResolve;
+use zenoh::sample::SampleKind;
+use zenoh::session::open;
+use zenoh::session::SessionDeclarations;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -27,13 +30,13 @@ async fn zenoh_liveliness() {
         .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
         .unwrap();
     c1.scouting.multicast.set_enabled(Some(false)).unwrap();
-    let session1 = ztimeout!(zenoh::open(c1).res_async()).unwrap();
+    let session1 = ztimeout!(open(c1).res_async()).unwrap();
     let mut c2 = config::peer();
     c2.connect
         .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
         .unwrap();
     c2.scouting.multicast.set_enabled(Some(false)).unwrap();
-    let session2 = ztimeout!(zenoh::open(c2).res_async()).unwrap();
+    let session2 = ztimeout!(open(c2).res_async()).unwrap();
 
     let sub = ztimeout!(session2
         .liveliness()

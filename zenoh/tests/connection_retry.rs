@@ -1,6 +1,9 @@
+use zenoh::config::Config;
 use zenoh::config::ConnectionRetryConf;
-use zenoh::prelude::sync::*;
-use zenoh_link::EndPoint;
+use zenoh::config::EndPoint;
+use zenoh::config::ValidatedMap;
+use zenoh::core::SyncResolve;
+use zenoh::session::open;
 
 #[test]
 fn retry_config_overriding() {
@@ -22,7 +25,7 @@ fn retry_config_overriding() {
         .insert_json5(
             "listen/retry",
             r#"
-            { 
+            {
                 try_timeout_ms: 2000,
                 period_init_ms: 3000,
                 period_max_ms: 6000,
@@ -72,7 +75,7 @@ fn retry_config_parsing() {
         .insert_json5(
             "listen/retry",
             r#"
-            { 
+            {
                 period_init_ms: 1000,
                 period_max_ms: 6000,
                 period_increase_factor: 2,
@@ -100,7 +103,7 @@ fn retry_config_const_period() {
         .insert_json5(
             "listen/retry",
             r#"
-            { 
+            {
                 period_init_ms: 1000,
                 period_increase_factor: 1,
             }
@@ -127,7 +130,7 @@ fn retry_config_infinit_period() {
         .insert_json5(
             "listen/retry",
             r#"
-            { 
+            {
                 period_init_ms: -1,
                 period_increase_factor: 1,
             }
@@ -153,7 +156,7 @@ fn listen_no_retry() {
         .unwrap();
 
     config.insert_json5("listen/timeout_ms", "0").unwrap();
-    zenoh::open(config).res().unwrap();
+    open(config).res().unwrap();
 }
 
 #[test]
@@ -166,5 +169,5 @@ fn listen_with_retry() {
 
     config.insert_json5("listen/timeout_ms", "1000").unwrap();
 
-    zenoh::open(config).res().unwrap();
+    open(config).res().unwrap();
 }

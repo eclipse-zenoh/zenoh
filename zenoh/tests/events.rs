@@ -12,8 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
-use zenoh::{config, prelude::r#async::*};
-use zenoh_core::ztimeout;
+
+use zenoh::config;
+use zenoh::core::ztimeout;
+use zenoh::core::AsyncResolve;
+use zenoh::query::Reply;
+use zenoh::sample::SampleKind;
+use zenoh::session::SessionDeclarations;
+use zenoh::session::{open, Session};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -29,7 +35,7 @@ async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening session");
-    ztimeout!(zenoh::open(config).res_async()).unwrap()
+    ztimeout!(open(config).res_async()).unwrap()
 }
 
 async fn close_session(session: Session) {

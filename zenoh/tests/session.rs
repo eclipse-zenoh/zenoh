@@ -14,9 +14,12 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use zenoh::config;
+use zenoh::core::ztimeout;
+use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
-use zenoh::sample::builder::QoSBuilderTrait;
-use zenoh_core::ztimeout;
+use zenoh::sample::Value;
+use zenoh::session::open;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -33,7 +36,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
-    let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let peer01 = ztimeout!(open(config).res_async()).unwrap();
 
     let mut config = config::peer();
     config.connect.endpoints = endpoints
@@ -42,7 +45,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
-    let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let peer02 = ztimeout!(open(config).res_async()).unwrap();
 
     (peer01, peer02)
 }
@@ -53,13 +56,13 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
     config.listen.endpoints = vec![endpoint01.parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
-    let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let peer01 = ztimeout!(open(config).res_async()).unwrap();
 
     let mut config = config::peer();
     config.listen.endpoints = vec![endpoint02.parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);
-    let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let peer02 = ztimeout!(open(config).res_async()).unwrap();
 
     (peer01, peer02)
 }

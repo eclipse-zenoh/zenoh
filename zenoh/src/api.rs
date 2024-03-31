@@ -22,7 +22,7 @@ pub mod handlers;
 mod info;
 pub mod key_expr;
 #[cfg(feature = "unstable")]
-mod liveliness;
+pub mod liveliness;
 pub mod payload;
 pub mod publication;
 pub mod query;

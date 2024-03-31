@@ -11,12 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use zenoh::config::Config;
+use zenoh::core::SyncResolve;
+use zenoh::sample::Attachment;
+use zenoh::sample::SampleBuilderTrait;
+use zenoh::sample::ValueBuilderTrait;
+use zenoh::session::open;
+use zenoh::session::SessionDeclarations;
+
 #[cfg(feature = "unstable")]
 #[test]
 fn pubsub() {
-    use zenoh::prelude::sync::*;
-
-    let zenoh = zenoh::open(Config::default()).res().unwrap();
+    let zenoh = open(Config::default()).res().unwrap();
     let _sub = zenoh
         .declare_subscriber("test/attachment")
         .callback(|sample| {
@@ -61,9 +67,7 @@ fn pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn queries() {
-    use zenoh::prelude::sync::*;
-
-    let zenoh = zenoh::open(Config::default()).res().unwrap();
+    let zenoh = open(Config::default()).res().unwrap();
     let _sub = zenoh
         .declare_queryable("test/attachment")
         .callback(|query| {

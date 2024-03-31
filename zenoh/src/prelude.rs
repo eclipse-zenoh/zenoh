@@ -18,12 +18,41 @@
 //! almost always want to import its entire contents, but unlike the standard
 //! library's prelude you'll have to do so manually. An example of using this is:
 //!
+//! There are 2 variants of prelude: sync and async. The only difference is that the async prelude
+//! reexports the [`AsyncResolve`] trait and the sync prelude reexports the [`SyncResolve`] trait.
+//! Both traits provides method `res()` for finalizing the operation, whcih is synchronous in the
+//! sync API and asynchronous in the async API.
+//!
+//! If both sync and async preludes are imported, the [`res_sync()`] and [`res_async()`] methods
+//! should be used explicitly.
+//!
+//! # Examples
+//!
 //! ```
 //! use zenoh::prelude::r#async::*;
 //! ```
+//!
+//! ```
+//! use zenoh::prelude::sync::*;
+//! ```
+
+/// Prelude to import when using Zenoh's sync API.
+pub mod sync {
+    pub use super::common::*;
+    pub use zenoh_core::SyncResolve;
+}
+/// Prelude to import when using Zenoh's async API.
+pub mod r#async {
+    pub use super::common::*;
+    pub use zenoh_core::AsyncResolve;
+}
 
 pub(crate) mod common {
-    pub use crate::config::{Config, ValidatedMap};
+    pub use zenoh_config::Config;
+    pub use zenoh_config::Locator;
+    pub use zenoh_config::ValidatedMap;
+    pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
+    pub use zenoh_result::ZResult as Result;
 
     #[zenoh_macros::unstable]
     pub use crate::sample::Attachment;
@@ -38,7 +67,7 @@ pub(crate) mod common {
 
     pub use crate::publication::Priority;
 
-    pub use crate::key_expr::kedefine;
+    pub use crate::key_expr::{kedefine, keformat};
 
     //     /// A zenoh error.
     //     // pub use zenoh_result::Error;
@@ -83,7 +112,6 @@ pub(crate) mod common {
     //     pub use crate::publication::Priority;
     //     #[zenoh_macros::unstable]
     //     pub use crate::publication::PublisherDeclarations;
-    //     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
 
     //     pub use crate::sample::builder::{
     //         QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
@@ -93,15 +121,4 @@ pub(crate) mod common {
     //  pub use zenoh_buffers as buffers;
     // pub use scouting::scout;
     // pub use session::open;
-}
-
-/// Prelude to import when using Zenoh's sync API.
-pub mod sync {
-    pub use super::common::*;
-    pub use zenoh_core::SyncResolve;
-}
-/// Prelude to import when using Zenoh's async API.
-pub mod r#async {
-    pub use super::common::*;
-    pub use zenoh_core::AsyncResolve;
 }
