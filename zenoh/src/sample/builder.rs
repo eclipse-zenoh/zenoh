@@ -64,14 +64,12 @@ pub trait ValueBuilderTrait {
     fn value<T: Into<Value>>(self, value: T) -> Self;
 }
 
-pub mod op {
-    #[derive(Debug)]
-    pub struct Put;
-    #[derive(Debug)]
-    pub struct Delete;
-    #[derive(Debug)]
-    pub struct Any;
-}
+#[derive(Debug)]
+pub struct SampleBuilderPut;
+#[derive(Debug)]
+pub struct SampleBuilderDelete;
+#[derive(Debug)]
+pub struct SampleBuilderAny;
 
 #[derive(Debug)]
 pub struct SampleBuilder<T> {
@@ -79,11 +77,11 @@ pub struct SampleBuilder<T> {
     _t: PhantomData<T>,
 }
 
-impl SampleBuilder<op::Put> {
+impl SampleBuilder<SampleBuilderPut> {
     pub fn put<IntoKeyExpr, IntoPayload>(
         key_expr: IntoKeyExpr,
         payload: IntoPayload,
-    ) -> SampleBuilder<op::Put>
+    ) -> SampleBuilder<SampleBuilderPut>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoPayload: Into<Payload>,
@@ -101,13 +99,13 @@ impl SampleBuilder<op::Put> {
                 #[cfg(feature = "unstable")]
                 attachment: None,
             },
-            _t: PhantomData::<op::Put>,
+            _t: PhantomData::<SampleBuilderPut>,
         }
     }
 }
 
-impl SampleBuilder<op::Delete> {
-    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> SampleBuilder<op::Delete>
+impl SampleBuilder<SampleBuilderDelete> {
+    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> SampleBuilder<SampleBuilderDelete>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
@@ -124,7 +122,7 @@ impl SampleBuilder<op::Delete> {
                 #[cfg(feature = "unstable")]
                 attachment: None,
             },
-            _t: PhantomData::<op::Delete>,
+            _t: PhantomData::<SampleBuilderDelete>,
         }
     }
 }
@@ -216,14 +214,14 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
     }
 }
 
-impl ValueBuilderTrait for SampleBuilder<op::Put> {
+impl ValueBuilderTrait for SampleBuilder<SampleBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             sample: Sample {
                 encoding: encoding.into(),
                 ..self.sample
             },
-            _t: PhantomData::<op::Put>,
+            _t: PhantomData::<SampleBuilderPut>,
         }
     }
     fn payload<T: Into<Payload>>(self, payload: T) -> Self {
@@ -232,7 +230,7 @@ impl ValueBuilderTrait for SampleBuilder<op::Put> {
                 payload: payload.into(),
                 ..self.sample
             },
-            _t: PhantomData::<op::Put>,
+            _t: PhantomData::<SampleBuilderPut>,
         }
     }
     fn value<T: Into<Value>>(self, value: T) -> Self {
@@ -243,21 +241,21 @@ impl ValueBuilderTrait for SampleBuilder<op::Put> {
                 encoding,
                 ..self.sample
             },
-            _t: PhantomData::<op::Put>,
+            _t: PhantomData::<SampleBuilderPut>,
         }
     }
 }
 
-impl From<Sample> for SampleBuilder<op::Any> {
+impl From<Sample> for SampleBuilder<SampleBuilderAny> {
     fn from(sample: Sample) -> Self {
         SampleBuilder {
             sample,
-            _t: PhantomData::<op::Any>,
+            _t: PhantomData::<SampleBuilderAny>,
         }
     }
 }
 
-impl TryFrom<Sample> for SampleBuilder<op::Put> {
+impl TryFrom<Sample> for SampleBuilder<SampleBuilderPut> {
     type Error = zresult::Error;
     fn try_from(sample: Sample) -> Result<Self, Self::Error> {
         if sample.kind != SampleKind::Put {
@@ -265,12 +263,12 @@ impl TryFrom<Sample> for SampleBuilder<op::Put> {
         }
         Ok(SampleBuilder {
             sample,
-            _t: PhantomData::<op::Put>,
+            _t: PhantomData::<SampleBuilderPut>,
         })
     }
 }
 
-impl TryFrom<Sample> for SampleBuilder<op::Delete> {
+impl TryFrom<Sample> for SampleBuilder<SampleBuilderDelete> {
     type Error = zresult::Error;
     fn try_from(sample: Sample) -> Result<Self, Self::Error> {
         if sample.kind != SampleKind::Delete {
@@ -278,7 +276,7 @@ impl TryFrom<Sample> for SampleBuilder<op::Delete> {
         }
         Ok(SampleBuilder {
             sample,
-            _t: PhantomData::<op::Delete>,
+            _t: PhantomData::<SampleBuilderDelete>,
         })
     }
 }
