@@ -408,14 +408,19 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     #[inline]
-    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> PutPublication
+    pub fn put<IntoPayload>(
+        &self,
+        payload: IntoPayload,
+    ) -> PublicationBuilder<&Publisher<'_>, PublicationBuilderPut>
     where
         IntoPayload: Into<Payload>,
     {
-        PutPublication {
+        PublicationBuilder {
             publisher: self,
-            payload: payload.into(),
-            encoding: Encoding::ZENOH_BYTES,
+            kind: PublicationBuilderPut {
+                payload: payload.into(),
+                encoding: Encoding::ZENOH_BYTES,
+            },
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
@@ -437,9 +442,10 @@ impl<'a> Publisher<'a> {
     /// publisher.delete().res().await.unwrap();
     /// # }
     /// ```
-    pub fn delete(&self) -> DeletePublication {
-        DeletePublication {
+    pub fn delete(&self) -> PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
+        PublicationBuilder {
             publisher: self,
+            kind: PublicationBuilderDelete,
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
@@ -674,127 +680,13 @@ impl Drop for Publisher<'_> {
     }
 }
 
-/// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct PutPublication<'a> {
-    publisher: &'a Publisher<'a>,
-    payload: Payload,
-    encoding: Encoding,
-    timestamp: Option<uhlc::Timestamp>,
-    #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
-    #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
-}
-
-/// A [`Resolvable`] returned by [`Publisher::delete()`](Publisher::delete)
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct DeletePublication<'a> {
-    publisher: &'a Publisher<'a>,
-    timestamp: Option<uhlc::Timestamp>,
-    #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
-    #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
-}
-
-impl TimestampBuilderTrait for PutPublication<'_> {
-    fn timestamp<T: Into<Option<uhlc::Timestamp>>>(self, timestamp: T) -> Self {
-        Self {
-            timestamp: timestamp.into(),
-            ..self
-        }
-    }
-}
-
-impl SampleBuilderTrait for PutPublication<'_> {
-    #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self {
-            source_info,
-            ..self
-        }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
-        Self {
-            attachment: attachment.into(),
-            ..self
-        }
-    }
-}
-
-impl ValueBuilderTrait for PutPublication<'_> {
-    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        Self {
-            encoding: encoding.into(),
-            ..self
-        }
-    }
-
-    fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<Payload>,
-    {
-        Self {
-            payload: payload.into(),
-            ..self
-        }
-    }
-
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            payload,
-            encoding,
-            ..self
-        }
-    }
-}
-
-impl TimestampBuilderTrait for DeletePublication<'_> {
-    fn timestamp<T: Into<Option<uhlc::Timestamp>>>(self, timestamp: T) -> Self {
-        Self {
-            timestamp: timestamp.into(),
-            ..self
-        }
-    }
-}
-
-impl SampleBuilderTrait for DeletePublication<'_> {
-    #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self {
-            source_info,
-            ..self
-        }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
-        Self {
-            attachment: attachment.into(),
-            ..self
-        }
-    }
-}
-
-impl Resolvable for PutPublication<'_> {
-    type To = ZResult<()>;
-}
-
-impl Resolvable for DeletePublication<'_> {
-    type To = ZResult<()>;
-}
-
-impl SyncResolve for PutPublication<'_> {
+impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         resolve_put(
             self.publisher,
-            self.payload,
+            self.kind.payload,
             SampleKind::Put,
-            self.encoding,
+            self.kind.encoding,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
@@ -804,7 +696,7 @@ impl SyncResolve for PutPublication<'_> {
     }
 }
 
-impl SyncResolve for DeletePublication<'_> {
+impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         resolve_put(
             self.publisher,
@@ -820,7 +712,7 @@ impl SyncResolve for DeletePublication<'_> {
     }
 }
 
-impl AsyncResolve for PutPublication<'_> {
+impl AsyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -828,7 +720,7 @@ impl AsyncResolve for PutPublication<'_> {
     }
 }
 
-impl AsyncResolve for DeletePublication<'_> {
+impl AsyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
