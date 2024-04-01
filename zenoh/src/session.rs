@@ -705,17 +705,19 @@ impl Session {
         &'a self,
         key_expr: TryIntoKeyExpr,
         payload: IntoPayload,
-    ) -> PutBuilder<'a, 'b>
+    ) -> PublicationBuilder<'a, 'b, PublicationBuilderPut>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
         IntoPayload: Into<Payload>,
     {
-        PutBuilder {
+        PublicationBuilder {
             publisher: self.declare_publisher(key_expr),
-            payload: payload.into(),
+            kind: PublicationBuilderPut {
+                payload: payload.into(),
+                encoding: Encoding::default(),
+            },
             timestamp: None,
-            encoding: Encoding::default(),
             #[cfg(feature = "unstable")]
             attachment: None,
             #[cfg(feature = "unstable")]
@@ -743,13 +745,14 @@ impl Session {
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> DeleteBuilder<'a, 'b>
+    ) -> PublicationBuilder<'a, 'b, PublicationBuilderDelete>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        DeleteBuilder {
+        PublicationBuilder {
             publisher: self.declare_publisher(key_expr),
+            kind: PublicationBuilderDelete,
             timestamp: None,
             #[cfg(feature = "unstable")]
             attachment: None,

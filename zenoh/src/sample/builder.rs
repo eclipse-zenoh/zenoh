@@ -64,14 +64,14 @@ pub trait ValueBuilderTrait {
     fn value<T: Into<Value>>(self, value: T) -> Self;
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SampleBuilderPut;
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SampleBuilderDelete;
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SampleBuilderAny;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SampleBuilder<T> {
     sample: Sample,
     _t: PhantomData<T>,
