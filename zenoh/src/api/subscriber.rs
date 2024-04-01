@@ -13,6 +13,8 @@
 //
 
 //! Subscribing primitives.
+#[cfg(not(feature = "unstable"))]
+pub use crate::api::query::Mode;
 use crate::api::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
@@ -27,11 +29,9 @@ use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalId;
+pub use zenoh_protocol::core::Reliability;
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
 use zenoh_result::ZResult;
-
-/// The kind of reliability.
-pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,

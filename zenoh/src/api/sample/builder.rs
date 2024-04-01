@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
@@ -11,7 +13,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-<<<<<<< HEAD:zenoh/src/api/sample/builder.rs
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
 #[zenoh_macros::unstable]
@@ -21,32 +22,13 @@ use crate::api::{
     key_expr::KeyExpr,
     payload::Payload,
     publication::Priority,
+    sample::SampleKind,
     sample::{QoS, QoSBuilder, Sample},
     value::Value,
 };
-=======
-
-use std::marker::PhantomData;
-
-#[cfg(feature = "unstable")]
-use crate::sample::Attachment;
-use crate::sample::QoS;
-use crate::sample::QoSBuilder;
-#[cfg(feature = "unstable")]
-use crate::sample::SourceInfo;
-use crate::Encoding;
-use crate::KeyExpr;
-use crate::Payload;
-use crate::Priority;
-use crate::Sample;
-use crate::SampleKind;
-use crate::Value;
->>>>>>> sample_api_rework:zenoh/src/sample/builder.rs
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
-
-use super::SampleKind;
 
 pub trait QoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.

@@ -13,7 +13,6 @@
 //
 
 //! Queryable primitives.
-<<<<<<< HEAD:zenoh/src/api/queryable.rs
 #[zenoh_macros::unstable]
 use crate::api::query::ReplyKeyExpr;
 #[zenoh_macros::unstable]
@@ -27,8 +26,8 @@ use crate::api::{
     sample::{
         attachment::Attachment,
         builder::{
-            DeleteSampleBuilder, PutSampleBuilder, QoSBuilderTrait, SampleBuilder,
-            SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+            QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
+            ValueBuilderTrait,
         },
         Locality, Sample, SampleKind,
     },
@@ -38,20 +37,6 @@ use crate::api::{
     Id,
 };
 use crate::net::primitives::Primitives;
-=======
-
-use crate::encoding::Encoding;
-use crate::handlers::{locked, DefaultHandler};
-use crate::net::primitives::Primitives;
-use crate::prelude::*;
-use crate::sample::builder::SampleBuilder;
-use crate::sample::{QoSBuilder, SourceInfo};
-use crate::Id;
-use crate::SessionRef;
-use crate::Undeclarable;
-#[cfg(feature = "unstable")]
-use crate::{query::ReplyKeyExpr, sample::Attachment};
->>>>>>> sample_api_rework:zenoh/src/queryable.rs
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
@@ -68,7 +53,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use super::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+use super::{query::_REPLY_KEY_EXPR_ANY_SEL_PARAM, sample::QoSBuilder};
 
 pub(crate) struct QueryInner {
     /// The key expression of this Query.
@@ -176,6 +161,7 @@ impl Query {
                 encoding: Encoding::default(),
             },
             timestamp: None,
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             attachment: None,
         }
@@ -214,6 +200,7 @@ impl Query {
             qos: response::ext::QoSType::RESPONSE.into(),
             kind: ReplyBuilderDelete,
             timestamp: None,
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             attachment: None,
         }
@@ -283,8 +270,8 @@ impl AsyncResolve for ReplySample<'_> {
 
 #[derive(Debug)]
 pub struct ReplyBuilderPut {
-    payload: super::Payload,
-    encoding: super::Encoding,
+    payload: Payload,
+    encoding: Encoding,
 }
 #[derive(Debug)]
 pub struct ReplyBuilderDelete;

@@ -53,8 +53,8 @@ use zenoh_core::Resolvable;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::declare::SubscriberId;
-use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::RequestId;
+use zenoh_protocol::network::{request, AtomicRequestId};
 use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::Put;
@@ -69,8 +69,7 @@ use zenoh_protocol::{
             subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
-        ext,
-        request::{self, ext::TargetType, Request},
+        request::{ext::TargetType, Request},
         Mapping, Push, Response, ResponseFinal,
     },
     zenoh::{

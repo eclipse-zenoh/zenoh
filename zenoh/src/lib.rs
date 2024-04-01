@@ -140,7 +140,7 @@ pub mod sample {
             builder::{
                 QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
             },
-            Sample, SampleKind,
+            QoSBuilder, Sample, SampleKind,
         },
         value::Value,
     };
@@ -160,11 +160,17 @@ pub mod queryable {
 }
 
 pub mod query {
+    pub use crate::api::query::Mode;
     pub use crate::api::query::Reply;
 }
 
 pub mod publication {
     pub use crate::api::publication::Priority;
+}
+
+pub mod subscriber {
+    pub use crate::api::subscriber::FlumeSubscriber;
+    pub use crate::api::subscriber::Subscriber;
 }
 
 pub mod handlers {

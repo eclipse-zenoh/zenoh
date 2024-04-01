@@ -30,6 +30,6 @@ pub mod queryable;
 pub mod sample;
 mod scouting;
 pub mod selector;
-mod subscriber;
+pub mod subscriber;
 mod time;
 pub mod value;

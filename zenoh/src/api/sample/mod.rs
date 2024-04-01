@@ -180,11 +180,7 @@ impl SourceInfo {
     }
 }
 
-<<<<<<<< HEAD:zenoh/src/api/sample.rs
-#[cfg(feature = "unstable")]
-========
 #[zenoh_macros::unstable]
->>>>>>>> sample_api_rework:zenoh/src/api/sample/mod.rs
 impl From<SourceInfo> for Option<zenoh::put::ext::SourceInfoType> {
     fn from(source_info: SourceInfo) -> Option<zenoh::put::ext::SourceInfoType> {
         if source_info.is_empty() {

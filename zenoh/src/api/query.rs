@@ -13,11 +13,6 @@
 //
 
 //! Query primitives.
-<<<<<<< HEAD:zenoh/src/api/query.rs
-=======
-use crate::handlers::{locked, Callback, DefaultHandler};
-use crate::prelude::*;
->>>>>>> sample_api_rework:zenoh/src/query.rs
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
 use crate::api::{

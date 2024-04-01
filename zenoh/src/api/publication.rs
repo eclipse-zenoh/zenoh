@@ -13,18 +13,14 @@
 //
 
 //! Publishing primitives.
-<<<<<<< HEAD:zenoh/src/api/publication.rs
-=======
-use crate::net::primitives::Primitives;
-use crate::prelude::*;
->>>>>>> sample_api_rework:zenoh/src/publication.rs
 #[zenoh_macros::unstable]
 use crate::api::sample::attachment::Attachment;
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
 use crate::api::{
     encoding::Encoding,
-    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    handlers::locked,
+    handlers::DefaultHandler,
     key_expr::{KeyExpr, KeyExprInner},
     payload::Payload,
     sample::{
@@ -33,24 +29,18 @@ use crate::api::{
     },
     session::{SessionRef, Undeclarable},
     value::Value,
-    Id,
 };
 use crate::net::primitives::Primitives;
 use std::future::Ready;
-use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResolve};
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::core::EntityId;
-use zenoh_protocol::network::push::ext;
-use zenoh_protocol::network::Mapping;
-use zenoh_protocol::network::Push;
-use zenoh_protocol::zenoh::Del;
-use zenoh_protocol::zenoh::PushBody;
-use zenoh_protocol::zenoh::Put;
-use zenoh_result::ZResult;
-
-/// The kind of congestion control.
-pub use zenoh_protocol::core::CongestionControl;
+use zenoh_protocol::{
+    core::CongestionControl,
+    network::Mapping,
+    zenoh::{Del, Put},
+};
+use zenoh_protocol::{core::EntityGlobalId, network::Push};
+use zenoh_protocol::{network::push::ext, zenoh::PushBody};
 
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderPut {
@@ -246,6 +236,7 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use zenoh_protocol::core::EntityId;
 use zenoh_result::Error;
 
 #[zenoh_macros::unstable]
