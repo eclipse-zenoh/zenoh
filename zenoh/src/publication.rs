@@ -15,9 +15,6 @@
 //! Publishing primitives.
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::sample::builder::{
-    QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
-};
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
@@ -105,29 +102,14 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
-impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
-    fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
-        Self {
-            timestamp: timestamp.into(),
-            ..self
-        }
-    }
-}
-
-impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
-    #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self {
-            source_info,
-            ..self
-        }
-    }
-    #[cfg(feature = "unstable")]
-    fn attachment<TA: Into<Option<Attachment>>>(self, attachment: TA) -> Self {
-        Self {
-            attachment: attachment.into(),
-            ..self
-        }
+impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+    /// Restrict the matching subscribers that will receive the published data
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn allowed_destination(mut self, destination: Locality) -> Self {
+        self.publisher = self.publisher.allowed_destination(destination);
+        self
     }
 }
 
@@ -163,14 +145,29 @@ impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     }
 }
 
-impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
-    /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.publisher = self.publisher.allowed_destination(destination);
-        self
+impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
+    #[cfg(feature = "unstable")]
+    fn source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            source_info,
+            ..self
+        }
+    }
+    #[cfg(feature = "unstable")]
+    fn attachment<TA: Into<Option<Attachment>>>(self, attachment: TA) -> Self {
+        Self {
+            attachment: attachment.into(),
+            ..self
+        }
+    }
+}
+
+impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
+    fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            ..self
+        }
     }
 }
 

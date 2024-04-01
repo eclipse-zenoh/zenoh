@@ -18,9 +18,7 @@ use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::sample::builder::{
-    QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
-};
+use crate::sample::builder::SampleBuilder;
 use crate::sample::{QoSBuilder, SourceInfo};
 use crate::Id;
 use crate::SessionRef;
@@ -287,17 +285,17 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
         Self {
-            source_info,
+            attachment: attachment.into(),
             ..self
         }
     }
 
     #[cfg(feature = "unstable")]
-    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
+    fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
-            attachment: attachment.into(),
+            source_info,
             ..self
         }
     }
@@ -379,6 +377,63 @@ impl SyncResolve for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
         #[cfg(feature = "unstable")]
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
+    }
+}
+
+impl Query {
+    fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
+        if !self._accepts_any_replies().unwrap_or(false)
+            && !self.key_expr().intersects(&sample.key_expr)
+        {
+            bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
+        }
+        #[cfg(not(feature = "unstable"))]
+        let ext_sinfo = None;
+        #[cfg(feature = "unstable")]
+        let ext_sinfo = sample.source_info.into();
+        self.inner.primitives.send_response(Response {
+            rid: self.inner.qid,
+            wire_expr: WireExpr {
+                scope: 0,
+                suffix: std::borrow::Cow::Owned(sample.key_expr.into()),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Reply(zenoh::Reply {
+                consolidation: zenoh::Consolidation::DEFAULT,
+                ext_unknown: vec![],
+                payload: match sample.kind {
+                    SampleKind::Put => ReplyBody::Put(Put {
+                        timestamp: sample.timestamp,
+                        encoding: sample.encoding.into(),
+                        ext_sinfo,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        #[cfg(feature = "unstable")]
+                        ext_attachment: sample.attachment.map(|a| a.into()),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_attachment: None,
+                        ext_unknown: vec![],
+                        payload: sample.payload.into(),
+                    }),
+                    SampleKind::Delete => ReplyBody::Del(Del {
+                        timestamp: sample.timestamp,
+                        ext_sinfo,
+                        #[cfg(feature = "unstable")]
+                        ext_attachment: sample.attachment.map(|a| a.into()),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_attachment: None,
+                        ext_unknown: vec![],
+                    }),
+                },
+            }),
+            ext_qos: sample.qos.into(),
+            ext_tstamp: None,
+            ext_respid: Some(response::ext::ResponderIdType {
+                zid: self.inner.zid,
+                eid: self.eid,
+            }),
+        });
+        Ok(())
     }
 }
 
@@ -464,63 +519,6 @@ impl<'a> AsyncResolve for ReplyErrBuilder<'a> {
 
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
-    }
-}
-
-impl Query {
-    fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        if !self._accepts_any_replies().unwrap_or(false)
-            && !self.key_expr().intersects(&sample.key_expr)
-        {
-            bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
-        }
-        #[cfg(not(feature = "unstable"))]
-        let ext_sinfo = None;
-        #[cfg(feature = "unstable")]
-        let ext_sinfo = sample.source_info.into();
-        self.inner.primitives.send_response(Response {
-            rid: self.inner.qid,
-            wire_expr: WireExpr {
-                scope: 0,
-                suffix: std::borrow::Cow::Owned(sample.key_expr.into()),
-                mapping: Mapping::Sender,
-            },
-            payload: ResponseBody::Reply(zenoh::Reply {
-                consolidation: zenoh::Consolidation::DEFAULT,
-                ext_unknown: vec![],
-                payload: match sample.kind {
-                    SampleKind::Put => ReplyBody::Put(Put {
-                        timestamp: sample.timestamp,
-                        encoding: sample.encoding.into(),
-                        ext_sinfo,
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        #[cfg(feature = "unstable")]
-                        ext_attachment: sample.attachment.map(|a| a.into()),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_attachment: None,
-                        ext_unknown: vec![],
-                        payload: sample.payload.into(),
-                    }),
-                    SampleKind::Delete => ReplyBody::Del(Del {
-                        timestamp: sample.timestamp,
-                        ext_sinfo,
-                        #[cfg(feature = "unstable")]
-                        ext_attachment: sample.attachment.map(|a| a.into()),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_attachment: None,
-                        ext_unknown: vec![],
-                    }),
-                },
-            }),
-            ext_qos: sample.qos.into(),
-            ext_tstamp: None,
-            ext_respid: Some(response::ext::ResponderIdType {
-                zid: self.inner.zid,
-                eid: self.eid,
-            }),
-        });
-        Ok(())
     }
 }
 
