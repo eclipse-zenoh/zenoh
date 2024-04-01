@@ -71,8 +71,8 @@ pub struct PublicationBuilderDelete;
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
-pub struct PublicationBuilder<'a, 'b, T> {
-    pub(crate) publisher: PublisherBuilder<'a, 'b>,
+pub struct PublicationBuilder<P, T> {
+    pub(crate) publisher: P,
     pub(crate) kind: T,
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
@@ -81,7 +81,7 @@ pub struct PublicationBuilder<'a, 'b, T> {
     pub(crate) attachment: Option<Attachment>,
 }
 
-impl<T> QoSBuilderTrait for PublicationBuilder<'_, '_, T> {
+impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -105,7 +105,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<'_, '_, T> {
     }
 }
 
-impl<T> TimestampBuilderTrait for PublicationBuilder<'_, '_, T> {
+impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
             timestamp: timestamp.into(),
@@ -114,7 +114,7 @@ impl<T> TimestampBuilderTrait for PublicationBuilder<'_, '_, T> {
     }
 }
 
-impl<T> SampleBuilderTrait for PublicationBuilder<'_, '_, T> {
+impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -131,7 +131,7 @@ impl<T> SampleBuilderTrait for PublicationBuilder<'_, '_, T> {
     }
 }
 
-impl ValueBuilderTrait for PublicationBuilder<'_, '_, PublicationBuilderPut> {
+impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: PublicationBuilderPut {
@@ -163,7 +163,7 @@ impl ValueBuilderTrait for PublicationBuilder<'_, '_, PublicationBuilderPut> {
     }
 }
 
-impl<T> PublicationBuilder<'_, '_, T> {
+impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
@@ -174,11 +174,11 @@ impl<T> PublicationBuilder<'_, '_, T> {
     }
 }
 
-impl<T> Resolvable for PublicationBuilder<'_, '_, T> {
+impl<P, T> Resolvable for PublicationBuilder<P, T> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for PublicationBuilder<'_, '_, PublicationBuilderPut> {
+impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
     #[inline]
     fn res_sync(self) -> <Self as Resolvable>::To {
         let publisher = self.publisher.create_one_shot_publisher()?;
@@ -196,7 +196,7 @@ impl SyncResolve for PublicationBuilder<'_, '_, PublicationBuilderPut> {
     }
 }
 
-impl SyncResolve for PublicationBuilder<'_, '_, PublicationBuilderDelete> {
+impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
     #[inline]
     fn res_sync(self) -> <Self as Resolvable>::To {
         let publisher = self.publisher.create_one_shot_publisher()?;
@@ -214,7 +214,7 @@ impl SyncResolve for PublicationBuilder<'_, '_, PublicationBuilderDelete> {
     }
 }
 
-impl AsyncResolve for PublicationBuilder<'_, '_, PublicationBuilderPut> {
+impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -222,7 +222,7 @@ impl AsyncResolve for PublicationBuilder<'_, '_, PublicationBuilderPut> {
     }
 }
 
-impl AsyncResolve for PublicationBuilder<'_, '_, PublicationBuilderDelete> {
+impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
