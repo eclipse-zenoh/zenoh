@@ -29,7 +29,10 @@ maintenance = { status = "actively-developed" }
 [features]
 unstable = []
 default = []
-shared-memory = ["zenoh/shared-memory"]
+shared-memory = [
+    "zenoh/shared-memory",
+    "zenoh-sync/shared-memory",
+]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
