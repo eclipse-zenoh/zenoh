@@ -590,6 +590,12 @@ impl From<QoS> for QoSBuilder {
     }
 }
 
+impl From<QoSType> for QoSBuilder {
+    fn from(qos: QoSType) -> Self {
+        QoSBuilder(QoS { inner: qos })
+    }
+}
+
 impl From<QoSBuilder> for QoS {
     fn from(builder: QoSBuilder) -> Self {
         builder.0
