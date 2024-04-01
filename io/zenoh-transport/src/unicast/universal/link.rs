@@ -102,7 +102,7 @@ impl TransportLinkUnicastUniversal {
                 // to finish in the close() joining its handle
                 // TODO(yuyuan): do more study to check which ZRuntime should be used or refine the
                 // termination
-                zenoh_runtime::ZRuntime::TX
+                zenoh_runtime::ZRuntime::Net
                     .spawn(async move { transport.del_link(tx.inner.link()).await });
             }
         };

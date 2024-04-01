@@ -408,7 +408,7 @@ impl Network {
 
                     if !self.autoconnect.is_empty() {
                         // Connect discovered peers
-                        if zenoh_runtime::ZRuntime::Net
+                        if zenoh_runtime::ZRuntime::Acceptor
                             .block_in_place(strong_runtime.manager().get_transport_unicast(&zid))
                             .is_none()
                             && self.autoconnect.matches(whatami)

@@ -1508,7 +1508,7 @@ impl Session {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
                 self.task_controller
-                    .spawn_with_rt(zenoh_runtime::ZRuntime::RX, {
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                         let session = self.clone();
                         let msub = msub.clone();
                         async move {
@@ -1546,7 +1546,7 @@ impl Session {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
                 self.task_controller
-                    .spawn_with_rt(zenoh_runtime::ZRuntime::RX, {
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                         let session = self.clone();
                         let msub = msub.clone();
                         async move {

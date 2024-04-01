@@ -326,7 +326,7 @@ fn scout(
             let cancellation_token = TerminatableTask::create_cancellation_token();
             let cancellation_token_clone = cancellation_token.clone();
             let task = TerminatableTask::spawn(
-                zenoh_runtime::ZRuntime::Net,
+                zenoh_runtime::ZRuntime::Acceptor,
                 async move {
                     let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
                         let callback = callback.clone();

@@ -170,7 +170,7 @@ impl<'a> PublicationCache<'a> {
         let token = TerminatableTask::create_cancellation_token();
         let token2 = token.clone();
         let task = TerminatableTask::spawn(
-            zenoh_runtime::ZRuntime::TX,
+            zenoh_runtime::ZRuntime::Application,
             async move {
                 let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                     HashMap::with_capacity(resources_limit.unwrap_or(32));
