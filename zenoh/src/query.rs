@@ -15,7 +15,6 @@
 //! Query primitives.
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
-use crate::sample::builder::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait};
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::QoSBuilder;

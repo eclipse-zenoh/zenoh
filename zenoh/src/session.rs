@@ -809,6 +809,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             attachment: None,
             handler: DefaultHandler,
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
         }
     }

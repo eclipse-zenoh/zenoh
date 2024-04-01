@@ -14,9 +14,11 @@
 
 use std::marker::PhantomData;
 
+#[cfg(feature = "unstable")]
 use crate::sample::Attachment;
 use crate::sample::QoS;
 use crate::sample::QoSBuilder;
+#[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
 use crate::Encoding;
 use crate::KeyExpr;
