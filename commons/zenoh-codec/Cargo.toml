@@ -39,6 +39,7 @@ std = [
 shared-memory = [
     "std",
     "zenoh-shm",
+    "zenoh-shm/shared-memory",
     "zenoh-protocol/shared-memory",
     "zenoh-buffers/shared-memory"
 ]
