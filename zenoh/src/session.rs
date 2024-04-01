@@ -705,7 +705,7 @@ impl Session {
         &'a self,
         key_expr: TryIntoKeyExpr,
         payload: IntoPayload,
-    ) -> PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut>
+    ) -> SessionPutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -745,7 +745,7 @@ impl Session {
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderDelete>
+    ) -> SessionDeleteBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
