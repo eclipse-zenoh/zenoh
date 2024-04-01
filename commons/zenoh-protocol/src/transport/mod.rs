@@ -39,6 +39,7 @@ use crate::network::NetworkMessage;
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 pub type BatchSize = u16;
+pub type AtomicBatchSize = core::sync::atomic::AtomicU16;
 
 pub mod batch_size {
     use super::BatchSize;

@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+<<<<<<< HEAD:zenoh/src/api/sample/builder.rs
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
 #[zenoh_macros::unstable]
@@ -23,6 +24,24 @@ use crate::api::{
     sample::{QoS, QoSBuilder, Sample},
     value::Value,
 };
+=======
+
+use std::marker::PhantomData;
+
+#[cfg(feature = "unstable")]
+use crate::sample::Attachment;
+use crate::sample::QoS;
+use crate::sample::QoSBuilder;
+#[cfg(feature = "unstable")]
+use crate::sample::SourceInfo;
+use crate::Encoding;
+use crate::KeyExpr;
+use crate::Payload;
+use crate::Priority;
+use crate::Sample;
+use crate::SampleKind;
+use crate::Value;
+>>>>>>> sample_api_rework:zenoh/src/sample/builder.rs
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
@@ -64,291 +83,225 @@ pub trait ValueBuilderTrait {
     fn value<T: Into<Value>>(self, value: T) -> Self;
 }
 
-#[derive(Debug)]
-pub struct SampleBuilder(Sample);
+#[derive(Clone, Debug)]
+pub struct SampleBuilderPut;
+#[derive(Clone, Debug)]
+pub struct SampleBuilderDelete;
+#[derive(Clone, Debug)]
+pub struct SampleBuilderAny;
 
-impl SampleBuilder {
+#[derive(Clone, Debug)]
+pub struct SampleBuilder<T> {
+    sample: Sample,
+    _t: PhantomData<T>,
+}
+
+impl SampleBuilder<SampleBuilderPut> {
     pub fn put<IntoKeyExpr, IntoPayload>(
         key_expr: IntoKeyExpr,
         payload: IntoPayload,
-    ) -> PutSampleBuilder
+    ) -> SampleBuilder<SampleBuilderPut>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoPayload: Into<Payload>,
     {
-        PutSampleBuilder::new(key_expr, payload)
+        Self {
+            sample: Sample {
+                key_expr: key_expr.into(),
+                payload: payload.into(),
+                kind: SampleKind::Put,
+                encoding: Encoding::default(),
+                timestamp: None,
+                qos: QoS::default(),
+                #[cfg(feature = "unstable")]
+                source_info: SourceInfo::empty(),
+                #[cfg(feature = "unstable")]
+                attachment: None,
+            },
+            _t: PhantomData::<SampleBuilderPut>,
+        }
     }
-    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> DeleteSampleBuilder
+}
+
+impl SampleBuilder<SampleBuilderDelete> {
+    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> SampleBuilder<SampleBuilderDelete>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
-        DeleteSampleBuilder::new(key_expr)
+        Self {
+            sample: Sample {
+                key_expr: key_expr.into(),
+                payload: Payload::empty(),
+                kind: SampleKind::Delete,
+                encoding: Encoding::default(),
+                timestamp: None,
+                qos: QoS::default(),
+                #[cfg(feature = "unstable")]
+                source_info: SourceInfo::empty(),
+                #[cfg(feature = "unstable")]
+                attachment: None,
+            },
+            _t: PhantomData::<SampleBuilderDelete>,
+        }
     }
+}
+
+impl<T> SampleBuilder<T> {
     /// Allows to change keyexpr of [`Sample`]
     pub fn keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
     {
-        Self(Sample {
-            key_expr: key_expr.into(),
-            ..self.0
-        })
+        Self {
+            sample: Sample {
+                key_expr: key_expr.into(),
+                ..self.sample
+            },
+            _t: PhantomData::<T>,
+        }
+    }
+
+    // Allows to change qos as a whole of [`Sample`]
+    pub fn qos(self, qos: QoS) -> Self {
+        Self {
+            sample: Sample { qos, ..self.sample },
+            _t: PhantomData::<T>,
+        }
     }
 }
 
-impl TimestampBuilderTrait for SampleBuilder {
-    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
-        Self(Sample {
-            timestamp: timestamp.into(),
-            ..self.0
-        })
+impl<T> TimestampBuilderTrait for SampleBuilder<T> {
+    fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
+        Self {
+            sample: Sample {
+                timestamp: timestamp.into(),
+                ..self.sample
+            },
+            _t: PhantomData::<T>,
+        }
     }
 }
 
-impl SampleBuilderTrait for SampleBuilder {
+impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
-        Self(Sample {
-            source_info,
-            ..self.0
-        })
+        Self {
+            sample: Sample {
+                source_info,
+                ..self.sample
+            },
+            _t: PhantomData::<T>,
+        }
     }
 
     #[zenoh_macros::unstable]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
-        Self(Sample {
-            attachment: attachment.into(),
-            ..self.0
-        })
+    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
+        Self {
+            sample: Sample {
+                attachment: attachment.into(),
+                ..self.sample
+            },
+            _t: PhantomData::<T>,
+        }
     }
 }
 
-impl QoSBuilderTrait for SampleBuilder {
+impl<T> QoSBuilderTrait for SampleBuilder<T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        let qos: QoSBuilder = self.0.qos.into();
+        let qos: QoSBuilder = self.sample.qos.into();
         let qos = qos.congestion_control(congestion_control).into();
-        Self(Sample { qos, ..self.0 })
+        Self {
+            sample: Sample { qos, ..self.sample },
+            _t: PhantomData::<T>,
+        }
     }
     fn priority(self, priority: Priority) -> Self {
-        let qos: QoSBuilder = self.0.qos.into();
+        let qos: QoSBuilder = self.sample.qos.into();
         let qos = qos.priority(priority).into();
-        Self(Sample { qos, ..self.0 })
+        Self {
+            sample: Sample { qos, ..self.sample },
+            _t: PhantomData::<T>,
+        }
     }
     fn express(self, is_express: bool) -> Self {
-        let qos: QoSBuilder = self.0.qos.into();
+        let qos: QoSBuilder = self.sample.qos.into();
         let qos = qos.express(is_express).into();
-        Self(Sample { qos, ..self.0 })
+        Self {
+            sample: Sample { qos, ..self.sample },
+            _t: PhantomData::<T>,
+        }
     }
 }
 
-#[derive(Debug)]
-pub struct PutSampleBuilder(SampleBuilder);
-
-impl From<SampleBuilder> for PutSampleBuilder {
-    fn from(sample_builder: SampleBuilder) -> Self {
-        Self(SampleBuilder(Sample {
-            kind: SampleKind::Put,
-            ..sample_builder.0
-        }))
-    }
-}
-
-impl PutSampleBuilder {
-    fn new<IntoKeyExpr, IntoPayload>(key_expr: IntoKeyExpr, payload: IntoPayload) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<Payload>,
-    {
-        Self(SampleBuilder::from(Sample {
-            key_expr: key_expr.into(),
-            payload: payload.into(),
-            kind: SampleKind::Put,
-            encoding: Encoding::default(),
-            timestamp: None,
-            qos: QoS::default(),
-            #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
-            attachment: None,
-        }))
-    }
-    /// Allows to change keyexpr of [`Sample`]
-    pub fn keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Self(self.0.keyexpr(key_expr))
-    }
-    // It's convenient to set QoS as a whole for internal usage. For user API there are `congestion_control`, `priority` and `express` methods.
-    pub(crate) fn qos(self, qos: QoS) -> Self {
-        Self(SampleBuilder(Sample { qos, ..self.0 .0 }))
-    }
-}
-
-impl TimestampBuilderTrait for PutSampleBuilder {
-    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
-        Self(self.0.timestamp(timestamp))
-    }
-}
-
-impl SampleBuilderTrait for PutSampleBuilder {
-    #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self(self.0.source_info(source_info))
-    }
-    #[zenoh_macros::unstable]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
-        Self(self.0.attachment(attachment))
-    }
-}
-
-impl QoSBuilderTrait for PutSampleBuilder {
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        Self(self.0.congestion_control(congestion_control))
-    }
-    fn priority(self, priority: Priority) -> Self {
-        Self(self.0.priority(priority))
-    }
-    fn express(self, is_express: bool) -> Self {
-        Self(self.0.express(is_express))
-    }
-}
-
-impl ValueBuilderTrait for PutSampleBuilder {
+impl ValueBuilderTrait for SampleBuilder<SampleBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        Self(SampleBuilder(Sample {
-            encoding: encoding.into(),
-            ..self.0 .0
-        }))
+        Self {
+            sample: Sample {
+                encoding: encoding.into(),
+                ..self.sample
+            },
+            _t: PhantomData::<SampleBuilderPut>,
+        }
     }
     fn payload<T: Into<Payload>>(self, payload: T) -> Self {
-        Self(SampleBuilder(Sample {
-            payload: payload.into(),
-            ..self.0 .0
-        }))
+        Self {
+            sample: Sample {
+                payload: payload.into(),
+                ..self.sample
+            },
+            _t: PhantomData::<SampleBuilderPut>,
+        }
     }
     fn value<T: Into<Value>>(self, value: T) -> Self {
         let Value { payload, encoding } = value.into();
-        Self(SampleBuilder(Sample {
-            payload,
-            encoding,
-            ..self.0 .0
-        }))
+        Self {
+            sample: Sample {
+                payload,
+                encoding,
+                ..self.sample
+            },
+            _t: PhantomData::<SampleBuilderPut>,
+        }
     }
 }
 
-#[derive(Debug)]
-pub struct DeleteSampleBuilder(SampleBuilder);
-
-impl From<SampleBuilder> for DeleteSampleBuilder {
-    fn from(sample_builder: SampleBuilder) -> Self {
-        Self(SampleBuilder(Sample {
-            kind: SampleKind::Delete,
-            ..sample_builder.0
-        }))
-    }
-}
-
-impl DeleteSampleBuilder {
-    pub fn new<IntoKeyExpr>(key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Self(SampleBuilder::from(Sample {
-            key_expr: key_expr.into(),
-            payload: Payload::empty(),
-            kind: SampleKind::Delete,
-            encoding: Encoding::default(),
-            timestamp: None,
-            qos: QoS::default(),
-            #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
-            attachment: None,
-        }))
-    }
-    /// Allows to change keyexpr of [`Sample`]
-    pub fn with_keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-    {
-        Self(self.0.keyexpr(key_expr))
-    }
-    // It's convenient to set QoS as a whole for internal usage. For user API there are `congestion_control`, `priority` and `express` methods.
-    pub(crate) fn with_qos(self, qos: QoS) -> Self {
-        Self(SampleBuilder(Sample { qos, ..self.0 .0 }))
-    }
-}
-
-impl TimestampBuilderTrait for DeleteSampleBuilder {
-    fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self {
-        Self(self.0.timestamp(timestamp))
-    }
-}
-
-impl SampleBuilderTrait for DeleteSampleBuilder {
-    #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self(self.0.source_info(source_info))
-    }
-    #[zenoh_macros::unstable]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
-        Self(self.0.attachment(attachment))
-    }
-}
-
-impl QoSBuilderTrait for DeleteSampleBuilder {
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        Self(self.0.congestion_control(congestion_control))
-    }
-    fn priority(self, priority: Priority) -> Self {
-        Self(self.0.priority(priority))
-    }
-    fn express(self, is_express: bool) -> Self {
-        Self(self.0.express(is_express))
-    }
-}
-
-impl From<Sample> for SampleBuilder {
+impl From<Sample> for SampleBuilder<SampleBuilderAny> {
     fn from(sample: Sample) -> Self {
-        SampleBuilder(sample)
+        SampleBuilder {
+            sample,
+            _t: PhantomData::<SampleBuilderAny>,
+        }
     }
 }
 
-impl TryFrom<Sample> for PutSampleBuilder {
+impl TryFrom<Sample> for SampleBuilder<SampleBuilderPut> {
     type Error = zresult::Error;
     fn try_from(sample: Sample) -> Result<Self, Self::Error> {
         if sample.kind != SampleKind::Put {
             bail!("Sample is not a put sample")
         }
-        Ok(Self(SampleBuilder(sample)))
+        Ok(SampleBuilder {
+            sample,
+            _t: PhantomData::<SampleBuilderPut>,
+        })
     }
 }
 
-impl TryFrom<Sample> for DeleteSampleBuilder {
+impl TryFrom<Sample> for SampleBuilder<SampleBuilderDelete> {
     type Error = zresult::Error;
     fn try_from(sample: Sample) -> Result<Self, Self::Error> {
         if sample.kind != SampleKind::Delete {
             bail!("Sample is not a delete sample")
         }
-        Ok(Self(SampleBuilder(sample)))
+        Ok(SampleBuilder {
+            sample,
+            _t: PhantomData::<SampleBuilderDelete>,
+        })
     }
 }
 
-impl From<SampleBuilder> for Sample {
-    fn from(sample_builder: SampleBuilder) -> Self {
-        sample_builder.0
-    }
-}
-
-impl From<PutSampleBuilder> for Sample {
-    fn from(put_sample_builder: PutSampleBuilder) -> Self {
-        put_sample_builder.0 .0
-    }
-}
-
-impl From<DeleteSampleBuilder> for Sample {
-    fn from(delete_sample_builder: DeleteSampleBuilder) -> Self {
-        delete_sample_builder.0 .0
+impl<T> From<SampleBuilder<T>> for Sample {
+    fn from(sample_builder: SampleBuilder<T>) -> Self {
+        sample_builder.sample
     }
 }

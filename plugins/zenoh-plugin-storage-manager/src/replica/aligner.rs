@@ -21,7 +21,7 @@ use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
-use zenoh::sample::builder::{SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait};
+use zenoh::sample::builder::SampleBuilder;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 

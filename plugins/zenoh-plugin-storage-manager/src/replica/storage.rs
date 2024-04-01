@@ -23,14 +23,13 @@ use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::buffer::SplitBuffer;
 use zenoh::buffers::ZBuf;
-use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::query::{ConsolidationMode, QueryTarget};
-use zenoh::sample::builder::{SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait};
+use zenoh::sample::builder::SampleBuilder;
 use zenoh::sample::{Sample, SampleKind};
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
-use zenoh::{Result as ZResult, Session, SessionDeclarations};
+use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
@@ -296,31 +295,25 @@ impl StorageService {
                 );
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
-                let sample_to_store: Sample = match self
+                let sample_to_store: Sample = if let Some(update) = self
                     .ovderriding_wild_update(&k, sample.timestamp().unwrap())
                     .await
                 {
-                    Some(Update {
-                        kind: SampleKind::Put,
-                        data,
-                    }) => {
-                        let Value {
-                            payload, encoding, ..
-                        } = data.value;
-                        SampleBuilder::put(KeyExpr::from(k.clone()), payload)
-                            .encoding(encoding)
-                            .timestamp(data.timestamp)
-                            .into()
+                    match update.kind {
+                        SampleKind::Put => {
+                            SampleBuilder::put(KeyExpr::from(k.clone()), update.data.value.payload)
+                                .encoding(update.data.value.encoding)
+                                .timestamp(update.data.timestamp)
+                                .into()
+                        }
+                        SampleKind::Delete => SampleBuilder::delete(KeyExpr::from(k.clone()))
+                            .timestamp(update.data.timestamp)
+                            .into(),
                     }
-                    Some(Update {
-                        kind: SampleKind::Delete,
-                        data,
-                    }) => SampleBuilder::delete(KeyExpr::from(k.clone()))
-                        .timestamp(data.timestamp)
-                        .into(),
-                    None => SampleBuilder::from(sample.clone())
+                } else {
+                    SampleBuilder::from(sample.clone())
                         .keyexpr(k.clone())
-                        .into(),
+                        .into()
                 };
 
                 let stripped_key = match self.strip_prefix(sample_to_store.key_expr()) {
@@ -520,12 +513,9 @@ impl StorageService {
                 match storage.get(stripped_key, q.parameters()).await {
                     Ok(stored_data) => {
                         for entry in stored_data {
-                            let Value {
-                                payload, encoding, ..
-                            } = entry.value;
                             if let Err(e) = q
-                                .reply(key.clone(), payload)
-                                .encoding(encoding)
+                                .reply(key.clone(), entry.value.payload)
+                                .encoding(entry.value.encoding)
                                 .timestamp(entry.timestamp)
                                 .res()
                                 .await
@@ -555,12 +545,9 @@ impl StorageService {
             match storage.get(stripped_key, q.parameters()).await {
                 Ok(stored_data) => {
                     for entry in stored_data {
-                        let Value {
-                            payload, encoding, ..
-                        } = entry.value;
                         if let Err(e) = q
-                            .reply(q.key_expr().clone(), payload)
-                            .encoding(encoding)
+                            .reply(q.key_expr().clone(), entry.value.payload)
+                            .encoding(entry.value.encoding)
                             .timestamp(entry.timestamp)
                             .res()
                             .await

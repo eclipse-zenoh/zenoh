@@ -21,6 +21,7 @@ use std::{borrow::Cow, fmt};
 use tokio::net::UdpSocket;
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
 use zenoh_protocol::core::{Config, EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 pub struct LinkMulticastUdp {
@@ -119,7 +120,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *UDP_DEFAULT_MTU
     }
 

@@ -25,20 +25,22 @@ pub use subscriber::*;
 pub use token::*;
 
 pub mod flag {
-    // pub const X: u8 = 1 << 5; // 0x20 Reserved
-    // pub const X: u8 = 1 << 6; // 0x40 Reserved
+    pub const I: u8 = 1 << 5; // 0x20 Interest      if I==1 then the declare is in a response to an Interest with future==false
+                              // pub const X: u8 = 1 << 6; // 0x40 Reserved
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
 /// Flags:
-/// - X: Reserved
+/// - I: Interest       If I==1 then the declare is in a response to an Interest with future==false
 /// - X: Reserved
 /// - Z: Extension      If Z==1 then at least one extension is present
 ///
 /// 7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |Z|X|X| DECLARE |
+/// |Z|X|I| DECLARE |
 /// +-+-+-+---------+
+/// ~interest_id:z32~  if I==1
+/// +---------------+
 /// ~  [decl_exts]  ~  if Z==1
 /// +---------------+
 /// ~  declaration  ~
@@ -46,6 +48,7 @@ pub mod flag {
 ///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Declare {
+    pub interest_id: Option<InterestId>,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_nodeid: ext::NodeIdType,
@@ -132,16 +135,18 @@ impl Declare {
 
         let mut rng = rand::thread_rng();
 
-        let body = DeclareBody::rand();
+        let interest_id = rng.gen_bool(0.5).then_some(rng.gen::<InterestId>());
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_nodeid = ext::NodeIdType::rand();
+        let body = DeclareBody::rand();
 
         Self {
-            body,
+            interest_id,
             ext_qos,
             ext_tstamp,
             ext_nodeid,
+            body,
         }
     }
 }

@@ -165,7 +165,7 @@ impl InitSyn {
         let whatami = WhatAmI::rand();
         let zid = ZenohId::default();
         let resolution = Resolution::rand();
-        let batch_size: u16 = rng.gen();
+        let batch_size: BatchSize = rng.gen();
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
@@ -221,7 +221,7 @@ impl InitAck {
         } else {
             Resolution::rand()
         };
-        let batch_size: u16 = rng.gen();
+        let batch_size: BatchSize = rng.gen();
         let cookie = ZSlice::rand(64);
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());

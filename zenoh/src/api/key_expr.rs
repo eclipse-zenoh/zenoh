@@ -187,7 +187,7 @@ impl<'a> KeyExpr<'a> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
+    pub unsafe fn from_str_unchecked(s: &'a str) -> Self {
         keyexpr::from_str_unchecked(s).into()
     }
 
@@ -666,6 +666,7 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(zenoh_protocol::network::Declare {
+            interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
