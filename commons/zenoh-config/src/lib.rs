@@ -105,14 +105,17 @@ pub struct AclConfigRules {
     pub interface: Vec<String>,
     pub key_expr: Vec<String>,
     pub action: Vec<Action>,
+    pub flow: Vec<DownsamplingFlow>,
     pub permission: Permission,
 }
+
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct PolicyRule {
     pub subject: Subject,
     pub key_expr: String,
     pub action: Action,
     pub permission: Permission,
+    pub flow: DownsamplingFlow,
 }
 
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]

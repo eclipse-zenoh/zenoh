@@ -21,18 +21,17 @@
 use ahash::RandomState;
 use std::collections::HashMap;
 use zenoh_config::{
-    AclConfig, AclConfigRules, Action, Permission, PolicyRule, Subject, NUMBER_OF_ACTIONS,
-    NUMBER_OF_PERMISSIONS,
+    AclConfig, AclConfigRules, Action, DownsamplingFlow, Permission, PolicyRule, Subject,
+    NUMBER_OF_ACTIONS, NUMBER_OF_PERMISSIONS,
 };
 use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
-
-pub struct PolicyForSubject(Vec<Vec<KeTreeRule>>); //vec of actions over vec of permission for tree of ke for this
+pub type Flow = DownsamplingFlow;
+pub struct PolicyForSubject(Vec<Vec<Vec<KeTreeRule>>>); //vec of actions over vec of permission for tree of ke for this
 pub struct PolicyMap(HashMap<i32, PolicyForSubject, RandomState>); //index of subject (i32) instead of subject (String)
 
 type KeTreeRule = KeBoxTree<bool>;
-
 pub struct PolicyEnforcer {
     pub(crate) acl_enabled: bool,
     pub(crate) default_permission: Permission,
@@ -76,13 +75,17 @@ impl PolicyEnforcer {
                 //first initialize the vector of vectors (required to maintain the indices)
                 for index in subject_map.values() {
                     let mut rule: PolicyForSubject = PolicyForSubject(Vec::new());
-                    for _i in 0..NUMBER_OF_ACTIONS {
-                        let mut action_rule: Vec<KeTreeRule> = Vec::new();
-                        for _j in 0..NUMBER_OF_PERMISSIONS {
-                            let permission_rule = KeTreeRule::new();
-                            action_rule.push(permission_rule);
+                    for _k in 0..2 {
+                        let mut flow_rule = Vec::new();
+                        for _i in 0..NUMBER_OF_ACTIONS {
+                            let mut action_rule: Vec<KeTreeRule> = Vec::new();
+                            for _j in 0..NUMBER_OF_PERMISSIONS {
+                                let permission_rule = KeTreeRule::new();
+                                action_rule.push(permission_rule);
+                            }
+                            flow_rule.push(action_rule);
                         }
-                        rule.0.push(action_rule);
+                        rule.0.push(flow_rule);
                     }
                     main_policy.0.insert(*index, rule);
                 }
@@ -91,7 +94,8 @@ impl PolicyEnforcer {
                     //add key-expression values to the ketree as per the policy rules
                     if let Some(index) = subject_map.get(&rule.subject) {
                         if let Some(single_policy) = main_policy.0.get_mut(index) {
-                            single_policy.0[rule.action as usize][rule.permission as usize]
+                            single_policy.0[rule.flow as usize][rule.action as usize]
+                                [rule.permission as usize]
                                 .insert(keyexpr::new(&rule.key_expr)?, true);
                         }
                     };
@@ -116,14 +120,17 @@ impl PolicyEnforcer {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
             for subject in &config_rule.interface {
-                for action in &config_rule.action {
-                    for key_expr in &config_rule.key_expr {
-                        policy_rules.push(PolicyRule {
-                            subject: Subject::Interface(subject.clone()),
-                            key_expr: key_expr.clone(),
-                            action: action.clone(),
-                            permission: config_rule.permission.clone(),
-                        })
+                for flow in &config_rule.flow {
+                    for action in &config_rule.action {
+                        for key_expr in &config_rule.key_expr {
+                            policy_rules.push(PolicyRule {
+                                subject: Subject::Interface(subject.clone()),
+                                key_expr: key_expr.clone(),
+                                action: action.clone(),
+                                permission: config_rule.permission.clone(),
+                                flow: flow.clone(),
+                            })
+                        }
                     }
                 }
             }
@@ -147,6 +154,7 @@ impl PolicyEnforcer {
     pub fn policy_decision_point(
         &self,
         subject: i32,
+        flow: Flow,
         action: Action,
         key_expr: &str,
     ) -> ZResult<Permission> {
@@ -154,10 +162,9 @@ impl PolicyEnforcer {
             Some(policy_map) => {
                 match policy_map.0.get(&subject) {
                     Some(single_policy) => {
-                        let permission_vec = &single_policy.0[action as usize];
-
                         //explicit Deny rules are ALWAYS given preference
-                        let deny_result = permission_vec[Permission::Deny as usize]
+                        let deny_result = single_policy.0[flow.clone() as usize]
+                            [action.clone() as usize][Permission::Deny as usize]
                             .nodes_including(keyexpr::new(&key_expr)?)
                             .count();
                         if deny_result != 0 {
@@ -167,7 +174,8 @@ impl PolicyEnforcer {
                         if self.default_permission == Permission::Allow {
                             Ok(Permission::Allow)
                         } else {
-                            let allow_result = permission_vec[Permission::Allow as usize]
+                            let allow_result = single_policy.0[flow as usize][action as usize]
+                                [Permission::Allow as usize]
                                 .nodes_including(keyexpr::new(&key_expr)?)
                                 .count();
 
@@ -191,4 +199,16 @@ impl PolicyEnforcer {
             }
         }
     }
+
+    // pub fn testing_policy_improv(&self, key_expr: &str) -> ZResult<RefCell<KeTreeRule>> {
+    //     let mut new_rule = KeTreeRule::new();
+    //     new_rule.insert(keyexpr::new(key_expr)?, true);
+    //     return Ok(RefCell::new(KeTreeRule::new()));
+    // }
+
+    // pub fn test_breaking(&self) -> ZResult<()> {
+    //     let x = self.testing_policy_improv("test/expression")?;
+    //     let y = x.clone();
+    //     Ok(())
+    // }
 }

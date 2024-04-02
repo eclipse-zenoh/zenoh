@@ -33,8 +33,8 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 use crate::net::routing::RoutingContext;
 
 use super::{
-    authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
-    InterceptorFactoryTrait, InterceptorTrait,
+    authorization::Flow, authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor,
+    InterceptorFactory, InterceptorFactoryTrait, InterceptorTrait,
 };
 pub(crate) struct AclEnforcer {
     pub(crate) enforcer: Arc<PolicyEnforcer>,
@@ -242,6 +242,7 @@ pub trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
     fn interface_list(&self) -> Vec<i32>;
     fn zid(&self) -> ZenohId;
+    fn flow(&self) -> Flow;
 
     fn put(&self, key_expr: &str) -> Permission {
         let policy_enforcer = self.policy_enforcer();
@@ -249,7 +250,12 @@ pub trait AclActionMethods {
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission.clone();
         for subject in &interface_list {
-            match policy_enforcer.policy_decision_point(*subject, Action::Put, key_expr) {
+            match policy_enforcer.policy_decision_point(
+                *subject,
+                self.flow(),
+                Action::Put,
+                key_expr,
+            ) {
                 Ok(Permission::Allow) => {
                     decision = Permission::Allow;
                     break;
@@ -279,7 +285,12 @@ pub trait AclActionMethods {
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission.clone();
         for subject in &interface_list {
-            match policy_enforcer.policy_decision_point(*subject, Action::Get, key_expr) {
+            match policy_enforcer.policy_decision_point(
+                *subject,
+                self.flow(),
+                Action::Get,
+                key_expr,
+            ) {
                 Ok(Permission::Allow) => {
                     decision = Permission::Allow;
                     break;
@@ -310,6 +321,7 @@ pub trait AclActionMethods {
         for subject in &interface_list {
             match policy_enforcer.policy_decision_point(
                 *subject,
+                self.flow(),
                 Action::DeclareSubscriber,
                 key_expr,
             ) {
@@ -347,6 +359,7 @@ pub trait AclActionMethods {
         for subject in &interface_list {
             match policy_enforcer.policy_decision_point(
                 *subject,
+                self.flow(),
                 Action::DeclareQueryable,
                 key_expr,
             ) {
@@ -389,6 +402,9 @@ impl AclActionMethods for EgressAclEnforcer {
     fn zid(&self) -> ZenohId {
         self.zid
     }
+    fn flow(&self) -> Flow {
+        Flow::Egress
+    }
 }
 
 impl AclActionMethods for IngressAclEnforcer {
@@ -402,5 +418,8 @@ impl AclActionMethods for IngressAclEnforcer {
 
     fn zid(&self) -> ZenohId {
         self.zid
+    }
+    fn flow(&self) -> Flow {
+        Flow::Ingress
     }
 }
