@@ -69,7 +69,7 @@ impl Drop for Stats {
 
 fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::init_log();
 
     let (mut config, m, n) = parse_args();
 

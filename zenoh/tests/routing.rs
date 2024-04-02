@@ -115,7 +115,7 @@ impl Task {
                                     }
 
                                     Err(err) => {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Sample got from {} failed to unwrap! Error: {}.",
                                             ke,
                                             err
@@ -365,7 +365,7 @@ impl Recipe {
 // And the message transmission should work even if the common node disappears after a while.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gossip() -> Result<()> {
-    env_logger::try_init().unwrap_or_default();
+    zenoh_util::init_log();
 
     let locator = String::from("tcp/127.0.0.1:17446");
     let ke = String::from("testKeyExprGossip");
@@ -433,7 +433,7 @@ async fn gossip() -> Result<()> {
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
-    env_logger::try_init().unwrap_or_default();
+    zenoh_util::init_log();
     let locator = String::from("tcp/127.0.0.1:17449");
     let ke = String::from("testKeyExprStaticFailoverBrokering");
     let msg_size = 8;
@@ -494,7 +494,7 @@ async fn static_failover_brokering() -> Result<()> {
 // Total cases = 2 x 4 x 6 = 48
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn three_node_combination() -> Result<()> {
-    env_logger::try_init().unwrap_or_default();
+    zenoh_util::init_log();
     let modes = [WhatAmI::Peer, WhatAmI::Client];
     let delay_in_secs = [
         (0, 1, 2),
@@ -625,7 +625,7 @@ async fn three_node_combination() -> Result<()> {
 // Total cases = 2 x 8 = 16
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn two_node_combination() -> Result<()> {
-    env_logger::try_init().unwrap_or_default();
+    zenoh_util::init_log();
 
     #[derive(Clone, Copy)]
     struct IsFirstListen(bool);

@@ -5,6 +5,9 @@ pub mod time_range;
 pub use lib_loader::*;
 pub mod timer;
 pub use timer::*;
+pub mod log;
+pub use log::init_log;
+
 /// The "ZENOH_HOME" environement variable name
 pub const ZENOH_HOME_ENV_VAR: &str = "ZENOH_HOME";
 

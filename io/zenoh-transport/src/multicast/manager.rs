@@ -180,7 +180,7 @@ impl TransportManager {
     }
 
     pub async fn close_multicast(&self) {
-        log::trace!("TransportManagerMulticast::clear())");
+        tracing::trace!("TransportManagerMulticast::clear())");
 
         zasynclock!(self.state.multicast.protocols).clear();
 
@@ -300,7 +300,7 @@ impl TransportManager {
 
         res.map(|_| ()).ok_or_else(|| {
             let e = zerror!("Can not delete the transport for locator: {}", locator);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -331,7 +331,7 @@ impl TransportManager {
 
         res.map(|_| ()).ok_or_else(|| {
             let e = zerror!("Can not delete the transport for locator: {}", locator);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }

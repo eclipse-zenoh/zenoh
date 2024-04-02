@@ -471,7 +471,7 @@ impl Drop for UnicastPipe {
 #[async_trait]
 impl LinkUnicastTrait for UnicastPipe {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing Unix Pipe link: {}", self);
+        tracing::trace!("Closing Unix Pipe link: {}", self);
         Ok(())
     }
 
@@ -509,7 +509,7 @@ impl LinkUnicastTrait for UnicastPipe {
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
         // @TODO: Not supported for now
-        log::debug!("The get_interface_names for UnicastPipe is not supported");
+        tracing::debug!("The get_interface_names for UnicastPipe is not supported");
         vec![]
     }
 

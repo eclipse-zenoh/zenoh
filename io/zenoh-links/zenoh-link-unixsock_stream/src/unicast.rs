@@ -65,17 +65,17 @@ impl LinkUnicastUnixSocketStream {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing UnixSocketStream link: {}", self);
+        tracing::trace!("Closing UnixSocketStream link: {}", self);
         // Close the underlying UnixSocketStream socket
         let res = self.get_mut_socket().shutdown().await;
-        log::trace!("UnixSocketStream link shutdown {}: {:?}", self, res);
+        tracing::trace!("UnixSocketStream link shutdown {}: {:?}", self, res);
         res.map_err(|e| zerror!(e).into())
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -83,7 +83,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -91,7 +91,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -103,7 +103,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
             .map(|_len| ())
             .map_err(|e| {
                 let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 e.into()
             })
     }
@@ -126,7 +126,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
         // @TODO: Not supported for now
-        log::debug!("The get_interface_names for LinkUnicastUnixSocketStream is not supported");
+        tracing::debug!("The get_interface_names for LinkUnicastUnixSocketStream is not supported");
         vec![]
     }
 
@@ -221,7 +221,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -231,7 +231,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -242,7 +242,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -250,7 +250,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             Some(path) => PathBuf::from(path),
             None => {
                 let e = format!("Can not create a new UnixSocketStream link bound to {path:?}");
-                log::warn!("{}", e);
+                tracing::warn!("{}", e);
                 PathBuf::from(format!("{}", Uuid::new_v4()))
             }
         };
@@ -260,7 +260,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 "Can not create a new UnixSocketStream link bound to {:?}",
                 path
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -314,7 +314,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 "Can not create a new UnixSocketStream listener on {} - Unable to open lock file: {}",
                 path, e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -326,7 +326,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -342,7 +342,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -352,19 +352,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
         let local_path = PathBuf::from(local_addr.as_pathname().ok_or_else(|| {
             let e = zerror!("Can not create a new UnixSocketStream listener on {}", path);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?);
 
         let local_path_str = local_path.to_str().ok_or_else(|| {
             let e = zerror!("Can not create a new UnixSocketStream listener on {}", path);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -409,7 +409,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 "Can not delete the UnixSocketStream listener because it has not been found: {}",
                 path
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e
         })?;
 
@@ -425,7 +425,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         // Remove the Unix Domain Socket file
         let lock_file_path = format!("{path}.lock");
         let tmp = remove_file(lock_file_path);
-        log::trace!("UnixSocketStream Domain Socket removal result: {:?}", tmp);
+        tracing::trace!("UnixSocketStream Domain Socket removal result: {:?}", tmp);
 
         Ok(())
     }
@@ -457,7 +457,7 @@ async fn accept_task(
 
     let src_addr = socket.local_addr().map_err(|e| {
         zerror!("Can not accept UnixSocketStream connections: {}", e);
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
@@ -466,7 +466,7 @@ async fn accept_task(
             "Can not create a new UnixSocketStream link bound to {:?}",
             src_addr
         );
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?);
 
@@ -475,12 +475,12 @@ async fn accept_task(
             "Can not create a new UnixSocketStream link bound to {:?}",
             src_addr
         );
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
     // The accept future
-    log::trace!(
+    tracing::trace!(
         "Ready to accept UnixSocketStream connections on: {}",
         src_path
     );
@@ -494,7 +494,7 @@ async fn accept_task(
                     Ok(stream) => {
                         let dst_path = format!("{}", Uuid::new_v4());
 
-                        log::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
+                        tracing::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
 
                         // Create the new link object
                         let link = Arc::new(LinkUnicastUnixSocketStream::new(
@@ -503,12 +503,12 @@ async fn accept_task(
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-                            log::error!("{}-{}: {}", file!(), line!(), e)
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 
                     }
                     Err(e) => {
-                        log::warn!("{}. Hint: increase the system open file limit.", e);
+                        tracing::warn!("{}. Hint: increase the system open file limit.", e);
                         // Throttle the accept loop upon an error
                         // NOTE: This might be due to various factors. However, the most common case is that
                         //       the process has reached the maximum number of open files in the system. On

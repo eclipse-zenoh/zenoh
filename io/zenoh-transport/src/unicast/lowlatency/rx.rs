@@ -41,7 +41,7 @@ impl TransportUnicastLowlatency {
             }
             callback.handle_message(msg)
         } else {
-            log::debug!(
+            tracing::debug!(
                 "Transport: {}. No callback available, dropping message: {}",
                 self.config.zid,
                 msg
@@ -62,7 +62,7 @@ impl TransportUnicastLowlatency {
                 .read(&mut reader)
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
-            log::trace!("Received: {:?}", msg);
+            tracing::trace!("Received: {:?}", msg);
 
             #[cfg(feature = "stats")]
             {

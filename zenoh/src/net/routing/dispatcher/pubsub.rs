@@ -38,7 +38,7 @@ pub(crate) fn declare_subscription(
     sub_info: &SubscriberInfo,
     node_id: NodeId,
 ) {
-    log::debug!("Declare subscription {}", face);
+    tracing::debug!("Declare subscription {}", face);
     let rtables = zread!(tables.tables);
     match rtables
         .get_mapping(face, &expr.scope, expr.mapping)
@@ -86,7 +86,7 @@ pub(crate) fn declare_subscription(
             }
             drop(wtables);
         }
-        None => log::error!("Declare subscription for unknown scope {}!", expr.scope),
+        None => tracing::error!("Declare subscription for unknown scope {}!", expr.scope),
     }
 }
 
@@ -97,7 +97,7 @@ pub(crate) fn undeclare_subscription(
     expr: &WireExpr,
     node_id: NodeId,
 ) {
-    log::debug!("Undeclare subscription {}", face);
+    tracing::debug!("Undeclare subscription {}", face);
     let rtables = zread!(tables.tables);
     match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
@@ -126,9 +126,9 @@ pub(crate) fn undeclare_subscription(
                 Resource::clean(&mut res);
                 drop(wtables);
             }
-            None => log::error!("Undeclare unknown subscription!"),
+            None => tracing::error!("Undeclare unknown subscription!"),
         },
-        None => log::error!("Undeclare subscription with unknown scope!"),
+        None => tracing::error!("Undeclare subscription with unknown scope!"),
     }
 }
 
@@ -267,14 +267,14 @@ macro_rules! treat_timestamp {
                         Ok(()) => (),
                         Err(e) => {
                             if $drop {
-                                log::error!(
+                                tracing::error!(
                                     "Error treating timestamp for received Data ({}). Drop it!",
                                     e
                                 );
                                 return;
                             } else {
                                 data.timestamp = Some(hlc.new_timestamp());
-                                log::error!(
+                                tracing::error!(
                                     "Error treating timestamp for received Data ({}). Replace timestamp: {:?}",
                                     e,
                                     data.timestamp);
@@ -284,7 +284,7 @@ macro_rules! treat_timestamp {
                 } else {
                     // Timestamp not present; add one
                     data.timestamp = Some(hlc.new_timestamp());
-                    log::trace!("Adding timestamp to DataInfo: {:?}", data.timestamp);
+                    tracing::trace!("Adding timestamp to DataInfo: {:?}", data.timestamp);
                 }
             }
         }
@@ -435,7 +435,7 @@ pub fn full_reentrant_route_data(
     let tables = zread!(tables_ref.tables);
     match tables.get_mapping(face, &expr.scope, expr.mapping).cloned() {
         Some(prefix) => {
-            log::trace!(
+            tracing::trace!(
                 "Route data for res {}{}",
                 prefix.expr(),
                 expr.suffix.as_ref()
@@ -552,7 +552,7 @@ pub fn full_reentrant_route_data(
             }
         }
         None => {
-            log::error!("Route data with unknown scope {}!", expr.scope);
+            tracing::error!("Route data with unknown scope {}!", expr.scope);
         }
     }
 }
@@ -592,14 +592,14 @@ pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireE
                             }
                         }
                         None => {
-                            log::error!(
+                            tracing::error!(
                                 "Pull data for unknown subscription {} (no info)!",
                                 prefix.expr() + expr.suffix.as_ref()
                             );
                         }
                     },
                     None => {
-                        log::error!(
+                        tracing::error!(
                             "Pull data for unknown subscription {} (no context)!",
                             prefix.expr() + expr.suffix.as_ref()
                         );
@@ -607,14 +607,14 @@ pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireE
                 }
             }
             None => {
-                log::error!(
+                tracing::error!(
                     "Pull data for unknown subscription {} (no resource)!",
                     prefix.expr() + expr.suffix.as_ref()
                 );
             }
         },
         None => {
-            log::error!("Pull data with unknown scope {}!", expr.scope);
+            tracing::error!("Pull data with unknown scope {}!", expr.scope);
         }
     };
 }

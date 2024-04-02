@@ -61,7 +61,7 @@ impl LinkUnicastWs {
     ) -> LinkUnicastWs {
         // Set the TCP nodelay option
         if let Err(err) = get_stream(&socket).set_nodelay(true) {
-            log::warn!(
+            tracing::warn!(
                 "Unable to set NODEALY option on TCP link {} => {}: {}",
                 src_addr,
                 dst_addr,
@@ -123,12 +123,12 @@ impl LinkUnicastWs {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastWs {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing WebSocket link: {}", self);
+        tracing::trace!("Closing WebSocket link: {}", self);
         let mut guard = zasynclock!(self.send);
         // Close the underlying TCP socket
         guard.close().await.map_err(|e| {
             let e = zerror!("WebSocket link shutdown {}: {:?}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -139,7 +139,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
         guard.send(msg).await.map_err(|e| {
             let e = zerror!("Write error on WebSocket link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e
         })?;
 
@@ -207,7 +207,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
         // @TODO: Not supported for now
-        log::debug!("The get_interface_names for LinkUnicastWs is not supported");
+        tracing::debug!("The get_interface_names for LinkUnicastWs is not supported");
         vec![]
     }
 
@@ -228,7 +228,7 @@ impl Drop for LinkUnicastWs {
             let mut guard = zasynclock!(self.send);
             // Close the underlying TCP socket
             guard.close().await.unwrap_or_else(|e| {
-                log::warn!("`LinkUnicastWs::Drop` error when closing WebSocket {}", e)
+                tracing::warn!("`LinkUnicastWs::Drop` error when closing WebSocket {}", e)
             });
         })
     }
@@ -387,7 +387,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                 "Can not delete the TCP (WebSocket) listener because it has not been found: {}",
                 addr
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e
         })?;
 
@@ -426,7 +426,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                             }
                         }
                     }
-                    Err(err) => log::error!("Unable to get local addresses: {}", err),
+                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
                 }
             } else if key.ip() == default_ipv6 {
                 match zenoh_util::net::get_local_addresses(None) {
@@ -443,7 +443,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                             }
                         }
                     }
-                    Err(err) => log::error!("Unable to get local addresses: {}", err),
+                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
                 }
             } else {
                 locators.push(listener_locator.clone());
@@ -467,11 +467,11 @@ async fn accept_task(
 
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TCP (WebSocket) connections: {}", e);
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
-    log::trace!(
+    tracing::trace!(
         "Ready to accept TCP (WebSocket) connections on: {:?}",
         src_addr
     );
@@ -482,7 +482,7 @@ async fn accept_task(
                 match res {
                     Ok(res) => res,
                     Err(e) => {
-                        log::warn!("{}. Hint: increase the system open file limit.", e);
+                        tracing::warn!("{}. Hint: increase the system open file limit.", e);
                         // Throttle the accept loop upon an error
                         // NOTE: This might be due to various factors. However, the most common case is that
                         //       the process has reached the maximum number of open files in the system. On
@@ -498,7 +498,7 @@ async fn accept_task(
             _ = token.cancelled() => break,
         };
 
-        log::debug!(
+        tracing::debug!(
             "Accepted TCP (WebSocket) connection on {:?}: {:?}",
             src_addr,
             dst_addr
@@ -508,7 +508,7 @@ async fn accept_task(
             .await
             .map_err(|e| {
                 let e = zerror!("Error when creating the WebSocket session: {}", e);
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 e
             })?;
         // Create the new link object
@@ -516,7 +516,7 @@ async fn accept_task(
 
         // Communicate the new link to the initial transport manager
         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-            log::error!("{}-{}: {}", file!(), line!(), e)
+            tracing::error!("{}-{}: {}", file!(), line!(), e)
         }
     }
 

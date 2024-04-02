@@ -68,11 +68,11 @@ impl LinkUnicastQuic {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastQuic {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing QUIC link: {}", self);
+        tracing::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
         let mut guard = zasynclock!(self.send);
         if let Err(e) = guard.finish().await {
-            log::trace!("Error closing QUIC stream {}: {}", self, e);
+            tracing::trace!("Error closing QUIC stream {}: {}", self, e);
         }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
@@ -81,7 +81,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.send);
         guard.write(buffer).await.map_err(|e| {
-            log::trace!("Write error on QUIC link {}: {}", self, e);
+            tracing::trace!("Write error on QUIC link {}: {}", self, e);
             zerror!(e).into()
         })
     }
@@ -89,7 +89,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.send);
         guard.write_all(buffer).await.map_err(|e| {
-            log::trace!("Write error on QUIC link {}: {}", self, e);
+            tracing::trace!("Write error on QUIC link {}: {}", self, e);
             zerror!(e).into()
         })
     }
@@ -101,7 +101,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
             .await
             .map_err(|e| {
                 let e = zerror!("Read error on QUIC link {}: {}", self, e);
-                log::trace!("{}", &e);
+                tracing::trace!("{}", &e);
                 e
             })?
             .ok_or_else(|| {
@@ -110,7 +110,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
                     self,
                     guard.id()
                 );
-                log::trace!("{}", &e);
+                tracing::trace!("{}", &e);
                 e.into()
             })
     }
@@ -119,7 +119,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         let mut guard = zasynclock!(self.recv);
         guard.read_exact(buffer).await.map_err(|e| {
             let e = zerror!("Read error on QUIC link {}: {}", self, e);
-            log::trace!("{}", &e);
+            tracing::trace!("{}", &e);
             e.into()
         })
     }
@@ -215,7 +215,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .parse()?;
 
         if !server_name_verification {
-            log::warn!("Skipping name verification of servers");
+            tracing::warn!("Skipping name verification of servers");
         }
 
         // Initialize the QUIC connection
@@ -440,7 +440,7 @@ async fn accept_task(
 
         let conn = qc.await.map_err(|e| {
             let e = zerror!("QUIC acceptor failed: {:?}", e);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -452,7 +452,7 @@ async fn accept_task(
         .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
 
     // The accept future
-    log::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
+    tracing::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
 
     loop {
         tokio::select! {
@@ -465,13 +465,13 @@ async fn accept_task(
                         let (send, recv) = match quic_conn.accept_bi().await {
                             Ok(stream) => stream,
                             Err(e) => {
-                                log::warn!("QUIC connection has no streams: {:?}", e);
+                                tracing::warn!("QUIC connection has no streams: {:?}", e);
                                 continue;
                             }
                         };
 
                         let dst_addr = quic_conn.remote_address();
-                        log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
+                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastQuic::new(
                             quic_conn,
@@ -483,12 +483,12 @@ async fn accept_task(
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-                            log::error!("{}-{}: {}", file!(), line!(), e)
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 
                     }
                     Err(e) => {
-                        log::warn!("{} Hint: increase the system open file limit.", e);
+                        tracing::warn!("{} Hint: increase the system open file limit.", e);
                         // Throttle the accept loop upon an error
                         // NOTE: This might be due to various factors. However, the most common case is that
                         //       the process has reached the maximum number of open files in the system. On

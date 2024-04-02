@@ -97,7 +97,7 @@ impl TransportLinkUnicastUniversal {
             .await;
 
             if let Err(e) = res {
-                log::debug!("{}", e);
+                tracing::debug!("{}", e);
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
                 // TODO(yuyuan): do more study to check which ZRuntime should be used or refine the
@@ -125,7 +125,7 @@ impl TransportLinkUnicastUniversal {
 
             // TODO(yuyuan): improve this callback
             if let Err(e) = res {
-                log::debug!("{}", e);
+                tracing::debug!("{}", e);
 
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
@@ -146,7 +146,7 @@ impl TransportLinkUnicastUniversal {
     }
 
     pub(super) async fn close(self) -> ZResult<()> {
-        log::trace!("{}: closing", self.link);
+        tracing::trace!("{}: closing", self.link);
 
         self.tracker.close();
         self.token.cancel();

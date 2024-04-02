@@ -147,7 +147,7 @@ impl TransportLinkUnicastTx {
     pub(crate) async fn send_batch(&mut self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
 
-        // log::trace!("WBatch: {:?}", batch);
+        // tracing::trace!("WBatch: {:?}", batch);
 
         let res = batch
             .finalize(self.buffer.as_mut())
@@ -162,7 +162,7 @@ impl TransportLinkUnicastTx {
                 .as_slice(),
         };
 
-        // log::trace!("WBytes: {:02x?}", bytes);
+        // tracing::trace!("WBytes: {:02x?}", bytes);
 
         // Send the message on the link
         self.inner.link.write_all(bytes).await?;
@@ -230,7 +230,7 @@ impl TransportLinkUnicastRx {
             self.link.read(into.as_mut_slice()).await?
         };
 
-        // log::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
+        // tracing::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
 
         let buffer = ZSlice::make(Arc::new(into), 0, end)
             .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
@@ -239,7 +239,7 @@ impl TransportLinkUnicastRx {
             .initialize(buff)
             .map_err(|e| zerror!("{ERR}{self}. {e}."))?;
 
-        // log::trace!("RBatch: {:?}", batch);
+        // tracing::trace!("RBatch: {:?}", batch);
 
         Ok(batch)
     }

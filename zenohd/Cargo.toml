@@ -32,12 +32,12 @@ shared-memory = ["zenoh/shared-memory"]
 [dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 clap = { workspace = true, features = ["derive"] }
-env_logger = { workspace = true }
+zenoh-util = {workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 zenoh = { workspace = true, features = ["unstable"] }
 
 [dev-dependencies]

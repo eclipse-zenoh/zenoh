@@ -85,7 +85,7 @@ fn load_plugin(
     paths: &Option<Vec<String>>,
 ) -> Result<()> {
     let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-        log::warn!("Plugin `{}` was already declared", declared.name());
+        tracing::warn!("Plugin `{}` was already declared", declared.name());
         declared
     } else if let Some(paths) = paths {
         plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
@@ -94,7 +94,7 @@ fn load_plugin(
     };
 
     if let Some(loaded) = declared.loaded_mut() {
-        log::warn!(
+        tracing::warn!(
             "Plugin `{}` was already loaded from {}",
             loaded.name(),
             loaded.path()
@@ -111,18 +111,14 @@ fn main() {
         .build()
         .unwrap()
         .block_on(async {
-        let mut log_builder =
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
-        #[cfg(feature = "stats")]
-        log_builder.format_timestamp_millis().init();
-        #[cfg(not(feature = "stats"))]
-        log_builder.init();
 
-        log::info!("zenohd {}", *LONG_VERSION);
+        zenoh_util::init_log();
+
+        tracing::info!("zenohd {}", *LONG_VERSION);
 
         let args = Args::parse();
         let config = config_from_args(&args);
-        log::info!("Initial conf: {}", &config);
+        tracing::info!("Initial conf: {}", &config);
 
         let mut plugin_mgr = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
         // Static plugins are to be added here, with `.add_static::<PluginType>()`
@@ -133,7 +129,7 @@ fn main() {
                 paths,
                 required,
             } = plugin_load;
-            log::info!(
+            tracing::info!(
                 "Loading {req} plugin \"{name}\"",
                 req = if required { "required" } else { "" }
             );
@@ -141,7 +137,7 @@ fn main() {
                 if required {
                     panic!("Plugin load failure: {}", e)
                 } else {
-                    log::error!("Plugin load failure: {}", e)
+                    tracing::error!("Plugin load failure: {}", e)
                 }
             }
             if required {
@@ -159,14 +155,14 @@ fn main() {
 
         for plugin in plugin_mgr.loaded_plugins_iter_mut() {
             let required = required_plugins.contains(plugin.name());
-            log::info!(
+            tracing::info!(
                 "Starting {req} plugin \"{name}\"",
                 req = if required { "required" } else { "" },
                 name = plugin.name()
             );
             match plugin.start(&runtime) {
                 Ok(_) => {
-                    log::info!(
+                    tracing::info!(
                         "Successfully started plugin {} from {:?}",
                         plugin.name(),
                         plugin.path()
@@ -188,7 +184,7 @@ fn main() {
                             }
                         );
                     } else {
-                        log::error!(
+                        tracing::error!(
                             "Required plugin \"{}\" failed to start: {}",
                             plugin.name(),
                             if report.is_empty() {
@@ -201,7 +197,7 @@ fn main() {
                 }
             }
         }
-        log::info!("Finished loading plugins");
+        tracing::info!("Finished loading plugins");
 
         AdminSpace::start(&runtime, plugin_mgr, LONG_VERSION.clone()).await;
 
@@ -355,14 +351,14 @@ fn config_from_args(args: &Args) -> Config {
                     if let Err(e) =
                         config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
                     {
-                        log::warn!("Couldn't perform configuration {}: {}", json, e);
+                        tracing::warn!("Couldn't perform configuration {}: {}", json, e);
                     }
                 }
-                Err(e) => log::warn!("Couldn't perform configuration {}: {}", json, e),
+                Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
             }
         }
     }
-    log::debug!("Config: {:?}", &config);
+    tracing::debug!("Config: {:?}", &config);
     config
 }
 

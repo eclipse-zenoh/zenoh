@@ -227,8 +227,8 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        let _ = env_logger::try_init();
-        log::debug!("REST plugin {}", LONG_VERSION.as_str());
+        let _ = zenoh_util::init_log();
+        tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
@@ -299,7 +299,7 @@ fn with_extended_string<R, F: FnMut(&mut String) -> R>(
 }
 
 async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
-    log::trace!("Incoming GET request: {:?}", req);
+    tracing::trace!("Incoming GET request: {:?}", req);
 
     let first_accept = match req.header("accept") {
         Some(accept) => accept[0]
@@ -327,7 +327,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                     }
                 };
                 async_std::task::spawn(async move {
-                    log::debug!(
+                    tracing::debug!(
                         "Subscribe to {} for SSE stream (task {})",
                         key_expr,
                         async_std::task::current().id()
@@ -349,23 +349,23 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         {
                             Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
-                                log::debug!(
+                                tracing::debug!(
                                     "SSE error ({})! Unsubscribe and terminate (task {})",
                                     e,
                                     async_std::task::current().id()
                                 );
                                 if let Err(e) = sub.undeclare().res().await {
-                                    log::error!("Error undeclaring subscriber: {}", e);
+                                    tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
                             Err(_) => {
-                                log::debug!(
+                                tracing::debug!(
                                     "SSE timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
                                 if let Err(e) = sub.undeclare().res().await {
-                                    log::error!("Error undeclaring subscriber: {}", e);
+                                    tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
@@ -428,7 +428,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
 }
 
 async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
-    log::trace!("Incoming PUT request: {:?}", req);
+    tracing::trace!("Incoming PUT request: {:?}", req);
     match req.body_bytes().await {
         Ok(bytes) => {
             let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
@@ -476,7 +476,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     let zid = runtime.zid().to_string();
     let session = zenoh::init(runtime).res().await.unwrap();
@@ -507,7 +507,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
         .delete(write);
 
     if let Err(e) = app.listen(conf.http_port).await {
-        log::error!("Unable to start http server for REST: {:?}", e);
+        tracing::error!("Unable to start http server for REST: {:?}", e);
         return Err(e.into());
     }
     Ok(())

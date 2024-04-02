@@ -105,11 +105,11 @@ impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
 pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
     match zenoh_util::net::get_interface_names_by_addr(addr.ip()) {
         Ok(interfaces) => {
-            log::trace!("get_interface_names for {:?}: {:?}", addr.ip(), interfaces);
+            tracing::trace!("get_interface_names for {:?}: {:?}", addr.ip(), interfaces);
             interfaces
         }
         Err(e) => {
-            log::debug!("get_interface_names for {:?} failed: {:?}", addr.ip(), e);
+            tracing::debug!("get_interface_names for {:?} failed: {:?}", addr.ip(), e);
             vec![]
         }
     }

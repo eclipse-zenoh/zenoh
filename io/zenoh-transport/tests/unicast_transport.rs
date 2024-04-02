@@ -594,7 +594,7 @@ async fn run_with_lowlatency_transport(
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tcp_only() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
@@ -619,7 +619,7 @@ async fn transport_unicast_tcp_only() {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tcp_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 16100).parse().unwrap()];
@@ -641,7 +641,7 @@ async fn transport_unicast_tcp_only_with_lowlatency_transport() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_udp_only() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
@@ -666,7 +666,7 @@ async fn transport_unicast_udp_only() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_udp_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 16110).parse().unwrap()];
@@ -688,7 +688,7 @@ async fn transport_unicast_udp_only_with_lowlatency_transport() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_unix_only() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     let f1 = "zenoh-test-unix-socket-5.sock";
     let _ = std::fs::remove_file(f1);
@@ -714,7 +714,7 @@ async fn transport_unicast_unix_only() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_unix_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     let f1 = "zenoh-test-unix-socket-5-lowlatency.sock";
     let _ = std::fs::remove_file(f1);
@@ -740,7 +740,7 @@ async fn transport_unicast_unix_only_with_lowlatency_transport() {
 #[cfg(feature = "transport_ws")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_ws_only() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
@@ -773,7 +773,7 @@ async fn transport_unicast_ws_only() {
 #[cfg(feature = "transport_ws")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_ws_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 16120).parse().unwrap()];
@@ -803,7 +803,7 @@ async fn transport_unicast_ws_only_with_lowlatency_transport() {
 #[cfg(feature = "transport_unixpipe")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_unixpipe_only() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
@@ -828,7 +828,7 @@ async fn transport_unicast_unixpipe_only() {
 #[cfg(feature = "transport_unixpipe")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
@@ -854,7 +854,7 @@ async fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tcp_udp() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
@@ -885,7 +885,7 @@ async fn transport_unicast_tcp_udp() {
 ))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tcp_unix() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     let f1 = "zenoh-test-unix-socket-6.sock";
     let _ = std::fs::remove_file(f1);
@@ -919,7 +919,7 @@ async fn transport_unicast_tcp_unix() {
 ))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_udp_unix() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     let f1 = "zenoh-test-unix-socket-7.sock";
     let _ = std::fs::remove_file(f1);
@@ -954,7 +954,7 @@ async fn transport_unicast_udp_unix() {
 ))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tcp_udp_unix() {
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     let f1 = "zenoh-test-unix-socket-8.sock";
     let _ = std::fs::remove_file(f1);
@@ -988,7 +988,7 @@ async fn transport_unicast_tcp_udp_unix() {
 async fn transport_unicast_tls_only_server() {
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locator
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 16070).parse().unwrap();
@@ -1034,7 +1034,7 @@ async fn transport_unicast_tls_only_server() {
 async fn transport_unicast_quic_only_server() {
     use zenoh_link::quic::config::*;
 
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
     // Define the locator
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 16080).parse().unwrap();
     endpoint
@@ -1079,7 +1079,7 @@ async fn transport_unicast_quic_only_server() {
 async fn transport_unicast_tls_only_mutual_success() {
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     let client_auth = "true";
 
@@ -1151,7 +1151,7 @@ async fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     use std::vec;
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     // Define the locator
     let mut client_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
@@ -1219,7 +1219,7 @@ async fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
 fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
+    let _ = zenoh_util::init_log();
 
     let client_auth = "true";
 
