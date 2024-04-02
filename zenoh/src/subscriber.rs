@@ -14,7 +14,7 @@
 
 //! Subscribing primitives.
 use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
-use crate::key_expr::KeyExpr;
+use crate::api::key_expr::KeyExpr;
 use crate::prelude::Locality;
 use crate::sample::Sample;
 use crate::Id;

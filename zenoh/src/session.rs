@@ -17,7 +17,7 @@ use crate::config::Notifier;
 use crate::encoding::Encoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
-use crate::key_expr::KeyExprInner;
+use crate::api::key_expr::KeyExprInner;
 #[zenoh_macros::unstable]
 use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::primitives::Primitives;

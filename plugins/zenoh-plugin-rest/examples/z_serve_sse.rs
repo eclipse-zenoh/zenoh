@@ -15,7 +15,6 @@ use clap::{arg, Command};
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
-use zenoh::{config::Config, key_expr::keyexpr};
 
 const HTML: &str = r#"
 <div id="result"></div>

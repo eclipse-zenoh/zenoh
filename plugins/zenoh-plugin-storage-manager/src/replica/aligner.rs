@@ -18,7 +18,6 @@ use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
 use std::str;
-use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::sample::builder::SampleBuilder;

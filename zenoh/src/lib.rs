@@ -123,12 +123,20 @@ pub const FEATURES: &str = concat_enabled_features!(
     ]
 );
 
+pub mod key_expr {
+    pub use crate::api::key_expr::OwnedKeyExpr;
+    pub mod format {
+        pub use crate::api::key_expr::format::KeFormat;
+    }
+}
+
+
 mod admin;
 #[macro_use]
 mod session;
 pub use session::*;
 
-pub mod key_expr;
+mod api;
 pub(crate) mod net;
 pub use net::runtime;
 pub mod selector;

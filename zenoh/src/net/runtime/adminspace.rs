@@ -13,7 +13,7 @@
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
 use crate::encoding::Encoding;
-use crate::key_expr::KeyExpr;
+use crate::api::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::payload::Payload;
 use crate::plugins::sealed::{self as plugins};

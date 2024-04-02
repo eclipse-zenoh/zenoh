@@ -323,8 +323,8 @@ impl FromStr for KeyExpr<'static> {
         Ok(Self(KeyExprInner::Owned(s.parse()?)))
     }
 }
-impl<'a> From<super::KeyExpr<'a>> for OwnedKeyExpr {
-    fn from(val: super::KeyExpr<'a>) -> Self {
+impl<'a> From<KeyExpr<'a>> for OwnedKeyExpr {
+    fn from(val: KeyExpr<'a>) -> Self {
         match val.0 {
             KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                 key_expr.into()

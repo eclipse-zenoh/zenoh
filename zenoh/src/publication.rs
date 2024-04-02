@@ -878,9 +878,9 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                 .try_into()
                 .expect("How did you get a key expression with a length over 2^32!?");
             key_expr = match key_expr.0 {
-                crate::key_expr::KeyExprInner::Borrowed(key_expr)
-                | crate::key_expr::KeyExprInner::BorrowedWire { key_expr, .. } => {
-                    KeyExpr(crate::key_expr::KeyExprInner::BorrowedWire {
+                crate::api::key_expr::KeyExprInner::Borrowed(key_expr)
+                | crate::api::key_expr::KeyExprInner::BorrowedWire { key_expr, .. } => {
+                    KeyExpr(crate::api::key_expr::KeyExprInner::BorrowedWire {
                         key_expr,
                         expr_id,
                         mapping: Mapping::Sender,
@@ -888,9 +888,9 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                         session_id,
                     })
                 }
-                crate::key_expr::KeyExprInner::Owned(key_expr)
-                | crate::key_expr::KeyExprInner::Wire { key_expr, .. } => {
-                    KeyExpr(crate::key_expr::KeyExprInner::Wire {
+                crate::api::key_expr::KeyExprInner::Owned(key_expr)
+                | crate::api::key_expr::KeyExprInner::Wire { key_expr, .. } => {
+                    KeyExpr(crate::api::key_expr::KeyExprInner::Wire {
                         key_expr,
                         expr_id,
                         mapping: Mapping::Sender,
