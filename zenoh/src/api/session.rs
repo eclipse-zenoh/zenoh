@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::admin;
+use crate::api::encoding::Encoding;
 use crate::api::key_expr::KeyExprInner;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
@@ -21,7 +22,6 @@ use crate::api::sample::QoS;
 use crate::api::value::Value;
 use crate::config::Config;
 use crate::config::Notifier;
-use crate::encoding::Encoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 #[zenoh_macros::unstable]

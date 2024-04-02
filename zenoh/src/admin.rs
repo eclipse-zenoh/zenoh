@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    api::encoding::Encoding,
     api::sample::DataInfo,
-    encoding::Encoding,
     keyexpr,
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,

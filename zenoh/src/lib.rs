@@ -162,6 +162,10 @@ pub mod value {
     pub use crate::api::value::Value;
 }
 
+pub mod encoding {
+    pub use crate::api::encoding::Encoding;
+}
+
 mod admin;
 #[macro_use]
 
@@ -171,7 +175,6 @@ pub use net::runtime;
 pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
-pub(crate) mod encoding;
 pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]

@@ -13,6 +13,7 @@
 //
 
 pub(crate) mod builders;
+pub(crate) mod encoding;
 pub(crate) mod key_expr;
 pub(crate) mod sample;
 pub(crate) mod session;

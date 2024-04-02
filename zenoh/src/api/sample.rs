@@ -14,9 +14,9 @@
 
 //! Sample primitives
 use crate::api::builders::sample::{QoSBuilderTrait, ValueBuilderTrait};
+use crate::api::encoding::Encoding;
 use crate::api::key_expr::KeyExpr;
 use crate::api::value::Value;
-use crate::encoding::Encoding;
 use crate::payload::Payload;
 use crate::time::Timestamp;
 use crate::Priority;
