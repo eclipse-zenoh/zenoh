@@ -124,9 +124,16 @@ pub const FEATURES: &str = concat_enabled_features!(
 );
 
 pub mod key_expr {
+    pub use crate::api::key_expr::keyexpr;
     pub use crate::api::key_expr::OwnedKeyExpr;
+    pub use crate::api::key_expr::kedefine;
+    pub use crate::api::key_expr::keformat;
+    // keyexpr format macro support
     pub mod format {
-        pub use crate::api::key_expr::format::KeFormat;
+        pub use crate::api::key_expr::format::*;
+        pub mod macro_support {
+            pub use crate::api::key_expr::format::macro_support::*;
+        }
     }
 }
 
