@@ -121,14 +121,6 @@ pub const FEATURES: &str = concat_enabled_features!(
 
 pub use crate::api::session::open;
 
-pub mod builders {
-    pub use crate::api::builders::sample::QoSBuilderTrait;
-    pub use crate::api::builders::sample::SampleBuilder;
-    pub use crate::api::builders::sample::SampleBuilderTrait;
-    pub use crate::api::builders::sample::TimestampBuilderTrait;
-    pub use crate::api::builders::sample::ValueBuilderTrait;
-}
-
 pub mod key_expr {
     pub use crate::api::key_expr::kedefine;
     pub use crate::api::key_expr::keformat;
@@ -152,6 +144,11 @@ pub mod session {
 }
 
 pub mod sample {
+    pub use crate::api::builders::sample::QoSBuilderTrait;
+    pub use crate::api::builders::sample::SampleBuilder;
+    pub use crate::api::builders::sample::SampleBuilderTrait;
+    pub use crate::api::builders::sample::TimestampBuilderTrait;
+    pub use crate::api::builders::sample::ValueBuilderTrait;
     pub use crate::api::sample::Attachment;
     pub use crate::api::sample::Locality;
     pub use crate::api::sample::Sample;
@@ -181,6 +178,13 @@ pub mod selector {
     pub use crate::api::selector::TIME_RANGE_KEY;
 }
 
+pub mod subscriber {
+    pub use crate::api::subscriber::FlumeSubscriber;
+    pub use crate::api::subscriber::Reliability;
+    pub use crate::api::subscriber::Subscriber;
+    pub use crate::api::subscriber::SubscriberBuilder;
+}
+
 mod admin;
 #[macro_use]
 
@@ -197,7 +201,6 @@ pub mod prelude;
 pub mod publication;
 pub mod query;
 pub mod queryable;
-pub mod subscriber;
 #[cfg(feature = "shared-memory")]
 pub use zenoh_shm as shm;
 

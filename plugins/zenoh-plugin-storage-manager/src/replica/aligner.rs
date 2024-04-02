@@ -18,9 +18,9 @@ use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
 use std::str;
-use zenoh::builders::SampleBuilder;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
+use zenoh::sample::SampleBuilder;
 use zenoh::session::Session;
 use zenoh::time::Timestamp;
 

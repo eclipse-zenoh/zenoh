@@ -61,7 +61,7 @@ fn pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn queries() {
-    use zenoh::{builders::SampleBuilderTrait, prelude::sync::*, sample::Attachment};
+    use zenoh::{prelude::sync::*, sample::Attachment, sample::SampleBuilderTrait};
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh

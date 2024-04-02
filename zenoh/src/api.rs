@@ -20,4 +20,5 @@ pub(crate) mod payload;
 pub(crate) mod sample;
 pub(crate) mod selector;
 pub(crate) mod session;
+pub(crate) mod subscriber;
 pub(crate) mod value;
