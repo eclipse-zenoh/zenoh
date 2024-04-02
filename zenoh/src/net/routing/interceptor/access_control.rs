@@ -22,7 +22,6 @@ use crate::KeyExpr;
 use std::any::Any;
 use std::sync::Arc;
 use zenoh_config::{AclConfig, Action, Permission, Subject, ZenohId};
-//use zenoh_keyexpr::key_expr;
 use zenoh_protocol::{
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
     zenoh::{PushBody, RequestBody},
@@ -86,12 +85,10 @@ impl InterceptorFactoryTrait for AclEnforcer {
                     Ok(links) => {
                         for link in links {
                             let enforcer = self.enforcer.clone();
-                            if let Some(subject_map) = &enforcer.subject_map {
-                                for face in link.interfaces {
-                                    let subject = &Subject::Interface(face);
-                                    if let Some(val) = subject_map.get(subject) {
-                                        interface_list.push(*val);
-                                    }
+                            for face in link.interfaces {
+                                let subject = &Subject::Interface(face);
+                                if let Some(val) = enforcer.subject_map.get(subject) {
+                                    interface_list.push(*val);
                                 }
                             }
                         }
