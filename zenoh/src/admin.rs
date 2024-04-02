@@ -13,10 +13,10 @@
 //
 use crate::{
     api::encoding::Encoding,
+    api::queryable::Query,
     api::sample::DataInfo,
     keyexpr,
     prelude::sync::{KeyExpr, Locality, SampleKind},
-    queryable::Query,
     Payload, Session,
 };
 use std::{

@@ -251,8 +251,8 @@ impl AsyncResolve for ReplySample<'_> {
 
 #[derive(Debug)]
 pub struct ReplyBuilderPut {
-    payload: super::Payload,
-    encoding: super::Encoding,
+    payload: Payload,
+    encoding: Encoding,
 }
 #[derive(Debug)]
 pub struct ReplyBuilderDelete;

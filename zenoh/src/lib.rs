@@ -202,6 +202,12 @@ pub mod query {
     pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 }
 
+pub mod queryable {
+    pub use crate::api::queryable::Query;
+    pub use crate::api::queryable::Queryable;
+    pub use crate::api::queryable::QueryableBuilder;
+}
+
 mod admin;
 #[macro_use]
 
@@ -215,7 +221,6 @@ pub mod handlers;
 pub mod liveliness;
 pub mod plugins;
 pub mod prelude;
-pub mod queryable;
 #[cfg(feature = "shared-memory")]
 pub use zenoh_shm as shm;
 

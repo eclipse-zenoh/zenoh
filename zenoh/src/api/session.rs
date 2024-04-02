@@ -24,6 +24,9 @@ use crate::api::publication::PublicationBuilderPut;
 use crate::api::query::GetBuilder;
 use crate::api::query::QueryState;
 use crate::api::query::Reply;
+use crate::api::queryable::Query;
+use crate::api::queryable::QueryInner;
+use crate::api::queryable::QueryableState;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
 use crate::api::sample::DataInfo;

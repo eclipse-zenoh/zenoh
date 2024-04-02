@@ -18,7 +18,7 @@ use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
 use zenoh_result::ZResult;
 pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
-use crate::{api::key_expr::KeyExpr, queryable::Query};
+use crate::{api::key_expr::KeyExpr, api::queryable::Query};
 
 use std::{
     borrow::{Borrow, Cow},
