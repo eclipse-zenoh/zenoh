@@ -154,11 +154,9 @@ impl Digest {
             HashMap::new(),
         );
         for entry in raw_log {
-            let Some(sub) = Digest::get_subinterval(
-                config.delta,
-                entry.timestamp,
-                config.sub_intervals,
-            ) else {
+            let Some(sub) =
+                Digest::get_subinterval(config.delta, entry.timestamp, config.sub_intervals)
+            else {
                 continue;
             };
             let Some(interval) = Digest::get_interval(sub, config.sub_intervals) else {
@@ -201,8 +199,7 @@ impl Digest {
                     int_content = BTreeMap::new();
                     if era != curr_era {
                         if !era_content.is_empty() {
-                            let era_hash: Vec<u64> =
-                                era_content.values().copied().collect();
+                            let era_hash: Vec<u64> = era_content.values().copied().collect();
                             let checksum = Digest::get_content_hash(&era_hash);
                             let e = Interval {
                                 checksum,
@@ -284,18 +281,13 @@ impl Digest {
             Digest::remove_deleted_content(current, deleted_content, latest_interval);
         log::trace!("Removed deleted content: {current:?}");
         // push content in correct places
-        let (
-            current,
-            mut subintervals_to_update,
-            mut intervals_to_update,
-            mut eras_to_update,
-        ) = Digest::update_new_content(current, new_content, latest_interval);
+        let (current, mut subintervals_to_update, mut intervals_to_update, mut eras_to_update) =
+            Digest::update_new_content(current, new_content, latest_interval);
 
         // move intervals into eras if changed -- iterate through hot
         // and move them to warm/cold if needed, iterate through warm
         // and move them to cold if needed
-        let (current, realigned_eras) =
-            Digest::recalculate_era_content(current, latest_interval);
+        let (current, realigned_eras) = Digest::recalculate_era_content(current, latest_interval);
 
         subintervals_to_update.extend(further_subintervals);
         intervals_to_update.extend(further_intervals);
@@ -455,8 +447,7 @@ impl Digest {
                 continue;
             };
             subintervals_to_update.insert(subinterval);
-            let Some(interval) =
-                Digest::get_interval(subinterval, current.config.sub_intervals)
+            let Some(interval) = Digest::get_interval(subinterval, current.config.sub_intervals)
             else {
                 continue;
             };
@@ -523,8 +514,7 @@ impl Digest {
                 continue;
             };
             subintervals_to_update.insert(subinterval);
-            let Some(interval) =
-                Digest::get_interval(subinterval, current.config.sub_intervals)
+            let Some(interval) = Digest::get_interval(subinterval, current.config.sub_intervals)
             else {
                 continue;
             };
@@ -578,8 +568,7 @@ impl Digest {
         for (curr_era, interval_list) in current.eras.clone() {
             if curr_era == EraType::Hot || curr_era == EraType::Warm {
                 for interval in &interval_list.content {
-                    let new_era =
-                        Digest::get_era(&current.config, latest_interval, *interval);
+                    let new_era = Digest::get_era(&current.config, latest_interval, *interval);
                     if new_era != curr_era {
                         to_modify.insert((*interval, curr_era.clone(), new_era.clone()));
                         eras_to_update.insert(curr_era.clone());
@@ -610,11 +599,7 @@ impl Digest {
     }
 
     // compute the subinterval for a given timestamp
-    fn get_subinterval(
-        delta: Duration,
-        ts: Timestamp,
-        subintervals: usize,
-    ) -> Option<u64> {
+    fn get_subinterval(delta: Duration, ts: Timestamp, subintervals: usize) -> Option<u64> {
         let ts = ts
             .get_time()
             .to_system_time()
@@ -785,11 +770,7 @@ impl Digest {
 // functions for alignment
 impl Digest {
     // check if the other era has more content
-    pub fn era_has_diff(
-        &self,
-        era: &EraType,
-        other: &HashMap<EraType, Interval>,
-    ) -> bool {
+    pub fn era_has_diff(&self, era: &EraType, other: &HashMap<EraType, Interval>) -> bool {
         match (other.get(era), self.eras.get(era)) {
             (Some(other_era), Some(my_era)) => other_era.checksum != my_era.checksum,
             (Some(_), None) => true,
@@ -813,10 +794,7 @@ impl Digest {
     }
 
     // return mismatching subintervals in an interval
-    pub fn get_subinterval_diff(
-        &self,
-        other_subintervals: HashMap<u64, u64>,
-    ) -> HashSet<u64> {
+    pub fn get_subinterval_diff(&self, other_subintervals: HashMap<u64, u64>) -> HashSet<u64> {
         let mut mis_sub = HashSet::new();
         for (key, other_sub) in &other_subintervals {
             if let Some(sub) = self.subintervals.get(key) {
@@ -844,11 +822,7 @@ impl Digest {
     }
 
     //return missing content in a subinterval
-    pub fn get_content_diff(
-        &self,
-        subinterval: u64,
-        content: Vec<LogEntry>,
-    ) -> Vec<LogEntry> {
+    pub fn get_content_diff(&self, subinterval: u64, content: Vec<LogEntry>) -> Vec<LogEntry> {
         if let Some(sub) = self.subintervals.get(&subinterval) {
             content
                 .into_iter()
@@ -939,8 +913,7 @@ fn test_create_digest_with_initial_hot() {
             SubInterval {
                 checksum: 10827088509365589085,
                 content: BTreeSet::from([LogEntry {
-                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1")
-                        .unwrap(),
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
                     key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                 }]),
             },
@@ -996,8 +969,7 @@ fn test_create_digest_with_initial_warm() {
             SubInterval {
                 checksum: 10827088509365589085,
                 content: BTreeSet::from([LogEntry {
-                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1")
-                        .unwrap(),
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
                     key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                 }]),
             },
@@ -1053,8 +1025,7 @@ fn test_create_digest_with_initial_cold() {
             SubInterval {
                 checksum: 10827088509365589085,
                 content: BTreeSet::from([LogEntry {
-                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1")
-                        .unwrap(),
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
                     key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                 }]),
             },
@@ -1118,8 +1089,7 @@ fn test_update_digest_add_content() {
             SubInterval {
                 checksum: 10827088509365589085,
                 content: BTreeSet::from([LogEntry {
-                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1")
-                        .unwrap(),
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
                     key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                 }]),
             },
@@ -1162,10 +1132,7 @@ fn test_update_digest_remove_content() {
                 SubInterval {
                     checksum: 10007212639402189432,
                     content: BTreeSet::from([LogEntry {
-                        timestamp: Timestamp::from_str(
-                            "2022-12-21T15:00:00.000000000Z/1",
-                        )
-                        .unwrap(),
+                        timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
                         key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
                     }]),
                 },
