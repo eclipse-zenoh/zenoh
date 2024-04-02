@@ -99,7 +99,7 @@ impl StorageRuntimeInner {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        let _ = zenoh_util::init_log();
+        zenoh_util::init_log();
         let PluginConfig {
             name,
             backend_search_dirs,

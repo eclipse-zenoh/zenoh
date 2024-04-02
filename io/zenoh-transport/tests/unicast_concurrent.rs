@@ -348,7 +348,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 #[cfg(feature = "transport_tcp")]
 #[tokio::test]
 async fn transport_tcp_concurrent() {
-    let _ = zenoh_util::init_log();
+    zenoh_util::init_log();
 
     let endpoint01: Vec<EndPoint> = vec![
         format!("tcp/127.0.0.1:{}", 9000).parse().unwrap(),
@@ -378,7 +378,7 @@ async fn transport_tcp_concurrent() {
 #[tokio::test]
 #[ignore]
 async fn transport_ws_concurrent() {
-    let _ = zenoh_util::init_log();
+    zenoh_util::init_log();
 
     let endpoint01: Vec<EndPoint> = vec![
         format!("ws/127.0.0.1:{}", 9020).parse().unwrap(),
@@ -408,7 +408,7 @@ async fn transport_ws_concurrent() {
 #[tokio::test]
 #[ignore]
 async fn transport_unixpipe_concurrent() {
-    let _ = zenoh_util::init_log();
+    zenoh_util::init_log();
 
     let endpoint01: Vec<EndPoint> = vec![
         "unixpipe/transport_unixpipe_concurrent".parse().unwrap(),

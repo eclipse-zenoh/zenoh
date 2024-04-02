@@ -227,7 +227,7 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        let _ = zenoh_util::init_log();
+        zenoh_util::init_log();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -476,7 +476,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    let _ = zenoh_util::init_log();
+    zenoh_util::init_log();
 
     let zid = runtime.zid().to_string();
     let session = zenoh::init(runtime).res().await.unwrap();
