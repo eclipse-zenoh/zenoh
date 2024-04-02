@@ -28,8 +28,8 @@ fn main() {
     // Generate config schema
     let schema = schema_for!(Config);
 
-    let schema_file = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap())
-        .join("config_schema.json5");
+    let schema_file =
+        std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("config_schema.json5");
     std::fs::write(&schema_file, serde_json::to_string_pretty(&schema).unwrap()).unwrap();
 
     // Check that the example config matches the schema
