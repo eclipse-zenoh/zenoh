@@ -190,7 +190,6 @@ pub use net::runtime;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 pub mod handlers;
-pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
 pub mod plugins;

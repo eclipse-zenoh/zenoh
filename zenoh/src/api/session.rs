@@ -13,6 +13,7 @@
 //
 use crate::admin;
 use crate::api::encoding::Encoding;
+use crate::api::info::SessionInfo;
 use crate::api::key_expr::KeyExpr;
 use crate::api::key_expr::KeyExprInner;
 #[cfg(feature = "unstable")]
@@ -27,7 +28,6 @@ use crate::api::value::Value;
 use crate::config::Config;
 use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
-use crate::info::*;
 #[zenoh_macros::unstable]
 use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::primitives::Primitives;
