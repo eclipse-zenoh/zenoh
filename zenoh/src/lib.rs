@@ -174,13 +174,19 @@ pub mod payload {
     pub use crate::api::payload::StringOrBase64;
 }
 
+pub mod selector {
+    pub use crate::api::selector::Parameter;
+    pub use crate::api::selector::Parameters;
+    pub use crate::api::selector::Selector;
+    pub use crate::api::selector::TIME_RANGE_KEY;
+}
+
 mod admin;
 #[macro_use]
 
 mod api;
 pub(crate) mod net;
 pub use net::runtime;
-pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 pub mod handlers;

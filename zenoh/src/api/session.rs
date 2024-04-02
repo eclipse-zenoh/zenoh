@@ -13,12 +13,16 @@
 //
 use crate::admin;
 use crate::api::encoding::Encoding;
+use crate::api::key_expr::KeyExpr;
 use crate::api::key_expr::KeyExprInner;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
 use crate::api::sample::DataInfo;
 use crate::api::sample::DataInfoIntoSample;
 use crate::api::sample::QoS;
+use crate::api::selector::Parameters;
+use crate::api::selector::Selector;
+use crate::api::selector::TIME_RANGE_KEY;
 use crate::api::value::Value;
 use crate::config::Config;
 use crate::config::Notifier;
@@ -31,17 +35,14 @@ use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
 use crate::payload::Payload;
 use crate::prelude::Locality;
-use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
-use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
 use crate::Id;
 use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
-use crate::Selector;
 use crate::SourceInfo;
 use log::{error, trace, warn};
 use std::collections::HashMap;
