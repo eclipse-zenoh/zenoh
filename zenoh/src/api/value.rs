@@ -13,7 +13,8 @@
 //
 
 //! Value primitives.
-use crate::{encoding::Encoding, payload::Payload, sample::builder::ValueBuilderTrait};
+use crate::api::builders::sample::ValueBuilderTrait;
+use crate::{encoding::Encoding, payload::Payload};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the [`Payload`] should be interpreted.
 #[non_exhaustive]

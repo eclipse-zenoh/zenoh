@@ -17,14 +17,14 @@ use std::future::Ready;
 use std::mem::swap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zenoh::builders::SampleBuilder;
 use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
-use zenoh::sample::builder::SampleBuilder;
+use zenoh::session::SessionRef;
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::{new_reception_timestamp, Timestamp};
 use zenoh::Result as ZResult;
-use zenoh::session::SessionRef;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
 
 use crate::ExtractSample;

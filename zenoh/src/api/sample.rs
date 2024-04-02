@@ -13,20 +13,21 @@
 //
 
 //! Sample primitives
+use crate::api::builders::sample::{QoSBuilderTrait, ValueBuilderTrait};
+use crate::api::key_expr::KeyExpr;
+use crate::api::value::Value;
 use crate::encoding::Encoding;
 use crate::payload::Payload;
-use crate::prelude::{KeyExpr, Value};
-use crate::sample::builder::{QoSBuilderTrait, ValueBuilderTrait};
 use crate::time::Timestamp;
 use crate::Priority;
+#[zenoh_macros::unstable]
+pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::network::declare::ext::QoSType;
 use zenoh_protocol::{core::CongestionControl, zenoh};
-
-pub mod builder;
 
 pub type SourceSn = u64;
 
@@ -154,7 +155,7 @@ pub struct SourceInfo {
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
     use crate::{
-        sample::{SourceInfo, SourceSn},
+        api::sample::{SourceInfo, SourceSn},
         ZenohId,
     };
 
@@ -466,9 +467,6 @@ impl TryFrom<u64> for SampleKind {
         }
     }
 }
-
-#[zenoh_macros::unstable]
-pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 
 /// Structure with public fields for sample. It's convenient if it's necessary to decompose a sample into its fields.
 pub struct SampleFields {

@@ -12,12 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    api::sample::DataInfo,
     encoding::Encoding,
     keyexpr,
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
-    sample::DataInfo,
-    Payload, Session
+    Payload, Session,
 };
 use std::{
     collections::hash_map::DefaultHasher,

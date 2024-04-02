@@ -13,13 +13,13 @@
 //
 
 //! Publishing primitives.
-use crate::net::primitives::Primitives;
-use crate::prelude::*;
 #[zenoh_macros::unstable]
-use crate::sample::Attachment;
-use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
+use crate::api::sample::Attachment;
+use crate::api::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
 use crate::api::session::SessionRef;
 use crate::api::session::Undeclarable;
+use crate::net::primitives::Primitives;
+use crate::prelude::*;
 #[cfg(feature = "unstable")]
 use crate::{
     handlers::{Callback, DefaultHandler, IntoHandler},

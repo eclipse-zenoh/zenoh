@@ -43,25 +43,25 @@ pub(crate) mod common {
 
     pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 
+    pub use crate::api::value::Value;
     pub use crate::encoding::Encoding;
     /// The encoding of a zenoh `Value`.
     pub use crate::payload::{Deserialize, Payload, Serialize};
-    pub use crate::value::Value;
 
     #[zenoh_macros::unstable]
-    pub use crate::sample::Locality;
+    pub use crate::api::sample::Locality;
+    #[zenoh_macros::unstable]
+    pub use crate::api::sample::SourceInfo;
+    pub use crate::api::sample::{Sample, SampleKind};
     #[cfg(not(feature = "unstable"))]
     pub(crate) use crate::sample::Locality;
-    #[zenoh_macros::unstable]
-    pub use crate::sample::SourceInfo;
-    pub use crate::sample::{Sample, SampleKind};
 
     pub use crate::publication::Priority;
     #[zenoh_macros::unstable]
     pub use crate::publication::PublisherDeclarations;
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
 
-    pub use crate::sample::builder::{
+    pub use crate::api::builders::sample::{
         QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
     };
 }

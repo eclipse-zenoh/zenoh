@@ -121,11 +121,19 @@ pub const FEATURES: &str = concat_enabled_features!(
 
 pub use crate::api::session::open;
 
+pub mod builders {
+    pub use crate::api::builders::sample::QoSBuilderTrait;
+    pub use crate::api::builders::sample::SampleBuilder;
+    pub use crate::api::builders::sample::SampleBuilderTrait;
+    pub use crate::api::builders::sample::TimestampBuilderTrait;
+    pub use crate::api::builders::sample::ValueBuilderTrait;
+}
+
 pub mod key_expr {
-    pub use crate::api::key_expr::keyexpr;
-    pub use crate::api::key_expr::OwnedKeyExpr;
     pub use crate::api::key_expr::kedefine;
     pub use crate::api::key_expr::keformat;
+    pub use crate::api::key_expr::keyexpr;
+    pub use crate::api::key_expr::OwnedKeyExpr;
     // keyexpr format macro support
     pub mod format {
         pub use crate::api::key_expr::format::*;
@@ -136,11 +144,22 @@ pub mod key_expr {
 }
 
 pub mod session {
-    pub use crate::api::session::open;
     pub use crate::api::session::init;
+    pub use crate::api::session::open;
     pub use crate::api::session::Session;
-    pub use crate::api::session::SessionRef;
     pub use crate::api::session::SessionDeclarations;
+    pub use crate::api::session::SessionRef;
+}
+
+pub mod sample {
+    pub use crate::api::sample::Attachment;
+    pub use crate::api::sample::Locality;
+    pub use crate::api::sample::Sample;
+    pub use crate::api::sample::SampleKind;
+}
+
+pub mod value {
+    pub use crate::api::value::Value;
 }
 
 mod admin;
@@ -163,9 +182,7 @@ pub mod prelude;
 pub mod publication;
 pub mod query;
 pub mod queryable;
-pub mod sample;
 pub mod subscriber;
-pub mod value;
 #[cfg(feature = "shared-memory")]
 pub use zenoh_shm as shm;
 

@@ -12,12 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::admin;
+use crate::api::key_expr::KeyExprInner;
+#[cfg(feature = "unstable")]
+use crate::api::sample::Attachment;
+use crate::api::sample::DataInfo;
+use crate::api::sample::DataInfoIntoSample;
+use crate::api::sample::QoS;
+use crate::api::value::Value;
 use crate::config::Config;
 use crate::config::Notifier;
 use crate::encoding::Encoding;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
-use crate::api::key_expr::KeyExprInner;
 #[zenoh_macros::unstable]
 use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::primitives::Primitives;
@@ -29,11 +35,6 @@ use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
-#[cfg(feature = "unstable")]
-use crate::sample::Attachment;
-use crate::sample::DataInfo;
-use crate::sample::DataInfoIntoSample;
-use crate::sample::QoS;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
 use crate::Id;
@@ -42,9 +43,7 @@ use crate::Sample;
 use crate::SampleKind;
 use crate::Selector;
 use crate::SourceInfo;
-use crate::Value;
 use log::{error, trace, warn};
-use zenoh_core::Resolvable;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -59,6 +58,7 @@ use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
+use zenoh_core::Resolvable;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::declare::SubscriberId;

@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
+use zenoh::builders::QoSBuilderTrait;
 use zenoh::prelude::r#async::*;
-use zenoh::sample::builder::QoSBuilderTrait;
 use zenoh::{publication::Priority, session::SessionDeclarations};
 use zenoh_core::ztimeout;
 

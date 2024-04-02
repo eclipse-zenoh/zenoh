@@ -15,18 +15,18 @@
 use std::marker::PhantomData;
 
 #[cfg(feature = "unstable")]
-use crate::sample::Attachment;
-use crate::sample::QoS;
-use crate::sample::QoSBuilder;
+use crate::api::sample::Attachment;
+use crate::api::sample::QoS;
+use crate::api::sample::QoSBuilder;
 #[cfg(feature = "unstable")]
-use crate::sample::SourceInfo;
+use crate::api::sample::SourceInfo;
+use crate::api::value::Value;
 use crate::Encoding;
 use crate::KeyExpr;
 use crate::Payload;
 use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
-use crate::Value;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
