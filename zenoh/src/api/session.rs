@@ -16,6 +16,11 @@ use crate::api::encoding::Encoding;
 use crate::api::info::SessionInfo;
 use crate::api::key_expr::KeyExpr;
 use crate::api::key_expr::KeyExprInner;
+use crate::api::publication::MatchingListenerState;
+use crate::api::publication::MatchingStatus;
+use crate::api::publication::PublicationBuilder;
+use crate::api::publication::PublicationBuilderDelete;
+use crate::api::publication::PublicationBuilderPut;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
 use crate::api::sample::DataInfo;

@@ -17,6 +17,7 @@ pub(crate) mod encoding;
 pub(crate) mod info;
 pub(crate) mod key_expr;
 pub(crate) mod payload;
+pub(crate) mod publication;
 pub(crate) mod sample;
 pub(crate) mod selector;
 pub(crate) mod session;

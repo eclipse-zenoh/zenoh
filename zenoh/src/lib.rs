@@ -185,6 +185,15 @@ pub mod subscriber {
     pub use crate::api::subscriber::SubscriberBuilder;
 }
 
+pub mod publication {
+    pub use crate::api::publication::CongestionControl;
+    pub use crate::api::publication::Priority;
+    pub use crate::api::publication::Publisher;
+    pub use crate::api::publication::PublisherBuilder;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publication::PublisherDeclarations;
+}
+
 mod admin;
 #[macro_use]
 
@@ -198,7 +207,6 @@ pub mod handlers;
 pub mod liveliness;
 pub mod plugins;
 pub mod prelude;
-pub mod publication;
 pub mod query;
 pub mod queryable;
 #[cfg(feature = "shared-memory")]
