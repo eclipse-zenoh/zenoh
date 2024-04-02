@@ -230,11 +230,11 @@ impl ZRuntimeConfig {
 impl Default for ZRuntimeConfig {
     fn default() -> Self {
         Self {
-            application_threads: 2,
-            acceptor_threads: 2,
-            tx_threads: 2,
-            rx_threads: 2,
-            net_threads: 2,
+            application_threads: 1,
+            acceptor_threads: 1,
+            tx_threads: 1,
+            rx_threads: 1,
+            net_threads: 1,
         }
     }
 }
