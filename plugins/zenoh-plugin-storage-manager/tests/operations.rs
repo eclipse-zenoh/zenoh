@@ -23,23 +23,24 @@ use async_std::task;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
+use zenoh::session::Session;
 use zenoh::{prelude::Config, time::Timestamp};
 use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
 
-async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
+async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
     println!("Putting Data ('{key_expr}': '{value}')...");
     //  @TODO: how to add timestamp metadata with put, not manipulating sample...
     session.put(key_expr, value).res().await.unwrap();
 }
 
-async fn delete_data(session: &zenoh::Session, key_expr: &str, _timestamp: Timestamp) {
+async fn delete_data(session: &Session, key_expr: &str, _timestamp: Timestamp) {
     println!("Deleting Data '{key_expr}'...");
     //  @TODO: how to add timestamp metadata with delete, not manipulating sample...
     session.delete(key_expr).res().await.unwrap();
 }
 
-async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
+async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
     let replies: Vec<Reply> = session
         .get(key_expr)
         .res()
@@ -83,7 +84,7 @@ async fn test_updates_in_order() {
     let storage =
         zenoh_plugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
 
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).res().await.unwrap();
 
     sleep(std::time::Duration::from_secs(1));
 

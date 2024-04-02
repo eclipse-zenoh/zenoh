@@ -29,7 +29,7 @@ use zenoh::sample::builder::SampleBuilder;
 use zenoh::sample::{Sample, SampleKind};
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
-use zenoh::{Result as ZResult, Session};
+use zenoh::{session::Session, Result as ZResult};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
