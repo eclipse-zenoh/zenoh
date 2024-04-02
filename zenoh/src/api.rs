@@ -13,3 +13,4 @@
 //
 
 pub(crate) mod key_expr;
+pub(crate) mod session;

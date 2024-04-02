@@ -31,7 +31,7 @@ use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
 use zenoh::Error as ZError;
 use zenoh::Result as ZResult;
-use zenoh::Session;
+use zenoh::session::Session;
 use zenoh_result::bail;
 use zenoh_sync::Condition;
 

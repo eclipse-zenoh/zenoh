@@ -18,8 +18,8 @@ use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
-use crate::SessionRef;
-use crate::Undeclarable;
+use crate::api::session::SessionRef;
+use crate::api::session::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
     handlers::{Callback, DefaultHandler, IntoHandler},
@@ -1511,7 +1511,7 @@ mod tests {
 
     #[test]
     fn sample_kind_integrity_in_publication() {
-        use crate::{open, prelude::sync::*};
+        use crate::{api::session::open, prelude::sync::*};
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/publication";
         const VALUE: &str = "zenoh";
@@ -1539,7 +1539,7 @@ mod tests {
 
     #[test]
     fn sample_kind_integrity_in_put_builder() {
-        use crate::{open, prelude::sync::*};
+        use crate::{api::session::open, prelude::sync::*};
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/put_builder";
         const VALUE: &str = "zenoh";

@@ -18,7 +18,7 @@ use std::future::Ready;
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::SessionRef;
+use zenoh::session::SessionRef;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_result::{bail, ZResult};
 use zenoh_util::core::ResolveFuture;

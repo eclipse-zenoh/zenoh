@@ -14,7 +14,7 @@
 use super::storages_mgt::*;
 use flume::Sender;
 use std::sync::Arc;
-use zenoh::Session;
+use zenoh::session::Session;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::{Capability, VolumeInstance};
 use zenoh_result::ZResult;

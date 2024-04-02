@@ -21,8 +21,8 @@ use crate::prelude::*;
 use crate::sample::builder::SampleBuilder;
 use crate::sample::{QoSBuilder, SourceInfo};
 use crate::Id;
-use crate::SessionRef;
-use crate::Undeclarable;
+use crate::api::session::SessionRef;
+use crate::api::session::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{query::ReplyKeyExpr, sample::Attachment};
 use std::fmt;

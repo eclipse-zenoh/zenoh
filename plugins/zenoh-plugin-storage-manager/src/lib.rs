@@ -30,7 +30,7 @@ use storages_mgt::StorageMessage;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
-use zenoh::Session;
+use zenoh::session::Session;
 use zenoh_backend_traits::config::ConfigDiff;
 use zenoh_backend_traits::config::PluginConfig;
 use zenoh_backend_traits::config::StorageConfig;
@@ -114,7 +114,7 @@ impl StorageRuntimeInner {
         let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
             .declare_static_plugin::<MemoryBackend>();
 
-        let session = Arc::new(zenoh::init(runtime.clone()).res_sync()?);
+        let session = Arc::new(zenoh::session::init(runtime.clone()).res_sync()?);
 
         // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
 

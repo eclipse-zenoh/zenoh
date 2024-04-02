@@ -144,7 +144,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
     // create a zenoh Session that shares the same Runtime than zenohd
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).res().await.unwrap();
 
     // the HasMap used as a storage by this example of storage plugin
     let mut stored: HashMap<String, Sample> = HashMap::new();

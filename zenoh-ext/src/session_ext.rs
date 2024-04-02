@@ -15,7 +15,7 @@ use super::PublicationCacheBuilder;
 use std::convert::TryInto;
 use std::sync::Arc;
 use zenoh::prelude::KeyExpr;
-use zenoh::{Session, SessionRef};
+use zenoh::session::{Session, SessionRef};
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
 pub trait SessionExt<'s, 'a> {

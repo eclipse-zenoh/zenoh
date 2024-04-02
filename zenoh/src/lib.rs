@@ -84,14 +84,10 @@ pub(crate) type Id = u32;
 use git_version::git_version;
 use handlers::DefaultHandler;
 #[cfg(feature = "unstable")]
-use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
-use std::future::Ready;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
 use zenoh_protocol::core::WhatAmIMatcher;
-use zenoh_result::{zerror, ZResult};
 use zenoh_util::concat_enabled_features;
 
 /// A zenoh error.
@@ -123,6 +119,8 @@ pub const FEATURES: &str = concat_enabled_features!(
     ]
 );
 
+pub use crate::api::session::open;
+
 pub mod key_expr {
     pub use crate::api::key_expr::keyexpr;
     pub use crate::api::key_expr::OwnedKeyExpr;
@@ -137,11 +135,16 @@ pub mod key_expr {
     }
 }
 
+pub mod session {
+    pub use crate::api::session::open;
+    pub use crate::api::session::init;
+    pub use crate::api::session::Session;
+    pub use crate::api::session::SessionRef;
+    pub use crate::api::session::SessionDeclarations;
+}
 
 mod admin;
 #[macro_use]
-mod session;
-pub use session::*;
 
 mod api;
 pub(crate) mod net;
@@ -230,159 +233,5 @@ where
         what: what.into(),
         config: config.try_into().map_err(|e| e.into()),
         handler: DefaultHandler,
-    }
-}
-
-/// Open a zenoh [`Session`].
-///
-/// # Arguments
-///
-/// * `config` - The [`Config`] for the zenoh session
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// # }
-/// ```
-///
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use std::str::FromStr;
-/// use zenoh::prelude::r#async::*;
-///
-/// let mut config = config::peer();
-/// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
-/// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
-///
-/// let session = zenoh::open(config).res().await.unwrap();
-/// # }
-/// ```
-pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    OpenBuilder { config }
-}
-
-/// A builder returned by [`open`] used to open a zenoh [`Session`].
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// # }
-/// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    config: TryIntoConfig,
-}
-
-impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    type To = ZResult<Session>;
-}
-
-impl<TryIntoConfig> SyncResolve for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        let config: crate::config::Config = self
-            .config
-            .try_into()
-            .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        Session::new(config).res_sync()
-    }
-}
-
-impl<TryIntoConfig> AsyncResolve for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
-    }
-}
-
-/// Initialize a Session with an existing Runtime.
-/// This operation is used by the plugins to share the same Runtime as the router.
-#[doc(hidden)]
-#[zenoh_macros::unstable]
-pub fn init(runtime: Runtime) -> InitBuilder {
-    InitBuilder {
-        runtime,
-        aggregated_subscribers: vec![],
-        aggregated_publishers: vec![],
-    }
-}
-
-/// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[doc(hidden)]
-#[zenoh_macros::unstable]
-pub struct InitBuilder {
-    runtime: Runtime,
-    aggregated_subscribers: Vec<OwnedKeyExpr>,
-    aggregated_publishers: Vec<OwnedKeyExpr>,
-}
-
-#[zenoh_macros::unstable]
-impl InitBuilder {
-    #[inline]
-    pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
-        self.aggregated_subscribers = exprs;
-        self
-    }
-
-    #[inline]
-    pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
-        self.aggregated_publishers = exprs;
-        self
-    }
-}
-
-#[zenoh_macros::unstable]
-impl Resolvable for InitBuilder {
-    type To = ZResult<Session>;
-}
-
-#[zenoh_macros::unstable]
-impl SyncResolve for InitBuilder {
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        Ok(Session::init(
-            self.runtime,
-            self.aggregated_subscribers,
-            self.aggregated_publishers,
-        )
-        .res_sync())
-    }
-}
-
-#[zenoh_macros::unstable]
-impl AsyncResolve for InitBuilder {
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
     }
 }

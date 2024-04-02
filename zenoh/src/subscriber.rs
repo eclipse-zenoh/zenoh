@@ -13,13 +13,13 @@
 //
 
 //! Subscribing primitives.
-use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::api::key_expr::KeyExpr;
+use crate::api::session::Undeclarable;
+use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::prelude::Locality;
 use crate::sample::Sample;
 use crate::Id;
-use crate::Undeclarable;
-use crate::{Result as ZResult, SessionRef};
+use crate::{api::session::SessionRef, Result as ZResult};
 use std::fmt;
 use std::future::Ready;
 use std::ops::{Deref, DerefMut};

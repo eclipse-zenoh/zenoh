@@ -21,7 +21,7 @@ use std::str::FromStr;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
-use zenoh::Session;
+use zenoh::session::Session;
 
 pub struct AlignQueryable {
     session: Arc<Session>,

@@ -17,14 +17,14 @@ use crate::{
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
     sample::DataInfo,
-    Payload, Session, ZResult,
+    Payload, Session
 };
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     sync::Arc,
 };
-use zenoh_core::SyncResolve;
+use zenoh_core::{Result as ZResult, SyncResolve};
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,

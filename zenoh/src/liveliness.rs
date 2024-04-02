@@ -26,7 +26,7 @@ use {
         handlers::DefaultHandler,
         prelude::*,
         subscriber::{Subscriber, SubscriberInner},
-        SessionRef, Undeclarable,
+        api::session::SessionRef, api::session::Undeclarable,
     },
     std::convert::TryInto,
     std::future::Ready,

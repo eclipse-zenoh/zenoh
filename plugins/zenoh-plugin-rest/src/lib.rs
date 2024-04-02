@@ -35,7 +35,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
-use zenoh::Session;
+use zenoh::session::Session;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -490,7 +490,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     let _ = env_logger::try_init();
 
     let zid = runtime.zid().to_string();
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).res().await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));
     app.with(
