@@ -166,6 +166,14 @@ pub mod encoding {
     pub use crate::api::encoding::Encoding;
 }
 
+pub mod payload {
+    pub use crate::api::payload::Deserialize;
+    pub use crate::api::payload::Payload;
+    pub use crate::api::payload::PayloadReader;
+    pub use crate::api::payload::Serialize;
+    pub use crate::api::payload::StringOrBase64;
+}
+
 mod admin;
 #[macro_use]
 
@@ -179,7 +187,6 @@ pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
-pub mod payload;
 pub mod plugins;
 pub mod prelude;
 pub mod publication;
