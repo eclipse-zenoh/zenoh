@@ -17,7 +17,7 @@
 //! see [`Liveliness`]
 use zenoh_protocol::network::request;
 
-use crate::{query::Reply, Id};
+use crate::{api::query::Reply, Id};
 
 #[zenoh_macros::unstable]
 use {

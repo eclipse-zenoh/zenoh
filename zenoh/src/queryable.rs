@@ -24,7 +24,7 @@ use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::Id;
 #[cfg(feature = "unstable")]
-use crate::{api::sample::Attachment, query::ReplyKeyExpr};
+use crate::{api::query::ReplyKeyExpr, api::sample::Attachment};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
@@ -201,7 +201,7 @@ impl Query {
     }
     fn _accepts_any_replies(&self) -> ZResult<bool> {
         self.parameters()
-            .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM])
+            .get_bools([crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM])
             .map(|a| a[0])
     }
 }

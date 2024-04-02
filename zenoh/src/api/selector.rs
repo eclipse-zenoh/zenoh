@@ -214,7 +214,7 @@ impl<'a> Selector<'a> {
     }
     #[cfg(any(feature = "unstable", test))]
     pub(crate) fn accept_any_keyexpr(self, any: bool) -> ZResult<Selector<'static>> {
-        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
         let mut s = self.into_owned();
         let any_selparam = s.parameter_index(_REPLY_KEY_EXPR_ANY_SEL_PARAM)?;
         match (any, any_selparam) {
@@ -264,7 +264,8 @@ fn selector_accessors() {
             map_selector.time_range().unwrap()
         );
         let without_any = selector.to_string();
-        let with_any = selector.to_string() + "&" + crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        let with_any =
+            selector.to_string() + "&" + crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
         selector = selector.accept_any_keyexpr(false).unwrap();
         assert_eq!(selector.to_string(), without_any);
         selector = selector.accept_any_keyexpr(true).unwrap();

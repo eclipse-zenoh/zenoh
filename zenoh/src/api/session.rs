@@ -21,6 +21,9 @@ use crate::api::publication::MatchingStatus;
 use crate::api::publication::PublicationBuilder;
 use crate::api::publication::PublicationBuilderDelete;
 use crate::api::publication::PublicationBuilderPut;
+use crate::api::query::GetBuilder;
+use crate::api::query::QueryState;
+use crate::api::query::Reply;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
 use crate::api::sample::DataInfo;
@@ -2178,7 +2181,7 @@ impl Primitives for Session {
                             query
                                 .selector
                                 .parameters()
-                                .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
+                                .get_bools([crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
                             Ok([true])
                         ) && !query.selector.key_expr.intersects(&key_expr)
                         {

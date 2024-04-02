@@ -194,6 +194,14 @@ pub mod publication {
     pub use crate::api::publication::PublisherDeclarations;
 }
 
+pub mod query {
+    pub use crate::api::query::Mode;
+    pub use crate::api::query::Reply;
+    pub use crate::api::query::ReplyKeyExpr;
+    pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
+    pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+}
+
 mod admin;
 #[macro_use]
 
@@ -207,7 +215,6 @@ pub mod handlers;
 pub mod liveliness;
 pub mod plugins;
 pub mod prelude;
-pub mod query;
 pub mod queryable;
 #[cfg(feature = "shared-memory")]
 pub use zenoh_shm as shm;
