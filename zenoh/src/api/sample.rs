@@ -18,7 +18,6 @@ use crate::api::encoding::Encoding;
 use crate::api::key_expr::KeyExpr;
 use crate::api::value::Value;
 use crate::payload::Payload;
-use crate::time::Timestamp;
 use crate::Priority;
 #[zenoh_macros::unstable]
 pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
@@ -26,6 +25,7 @@ pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
 use zenoh_protocol::core::EntityGlobalId;
+use zenoh_protocol::core::Timestamp;
 use zenoh_protocol::network::declare::ext::QoSType;
 use zenoh_protocol::{core::CongestionControl, zenoh};
 

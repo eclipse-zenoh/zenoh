@@ -222,6 +222,11 @@ pub mod liveliness {
     pub use crate::api::liveliness::LivelinessSubscriberBuilder;
 }
 
+pub mod time {
+    pub use crate::api::time::new_reception_timestamp;
+    pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
+}
+
 mod admin;
 #[macro_use]
 
@@ -239,20 +244,3 @@ pub use zenoh_shm as shm;
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
 pub use zenoh_buffers as buffers;
-
-/// Time related types and functions.
-pub mod time {
-    use std::convert::TryFrom;
-
-    pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
-
-    /// Generates a reception [`Timestamp`] with id=0x01.
-    /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
-    /// that doesn't contain any timestamp.
-    pub fn new_reception_timestamp() -> Timestamp {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        Timestamp::new(now.into(), TimestampId::try_from([1]).unwrap())
-    }
-}

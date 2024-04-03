@@ -27,4 +27,5 @@ pub(crate) mod scouting;
 pub(crate) mod selector;
 pub(crate) mod session;
 pub(crate) mod subscriber;
+pub(crate) mod time;
 pub(crate) mod value;
