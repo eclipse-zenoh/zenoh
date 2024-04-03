@@ -28,7 +28,9 @@ use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
 pub type Flow = DownsamplingFlow;
-pub struct PolicyForSubject(Vec<Vec<Vec<KeTreeRule>>>); //vec of flows over vec of actions over vec of permissions of tree of kexpr
+type PermissionVec = Vec<KeTreeRule>;
+type ActionVec = Vec<PermissionVec>;
+pub struct PolicyForSubject(Vec<ActionVec>); //vec of flows over vec of actions over vec of permissions of tree of kexpr
 pub struct PolicyMap(HashMap<i32, PolicyForSubject, RandomState>); //mapping index of subject (i32) instead of actual subject value (String)
 
 type KeTreeRule = KeBoxTree<bool>;

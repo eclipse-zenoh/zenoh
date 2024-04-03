@@ -22,4 +22,4 @@
 cargo-timing*.html
 
 # Remove test data
-tests
+testsfiles
