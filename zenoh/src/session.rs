@@ -114,6 +114,7 @@ pub(crate) struct SessionState {
     pub(crate) remote_tokens: HashMap<TokenId, KeyExpr<'static>>,
     //pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
+    pub(crate) liveliness_subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
     pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
@@ -142,6 +143,7 @@ impl SessionState {
             remote_tokens: HashMap::new(),
             //publications: Vec::new(),
             subscribers: HashMap::new(),
+            liveliness_subscribers: HashMap::new(),
             queryables: HashMap::new(),
             #[cfg(feature = "unstable")]
             tokens: HashMap::new(),
@@ -247,14 +249,32 @@ impl SessionState {
             self.remote_key_to_expr(key_expr)
         }
     }
+
+    pub(crate) fn subscribers(&self, kind: SubscriberKind) -> &HashMap<Id, Arc<SubscriberState>> {
+        match kind {
+            SubscriberKind::Subscriber => &self.subscribers,
+            SubscriberKind::LivelinessSubscriber => &self.liveliness_subscribers,
+        }
+    }
+
+    pub(crate) fn subscribers_mut(
+        &mut self,
+        kind: SubscriberKind,
+    ) -> &mut HashMap<Id, Arc<SubscriberState>> {
+        match kind {
+            SubscriberKind::Subscriber => &mut self.subscribers,
+            SubscriberKind::LivelinessSubscriber => &mut self.liveliness_subscribers,
+        }
+    }
 }
 
 impl fmt::Debug for SessionState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "SessionState{{ subscribers: {} }}",
-            self.subscribers.len()
+            "SessionState{{ subscribers: {}, liveliness_subscribers: {} }}",
+            self.subscribers.len(),
+            self.liveliness_subscribers.len()
         )
     }
 }
@@ -262,7 +282,36 @@ impl fmt::Debug for SessionState {
 pub(crate) struct ResourceNode {
     pub(crate) key_expr: OwnedKeyExpr,
     pub(crate) subscribers: Vec<Arc<SubscriberState>>,
+    pub(crate) liveliness_subscribers: Vec<Arc<SubscriberState>>,
 }
+
+impl ResourceNode {
+    pub(crate) fn new(key_expr: OwnedKeyExpr) -> Self {
+        Self {
+            key_expr,
+            subscribers: Vec::new(),
+            liveliness_subscribers: Vec::new(),
+        }
+    }
+
+    pub(crate) fn subscribers(&self, kind: SubscriberKind) -> &Vec<Arc<SubscriberState>> {
+        match kind {
+            SubscriberKind::Subscriber => &self.subscribers,
+            SubscriberKind::LivelinessSubscriber => &self.liveliness_subscribers,
+        }
+    }
+
+    pub(crate) fn subscribers_mut(
+        &mut self,
+        kind: SubscriberKind,
+    ) -> &mut Vec<Arc<SubscriberState>> {
+        match kind {
+            SubscriberKind::Subscriber => &mut self.subscribers,
+            SubscriberKind::LivelinessSubscriber => &mut self.liveliness_subscribers,
+        }
+    }
+}
+
 pub(crate) enum Resource {
     Prefix { prefix: Box<str> },
     Node(ResourceNode),
@@ -277,10 +326,7 @@ impl Resource {
         }
     }
     pub(crate) fn for_keyexpr(key_expr: OwnedKeyExpr) -> Self {
-        Self::Node(ResourceNode {
-            key_expr,
-            subscribers: Vec::new(),
-        })
+        Self::Node(ResourceNode::new(key_expr))
     }
     pub(crate) fn name(&self) -> &str {
         match self {
@@ -859,15 +905,20 @@ impl Session {
                 None => {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
-                    if let Resource::Node(ResourceNode {
-                        key_expr,
-                        subscribers,
-                        ..
-                    }) = &mut res
-                    {
-                        for sub in state.subscribers.values() {
-                            if key_expr.intersects(&sub.key_expr) {
-                                subscribers.push(sub.clone());
+                    if let Resource::Node(res_node) = &mut res {
+                        // NOTE(fuzzypixelz): At this point, I'm not sure if
+                        // DeclareKeyExpr is relevant to subscribers or
+                        // liveliness subscribers. So I assume that this key
+                        // expression can be used both for tokens and
+                        // samples.
+                        for kind in [
+                            SubscriberKind::Subscriber,
+                            SubscriberKind::LivelinessSubscriber,
+                        ] {
+                            for sub in state.subscribers(kind).values() {
+                                if res_node.key_expr.intersects(&sub.key_expr) {
+                                    res_node.subscribers_mut(kind).push(sub.clone());
+                                }
                             }
                         }
                     }
@@ -1017,56 +1068,58 @@ impl Session {
             callback,
         };
 
-        #[cfg(not(feature = "unstable"))]
         let declared_sub = origin != Locality::SessionLocal;
-        #[cfg(feature = "unstable")]
-        let declared_sub = origin != Locality::SessionLocal
-            && !key_expr
-                .as_str()
-                .starts_with(crate::liveliness::PREFIX_LIVELINESS);
 
-        let declared_sub =
-            declared_sub
-                .then(|| {
-                    match state
-                        .aggregated_subscribers
-                        .iter()
-                        .find(|s| s.includes(&key_expr))
-                    {
-                        Some(join_sub) => {
-                            if let Some(joined_sub) = state.subscribers.values().find(|s| {
+        let declared_sub = declared_sub
+            .then(|| {
+                match state
+                    .aggregated_subscribers
+                    .iter()
+                    .find(|s| s.includes(&key_expr))
+                {
+                    Some(join_sub) => {
+                        if let Some(joined_sub) = state
+                            .subscribers(SubscriberKind::Subscriber)
+                            .values()
+                            .find(|s| {
                                 s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
-                            }) {
-                                sub_state.remote_id = joined_sub.remote_id;
-                                None
-                            } else {
-                                Some(join_sub.clone().into())
-                            }
-                        }
-                        None => {
-                            if let Some(twin_sub) = state.subscribers.values().find(|s| {
-                                s.origin != Locality::SessionLocal && s.key_expr == key_expr
-                            }) {
-                                sub_state.remote_id = twin_sub.remote_id;
-                                None
-                            } else {
-                                Some(key_expr.clone())
-                            }
+                            })
+                        {
+                            sub_state.remote_id = joined_sub.remote_id;
+                            None
+                        } else {
+                            Some(join_sub.clone().into())
                         }
                     }
-                })
-                .flatten();
+                    None => {
+                        if let Some(twin_sub) = state
+                            .subscribers(SubscriberKind::Subscriber)
+                            .values()
+                            .find(|s| s.origin != Locality::SessionLocal && s.key_expr == key_expr)
+                        {
+                            sub_state.remote_id = twin_sub.remote_id;
+                            None
+                        } else {
+                            Some(key_expr.clone())
+                        }
+                    }
+                }
+            })
+            .flatten();
 
         let sub_state = Arc::new(sub_state);
 
-        state.subscribers.insert(sub_state.id, sub_state.clone());
+        state
+            .subscribers_mut(SubscriberKind::Subscriber)
+            .insert(sub_state.id, sub_state.clone());
         for res in state
             .local_resources
             .values_mut()
             .filter_map(Resource::as_node_mut)
         {
             if key_expr.intersects(&res.key_expr) {
-                res.subscribers.push(sub_state.clone());
+                res.subscribers_mut(SubscriberKind::Subscriber)
+                    .push(sub_state.clone());
             }
         }
         for res in state
@@ -1075,7 +1128,8 @@ impl Session {
             .filter_map(Resource::as_node_mut)
         {
             if key_expr.intersects(&res.key_expr) {
-                res.subscribers.push(sub_state.clone());
+                res.subscribers_mut(SubscriberKind::Subscriber)
+                    .push(sub_state.clone());
             }
         }
 
@@ -1121,63 +1175,47 @@ impl Session {
                 let state = zread!(self.state);
                 self.update_status_up(&state, &key_expr)
             }
-        } else if key_expr
-            .as_str()
-            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-
-            primitives.ingress_declare(Declare {
-                ext_qos: declare::ext::QoSType::DECLARE,
-                ext_tstamp: None,
-                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                body: DeclareBody::DeclareInterest(DeclareInterest {
-                    id,
-                    wire_expr: Some(key_expr.to_wire(self).to_owned()),
-                    interest: Interest::KEYEXPRS + Interest::FUTURE + Interest::TOKENS,
-                }),
-            });
         }
 
         Ok(sub_state)
     }
 
-    pub(crate) fn undeclare_subscriber_inner(&self, sid: Id) -> ZResult<()> {
+    pub(crate) fn undeclare_subscriber_inner(&self, sid: Id, kind: SubscriberKind) -> ZResult<()> {
         let mut state = zwrite!(self.state);
-        if let Some(sub_state) = state.subscribers.remove(&sid) {
+        if let Some(sub_state) = state
+            .subscribers_mut(SubscriberKind::Subscriber)
+            .remove(&sid)
+        {
             trace!("undeclare_subscriber({:?})", sub_state);
             for res in state
                 .local_resources
                 .values_mut()
                 .filter_map(Resource::as_node_mut)
             {
-                res.subscribers.retain(|sub| sub.id != sub_state.id);
+                res.subscribers_mut(kind)
+                    .retain(|sub| sub.id != sub_state.id);
             }
             for res in state
                 .remote_resources
                 .values_mut()
                 .filter_map(Resource::as_node_mut)
             {
-                res.subscribers.retain(|sub| sub.id != sub_state.id);
+                res.subscribers_mut(kind)
+                    .retain(|sub| sub.id != sub_state.id);
             }
 
-            #[cfg(not(feature = "unstable"))]
-            let send_forget = sub_state.origin != Locality::SessionLocal;
-            #[cfg(feature = "unstable")]
-            let send_forget = sub_state.origin != Locality::SessionLocal
-                && !sub_state
-                    .key_expr
-                    .as_str()
-                    .starts_with(crate::liveliness::PREFIX_LIVELINESS);
-            if send_forget {
+            // NOTE(fuzzypixelz): I'm assuming that liveliness subscribers are
+            // declared and undeclared just like subscribers. The old code seems
+            // to have prevented liveliness subscribers from being declared
+            // since they have @/liveliness/* key expressions?
+
+            if sub_state.origin != Locality::SessionLocal {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
-                if !state.subscribers.values().any(|s| {
+                if !state.subscribers(kind).values().any(|s| {
                     s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
                 }) {
                     let primitives = state.primitives.as_ref().unwrap().clone();
-                    drop(state);
                     primitives.ingress_declare(Declare {
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
@@ -1195,11 +1233,9 @@ impl Session {
                         self.update_status_down(&state, &sub_state.key_expr)
                     }
                 }
-            } else if sub_state
-                .key_expr
-                .as_str()
-                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-            {
+            }
+
+            if kind == SubscriberKind::LivelinessSubscriber {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
 
@@ -1213,6 +1249,7 @@ impl Session {
                     }),
                 });
             }
+
             Ok(())
         } else {
             Err(zerror!("Unable to find subscriber").into())
@@ -1293,7 +1330,8 @@ impl Session {
         let mut state = zwrite!(self.state);
         log::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
-        let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
+        // TODO(fuzzypixelz): Remove `KE_PREFIX_LIVELINESS` once
+        // liveliness().get() doesn't need it anymore
         let tok_state = Arc::new(LivelinessTokenState {
             id,
             key_expr: key_expr.clone().into_owned(),
@@ -1312,6 +1350,76 @@ impl Session {
             }),
         });
         Ok(tok_state)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn declare_liveliness_subscriber_inner(
+        &self,
+        key_expr: &KeyExpr,
+        scope: &Option<KeyExpr>,
+        origin: Locality,
+        callback: Callback<'static, Sample>,
+    ) -> ZResult<Arc<SubscriberState>> {
+        let mut state = zwrite!(self.state);
+        log::trace!("declare_liveliness_subscriber({:?})", key_expr);
+        let id = self.runtime.next_id();
+        let key_expr = match scope {
+            Some(scope) => scope / key_expr,
+            None => key_expr.clone(),
+        };
+
+        let sub_state = SubscriberState {
+            id,
+            remote_id: id,
+            key_expr: key_expr.clone().into_owned(),
+            scope: scope.clone().map(|e| e.into_owned()),
+            origin,
+            callback,
+        };
+
+        let sub_state = Arc::new(sub_state);
+
+        state
+            .subscribers_mut(SubscriberKind::LivelinessSubscriber)
+            .insert(sub_state.id, sub_state.clone());
+
+        for res in state
+            .local_resources
+            .values_mut()
+            .filter_map(Resource::as_node_mut)
+        {
+            if key_expr.intersects(&res.key_expr) {
+                res.subscribers_mut(SubscriberKind::LivelinessSubscriber)
+                    .push(sub_state.clone());
+            }
+        }
+
+        for res in state
+            .remote_resources
+            .values_mut()
+            .filter_map(Resource::as_node_mut)
+        {
+            if key_expr.intersects(&res.key_expr) {
+                res.subscribers_mut(SubscriberKind::LivelinessSubscriber)
+                    .push(sub_state.clone());
+            }
+        }
+
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
+
+        primitives.ingress_declare(Declare {
+            ext_qos: declare::ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareInterest(DeclareInterest {
+                id,
+                wire_expr: Some(key_expr.to_wire(self).to_owned()),
+                interest: Interest::KEYEXPRS + Interest::FUTURE + Interest::TOKENS,
+            }),
+        });
+
+        Ok(sub_state)
     }
 
     #[zenoh_macros::unstable]
@@ -1493,12 +1601,13 @@ impl Session {
         }
     }
 
-    pub(crate) fn handle_data(
+    pub(crate) fn execute_subscriber_callbacks(
         &self,
         local: bool,
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
+        kind: SubscriberKind,
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
         let mut callbacks = SingleOrVec::default();
@@ -1506,7 +1615,7 @@ impl Session {
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, key_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
-                    for sub in &res.subscribers {
+                    for sub in res.subscribers(kind) {
                         if sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal))
                         {
@@ -1556,7 +1665,7 @@ impl Session {
         } else {
             match state.wireexpr_to_keyexpr(key_expr, local) {
                 Ok(key_expr) => {
-                    for sub in state.subscribers.values() {
+                    for sub in state.subscribers(kind).values() {
                         if (sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal)))
                             && key_expr.intersects(&sub.key_expr)
@@ -1992,18 +2101,26 @@ impl IngressPrimitives for Session {
                 let state = &mut zwrite!(self.state);
                 match state.remote_key_to_expr(&m.wire_expr) {
                     Ok(key_expr) => {
-                        let mut subs = Vec::new();
-                        for sub in state.subscribers.values() {
-                            if key_expr.intersects(&sub.key_expr) {
-                                subs.push(sub.clone());
+                        let mut res_node = ResourceNode::new(key_expr.clone().into());
+                        // NOTE(fuzzypixelz): At this point, I'm not sure if
+                        // DeclareKeyExpr is relevant to subscribers or
+                        // liveliness subscribers. So I assume that this key
+                        // expression can be used both for tokens and
+                        // samples.
+                        for kind in [
+                            SubscriberKind::Subscriber,
+                            SubscriberKind::LivelinessSubscriber,
+                        ] {
+                            for sub in state.subscribers(kind).values() {
+                                if key_expr.intersects(&sub.key_expr) {
+                                    res_node.subscribers_mut(kind).push(sub.clone());
+                                }
                             }
                         }
-                        let res = Resource::Node(ResourceNode {
-                            key_expr: key_expr.into(),
-                            subscribers: subs,
-                        });
 
-                        state.remote_resources.insert(m.id, res);
+                        state
+                            .remote_resources
+                            .insert(m.id, Resource::Node(res_node));
                     }
                     Err(e) => error!(
                         "Received Resource for invalid wire_expr `{}`: {}",
@@ -2015,7 +2132,7 @@ impl IngressPrimitives for Session {
                 trace!("recv UndeclareKeyExpr {}", m.id);
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
-                trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
+                log::debug!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
@@ -2026,21 +2143,6 @@ impl IngressPrimitives for Session {
                         Ok(expr) => {
                             state.remote_subscribers.insert(m.id, expr.clone());
                             self.update_status_up(&state, &expr);
-
-                            if expr
-                                .as_str()
-                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                            {
-                                drop(state);
-                                self.handle_data(
-                                    false,
-                                    &m.wire_expr,
-                                    None,
-                                    ZBuf::default(),
-                                    #[cfg(feature = "unstable")]
-                                    None,
-                                );
-                            }
                         }
                         Err(err) => {
                             log::error!("Received DeclareSubscriber for unkown wire_expr: {}", err)
@@ -2049,31 +2151,12 @@ impl IngressPrimitives for Session {
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
-                trace!("recv UndeclareSubscriber {:?}", m.id);
+                log::debug!("recv UndeclareSubscriber {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
                     if let Some(expr) = state.remote_subscribers.remove(&m.id) {
                         self.update_status_down(&state, &expr);
-
-                        if expr
-                            .as_str()
-                            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                        {
-                            drop(state);
-                            let data_info = DataInfo {
-                                kind: SampleKind::Delete,
-                                ..Default::default()
-                            };
-                            self.handle_data(
-                                false,
-                                &expr.to_wire(self),
-                                Some(data_info),
-                                ZBuf::default(),
-                                #[cfg(feature = "unstable")]
-                                None,
-                            );
-                        }
                     } else {
                         log::error!("Received Undeclare Subscriber for unkown id: {}", m.id);
                     }
@@ -2087,7 +2170,7 @@ impl IngressPrimitives for Session {
             }
 
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
-                trace!("recv DeclareToken {:?}", m.id);
+                log::debug!("recv DeclareToken {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
@@ -2105,21 +2188,17 @@ impl IngressPrimitives for Session {
                             // doens't need to to be visible to publishers
                             // through .matching_status().
 
-                            if expr
-                                .as_str()
-                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                            {
-                                drop(state);
+                            drop(state);
 
-                                self.handle_data(
-                                    false,
-                                    &m.wire_expr,
-                                    None,
-                                    ZBuf::default(),
-                                    #[cfg(feature = "unstable")]
-                                    None,
-                                );
-                            }
+                            self.execute_subscriber_callbacks(
+                                false,
+                                &m.wire_expr,
+                                None,
+                                ZBuf::default(),
+                                SubscriberKind::LivelinessSubscriber,
+                                #[cfg(feature = "unstable")]
+                                None,
+                            );
                         }
                         Err(err) => {
                             log::error!("Received DeclareToken for unkown wire_expr: {}", err)
@@ -2128,11 +2207,11 @@ impl IngressPrimitives for Session {
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
-                trace!("recv UndeclareToken {:?}", m.id);
+                log::debug!("recv UndeclareToken {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
-                    if let Some(expr) = state.remote_tokens.remove(&m.id) {
+                    if state.remote_tokens.remove(&m.id).is_some() {
                         // NOTE(fuzzypixelz): I didn't put
                         // self.update_status_down() here because it doesn't
                         // make sense. An application which declares a
@@ -2140,26 +2219,22 @@ impl IngressPrimitives for Session {
                         // doens't need to to be visible to publishers
                         // through .matching_status().
 
-                        if expr
-                            .as_str()
-                            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                        {
-                            drop(state);
+                        drop(state);
 
-                            let data_info = DataInfo {
-                                kind: SampleKind::Delete,
-                                ..Default::default()
-                            };
+                        let data_info = DataInfo {
+                            kind: SampleKind::Delete,
+                            ..Default::default()
+                        };
 
-                            self.handle_data(
-                                false,
-                                &m.ext_wire_expr.wire_expr,
-                                Some(data_info),
-                                ZBuf::default(),
-                                #[cfg(feature = "unstable")]
-                                None,
-                            );
-                        }
+                        self.execute_subscriber_callbacks(
+                            false,
+                            &m.ext_wire_expr.wire_expr,
+                            Some(data_info),
+                            ZBuf::default(),
+                            SubscriberKind::LivelinessSubscriber,
+                            #[cfg(feature = "unstable")]
+                            None,
+                        );
                     } else {
                         log::error!("Received UndeclareToken for unkown id: {}", m.id);
                     }
@@ -2189,11 +2264,12 @@ impl IngressPrimitives for Session {
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
-                self.handle_data(
+                self.execute_subscriber_callbacks(
                     false,
                     &msg.wire_expr,
                     Some(info),
                     m.payload,
+                    SubscriberKind::Subscriber,
                     #[cfg(feature = "unstable")]
                     m.ext_attachment.map(Into::into),
                 )
@@ -2207,11 +2283,12 @@ impl IngressPrimitives for Session {
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
-                self.handle_data(
+                self.execute_subscriber_callbacks(
                     false,
                     &msg.wire_expr,
                     Some(info),
                     ZBuf::empty(),
+                    SubscriberKind::Subscriber,
                     #[cfg(feature = "unstable")]
                     m.ext_attachment.map(Into::into),
                 )

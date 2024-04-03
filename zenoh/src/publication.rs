@@ -18,6 +18,7 @@ use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::{DataInfo, QoS, Sample, SampleKind};
+use crate::subscriber::SubscriberKind;
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
@@ -968,11 +969,12 @@ fn resolve_put(
             )),
         };
 
-        publisher.session.handle_data(
+        publisher.session.execute_subscriber_callbacks(
             true,
             &publisher.key_expr.to_wire(&publisher.session),
             Some(data_info),
             payload.into(),
+            SubscriberKind::Subscriber,
             #[cfg(feature = "unstable")]
             attachment,
         );

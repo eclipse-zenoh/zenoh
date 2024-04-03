@@ -78,6 +78,7 @@ pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) alive: bool,
+    pub(crate) kind: SubscriberKind,
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -144,7 +145,7 @@ impl SyncResolve for SubscriberUndeclaration<'_> {
         self.subscriber.alive = false;
         self.subscriber
             .session
-            .undeclare_subscriber_inner(self.subscriber.state.id)
+            .undeclare_subscriber_inner(self.subscriber.state.id, self.subscriber.kind)
     }
 }
 
@@ -159,7 +160,9 @@ impl AsyncResolve for SubscriberUndeclaration<'_> {
 impl Drop for SubscriberInner<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.undeclare_subscriber_inner(self.state.id);
+            let _ = self
+                .session
+                .undeclare_subscriber_inner(self.state.id, self.kind);
         }
     }
 }
@@ -389,6 +392,7 @@ where
                     session,
                     state: sub_state,
                     alive: true,
+                    kind: SubscriberKind::Subscriber,
                 },
                 receiver,
             })
@@ -514,3 +518,9 @@ impl<Receiver> DerefMut for Subscriber<'_, Receiver> {
 
 /// A [`Subscriber`] that provides data through a `flume` channel.
 pub type FlumeSubscriber<'a> = Subscriber<'a, flume::Receiver<Sample>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SubscriberKind {
+    Subscriber,
+    LivelinessSubscriber,
+}

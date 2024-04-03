@@ -23,7 +23,7 @@ use {
         handlers::locked,
         handlers::DefaultHandler,
         prelude::*,
-        subscriber::{Subscriber, SubscriberInner},
+        subscriber::{Subscriber, SubscriberInner, SubscriberKind},
         SessionRef, Undeclarable,
     },
     std::convert::TryInto,
@@ -35,7 +35,6 @@ use {
     zenoh_core::Resolvable,
     zenoh_core::Result as ZResult,
     zenoh_core::SyncResolve,
-    zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo,
 };
 
 #[zenoh_macros::unstable]
@@ -542,18 +541,13 @@ where
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
         session
-            .declare_subscriber_inner(
-                &key_expr,
-                &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
-                Locality::default(),
-                callback,
-                &SubscriberInfo::DEFAULT,
-            )
+            .declare_liveliness_subscriber_inner(&key_expr, &None, Locality::default(), callback)
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
                     alive: true,
+                    kind: SubscriberKind::LivelinessSubscriber,
                 },
                 receiver,
             })
