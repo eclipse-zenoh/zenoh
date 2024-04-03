@@ -19,7 +19,7 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use zenoh_buffers::ZSlice;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-use zenoh_shm::api::provider::zsliceshm::ZSliceShm;
+use zenoh_shm::api::provider::zsliceshm::ZSliceShmMut;
 
 use zenoh_collections::Properties;
 use zenoh_result::ZError;
@@ -88,8 +88,8 @@ impl std::error::Error for Value {}
 
 // Shared memory conversion
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-impl From<ZSliceShm> for Value {
-    fn from(slice: ZSliceShm) -> Self {
+impl From<ZSliceShmMut> for Value {
+    fn from(slice: ZSliceShmMut) -> Self {
         Value {
             payload: slice.into(),
             encoding: KnownEncoding::AppOctetStream.into(),

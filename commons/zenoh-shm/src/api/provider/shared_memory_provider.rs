@@ -42,7 +42,7 @@ use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
     shared_memory_provider_backend::SharedMemoryProviderBackend,
     types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
-    zsliceshm::ZSliceShm,
+    zsliceshmmut::ZSliceShmMut,
 };
 
 #[derive(Debug)]
@@ -708,11 +708,11 @@ where
         self.backend.defragment()
     }
 
-    /// Map externally-allocated chunk into ZSliceShm.
+    /// Map externally-allocated chunk into ZSliceShmMut.
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
-    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<ZSliceShm> {
+    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<ZSliceShmMut> {
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
 
@@ -724,7 +724,7 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(ZSliceShm::new(wrapped))
+        Ok(ZSliceShmMut::new(wrapped))
     }
 
     /// Try to collect free chunks.
@@ -801,7 +801,7 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(ZSliceShm::new(wrapped))
+        Ok(ZSliceShmMut::new(wrapped))
     }
 
     fn alloc_resources() -> ZResult<(
@@ -906,6 +906,6 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(ZSliceShm::new(wrapped))
+        Ok(ZSliceShmMut::new(wrapped))
     }
 }

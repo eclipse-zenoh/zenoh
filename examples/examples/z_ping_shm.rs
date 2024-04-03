@@ -90,7 +90,7 @@ fn main() {
         .res()
         .unwrap();
 
-    // convert ZSliceShm into ZSlice as ZSliceShm does not support Clone
+    // convert ZSliceShmMut into ZSlice as ZSliceShmMut does not support Clone
     let buf: ZSlice = buf.into();
 
     // -- warmup --

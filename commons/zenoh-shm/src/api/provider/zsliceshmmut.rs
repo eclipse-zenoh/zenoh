@@ -21,17 +21,17 @@ use crate::SharedMemoryBuf;
 /// An SHM ZSlice in an exceptional state when it is recently allocated and thus
 /// is known to be unique, so it can be safely mutated without any checks.
 #[zenoh_macros::unstable_doc]
-pub struct ZSliceShm {
+pub struct ZSliceShmMut {
     pub(crate) slice: SharedMemoryBuf,
 }
 
-impl ZSliceShm {
+impl ZSliceShmMut {
     pub(crate) fn new(slice: SharedMemoryBuf) -> Self {
         Self { slice }
     }
 }
 
-impl Deref for ZSliceShm {
+impl Deref for ZSliceShmMut {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -39,26 +39,26 @@ impl Deref for ZSliceShm {
     }
 }
 
-impl DerefMut for ZSliceShm {
+impl DerefMut for ZSliceShmMut {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.slice.as_mut()
     }
 }
 
-impl AsRef<[u8]> for ZSliceShm {
+impl AsRef<[u8]> for ZSliceShmMut {
     fn as_ref(&self) -> &[u8] {
         self
     }
 }
 
-impl AsMut<[u8]> for ZSliceShm {
+impl AsMut<[u8]> for ZSliceShmMut {
     fn as_mut(&mut self) -> &mut [u8] {
         self
     }
 }
 
-impl From<ZSliceShm> for ZSlice {
-    fn from(val: ZSliceShm) -> Self {
+impl From<ZSliceShmMut> for ZSlice {
+    fn from(val: ZSliceShmMut) -> Self {
         val.slice.into()
     }
 }
