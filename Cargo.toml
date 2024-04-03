@@ -197,6 +197,7 @@ zenoh-link = { version = "0.11.0-dev", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "0.11.0-dev", path = "io/zenoh-link-commons" }
 zenoh = { version = "0.11.0-dev", path = "zenoh", default-features = false }
 zenoh-runtime = { version = "0.11.0-dev", path = "commons/zenoh-runtime" }
+enum-map = "2.7.3"
 
 [profile.dev]
 debug = true

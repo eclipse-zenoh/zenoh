@@ -16,6 +16,7 @@
 pub mod defaults;
 mod include;
 
+use enum_map::Enum;
 use include::recursive_include;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
@@ -73,7 +74,7 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Enum)]
 #[serde(rename_all = "lowercase")]
 pub enum DownsamplingFlow {
     Egress,
@@ -125,7 +126,7 @@ pub enum Subject {
     Interface(String),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Enum)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
     Put,
@@ -133,16 +134,15 @@ pub enum Action {
     Get,
     DeclareQueryable,
 }
-pub const NUMBER_OF_ACTIONS: usize = 4; //size of Action enum (change according to Action size)
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Enum)]
 #[serde(rename_all = "lowercase")]
 pub enum Permission {
     Allow,
     Deny,
 }
-pub const NUMBER_OF_PERMISSIONS: usize = 2; //size of permission enum (permanently fixed to 2)
 
+pub type Flow = DownsamplingFlow;
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,

@@ -17,33 +17,29 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-
 use ahash::RandomState;
+use enum_map::{enum_map, EnumMap};
 use std::collections::HashMap;
-use zenoh_config::{
-    AclConfig, AclConfigRules, Action, DownsamplingFlow, Permission, PolicyRule, Subject,
-    NUMBER_OF_ACTIONS, NUMBER_OF_PERMISSIONS,
-};
+use zenoh_config::{AclConfig, AclConfigRules, Action, Flow, Permission, PolicyRule, Subject};
 use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
-pub type Flow = DownsamplingFlow;
 type PermissionVec = Vec<KeTreeRule>;
 type ActionVec = Vec<PermissionVec>;
-pub struct PolicyForSubject(Vec<ActionVec>); //vec of flows over vec of actions over vec of permissions of tree of kexpr
-pub struct PolicyMap(HashMap<i32, PolicyForSubject, RandomState>); //mapping index of subject (i32) instead of actual subject value (String)
-
+type PolicyForSubject = Vec<ActionVec>;
+type PolicyMap = HashMap<i32, PolicyForSubject, RandomState>;
+type SubjectMap = HashMap<Subject, i32, RandomState>;
 type KeTreeRule = KeBoxTree<bool>;
 pub struct PolicyEnforcer {
     pub(crate) acl_enabled: bool,
     pub(crate) default_permission: Permission,
-    pub(crate) subject_map: HashMap<Subject, i32, RandomState>,
+    pub(crate) subject_map: SubjectMap,
     pub(crate) policy_map: PolicyMap,
 }
 
 #[derive(Debug, Clone)]
 pub struct PolicyInformation {
-    subject_map: HashMap<Subject, i32, RandomState>,
+    subject_map: SubjectMap,
     policy_rules: Vec<PolicyRule>,
 }
 
@@ -52,8 +48,8 @@ impl PolicyEnforcer {
         PolicyEnforcer {
             acl_enabled: true,
             default_permission: Permission::Deny,
-            subject_map: HashMap::default(),
-            policy_map: PolicyMap(HashMap::default()),
+            subject_map: SubjectMap::default(),
+            policy_map: PolicyMap::default(),
         }
     }
 
@@ -61,43 +57,45 @@ impl PolicyEnforcer {
        initializes the policy_enforcer
     */
     pub fn init(&mut self, acl_config: AclConfig) -> ZResult<()> {
+        let (action_index, permission_index, flow_index) = get_enum_map();
+        let (number_of_actions, number_of_permissions, number_of_flows) =
+            (action_index.len(), permission_index.len(), flow_index.len());
+
         self.acl_enabled = acl_config.enabled;
         self.default_permission = acl_config.default_permission;
         if self.acl_enabled {
             if let Some(rules) = acl_config.rules {
                 if rules.is_empty() {
                     log::warn!("[ACCESS LOG]: ACL ruleset in config file is empty!!!");
-                    self.policy_map = PolicyMap(HashMap::default());
-                    self.subject_map = HashMap::default();
+                    self.policy_map = PolicyMap::default();
+                    self.subject_map = SubjectMap::default();
                 } else {
                     let policy_information = self.policy_information_point(rules)?;
-
                     let subject_map = policy_information.subject_map;
-                    let mut main_policy: PolicyMap = PolicyMap(HashMap::default());
-                    //first initialize the vector of vectors (required to maintain the indices)
+                    let mut main_policy: PolicyMap = PolicyMap::default();
+
                     for index in subject_map.values() {
-                        let mut rule: PolicyForSubject = PolicyForSubject(Vec::new());
-                        for _k in 0..2 {
+                        let mut rule = PolicyForSubject::new();
+                        for _k in 0..number_of_flows {
                             let mut flow_rule = Vec::new();
-                            for _i in 0..NUMBER_OF_ACTIONS {
+                            for _i in 0..number_of_actions {
                                 let mut action_rule: Vec<KeTreeRule> = Vec::new();
-                                for _j in 0..NUMBER_OF_PERMISSIONS {
+                                for _j in 0..number_of_permissions {
                                     let permission_rule = KeTreeRule::new();
                                     action_rule.push(permission_rule);
                                 }
                                 flow_rule.push(action_rule);
                             }
-                            rule.0.push(flow_rule);
+                            rule.push(flow_rule);
                         }
-                        main_policy.0.insert(*index, rule);
+                        main_policy.insert(*index, rule);
                     }
 
                     for rule in policy_information.policy_rules {
-                        //add key-expression values to the ketree as per the policy rules
                         if let Some(index) = subject_map.get(&rule.subject) {
-                            if let Some(single_policy) = main_policy.0.get_mut(index) {
-                                single_policy.0[rule.flow as usize][rule.action as usize]
-                                    [rule.permission as usize]
+                            if let Some(single_policy) = main_policy.get_mut(index) {
+                                single_policy[flow_index[rule.flow]][action_index[rule.action]]
+                                    [permission_index[rule.permission]]
                                     .insert(keyexpr::new(&rule.key_expr)?, true);
                             }
                         };
@@ -137,7 +135,7 @@ impl PolicyEnforcer {
                 }
             }
         }
-        let mut subject_map = HashMap::default();
+        let mut subject_map = SubjectMap::default();
         let mut counter = 1; //starting at 1 since 0 is the init value and should not match anything
         for rule in policy_rules.iter() {
             subject_map.insert(rule.subject.clone(), counter);
@@ -162,22 +160,21 @@ impl PolicyEnforcer {
     ) -> ZResult<Permission> {
         let policy_map = &self.policy_map;
 
-        match policy_map.0.get(&subject) {
+        let (action_index, permission_index, flow_index) = get_enum_map();
+        match policy_map.get(&subject) {
             Some(single_policy) => {
-                //explicit Deny rules are ALWAYS given preference
-                let deny_result = single_policy.0[flow.clone() as usize][action.clone() as usize]
+                let deny_result = single_policy[flow.clone() as usize][action.clone() as usize]
                     [Permission::Deny as usize]
                     .nodes_including(keyexpr::new(&key_expr)?)
                     .count();
                 if deny_result != 0 {
                     return Ok(Permission::Deny);
                 }
-                //if default_permission is Allow, ignore checks for Allow
                 if self.default_permission == Permission::Allow {
                     Ok(Permission::Allow)
                 } else {
-                    let allow_result = single_policy.0[flow as usize][action as usize]
-                        [Permission::Allow as usize]
+                    let allow_result = single_policy[flow_index[flow]][action_index[action]]
+                        [permission_index[Permission::Allow]]
                         .nodes_including(keyexpr::new(&key_expr)?)
                         .count();
 
@@ -191,4 +188,26 @@ impl PolicyEnforcer {
             None => Ok(self.default_permission.clone()),
         }
     }
+}
+
+fn get_enum_map() -> (
+    EnumMap<Action, usize>,
+    EnumMap<Permission, usize>,
+    EnumMap<Flow, usize>,
+) {
+    let action_index = enum_map! {
+        Action::Put => 0_usize,
+        Action::DeclareSubscriber => 1,
+        Action::Get => 2,
+        Action::DeclareQueryable => 3,
+    };
+    let permission_index = enum_map! {
+        Permission::Allow =>  0_usize,
+        Permission::Deny => 1
+    };
+    let flow_index = enum_map! {
+        Flow::Egress =>  0_usize,
+        Flow::Ingress => 1
+    };
+    (action_index, permission_index, flow_index)
 }

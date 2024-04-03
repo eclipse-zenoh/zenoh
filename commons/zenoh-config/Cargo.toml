@@ -37,3 +37,4 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
 secrecy = { workspace = true }
+enum-map = { workspace = true }

@@ -18,25 +18,23 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
+use super::{
+    authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
+    InterceptorFactoryTrait, InterceptorTrait,
+};
+use crate::net::routing::RoutingContext;
 use crate::KeyExpr;
 use std::any::Any;
 use std::sync::Arc;
-use zenoh_config::{AclConfig, Action, Permission, Subject, ZenohId};
+use zenoh_config::{AclConfig, Action, Flow, Permission, Subject, ZenohId};
 use zenoh_protocol::{
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
-
-use crate::net::routing::RoutingContext;
-
-use super::{
-    authorization::Flow, authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor,
-    InterceptorFactory, InterceptorFactoryTrait, InterceptorTrait,
-};
-pub(crate) struct AclEnforcer {
-    pub(crate) enforcer: Arc<PolicyEnforcer>,
+pub struct AclEnforcer {
+    enforcer: Arc<PolicyEnforcer>,
 }
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
@@ -147,7 +145,6 @@ impl InterceptorTrait for IngressAclEnforcer {
         let key_expr = cache
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr())?;
-
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
@@ -234,7 +231,6 @@ impl InterceptorTrait for EgressAclEnforcer {
         Some(ctx)
     }
 }
-
 pub trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
     fn interface_list(&self) -> Vec<i32>;
