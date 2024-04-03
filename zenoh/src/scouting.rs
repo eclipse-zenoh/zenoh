@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::api::handlers::{locked, Callback, DefaultHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
-
 use futures::StreamExt;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
 use tokio::net::UdpSocket;

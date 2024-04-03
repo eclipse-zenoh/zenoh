@@ -22,7 +22,7 @@ use crate::net::primitives::Primitives;
 use crate::prelude::*;
 #[cfg(feature = "unstable")]
 use crate::{
-    handlers::{Callback, DefaultHandler, IntoHandler},
+    api::handlers::{Callback, DefaultHandler, IntoHandler},
     Id,
 };
 use std::future::Ready;
@@ -1238,7 +1238,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     where
         CallbackMut: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
-        self.callback(crate::handlers::locked(callback))
+        self.callback(crate::api::handlers::locked(callback))
     }
 
     /// Receive the MatchingStatuses for this listener with a [`Handler`](crate::prelude::IntoHandler).

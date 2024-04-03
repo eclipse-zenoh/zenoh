@@ -22,11 +22,11 @@ use crate::{api::query::Reply, Id};
 #[zenoh_macros::unstable]
 use {
     crate::{
+        api::handlers::locked,
+        api::handlers::DefaultHandler,
         api::session::SessionRef,
         api::session::Undeclarable,
         api::subscriber::{Subscriber, SubscriberInner},
-        handlers::locked,
-        handlers::DefaultHandler,
         prelude::*,
     },
     std::convert::TryInto,

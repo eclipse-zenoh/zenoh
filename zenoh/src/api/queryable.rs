@@ -15,11 +15,11 @@
 //! Queryable primitives.
 
 use crate::api::builders::sample::SampleBuilder;
+use crate::api::encoding::Encoding;
+use crate::api::handlers::{locked, DefaultHandler};
 use crate::api::sample::{QoSBuilder, SourceInfo};
 use crate::api::session::SessionRef;
 use crate::api::session::Undeclarable;
-use crate::encoding::Encoding;
-use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::Id;

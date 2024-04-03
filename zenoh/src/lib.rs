@@ -81,8 +81,8 @@ extern crate zenoh_result;
 
 pub(crate) type Id = u32;
 
+use api::handlers::DefaultHandler;
 use git_version::git_version;
-use handlers::DefaultHandler;
 #[cfg(feature = "unstable")]
 use prelude::*;
 use scouting::ScoutBuilder;
@@ -208,6 +208,13 @@ pub mod queryable {
     pub use crate::api::queryable::QueryableBuilder;
 }
 
+pub mod handlers {
+    pub use crate::api::handlers::locked;
+    pub use crate::api::handlers::DefaultHandler;
+    pub use crate::api::handlers::IntoHandler;
+    pub use crate::api::handlers::RingBuffer;
+}
+
 mod admin;
 #[macro_use]
 
@@ -216,7 +223,6 @@ pub(crate) mod net;
 pub use net::runtime;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
-pub mod handlers;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
 pub mod plugins;

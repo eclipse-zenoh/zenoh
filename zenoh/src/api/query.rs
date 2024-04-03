@@ -13,10 +13,10 @@
 //
 
 //! Query primitives.
+use crate::api::handlers::{locked, Callback, DefaultHandler};
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
 use crate::api::sample::QoSBuilder;
-use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
 use crate::Session;
 use std::collections::HashMap;
