@@ -169,7 +169,7 @@ where
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-        scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
+        _scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
     }
 }
 
@@ -294,7 +294,7 @@ impl<Receiver> Scout<Receiver> {
     }
 }
 
-fn scout(
+fn _scout(
     what: WhatAmIMatcher,
     config: zenoh_config::Config,
     callback: Callback<'static, Hello>,
@@ -335,4 +335,47 @@ fn scout(
         }
     }
     Ok(ScoutInner { stop_sender })
+}
+
+/// Scout for routers and/or peers.
+///
+/// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
+///
+/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
+///
+/// # Arguments
+///
+/// * `what` - The kind of zenoh process to scout for
+/// * `config` - The configuration [`Config`] to use for scouting
+///
+/// # Examples
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::r#async::*;
+/// use zenoh::scouting::WhatAmI;
+///
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+///     .res()
+///     .await
+///     .unwrap();
+/// while let Ok(hello) = receiver.recv_async().await {
+///     println!("{}", hello);
+/// }
+/// # }
+/// ```
+pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
+    what: I,
+    config: TryIntoConfig,
+) -> ScoutBuilder<DefaultHandler>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error:
+        Into<zenoh_result::Error>,
+{
+    ScoutBuilder {
+        what: what.into(),
+        config: config.try_into().map_err(|e| e.into()),
+        handler: DefaultHandler,
+    }
 }

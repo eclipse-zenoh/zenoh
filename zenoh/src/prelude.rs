@@ -41,7 +41,7 @@ pub(crate) mod common {
     pub use crate::selector::{Parameter, Parameters, Selector};
     pub use crate::session::{Session, SessionDeclarations};
 
-    pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+    pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 
     pub use crate::api::encoding::Encoding;
     pub use crate::api::value::Value;
@@ -56,9 +56,9 @@ pub(crate) mod common {
     #[cfg(not(feature = "unstable"))]
     pub(crate) use crate::sample::Locality;
 
-    pub use crate::publication::Priority;
+    pub use crate::api::publication::Priority;
     #[zenoh_macros::unstable]
-    pub use crate::publication::PublisherDeclarations;
+    pub use crate::api::publication::PublisherDeclarations;
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
 
     pub use crate::api::builders::sample::{

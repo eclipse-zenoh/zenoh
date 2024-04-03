@@ -22,6 +22,7 @@ pub(crate) mod publication;
 pub(crate) mod query;
 pub(crate) mod queryable;
 pub(crate) mod sample;
+pub(crate) mod scouting;
 pub(crate) mod selector;
 pub(crate) mod session;
 pub(crate) mod subscriber;

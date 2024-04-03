@@ -14,6 +14,7 @@
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::scouting::WhatAmI;
+use zenoh::scouting::scout;
 
 #[tokio::main]
 async fn main() {
@@ -21,7 +22,7 @@ async fn main() {
     env_logger::init();
 
     println!("Scouting...");
-    let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
+    let receiver = scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
         .res()
         .await
         .unwrap();

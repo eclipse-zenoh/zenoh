@@ -81,13 +81,9 @@ extern crate zenoh_result;
 
 pub(crate) type Id = u32;
 
-use api::handlers::DefaultHandler;
 use git_version::git_version;
 #[cfg(feature = "unstable")]
 use prelude::*;
-use scouting::ScoutBuilder;
-pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
-use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_util::concat_enabled_features;
 
 /// A zenoh error.
@@ -215,6 +211,12 @@ pub mod handlers {
     pub use crate::api::handlers::RingBuffer;
 }
 
+pub mod scouting {
+    pub use crate::api::scouting::scout;
+    pub use crate::api::scouting::ScoutBuilder;
+    pub use crate::api::scouting::WhatAmI;
+}
+
 mod admin;
 #[macro_use]
 
@@ -248,51 +250,5 @@ pub mod time {
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         Timestamp::new(now.into(), TimestampId::try_from([1]).unwrap())
-    }
-}
-
-/// Scouting primitives.
-pub mod scouting;
-
-/// Scout for routers and/or peers.
-///
-/// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
-///
-/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
-///
-/// # Arguments
-///
-/// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [`Config`] to use for scouting
-///
-/// # Examples
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-/// use zenoh::scouting::WhatAmI;
-///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
-///     .res()
-///     .await
-///     .unwrap();
-/// while let Ok(hello) = receiver.recv_async().await {
-///     println!("{}", hello);
-/// }
-/// # }
-/// ```
-pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
-    what: I,
-    config: TryIntoConfig,
-) -> ScoutBuilder<DefaultHandler>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error:
-        Into<zenoh_result::Error>,
-{
-    ScoutBuilder {
-        what: what.into(),
-        config: config.try_into().map_err(|e| e.into()),
-        handler: DefaultHandler,
     }
 }
