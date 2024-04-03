@@ -13,7 +13,7 @@
 //
 use std::convert::TryFrom;
 
-use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
+use zenoh_protocol::core::{Timestamp, TimestampId};
 
 /// Generates a reception [`Timestamp`] with id=0x01.
 /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)

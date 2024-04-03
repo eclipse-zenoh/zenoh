@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::admin;
+use crate::api::admin;
 use crate::api::encoding::Encoding;
 use crate::api::handlers::{Callback, DefaultHandler};
 use crate::api::info::SessionInfo;

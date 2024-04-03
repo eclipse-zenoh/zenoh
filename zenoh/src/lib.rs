@@ -227,9 +227,6 @@ pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 }
 
-mod admin;
-#[macro_use]
-
 mod api;
 pub(crate) mod net;
 pub use net::runtime;

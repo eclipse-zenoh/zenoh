@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+pub(crate) mod admin;
 pub(crate) mod builders;
 pub(crate) mod encoding;
 pub(crate) mod handlers;
