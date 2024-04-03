@@ -17,6 +17,8 @@ use crate::api::handlers::{Callback, DefaultHandler};
 use crate::api::info::SessionInfo;
 use crate::api::key_expr::KeyExpr;
 use crate::api::key_expr::KeyExprInner;
+#[zenoh_macros::unstable]
+use crate::api::liveliness::{Liveliness, LivelinessTokenState};
 use crate::api::publication::MatchingListenerState;
 use crate::api::publication::MatchingStatus;
 use crate::api::publication::PublicationBuilder;
@@ -41,8 +43,6 @@ use crate::api::subscriber::SubscriberState;
 use crate::api::value::Value;
 use crate::config::Config;
 use crate::config::Notifier;
-#[zenoh_macros::unstable]
-use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
@@ -1030,7 +1030,7 @@ impl Session {
         let declared_sub = origin != Locality::SessionLocal
             && !key_expr
                 .as_str()
-                .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+                .starts_with(crate::api::liveliness::PREFIX_LIVELINESS);
 
         let declared_sub =
             declared_sub
@@ -1160,7 +1160,7 @@ impl Session {
                 && !sub_state
                     .key_expr
                     .as_str()
-                    .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+                    .starts_with(crate::api::liveliness::PREFIX_LIVELINESS);
             if send_forget {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
@@ -1270,7 +1270,7 @@ impl Session {
         let mut state = zwrite!(self.state);
         log::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
-        let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
+        let key_expr = KeyExpr::from(*crate::api::liveliness::KE_PREFIX_LIVELINESS / key_expr);
         let tok_state = Arc::new(LivelinessTokenState {
             id,
             key_expr: key_expr.clone().into_owned(),
@@ -2018,7 +2018,7 @@ impl Primitives for Session {
 
                             if expr
                                 .as_str()
-                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                                .starts_with(crate::api::liveliness::PREFIX_LIVELINESS)
                             {
                                 drop(state);
                                 self.handle_data(
@@ -2047,7 +2047,7 @@ impl Primitives for Session {
 
                         if expr
                             .as_str()
-                            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                            .starts_with(crate::api::liveliness::PREFIX_LIVELINESS)
                         {
                             drop(state);
                             let data_info = DataInfo {

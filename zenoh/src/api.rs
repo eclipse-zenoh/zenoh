@@ -17,6 +17,7 @@ pub(crate) mod encoding;
 pub(crate) mod handlers;
 pub(crate) mod info;
 pub(crate) mod key_expr;
+pub(crate) mod liveliness;
 pub(crate) mod payload;
 pub(crate) mod publication;
 pub(crate) mod query;

@@ -217,6 +217,11 @@ pub mod scouting {
     pub use crate::api::scouting::WhatAmI;
 }
 
+pub mod liveliness {
+    pub use crate::api::liveliness::Liveliness;
+    pub use crate::api::liveliness::LivelinessSubscriberBuilder;
+}
+
 mod admin;
 #[macro_use]
 
@@ -226,7 +231,6 @@ pub use net::runtime;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 #[cfg(feature = "unstable")]
-pub mod liveliness;
 pub mod plugins;
 pub mod prelude;
 #[cfg(feature = "shared-memory")]
