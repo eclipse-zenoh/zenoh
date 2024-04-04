@@ -303,7 +303,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
     fn declare_queryable<'b, TryIntoKeyExpr>(
@@ -319,7 +319,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: false,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
     fn declare_publisher<'b, TryIntoKeyExpr>(
@@ -798,7 +798,7 @@ impl Session {
             value: None,
             #[cfg(feature = "unstable")]
             attachment: None,
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 }
@@ -1825,7 +1825,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -1870,7 +1870,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: false,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
