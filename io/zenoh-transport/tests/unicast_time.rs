@@ -89,6 +89,11 @@ async fn time_transport(
     connect_endpoint: &EndPoint,
     lowlatency_transport: bool,
 ) {
+    if lowlatency_transport {
+        println!(">>> Low latency transport");
+    } else {
+        println!(">>> Universal transport");
+    }
     /* [ROUTER] */
     let router_id = ZenohId::try_from([1]).unwrap();
 
