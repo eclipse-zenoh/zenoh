@@ -19,6 +19,9 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::collections::HashMap;
 use zenoh_config::Config;
+
+#[cfg(any(feature = "transport_quic", feature = "transport_tls"))]
+use zenoh_link_commons::tls::TlsConfigurator;
 use zenoh_result::{bail, ZResult};
 
 #[cfg(feature = "transport_tcp")]
@@ -36,16 +39,12 @@ use zenoh_link_udp::{
 #[cfg(feature = "transport_tls")]
 pub use zenoh_link_tls as tls;
 #[cfg(feature = "transport_tls")]
-use zenoh_link_tls::{
-    LinkManagerUnicastTls, TlsConfigurator, TlsLocatorInspector, TLS_LOCATOR_PREFIX,
-};
+use zenoh_link_tls::{LinkManagerUnicastTls, TlsLocatorInspector, TLS_LOCATOR_PREFIX};
 
 #[cfg(feature = "transport_quic")]
 pub use zenoh_link_quic as quic;
 #[cfg(feature = "transport_quic")]
-use zenoh_link_quic::{
-    LinkManagerUnicastQuic, QuicConfigurator, QuicLocatorInspector, QUIC_LOCATOR_PREFIX,
-};
+use zenoh_link_quic::{LinkManagerUnicastQuic, QuicLocatorInspector, QUIC_LOCATOR_PREFIX};
 
 #[cfg(feature = "transport_ws")]
 pub use zenoh_link_ws as ws;
@@ -155,7 +154,7 @@ impl LocatorInspector {
 #[derive(Default)]
 pub struct LinkConfigurator {
     #[cfg(feature = "transport_quic")]
-    quic_inspector: QuicConfigurator,
+    quic_inspector: TlsConfigurator,
     #[cfg(feature = "transport_tls")]
     tls_inspector: TlsConfigurator,
     #[cfg(feature = "transport_unixpipe")]

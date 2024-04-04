@@ -34,9 +34,11 @@ rustls-webpki = { workspace = true }
 flume = { workspace = true }
 tracing = {workspace = true}
 serde = { workspace = true, features = ["default"] }
+secrecy = {workspace = true }
 zenoh-buffers = { workspace = true }
 zenoh-codec = { workspace = true }
 zenoh-core = { workspace = true }
+zenoh-config = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }

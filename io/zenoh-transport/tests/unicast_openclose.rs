@@ -559,7 +559,7 @@ async fn openclose_unix_only() {
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
     // NOTE: this an auto-generated pair of certificate and key.
@@ -657,7 +657,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only() {
-    use zenoh_link::quic::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real

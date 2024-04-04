@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    base64_decode, config::*, get_tls_addr, get_tls_host, get_tls_server_name,
-    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
+    base64_decode, get_tls_addr, get_tls_host, get_tls_server_name, TLS_ACCEPT_THROTTLE_TIME,
+    TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
 use async_trait::async_trait;
 use rustls::{
@@ -37,7 +37,17 @@ use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
 use webpki::anchor_from_trusted_cert;
 use zenoh_core::zasynclock;
-use zenoh_link_commons::tls::WebPkiVerifierAnyServerName;
+use zenoh_link_commons::tls::{
+    config::{
+        TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_BASE64, TLS_CLIENT_CERTIFICATE_FILE,
+        TLS_CLIENT_CERTIFICATE_RAW, TLS_CLIENT_PRIVATE_KEY_BASE64, TLS_CLIENT_PRIVATE_KEY_FILE,
+        TLS_CLIENT_PRIVATE_KEY_RAW, TLS_ROOT_CA_CERTIFICATE_BASE64, TLS_ROOT_CA_CERTIFICATE_FILE,
+        TLS_ROOT_CA_CERTIFICATE_RAW, TLS_SERVER_CERTIFICATE_BASE64, TLS_SERVER_CERTIFICATE_FILE,
+        TLS_SERVER_CERTIFICATE_RAW, TLS_SERVER_NAME_VERIFICATION, TLS_SERVER_PRIVATE_KEY_BASE_64,
+        TLS_SERVER_PRIVATE_KEY_FILE, TLS_SERVER_PRIVATE_KEY_RAW,
+    },
+    WebPkiVerifierAnyServerName,
+};
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,

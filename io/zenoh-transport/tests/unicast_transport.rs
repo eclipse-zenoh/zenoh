@@ -991,7 +991,7 @@ async fn transport_unicast_tcp_udp_unix() {
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tls_only_server() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
 
@@ -1037,7 +1037,7 @@ async fn transport_unicast_tls_only_server() {
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_quic_only_server() {
-    use zenoh_link::quic::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
     // Define the locator
@@ -1082,7 +1082,7 @@ async fn transport_unicast_quic_only_server() {
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tls_only_mutual_success() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
 
@@ -1154,7 +1154,7 @@ async fn transport_unicast_tls_only_mutual_success() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     use std::vec;
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
 
@@ -1222,7 +1222,7 @@ async fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
 fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
 
