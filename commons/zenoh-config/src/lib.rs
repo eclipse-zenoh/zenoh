@@ -15,8 +15,6 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
-
-use enum_map::Enum;
 use include::recursive_include;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
@@ -74,7 +72,7 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Enum)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum DownsamplingFlow {
     Egress,
@@ -126,7 +124,7 @@ pub enum Subject {
     Interface(String),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Enum)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
     Put,
@@ -135,7 +133,7 @@ pub enum Action {
     DeclareQueryable,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Enum)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Permission {
     Allow,
