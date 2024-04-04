@@ -27,7 +27,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
-            DeclareBody, DeclareKeyExpr,
+            DeclareBody, DeclareKeyExpr, DeclareMode,
         },
         Mapping,
     },
@@ -452,7 +452,7 @@ impl Resource {
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            interest_id: None,
+                            mode: DeclareMode::Push,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,

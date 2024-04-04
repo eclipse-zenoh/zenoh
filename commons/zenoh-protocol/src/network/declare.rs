@@ -18,6 +18,8 @@ use crate::{
     zextz64, zextzbuf,
 };
 use alloc::borrow::Cow;
+pub use common::*;
+use core::sync::atomic::AtomicU32;
 pub use interest::*;
 pub use keyexpr::*;
 pub use queryable::*;
@@ -31,24 +33,59 @@ pub mod flag {
 }
 
 /// Flags:
-/// - I: Interest       If I==1 then the declare is in a response to an Interest with future==false
-/// - X: Reserved
+/// - |: Mode           The mode of the the declaration*
+/// -/
 /// - Z: Extension      If Z==1 then at least one extension is present
 ///
 /// 7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |Z|X|I| DECLARE |
+/// |Z|Mod| DECLARE |
 /// +-+-+-+---------+
-/// ~interest_id:z32~  if I==1
+/// ~    rid:z32    ~  if Mode != Push
 /// +---------------+
 /// ~  [decl_exts]  ~  if Z==1
 /// +---------------+
 /// ~  declaration  ~
 /// +---------------+
 ///
+/// *Mode of declaration:
+/// - Mode 0b00: Push
+/// - Mode 0b01: Request
+/// - Mode 0b10: RequestContinuous
+/// - Mode 0b11: Response
+
+/// The resolution of a RequestId
+pub type DeclareRequestId = u32;
+pub type AtomicDeclareRequestId = AtomicU32;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeclareMode {
+    Push,
+    Request(DeclareRequestId),
+    RequestContinuous(DeclareRequestId),
+    Response(DeclareRequestId),
+}
+
+impl DeclareMode {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        match rng.gen_range(0..4) {
+            0 => DeclareMode::Push,
+            1 => DeclareMode::Request(rng.gen()),
+            2 => DeclareMode::RequestContinuous(rng.gen()),
+            3 => DeclareMode::Response(rng.gen()),
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Declare {
-    pub interest_id: Option<InterestId>,
+    pub mode: DeclareMode,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_nodeid: ext::NodeIdType,
@@ -85,8 +122,9 @@ pub mod id {
     pub const U_TOKEN: u8 = 0x07;
 
     pub const D_INTEREST: u8 = 0x08;
-    pub const F_INTEREST: u8 = 0x09;
-    pub const U_INTEREST: u8 = 0x0A;
+    pub const U_INTEREST: u8 = 0x09;
+
+    pub const D_FINAL: u8 = 0x1A;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,8 +138,8 @@ pub enum DeclareBody {
     DeclareToken(DeclareToken),
     UndeclareToken(UndeclareToken),
     DeclareInterest(DeclareInterest),
-    FinalInterest(FinalInterest),
     UndeclareInterest(UndeclareInterest),
+    DeclareFinal(DeclareFinal),
 }
 
 impl DeclareBody {
@@ -121,8 +159,8 @@ impl DeclareBody {
             6 => DeclareBody::DeclareToken(DeclareToken::rand()),
             7 => DeclareBody::UndeclareToken(UndeclareToken::rand()),
             8 => DeclareBody::DeclareInterest(DeclareInterest::rand()),
-            9 => DeclareBody::FinalInterest(FinalInterest::rand()),
-            10 => DeclareBody::UndeclareInterest(UndeclareInterest::rand()),
+            9 => DeclareBody::UndeclareInterest(UndeclareInterest::rand()),
+            10 => DeclareBody::DeclareFinal(DeclareFinal::rand()),
             _ => unreachable!(),
         }
     }
@@ -135,14 +173,14 @@ impl Declare {
 
         let mut rng = rand::thread_rng();
 
-        let interest_id = rng.gen_bool(0.5).then_some(rng.gen::<InterestId>());
+        let mode = DeclareMode::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_nodeid = ext::NodeIdType::rand();
         let body = DeclareBody::rand();
 
         Self {
-            interest_id,
+            mode,
             ext_qos,
             ext_tstamp,
             ext_nodeid,
@@ -153,6 +191,29 @@ impl Declare {
 
 pub mod common {
     use super::*;
+
+    /// ```text
+    /// Flags:
+    /// - X: Reserved
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|x|x| D_FINAL |
+    /// +---------------+
+    /// ~ [final_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct DeclareFinal;
+
+    impl DeclareFinal {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            Self
+        }
+    }
 
     pub mod ext {
         use super::*;
@@ -545,7 +606,7 @@ pub mod queryable {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|0_2|  U_QBL  |
+    /// |Z|X|X|  U_QBL  |
     /// +---------------+
     /// ~  qbls_id:z32  ~
     /// +---------------+
@@ -668,44 +729,51 @@ pub mod interest {
     pub type InterestId = u32;
 
     pub mod flag {
-        pub const C: u8 = 1 << 5; // 0x20 Current       if C==1 then the interest refers to the current declarations.
+        // pub const X: u8 = 1 << 5; // 0x20 Reserved
         pub const F: u8 = 1 << 6; // 0x40 Future        if F==1 then the interest refers to the future declarations.
         pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
     }
 
     /// # DeclareInterest message
     ///
-    /// The DECLARE INTEREST message is sent to request the transmission of existing and future
-    /// declarations of a given kind matching a target keyexpr. E.g., a declare interest could be sent to
-    /// request the transmisison of all existing subscriptions matching `a/*`. A FINAL INTEREST is used to
-    /// mark the end of the transmission of exisiting matching declarations.
+    /// The DECLARE INTEREST message is sent to request the transmission of current and/or future
+    /// declarations of a given kind matching a target keyexpr. E.g., a declare interest could be
+    /// sent to request the transmisison of all current subscriptions matching `a/*`.
     ///
-    /// E.g., the [`DeclareInterest`]/[`FinalInterest`]/[`UndeclareInterest`] message flow is the following:
+    /// The behaviour of a DECLARE INTEREST depends on the DECLARE MODE in the DECLARE MESSAGE:
+    /// - Push: only future declarations
+    /// - Request: only current declarations
+    /// - RequestContinous: current and future declarations
+    /// - Response: invalid
+    ///
+    /// E.g., the [`DeclareInterest`]/[`UndeclareInterest`] message flow is the following:
     ///
     /// ```text
     ///     A                   B
     ///     |   DECL INTEREST   |
-    ///     |------------------>| -- This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
+    ///     |------------------>| -- Sent in Declare::RequestContinuous.
+    ///     |                   |    This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
     ///     |                   |
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------|
+    ///     |<------------------| -- Sent in Declare::Response
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------|
+    ///     |<------------------| -- Sent in Declare::Response
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------|
+    ///     |<------------------| -- Sent in Declare::Response
     ///     |                   |
-    ///     |   FINAL INTEREST  |
-    ///     |<------------------|  -- The FinalInterest signals that all known subscribers have been transmitted.
+    ///     |       FINAL       |
+    ///     |<------------------| -- Sent in Declare::Response
     ///     |                   |
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------|  -- This is a new subscriber declaration.
+    ///     |<------------------| -- Sent in Declare::Push. This is a new subscriber declaration.
     ///     | UNDECL SUBSCRIBER |
-    ///     |<------------------|  -- This is a new subscriber undeclaration.
+    ///     |<------------------| -- Sent in Declare::Push. This is a new subscriber undeclaration.
     ///     |                   |
     ///     |        ...        |
     ///     |                   |
     ///     |  UNDECL INTEREST  |
-    ///     |------------------>|  -- This is an UndeclareInterest to stop receiving subscriber declarations/undeclarations.
+    ///     |------------------>| -- Sent in Declare::RequestContinuous.
+    ///     |                   |    This is an UndeclareInterest to stop receiving subscriber declarations/undeclarations.
     ///     |                   |
     /// ```
     ///
@@ -713,7 +781,7 @@ pub mod interest {
     ///
     /// ```text
     /// Flags:
-    /// - C: Current        if C==1 then the interest refers to the current declarations.
+    /// - X: Reserved
     /// - F: Future         if F==1 then the interest refers to the future declarations. Note that if F==0 then:
     ///                     - Declarations SHOULD NOT be sent after the FinalInterest;
     ///                     - UndeclareInterest SHOULD NOT be sent after the FinalInterest.
@@ -721,7 +789,7 @@ pub mod interest {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|F|C|  D_INT  |
+    /// |Z|F|X|  D_INT  |
     /// +---------------+
     /// ~ intst_id:z32  ~
     /// +---------------+
@@ -754,9 +822,6 @@ pub mod interest {
     impl DeclareInterest {
         pub fn flags(&self) -> u8 {
             let mut interest = self.interest;
-            if self.interest.current() {
-                interest += Interest::CURRENT;
-            }
             if self.interest.future() {
                 interest += Interest::FUTURE;
             }
@@ -802,7 +867,6 @@ pub mod interest {
 
     impl Interest {
         // Header
-        pub const CURRENT: Interest = Interest::flags(interest::flag::C);
         pub const FUTURE: Interest = Interest::flags(interest::flag::F);
         // Flags
         pub const KEYEXPRS: Interest = Interest::options(1);
@@ -833,10 +897,6 @@ pub mod interest {
                 flags: 0,
                 options: 0,
             }
-        }
-
-        pub const fn current(&self) -> bool {
-            imsg::has_flag(self.flags, Self::CURRENT.flags)
         }
 
         pub const fn future(&self) -> bool {
@@ -882,9 +942,6 @@ pub mod interest {
 
             let mut s = Self::empty();
             if rng.gen_bool(0.5) {
-                s += Interest::CURRENT;
-            }
-            if rng.gen_bool(0.5) {
                 s += Interest::FUTURE;
             }
             if rng.gen_bool(0.5) {
@@ -905,8 +962,7 @@ pub mod interest {
 
     impl PartialEq for Interest {
         fn eq(&self, other: &Self) -> bool {
-            self.current() == other.current()
-                && self.future() == other.future()
+            self.future() == other.future()
                 && self.keyexprs() == other.keyexprs()
                 && self.subscribers() == other.subscribers()
                 && self.queryables() == other.queryables()
@@ -918,11 +974,6 @@ pub mod interest {
     impl Debug for Interest {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "Interest {{ ")?;
-            if self.current() {
-                write!(f, "C:Y, ")?;
-            } else {
-                write!(f, "C:N, ")?;
-            }
             if self.future() {
                 write!(f, "F:Y, ")?;
             } else {
@@ -1000,38 +1051,6 @@ pub mod interest {
         fn from(value: (u8, u8)) -> Self {
             let (flags, options) = value;
             Self { flags, options }
-        }
-    }
-
-    /// ```text
-    /// Flags:
-    /// - X: Reserved
-    /// - X: Reserved
-    /// - Z: Extension      If Z==1 then at least one extension is present
-    ///
-    /// 7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X|  F_INT  |
-    /// +---------------+
-    /// ~ intst_id:z32  ~  
-    /// +---------------+
-    /// ~  [decl_exts]  ~  if Z==1
-    /// +---------------+
-    /// ```
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct FinalInterest {
-        pub id: InterestId,
-    }
-
-    impl FinalInterest {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let id: InterestId = rng.gen();
-
-            Self { id }
         }
     }
 
