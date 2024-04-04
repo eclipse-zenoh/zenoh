@@ -27,6 +27,7 @@ tracing-subscriber = {version = "0.3", features = ["json", "env-filter"]}
 futures = "0.3.25"
 zenoh = { path = "../../zenoh/" }
 zenoh-runtime = { path = "../../commons/zenoh-runtime/" }
+zenoh-util = { path = "../../commons/zenoh-util/" }
 
 [[bin]]
 name = "pub_sub"
