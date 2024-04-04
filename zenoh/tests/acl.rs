@@ -10,6 +10,7 @@ fn test_acl() {
     test_pub_sub_deny();
     test_pub_sub_allow_then_deny();
     test_pub_sub_deny_then_allow();
+    test_get_queryable_deny_then_allow();
 }
 
 fn test_pub_sub_deny() {
@@ -276,7 +277,7 @@ fn test_pub_sub_allow_then_deny() {
     std::thread::sleep(std::time::Duration::from_millis(10));
     assert_ne!(*zlock!(received_value), VALUE);
 }
-
+#[test]
 fn test_pub_sub_deny_then_allow() {
     let mut config_router = Config::default();
     config_router.set_mode(Some(WhatAmI::Router)).unwrap();
@@ -372,4 +373,97 @@ fn test_pub_sub_deny_then_allow() {
     publisher.put(VALUE).res().unwrap();
     std::thread::sleep(std::time::Duration::from_millis(10));
     assert_eq!(*zlock!(received_value), VALUE);
+}
+
+#[test]
+fn test_get_queryable_deny_then_allow() {
+    let mut config_router = Config::default();
+    config_router.set_mode(Some(WhatAmI::Router)).unwrap();
+    config_router
+        .listen
+        .set_endpoints(vec![
+            "tcp/localhost:7447".parse().unwrap(),
+            "tcp/localhost:7448".parse().unwrap(),
+        ])
+        .unwrap();
+
+    config_router
+        .scouting
+        .multicast
+        .set_enabled(Some(false))
+        .unwrap();
+    config_router
+        .insert_json5(
+            "transport",
+            r#"{
+          acl: {
+            "enabled": true,
+            "default_permission": "deny",
+            "rules":
+            [
+              {
+                "permission": "allow",
+                "flow": ["egress","ingress"],
+                "action": [
+                  "get",
+                  "declare_queryable"
+                ],
+                "key_expr": [
+                  "test/demo"
+                ],
+                "interface": [
+                  "lo0"
+                ]
+              },
+            ]
+          }
+        }"#,
+        )
+        .unwrap();
+    let mut config_qbl = Config::default();
+    config_qbl.set_mode(Some(WhatAmI::Client)).unwrap();
+    config_qbl
+        .connect
+        .set_endpoints(vec!["tcp/localhost:7447".parse().unwrap()])
+        .unwrap();
+    config_qbl
+        .scouting
+        .multicast
+        .set_enabled(Some(false))
+        .unwrap();
+    let mut config_get = Config::default();
+    config_get.set_mode(Some(WhatAmI::Client)).unwrap();
+    config_get
+        .connect
+        .set_endpoints(vec!["tcp/localhost:7448".parse().unwrap()])
+        .unwrap();
+    config_get
+        .scouting
+        .multicast
+        .set_enabled(Some(false))
+        .unwrap();
+    const KEY_EXPR: &str = "test/demo";
+    const VALUE: &str = "zenoh";
+    let _session = zenoh::open(config_router).res().unwrap();
+    let qbl_session = zenoh::open(config_qbl).res().unwrap();
+    let get_session = zenoh::open(config_get).res().unwrap();
+    let mut received_value = String::new();
+    let _qbl = qbl_session
+        .declare_queryable(KEY_EXPR)
+        .callback(move |sample| {
+            let rep = Sample::try_from(KEY_EXPR, VALUE).unwrap();
+            sample.reply(Ok(rep)).res().unwrap();
+        })
+        .res()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    let recv_reply = get_session.get(KEY_EXPR).res().unwrap();
+    while let Ok(reply) = recv_reply.recv() {
+        match reply.sample {
+            Ok(sample) => received_value = sample.value.to_string(),
+            Err(e) => println!("Error : {}", e),
+        }
+    }
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    assert_eq!(received_value, VALUE);
 }
