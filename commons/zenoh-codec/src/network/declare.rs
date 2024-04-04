@@ -52,7 +52,6 @@ where
             DeclareBody::DeclareToken(r) => self.write(&mut *writer, r)?,
             DeclareBody::UndeclareToken(r) => self.write(&mut *writer, r)?,
             DeclareBody::DeclareInterest(r) => self.write(&mut *writer, r)?,
-            DeclareBody::UndeclareInterest(r) => self.write(&mut *writer, r)?,
             DeclareBody::DeclareFinal(r) => self.write(&mut *writer, r)?,
         }
 
@@ -81,7 +80,6 @@ where
             D_TOKEN => DeclareBody::DeclareToken(codec.read(&mut *reader)?),
             U_TOKEN => DeclareBody::UndeclareToken(codec.read(&mut *reader)?),
             D_INTEREST => DeclareBody::DeclareInterest(codec.read(&mut *reader)?),
-            U_INTEREST => DeclareBody::UndeclareInterest(codec.read(&mut *reader)?),
             D_FINAL => DeclareBody::DeclareFinal(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
@@ -110,9 +108,9 @@ where
         let mut header = id::DECLARE;
         header |= match mode {
             DeclareMode::Push => 0b00,
-            DeclareMode::Request(_) => 0b01,
-            DeclareMode::RequestContinuous(_) => 0b10,
-            DeclareMode::Response(_) => 0b11,
+            DeclareMode::Response(_) => 0b01,
+            DeclareMode::Request(_) => 0b10,
+            DeclareMode::RequestContinuous(_) => 0b11,
         } << HEADER_BITS;
 
         let mut n_exts = ((ext_qos != &declare::ext::QoSType::DEFAULT) as u8)
@@ -180,9 +178,9 @@ where
         // Body
         let mode = match (self.header >> HEADER_BITS) & 0b11 {
             0b00 => DeclareMode::Push,
-            0b01 => DeclareMode::Request(self.codec.read(&mut *reader)?),
-            0b10 => DeclareMode::RequestContinuous(self.codec.read(&mut *reader)?),
-            0b11 => DeclareMode::Response(self.codec.read(&mut *reader)?),
+            0b01 => DeclareMode::Response(self.codec.read(&mut *reader)?),
+            0b10 => DeclareMode::Request(self.codec.read(&mut *reader)?),
+            0b11 => DeclareMode::RequestContinuous(self.codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
@@ -1041,81 +1039,6 @@ where
             interest,
             wire_expr,
         })
-    }
-}
-
-// UndeclareInterest
-impl<W> WCodec<&interest::UndeclareInterest, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &interest::UndeclareInterest) -> Self::Output {
-        let interest::UndeclareInterest { id, ext_wire_expr } = x;
-
-        // Header
-        let header = declare::id::U_INTEREST | interest::flag::Z;
-        self.write(&mut *writer, header)?;
-
-        // Body
-        self.write(&mut *writer, id)?;
-
-        // Extension
-        self.write(&mut *writer, (ext_wire_expr, false))?;
-
-        Ok(())
-    }
-}
-
-impl<R> RCodec<interest::UndeclareInterest, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<interest::UndeclareInterest, Self::Error> {
-        let header: u8 = self.read(&mut *reader)?;
-        let codec = Zenoh080Header::new(header);
-
-        codec.read(reader)
-    }
-}
-
-impl<R> RCodec<interest::UndeclareInterest, &mut R> for Zenoh080Header
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<interest::UndeclareInterest, Self::Error> {
-        if imsg::mid(self.header) != declare::id::U_INTEREST {
-            return Err(DidntRead);
-        }
-
-        // Body
-        let id: interest::InterestId = self.codec.read(&mut *reader)?;
-
-        // Extensions
-        let mut ext_wire_expr = common::ext::WireExprType::null();
-
-        let mut has_ext = imsg::has_flag(self.header, interest::flag::Z);
-        while has_ext {
-            let ext: u8 = self.codec.read(&mut *reader)?;
-            let eodec = Zenoh080Header::new(ext);
-            match iext::eid(ext) {
-                common::ext::WireExprExt::ID => {
-                    let (we, ext): (common::ext::WireExprType, bool) = eodec.read(&mut *reader)?;
-                    ext_wire_expr = we;
-                    has_ext = ext;
-                }
-                _ => {
-                    has_ext = extension::skip(reader, "UndeclareInterest", ext)?;
-                }
-            }
-        }
-
-        Ok(interest::UndeclareInterest { id, ext_wire_expr })
     }
 }
 

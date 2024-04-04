@@ -2048,7 +2048,6 @@ impl Primitives for Session {
             DeclareBody::UndeclareToken(_) => todo!(),
             DeclareBody::DeclareInterest(_) => todo!(),
             DeclareBody::DeclareFinal(_) => todo!(),
-            DeclareBody::UndeclareInterest(_) => todo!(),
         }
     }
 

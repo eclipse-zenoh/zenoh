@@ -50,9 +50,9 @@ pub mod flag {
 ///
 /// *Mode of declaration:
 /// - Mode 0b00: Push
-/// - Mode 0b01: Request
-/// - Mode 0b10: RequestContinuous
-/// - Mode 0b11: Response
+/// - Mode 0b01: Response
+/// - Mode 0b10: Request
+/// - Mode 0b11: RequestContinuous
 
 /// The resolution of a RequestId
 pub type DeclareRequestId = u32;
@@ -122,7 +122,6 @@ pub mod id {
     pub const U_TOKEN: u8 = 0x07;
 
     pub const D_INTEREST: u8 = 0x08;
-    pub const U_INTEREST: u8 = 0x09;
 
     pub const D_FINAL: u8 = 0x1A;
 }
@@ -138,7 +137,6 @@ pub enum DeclareBody {
     DeclareToken(DeclareToken),
     UndeclareToken(UndeclareToken),
     DeclareInterest(DeclareInterest),
-    UndeclareInterest(UndeclareInterest),
     DeclareFinal(DeclareFinal),
 }
 
@@ -149,7 +147,7 @@ impl DeclareBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..11) {
+        match rng.gen_range(0..10) {
             0 => DeclareBody::DeclareKeyExpr(DeclareKeyExpr::rand()),
             1 => DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr::rand()),
             2 => DeclareBody::DeclareSubscriber(DeclareSubscriber::rand()),
@@ -159,8 +157,7 @@ impl DeclareBody {
             6 => DeclareBody::DeclareToken(DeclareToken::rand()),
             7 => DeclareBody::UndeclareToken(UndeclareToken::rand()),
             8 => DeclareBody::DeclareInterest(DeclareInterest::rand()),
-            9 => DeclareBody::UndeclareInterest(UndeclareInterest::rand()),
-            10 => DeclareBody::DeclareFinal(DeclareFinal::rand()),
+            9 => DeclareBody::DeclareFinal(DeclareFinal::rand()),
             _ => unreachable!(),
         }
     }
@@ -746,7 +743,7 @@ pub mod interest {
     /// - RequestContinous: current and future declarations
     /// - Response: invalid
     ///
-    /// E.g., the [`DeclareInterest`]/[`UndeclareInterest`] message flow is the following:
+    /// E.g., the [`DeclareInterest`] message flow is the following:
     ///
     /// ```text
     ///     A                   B
@@ -771,9 +768,9 @@ pub mod interest {
     ///     |                   |
     ///     |        ...        |
     ///     |                   |
-    ///     |  UNDECL INTEREST  |
+    ///     |       FINAL       |
     ///     |------------------>| -- Sent in Declare::RequestContinuous.
-    ///     |                   |    This is an UndeclareInterest to stop receiving subscriber declarations/undeclarations.
+    ///     |                   |    This stops the transmission of subscriber declarations/undeclarations.
     ///     |                   |
     /// ```
     ///
@@ -783,8 +780,7 @@ pub mod interest {
     /// Flags:
     /// - X: Reserved
     /// - F: Future         if F==1 then the interest refers to the future declarations. Note that if F==0 then:
-    ///                     - Declarations SHOULD NOT be sent after the FinalInterest;
-    ///                     - UndeclareInterest SHOULD NOT be sent after the FinalInterest.
+    ///                     - Declarations SHOULD NOT be sent after the Final;
     /// - Z: Extension      If Z==1 then at least one extension is present
     ///
     /// 7 6 5 4 3 2 1 0
