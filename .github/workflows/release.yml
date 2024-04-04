@@ -20,24 +20,38 @@ on:
     inputs:
       live-run:
         type: boolean
-        description: If false (or undefined) the workflow runs in dry-run mode (i.e. with no side-effects)
+        description: Live-run
         required: false
         default: false
       version:
         type: string
-        description: Release number. If undefined, the workflow auto-generates a version using git-describe
+        description: Release number
         required: false
 
 jobs:
   tag:
-    name: Bump and tag crates
-    uses: eclipse-zenoh/ci/.github/workflows/tag-crates.yml@main
-    with:
-      repo: ${{ github.repository }}
-      live-run: ${{ inputs.live-run || false }}
-      version: ${{ inputs.version }}
-      inter-deps-pattern: zenoh.*
-    secrets: inherit
+    name: Branch, bump & tag crates
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.create-release-branch.outputs.version }}
+      branch: ${{ steps.create-release-branch.outputs.branch }}
+    steps:
+      - id: create-release-branch
+        uses: eclipse-zenoh/ci/create-release-branch@main
+        with:
+          repo: ${{ github.repository }}
+          live-run: ${{ inputs.live-run || false }}
+          version: ${{ inputs.version }}
+          github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
+
+      - uses: eclipse-zenoh/ci/bump-crates@main
+        with:
+          repo: ${{ github.repository }}
+          version: ${{ steps.create-release-branch.outputs.version }}
+          branch: ${{ steps.create-release-branch.outputs.branch }}
+          bump-deps-pattern: zenoh.*
+          bump-deps-version: ${{ steps.create-release-branch.outputs.version }}
+          github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
 
   build-debian:
     name: Build Debian packages
@@ -64,14 +78,13 @@ jobs:
     secrets: inherit
 
   cargo:
-    name: Publish Cargo crates
     needs: tag
+    name: Publish Cargo crates
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-cargo.yml@main
     with:
-      repos: ${{ github.repository }}
+      repo: ${{ github.repository }}
       live-run: ${{ inputs.live-run || false }}
       branch: ${{ needs.tag.outputs.branch }}
-      inter-deps-pattern: zenoh.*
     secrets: inherit
 
   debian:
@@ -146,9 +159,10 @@ jobs:
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-dockerhub.yml@main
     with:
       no-build: true
-      live-run: ${{ inputs.live-run || false }}
+      live-run: true
       version: ${{ needs.tag.outputs.version }}
       repo: ${{ github.repository }}
+      branch: ${{ needs.tag.outputs.branch }}
       tags: "eclipse/zenoh:${{ needs.tag.outputs.version }}"
       binary: zenohd
       files: |
@@ -158,6 +172,7 @@ jobs:
       platforms: |
         linux/arm64
         linux/amd64
+      licenses: EPL-2.0 OR Apache-2.0
     secrets: inherit
 
   ghcr:
@@ -166,9 +181,10 @@ jobs:
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-ghcr.yml@main
     with:
       no-build: true
-      live-run: ${{ inputs.live-run || false }}
+      live-run: true
       version: ${{ needs.tag.outputs.version }}
       repo: ${{ github.repository }}
+      branch: ${{ needs.tag.outputs.branch }}
       tags: "${{ github.repository }}:${{ needs.tag.outputs.version }}"
       binary: zenohd
       files: |
@@ -178,4 +194,5 @@ jobs:
       platforms: |
         linux/arm64
         linux/amd64
+      licenses: EPL-2.0 OR Apache-2.0
     secrets: inherit
