@@ -154,19 +154,14 @@ impl Drop for ZRuntimePool {
         let handles: Vec<_> = self
             .0
             .drain()
-            .map(|(_name, mut rt)| {
-                rt.take().map(|r|
-                    std::thread::spawn(move || {
-                        r.shutdown_timeout(Duration::from_secs(1))
-                    })
-                )
+            .filter_map(|(_name, mut rt)| {
+                rt.take()
+                    .map(|r| std::thread::spawn(move || r.shutdown_timeout(Duration::from_secs(1))))
             })
             .collect();
 
-        for hdo in handles {
-            if let Some(hd) = hdo {
-                let _ = hd.join();
-            }
+        for hd in handles {
+            let _ = hd.join();
         }
     }
 }
