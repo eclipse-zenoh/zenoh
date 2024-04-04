@@ -37,10 +37,9 @@ secrecy = {workspace = true }
 tokio = { workspace = true, features = ["io-util", "net", "fs", "sync"] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
-webpki-roots = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-link-commons = { workspace = true }
+zenoh-link-commons = { workspace = true, features = ["tls"]}
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
