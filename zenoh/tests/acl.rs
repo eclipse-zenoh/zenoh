@@ -1,3 +1,4 @@
+use interfaces::Interface;
 use std::sync::{Arc, Mutex};
 use zenoh::prelude::sync::*;
 use zenoh_config::Config;
@@ -8,12 +9,20 @@ fn test_acl() {
     env_logger::init();
     test_pub_sub_allow();
     test_pub_sub_deny();
-    test_pub_sub_allow_then_deny();
-    test_pub_sub_deny_then_allow();
     test_get_queryable_allow();
     test_get_queryable_deny();
-    test_get_queryable_allow_then_deny();
-    test_get_queryable_deny_then_allow();
+    if let Some(loopback_face) = get_loopback_interface() {
+        test_pub_sub_allow_then_deny(&loopback_face.name);
+        test_pub_sub_deny_then_allow(&loopback_face.name);
+        test_get_queryable_allow_then_deny(&loopback_face.name);
+        test_get_queryable_deny_then_allow(&loopback_face.name);
+    }
+}
+
+fn get_loopback_interface() -> Option<Interface> {
+    let mut ifs = Interface::get_all().expect("could not get interfaces");
+    ifs.sort_by(|a, b| a.name.cmp(&b.name));
+    ifs.into_iter().find(|i| i.is_loopback())
 }
 
 fn test_pub_sub_deny() {
@@ -184,7 +193,7 @@ fn test_pub_sub_allow() {
     assert_eq!(*zlock!(received_value), VALUE);
 }
 
-fn test_pub_sub_allow_then_deny() {
+fn test_pub_sub_allow_then_deny(interface_name: &str) {
     let mut config_router = Config::default();
     config_router.set_mode(Some(WhatAmI::Router)).unwrap();
     config_router
@@ -200,34 +209,34 @@ fn test_pub_sub_allow_then_deny() {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    config_router
-        .insert_json5(
-            "transport",
-            r#"{
-            acl: {
-              "enabled": true,
-              "default_permission": "allow",
-              "rules":
-              [
-                {
-                  "permission": "deny",
-                  "flow": ["egress"],
-                  "action": [
-                    "put",
-                  ],
-                  "key_expr": [
-                    "test/demo"
-                  ],
-                  "interface": [
-                    "lo0"
-                  ]
-                },
+    let acl_js = format!(
+        r#"
+        {{
+        acl: {{
+          "enabled": true,
+          "default_permission": "allow",
+          "rules":
+          [
+            {{
+              "permission": "deny",
+              "flow": ["egress"],
+              "action": [
+                "put",
+              ],
+              "key_expr": [
+                "test/demo"
+              ],
+              "interface": [
+                "{}"
               ]
-            }
-          }"#,
-        )
-        .unwrap();
-
+            }},
+          ]
+        }}
+    }}
+    "#,
+        interface_name
+    );
+    config_router.insert_json5("transport", &acl_js).unwrap();
     let mut config_sub = Config::default();
     config_sub.set_mode(Some(WhatAmI::Client)).unwrap();
     config_sub
@@ -280,7 +289,7 @@ fn test_pub_sub_allow_then_deny() {
     std::thread::sleep(std::time::Duration::from_millis(10));
     assert_ne!(*zlock!(received_value), VALUE);
 }
-fn test_pub_sub_deny_then_allow() {
+fn test_pub_sub_deny_then_allow(interface_name: &str) {
     let mut config_router = Config::default();
     config_router.set_mode(Some(WhatAmI::Router)).unwrap();
     config_router
@@ -296,34 +305,35 @@ fn test_pub_sub_deny_then_allow() {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    config_router
-        .insert_json5(
-            "transport",
-            r#"{
-          acl: {
-            "enabled": true,
-            "default_permission": "deny",
-            "rules":
-            [
-              {
-                "permission": "allow",
-                "flow": ["egress","ingress"],
-                "action": [
-                  "put",
-                  "declare_subscriber"
-                ],
-                "key_expr": [
-                  "test/demo"
-                ],
-                "interface": [
-                  "lo0"
-                ]
-              },
-            ]
-          }
-        }"#,
-        )
-        .unwrap();
+    let acl_js = format!(
+        r#"
+        {{
+        acl: {{
+          "enabled": true,
+          "default_permission": "deny",
+          "rules":
+          [
+            {{
+              "permission": "allow",
+              "flow": ["egress","ingress"],
+              "action": [
+                "put",
+                "declare_subscriber"
+              ],
+              "key_expr": [
+                "test/demo"
+              ],
+              "interface": [
+                "{}"
+              ]
+            }},
+          ]
+        }}
+    }}
+    "#,
+        interface_name
+    );
+    config_router.insert_json5("transport", &acl_js).unwrap();
 
     let mut config_sub = Config::default();
     config_sub.set_mode(Some(WhatAmI::Client)).unwrap();
@@ -541,7 +551,7 @@ fn test_get_queryable_allow() {
     assert_eq!(received_value, VALUE);
 }
 
-fn test_get_queryable_allow_then_deny() {
+fn test_get_queryable_allow_then_deny(interface_name: &str) {
     let mut config_router = Config::default();
     config_router.set_mode(Some(WhatAmI::Router)).unwrap();
     config_router
@@ -557,34 +567,35 @@ fn test_get_queryable_allow_then_deny() {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    config_router
-        .insert_json5(
-            "transport",
-            r#"{
-          acl: {
-            "enabled": true,
-            "default_permission": "allow",
-            "rules":
-            [
-              {
-                "permission": "deny",
-                "flow": ["egress","ingress"],
-                "action": [
-                  "get",
-                  "declare_queryable"
-                ],
-                "key_expr": [
-                  "test/demo"
-                ],
-                "interface": [
-                  "lo0"
-                ]
-              },
-            ]
-          }
-        }"#,
-        )
-        .unwrap();
+    let acl_js = format!(
+        r#"
+        {{
+        acl: {{
+          "enabled": true,
+          "default_permission": "allow",
+          "rules":
+          [
+            {{
+              "permission": "deny",
+              "flow": ["egress"],
+              "action": [
+                "get",
+                "declare_queryable"
+              ],
+              "key_expr": [
+                "test/demo"
+              ],
+              "interface": [
+                "{}"
+              ]
+            }},
+          ]
+        }}
+    }}
+    "#,
+        interface_name
+    );
+    config_router.insert_json5("transport", &acl_js).unwrap();
     let mut config_qbl = Config::default();
     config_qbl.set_mode(Some(WhatAmI::Client)).unwrap();
     config_qbl
@@ -636,7 +647,7 @@ fn test_get_queryable_allow_then_deny() {
     assert_ne!(received_value, VALUE);
 }
 
-fn test_get_queryable_deny_then_allow() {
+fn test_get_queryable_deny_then_allow(interface_name: &str) {
     let mut config_router = Config::default();
     config_router.set_mode(Some(WhatAmI::Router)).unwrap();
     config_router
@@ -652,34 +663,35 @@ fn test_get_queryable_deny_then_allow() {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    config_router
-        .insert_json5(
-            "transport",
-            r#"{
-          acl: {
-            "enabled": true,
-            "default_permission": "deny",
-            "rules":
-            [
-              {
-                "permission": "allow",
-                "flow": ["egress","ingress"],
-                "action": [
-                  "get",
-                  "declare_queryable"
-                ],
-                "key_expr": [
-                  "test/demo"
-                ],
-                "interface": [
-                  "lo0"
-                ]
-              },
-            ]
-          }
-        }"#,
-        )
-        .unwrap();
+    let acl_js = format!(
+        r#"
+        {{
+        acl: {{
+          "enabled": true,
+          "default_permission": "deny",
+          "rules":
+          [
+            {{
+              "permission": "allow",
+              "flow": ["egress","ingress"],
+              "action": [
+                "get",
+                "declare_queryable"
+              ],
+              "key_expr": [
+                "test/demo"
+              ],
+              "interface": [
+                "{}"
+              ]
+            }},
+          ]
+        }}
+    }}
+    "#,
+        interface_name
+    );
+    config_router.insert_json5("transport", &acl_js).unwrap();
     let mut config_qbl = Config::default();
     config_qbl.set_mode(Some(WhatAmI::Client)).unwrap();
     config_qbl
