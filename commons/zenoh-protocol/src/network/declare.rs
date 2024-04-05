@@ -763,7 +763,7 @@ pub mod interest {
     /// ```
     ///
     ///
-    /// And the [`DeclareInterest`] message flow is the following for a ContinuousRequest:
+    /// And the [`DeclareInterest`] message flow is the following for a RequestContinuous:
     ///
     /// ```text
     ///     A                   B
