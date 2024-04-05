@@ -15,6 +15,7 @@ use async_std::sync::RwLock;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
+use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};

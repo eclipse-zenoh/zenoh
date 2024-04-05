@@ -126,15 +126,22 @@ pub mod buffers {
 }
 
 pub mod key_expr {
-    pub use crate::api::key_expr::kedefine;
-    pub use crate::api::key_expr::keformat;
-    pub use crate::api::key_expr::keyexpr;
-    pub use crate::api::key_expr::OwnedKeyExpr;
+    pub mod keyexpr_tree {
+        pub use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
+        pub use zenoh_keyexpr::keyexpr_tree::{
+            support::NonWild, support::UnknownWildness, KeBoxTree,
+        };
+        pub use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
+    }
+    pub use crate::api::key_expr::KeyExpr;
+    pub use zenoh_keyexpr::keyexpr;
+    pub use zenoh_keyexpr::OwnedKeyExpr;
+    pub use zenoh_macros::{kedefine, keformat, kewrite};
     // keyexpr format macro support
     pub mod format {
-        pub use crate::api::key_expr::format::*;
+        pub use zenoh_keyexpr::format::*;
         pub mod macro_support {
-            pub use crate::api::key_expr::format::macro_support::*;
+            pub use zenoh_keyexpr::format::macro_support::*;
         }
     }
 }

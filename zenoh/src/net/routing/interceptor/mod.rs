@@ -18,7 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use super::RoutingContext;
-use crate::KeyExpr;
+use crate::api::key_expr::KeyExpr;
 use std::any::Any;
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;

@@ -49,7 +49,6 @@ urlencoding = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"] }
 zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-keyexpr = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }

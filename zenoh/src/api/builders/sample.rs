@@ -14,6 +14,7 @@
 
 use std::marker::PhantomData;
 
+use crate::api::key_expr::KeyExpr;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
 use crate::api::sample::QoS;
@@ -22,7 +23,6 @@ use crate::api::sample::QoSBuilder;
 use crate::api::sample::SourceInfo;
 use crate::api::value::Value;
 use crate::Encoding;
-use crate::KeyExpr;
 use crate::Payload;
 use crate::Priority;
 use crate::Sample;

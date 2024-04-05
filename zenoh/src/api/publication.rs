@@ -17,6 +17,7 @@ use crate::api::builders::publication::{
     PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherDeleteBuilder,
     PublisherPutBuilder,
 };
+use crate::api::key_expr::KeyExpr;
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
 use crate::api::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
@@ -35,6 +36,7 @@ use std::future::Ready;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_keyexpr::keyexpr;
 pub use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Push;

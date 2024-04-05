@@ -125,10 +125,10 @@
 
 use async_trait::async_trait;
 use const_format::concatcp;
-use zenoh::prelude::OwnedKeyExpr;
+use zenoh::key_expr::{keyexpr, OwnedKeyExpr};
 use zenoh::time::Timestamp;
 use zenoh::value::Value;
-pub use zenoh::Result as ZResult;
+use zenoh::Result as ZResult;
 use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, StructVersion};
 use zenoh_util::concat_enabled_features;
 
@@ -212,7 +212,7 @@ impl StructVersion for VolumeInstance {
 }
 
 impl PluginControl for VolumeInstance {
-    fn plugins_status(&self, _names: &zenoh::prelude::keyexpr) -> Vec<PluginStatusRec> {
+    fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec> {
         Vec::new()
     }
 }

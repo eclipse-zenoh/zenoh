@@ -14,6 +14,7 @@
 use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 

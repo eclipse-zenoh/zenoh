@@ -14,15 +14,16 @@
 
 //! Queryable primitives.
 
+use super::key_expr::KeyExpr;
 use crate::api::builders::sample::SampleBuilder;
 use crate::api::encoding::Encoding;
 use crate::api::handlers::{locked, DefaultHandler};
 use crate::api::sample::{QoSBuilder, SourceInfo};
 use crate::api::session::SessionRef;
 use crate::api::session::Undeclarable;
+use crate::api::Id;
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::api::Id;
 #[cfg(feature = "unstable")]
 use crate::{api::query::ReplyKeyExpr, api::sample::Attachment};
 use std::fmt;

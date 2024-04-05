@@ -4963,7 +4963,6 @@ dependencies = [
  "zenoh",
  "zenoh-collections",
  "zenoh-core",
- "zenoh-keyexpr",
  "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",

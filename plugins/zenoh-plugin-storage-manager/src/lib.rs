@@ -27,6 +27,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
+use zenoh::key_expr::keyexpr;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;

@@ -15,20 +15,18 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
-use zenoh_protocol::network::request;
-
-use crate::{api::query::Reply, api::Id};
-
 #[zenoh_macros::unstable]
 use {
     crate::{
         api::handlers::locked,
         api::handlers::DefaultHandler,
+        api::key_expr::KeyExpr,
         api::session::SessionRef,
         api::session::Undeclarable,
         api::subscriber::{Subscriber, SubscriberInner},
         prelude::*,
     },
+    crate::{api::query::Reply, api::Id},
     std::convert::TryInto,
     std::future::Ready,
     std::sync::Arc,
@@ -38,7 +36,9 @@ use {
     zenoh_core::Resolvable,
     zenoh_core::Result as ZResult,
     zenoh_core::SyncResolve,
+    zenoh_keyexpr::keyexpr,
     zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo,
+    zenoh_protocol::network::request,
 };
 
 #[zenoh_macros::unstable]

@@ -14,6 +14,7 @@
 
 //! Query primitives.
 use crate::api::handlers::{locked, Callback, DefaultHandler};
+use crate::api::key_expr::KeyExpr;
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
 use crate::api::sample::QoSBuilder;
@@ -23,6 +24,7 @@ use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::ZResult;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).

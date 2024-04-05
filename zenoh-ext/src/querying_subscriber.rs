@@ -18,6 +18,7 @@ use std::mem::swap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh::handlers::{locked, DefaultHandler};
+use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::sample::SampleBuilder;

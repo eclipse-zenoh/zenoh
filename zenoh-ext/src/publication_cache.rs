@@ -15,6 +15,7 @@ use flume::{bounded, Sender};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
+use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::session::SessionRef;

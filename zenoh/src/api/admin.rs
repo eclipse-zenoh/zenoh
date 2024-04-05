@@ -13,10 +13,10 @@
 //
 use crate::{
     api::encoding::Encoding,
+    api::key_expr::KeyExpr,
     api::queryable::Query,
     api::sample::DataInfo,
-    keyexpr,
-    prelude::sync::{KeyExpr, Locality, SampleKind},
+    prelude::sync::{Locality, SampleKind},
     Payload, Session,
 };
 use std::{
@@ -25,6 +25,7 @@ use std::{
     sync::Arc,
 };
 use zenoh_core::{Result as ZResult, SyncResolve};
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,

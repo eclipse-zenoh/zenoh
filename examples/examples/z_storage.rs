@@ -17,6 +17,7 @@ use clap::Parser;
 use futures::select;
 use std::collections::HashMap;
 use zenoh::config::Config;
+use zenoh::key_expr::{keyexpr, KeyExpr};
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 

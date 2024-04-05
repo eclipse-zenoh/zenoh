@@ -49,8 +49,7 @@ use std::{
     str::FromStr,
 };
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-pub use zenoh_keyexpr::*;
-pub use zenoh_macros::{kedefine, keformat, kewrite};
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
     core::{key_expr::canon::Canonizable, ExprId, WireExpr},
     network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
