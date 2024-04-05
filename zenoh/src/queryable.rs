@@ -18,13 +18,12 @@ use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::sample::builder::SampleBuilder;
 use crate::sample::{QoSBuilder, SourceInfo};
 use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
-use crate::{query::ReplyKeyExpr, sample::Attachment};
+use crate::{query::ReplyKeyExpr, sample::builder::SampleBuilder, sample::Attachment};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
@@ -96,6 +95,18 @@ impl Query {
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
         self.inner.value.as_ref()
+    }
+
+    /// This Query's payload.
+    #[inline(always)]
+    pub fn payload(&self) -> Option<&Payload> {
+        self.inner.value.as_ref().map(|v| &v.payload)
+    }
+
+    /// This Query's encoding.
+    #[inline(always)]
+    pub fn encoding(&self) -> Option<&Encoding> {
+        self.inner.value.as_ref().map(|v| &v.encoding)
     }
 
     #[zenoh_macros::unstable]

@@ -18,7 +18,6 @@ use std::time::Duration;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
-use zenoh::sample::builder::QoSBuilderTrait;
 use zenoh::Result;
 use zenoh_core::ztimeout;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};

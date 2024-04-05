@@ -15,11 +15,8 @@
 use std::marker::PhantomData;
 
 #[cfg(feature = "unstable")]
-use crate::sample::Attachment;
-use crate::sample::QoS;
-use crate::sample::QoSBuilder;
-#[cfg(feature = "unstable")]
-use crate::sample::SourceInfo;
+use crate::sample::{Attachment, SourceInfo};
+use crate::sample::{QoS, QoSBuilder};
 use crate::Encoding;
 use crate::KeyExpr;
 use crate::Payload;
@@ -47,6 +44,7 @@ pub trait TimestampBuilderTrait {
     fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self;
 }
 
+#[zenoh_macros::unstable]
 pub trait SampleBuilderTrait {
     /// Attach source information
     #[zenoh_macros::unstable]
