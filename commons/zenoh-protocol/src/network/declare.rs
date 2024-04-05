@@ -733,17 +733,37 @@ pub mod interest {
 
     /// # DeclareInterest message
     ///
-    /// The DECLARE INTEREST message is sent to request the transmission of current and/or future
+    /// The DECLARE INTEREST message is sent to request the transmission of current and optionally future
     /// declarations of a given kind matching a target keyexpr. E.g., a declare interest could be
     /// sent to request the transmisison of all current subscriptions matching `a/*`.
     ///
     /// The behaviour of a DECLARE INTEREST depends on the DECLARE MODE in the DECLARE MESSAGE:
-    /// - Push: only future declarations
+    /// - Push: invalid
     /// - Request: only current declarations
     /// - RequestContinous: current and future declarations
     /// - Response: invalid
     ///
-    /// E.g., the [`DeclareInterest`] message flow is the following:
+    /// E.g., the [`DeclareInterest`] message flow is the following for a Request:
+    ///
+    /// ```text
+    ///     A                   B
+    ///     |   DECL INTEREST   |
+    ///     |------------------>| -- Sent in Declare::Request.
+    ///     |                   |    This is a DeclareInterest e.g. for subscriber declarations.
+    ///     |                   |
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------| -- Sent in Declare::Response
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------| -- Sent in Declare::Response
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------| -- Sent in Declare::Response
+    ///     |                   |
+    ///     |       FINAL       |
+    ///     |<------------------| -- Sent in Declare::Response
+    /// ```
+    ///
+    ///
+    /// And the [`DeclareInterest`] message flow is the following for a RequestContinuous:
     ///
     /// ```text
     ///     A                   B
@@ -752,11 +772,11 @@ pub mod interest {
     ///     |                   |    This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
     ///     |                   |
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------| -- Sent in Declare::Response
+    ///     |<------------------| -- Sent in Declare::Push
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------| -- Sent in Declare::Response
+    ///     |<------------------| -- Sent in Declare::Push
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------| -- Sent in Declare::Response
+    ///     |<------------------| -- Sent in Declare::Push
     ///     |                   |
     ///     |       FINAL       |
     ///     |<------------------| -- Sent in Declare::Response
@@ -784,9 +804,7 @@ pub mod interest {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|F|X|  D_INT  |
-    /// +---------------+
-    /// ~ intst_id:z32  ~
+    /// |Z|X|X|  D_INT  |
     /// +---------------+
     /// |A|M|N|R|T|Q|S|K|  (*)
     /// +---------------+
@@ -809,7 +827,6 @@ pub mod interest {
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct DeclareInterest {
-        pub id: InterestId,
         pub interest: Interest,
         pub wire_expr: Option<WireExpr<'static>>,
     }
@@ -834,12 +851,10 @@ pub mod interest {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
-            let id: InterestId = rng.gen();
             let wire_expr = rng.gen_bool(0.5).then_some(WireExpr::rand());
             let interest = Interest::rand();
 
             Self {
-                id,
                 wire_expr,
                 interest,
             }
@@ -848,7 +863,6 @@ pub mod interest {
 
     #[derive(Clone, Copy)]
     pub struct Interest {
-        flags: u8,
         options: u8,
     }
 
@@ -870,14 +884,11 @@ pub mod interest {
         );
 
         const fn options(options: u8) -> Self {
-            Self { flags: 0, options }
+            Self { options }
         }
 
         pub const fn empty() -> Self {
-            Self {
-                flags: 0,
-                options: 0,
-            }
+            Self { options: 0 }
         }
 
         pub const fn keyexprs(&self) -> bool {
@@ -982,17 +993,17 @@ pub mod interest {
     impl Add for Interest {
         type Output = Self;
 
+        #[allow(clippy::suspicious_arithmetic_impl)] // Allows to implement Add & Sub for Interest
         fn add(self, rhs: Self) -> Self::Output {
             Self {
-                flags: self.flags | rhs.flags,
                 options: self.options | rhs.options,
             }
         }
     }
 
     impl AddAssign for Interest {
+        #[allow(clippy::suspicious_op_assign_impl)] // Allows to implement Add & Sub for Interest
         fn add_assign(&mut self, rhs: Self) {
-            self.flags |= rhs.flags;
             self.options |= rhs.options;
         }
     }
@@ -1002,7 +1013,6 @@ pub mod interest {
 
         fn sub(self, rhs: Self) -> Self::Output {
             Self {
-                flags: self.flags & !rhs.flags,
                 options: self.options & !rhs.options,
             }
         }
@@ -1010,15 +1020,13 @@ pub mod interest {
 
     impl SubAssign for Interest {
         fn sub_assign(&mut self, rhs: Self) {
-            self.flags &= !rhs.flags;
             self.options &= !rhs.options;
         }
     }
 
-    impl From<(u8, u8)> for Interest {
-        fn from(value: (u8, u8)) -> Self {
-            let (flags, options) = value;
-            Self { flags, options }
+    impl From<u8> for Interest {
+        fn from(options: u8) -> Self {
+            Self { options }
         }
     }
 
