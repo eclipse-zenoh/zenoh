@@ -358,10 +358,15 @@ impl HatPubSubTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        future: bool,
+        continuous: bool,
         aggregate: bool,
     ) {
         if face.whatami == WhatAmI::Client {
+            let mode = if continuous {
+                DeclareMode::Push
+            } else {
+                DeclareMode::Response(id)
+            };
             let sub_info = SubscriberInfo {
                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
             };
@@ -374,12 +379,17 @@ impl HatPubSubTrait for HatCode {
                                 .values()
                                 .any(|sub| sub.context.is_some() && sub.matches(res))
                     }) {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
+                        let id = if continuous {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face).local_subs.insert((*res).clone(), id);
+                            id
+                        } else {
+                            0
+                        };
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode: DeclareMode::Push,
+                                mode,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -402,12 +412,18 @@ impl HatPubSubTrait for HatCode {
                         if src_face.id != face.id {
                             for sub in face_hat!(src_face).remote_subs.values() {
                                 if sub.context.is_some() && sub.matches(res) {
-                                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                    face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                                    let id = if continuous {
+                                        let id =
+                                            face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                        face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                                        id
+                                    } else {
+                                        0
+                                    };
                                     let wire_expr = Resource::decl_key(sub, face);
                                     face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
-                                            mode: DeclareMode::Push,
+                                            mode,
                                             ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
                                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -435,12 +451,17 @@ impl HatPubSubTrait for HatCode {
                 {
                     if src_face.id != face.id {
                         for sub in face_hat!(src_face).remote_subs.values() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                            let id = if continuous {
+                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                                id
+                            } else {
+                                0
+                            };
                             let wire_expr = Resource::decl_key(sub, face);
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
-                                    mode: DeclareMode::Push,
+                                    mode,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -457,7 +478,7 @@ impl HatPubSubTrait for HatCode {
                 }
             }
         }
-        if future {
+        if continuous {
             face_hat_mut!(face)
                 .remote_sub_interests
                 .insert(id, (res.cloned(), aggregate));

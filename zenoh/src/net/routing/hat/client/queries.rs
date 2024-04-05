@@ -253,7 +253,7 @@ impl HatQueriesTrait for HatCode {
         _face: &mut Arc<FaceState>,
         _id: InterestId,
         _res: Option<&mut Arc<Resource>>,
-        _future: bool,
+        _continuous: bool,
         _aggregate: bool,
     ) {
         todo!()

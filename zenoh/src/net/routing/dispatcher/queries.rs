@@ -41,7 +41,7 @@ pub(crate) fn declare_qabl_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
     expr: Option<&WireExpr>,
-    future: bool,
+    continuous: bool,
     aggregate: bool,
 ) {
     if let Some(expr) = expr {
@@ -87,7 +87,7 @@ pub(crate) fn declare_qabl_interest(
                     face,
                     id,
                     Some(&mut res),
-                    future,
+                    continuous,
                     aggregate,
                 );
             }
@@ -100,7 +100,7 @@ pub(crate) fn declare_qabl_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_qabl_interest(&mut wtables, face, id, None, future, aggregate);
+        hat_code.declare_qabl_interest(&mut wtables, face, id, None, continuous, aggregate);
     }
 }
 

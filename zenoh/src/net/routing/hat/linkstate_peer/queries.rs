@@ -678,10 +678,15 @@ impl HatQueriesTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        future: bool,
+        continuous: bool,
         aggregate: bool,
     ) {
         if face.whatami == WhatAmI::Client {
+            let mode = if continuous {
+                DeclareMode::Push
+            } else {
+                DeclareMode::Response(id)
+            };
             if let Some(res) = res.as_ref() {
                 if aggregate {
                     if hat!(tables).peer_qabls.iter().any(|qabl| {
@@ -690,14 +695,19 @@ impl HatQueriesTrait for HatCode {
                             && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
                     }) {
                         let info = local_qabl_info(tables, res, face);
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .insert((*res).clone(), (id, info));
+                        let id = if continuous {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face)
+                                .local_qabls
+                                .insert((*res).clone(), (id, info));
+                            id
+                        } else {
+                            0
+                        };
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode: DeclareMode::Push,
+                                mode,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -717,14 +727,19 @@ impl HatQueriesTrait for HatCode {
                             && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
                         {
                             let info = local_qabl_info(tables, qabl, face);
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face)
-                                .local_qabls
-                                .insert(qabl.clone(), (id, info));
+                            let id = if continuous {
+                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(face)
+                                    .local_qabls
+                                    .insert(qabl.clone(), (id, info));
+                                id
+                            } else {
+                                0
+                            };
                             let key_expr = Resource::decl_key(qabl, face);
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
-                                    mode: DeclareMode::Push,
+                                    mode,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -745,14 +760,19 @@ impl HatQueriesTrait for HatCode {
                         && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
                     {
                         let info = local_qabl_info(tables, qabl, face);
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .insert(qabl.clone(), (id, info));
+                        let id = if continuous {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face)
+                                .local_qabls
+                                .insert(qabl.clone(), (id, info));
+                            id
+                        } else {
+                            0
+                        };
                         let key_expr = Resource::decl_key(qabl, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode: DeclareMode::Push,
+                                mode,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -768,7 +788,7 @@ impl HatQueriesTrait for HatCode {
                 }
             }
         }
-        if future {
+        if continuous {
             face_hat_mut!(face)
                 .remote_qabl_interests
                 .insert(id, res.cloned());

@@ -123,7 +123,7 @@ pub(crate) trait HatPubSubTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        future: bool,
+        continuous: bool,
         aggregate: bool,
     );
     fn undeclare_sub_interest(
@@ -171,7 +171,7 @@ pub(crate) trait HatQueriesTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        future: bool,
+        continuous: bool,
         aggregate: bool,
     );
     fn undeclare_qabl_interest(

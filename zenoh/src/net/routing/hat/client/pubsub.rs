@@ -280,7 +280,7 @@ impl HatPubSubTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        future: bool,
+        continuous: bool,
         _aggregate: bool,
     ) {
         face_hat_mut!(face)
@@ -293,7 +293,7 @@ impl HatPubSubTrait for HatCode {
         {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             let interest = Interest::KEYEXPRS + Interest::SUBSCRIBERS;
-            let mode = if future {
+            let mode = if continuous {
                 DeclareMode::RequestContinuous(id)
             } else {
                 DeclareMode::Request(id)
