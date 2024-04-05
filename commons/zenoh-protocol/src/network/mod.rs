@@ -21,8 +21,8 @@ use core::fmt;
 
 pub use declare::{
     Declare, DeclareBody, DeclareFinal, DeclareInterest, DeclareKeyExpr, DeclareMode,
-    DeclareQueryable, DeclareSubscriber, DeclareToken, UndeclareInterest, UndeclareKeyExpr,
-    UndeclareQueryable, UndeclareSubscriber, UndeclareToken,
+    DeclareQueryable, DeclareSubscriber, DeclareToken, UndeclareKeyExpr, UndeclareQueryable,
+    UndeclareSubscriber, UndeclareToken,
 };
 pub use oam::Oam;
 pub use push::Push;

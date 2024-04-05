@@ -1029,38 +1029,4 @@ pub mod interest {
             Self { options }
         }
     }
-
-    /// ```text
-    /// Flags:
-    /// - X: Reserved
-    /// - X: Reserved
-    /// - Z: Extension      If Z==1 then at least one extension is present
-    ///
-    /// 7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X|  U_INT  |
-    /// +---------------+
-    /// ~ intst_id:z32  ~  
-    /// +---------------+
-    /// ~  [decl_exts]  ~  if Z==1
-    /// +---------------+
-    /// ```
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct UndeclareInterest {
-        pub id: InterestId,
-        pub ext_wire_expr: common::ext::WireExprType,
-    }
-
-    impl UndeclareInterest {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let id: InterestId = rng.gen();
-            let ext_wire_expr = common::ext::WireExprType::rand();
-
-            Self { id, ext_wire_expr }
-        }
-    }
 }
