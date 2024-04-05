@@ -46,7 +46,8 @@ pub struct PublicationBuilderPut {
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderDelete;
 
-/// A builder for initializing a [`put`](crate::Session::put) and [`delete`](crate::Session::delete) operations
+/// A builder for initializing  [`Session::put`](crate::Session::put), [`Session::delete`](crate::Session::delete),
+/// [`Publisher::put`](crate::Publisher::put), and [`Publisher::delete`](crate::Publisher::delete) operations.
 ///
 /// # Examples
 /// ```
@@ -77,6 +78,17 @@ pub struct PublicationBuilder<P, T> {
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
+
+pub type SessionPutBuilder<'a, 'b> =
+    PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut>;
+
+pub type SessionDeleteBuilder<'a, 'b> =
+    PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderDelete>;
+
+pub type PublisherPutBuilder<'a> = PublicationBuilder<&'a Publisher<'a>, PublicationBuilderPut>;
+
+pub type PublisherDeleteBuilder<'a> =
+    PublicationBuilder<&'a Publisher<'a>, PublicationBuilderDelete>;
 
 impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     #[inline]
@@ -405,10 +417,7 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     #[inline]
-    pub fn put<IntoPayload>(
-        &self,
-        payload: IntoPayload,
-    ) -> PublicationBuilder<&Publisher<'_>, PublicationBuilderPut>
+    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> PublisherPutBuilder<'_>
     where
         IntoPayload: Into<Payload>,
     {
@@ -439,7 +448,7 @@ impl<'a> Publisher<'a> {
     /// publisher.delete().res().await.unwrap();
     /// # }
     /// ```
-    pub fn delete(&self) -> PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
+    pub fn delete(&self) -> PublisherDeleteBuilder<'_> {
         PublicationBuilder {
             publisher: self,
             kind: PublicationBuilderDelete,
