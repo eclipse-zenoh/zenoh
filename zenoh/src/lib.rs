@@ -79,6 +79,9 @@ extern crate zenoh_core;
 #[macro_use]
 extern crate zenoh_result;
 
+mod api;
+mod net;
+
 pub(crate) type Id = u32;
 
 use git_version::git_version;
@@ -116,6 +119,13 @@ pub const FEATURES: &str = concat_enabled_features!(
 );
 
 pub use crate::api::session::open;
+
+/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
+/// reading and writing data.
+pub mod buffers {
+    pub use zenoh_buffers::buffer::SplitBuffer;
+    pub use zenoh_buffers::{ZBuf, ZSlice};
+}
 
 pub mod key_expr {
     pub use crate::api::key_expr::kedefine;
@@ -238,14 +248,13 @@ pub mod config {
     };
 }
 
-mod api;
-mod net;
-#[cfg(feature = "unstable")]
-pub mod plugins;
+pub mod plugins {
+    pub use crate::api::plugins::PluginsManager;
+    pub use crate::api::plugins::Response;
+    pub use crate::api::plugins::RunningPlugin;
+    pub use crate::api::plugins::{RunningPluginTrait, ZenohPlugin};
+}
+
 pub mod prelude;
 #[cfg(feature = "shared-memory")]
 pub use zenoh_shm as shm;
-
-/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
-/// reading and writing data.
-pub use zenoh_buffers as buffers;

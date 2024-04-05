@@ -20,6 +20,8 @@ pub(crate) mod info;
 pub(crate) mod key_expr;
 pub(crate) mod liveliness;
 pub(crate) mod payload;
+#[cfg(feature = "unstable")]
+pub(crate) mod plugins;
 pub(crate) mod publication;
 pub(crate) mod query;
 pub(crate) mod queryable;

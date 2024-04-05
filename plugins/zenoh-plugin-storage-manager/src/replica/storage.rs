@@ -21,7 +21,7 @@ use futures::select;
 use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
-use zenoh::buffers::buffer::SplitBuffer;
+use zenoh::buffers::SplitBuffer;
 use zenoh::buffers::ZBuf;
 use zenoh::prelude::r#async::*;
 use zenoh::query::{ConsolidationMode, QueryTarget};
