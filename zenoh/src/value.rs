@@ -19,7 +19,7 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use zenoh_buffers::ZSlice;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-use zenoh_shm::api::provider::zsliceshm::ZSliceShmMut;
+use zenoh_shm::api::provider::zsliceshmmut::ZSliceShmMut;
 
 use zenoh_collections::Properties;
 use zenoh_result::ZError;
