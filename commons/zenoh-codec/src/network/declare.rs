@@ -973,7 +973,7 @@ where
         } = x;
 
         // Header
-        let header = declare::id::D_INTEREST | x.flags();
+        let header = declare::id::D_INTEREST;
         self.write(&mut *writer, header)?;
 
         // Body

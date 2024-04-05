@@ -727,7 +727,7 @@ pub mod interest {
 
     pub mod flag {
         // pub const X: u8 = 1 << 5; // 0x20 Reserved
-        pub const F: u8 = 1 << 6; // 0x40 Future        if F==1 then the interest refers to the future declarations.
+        // pub const X: u8 = 1 << 6; // 0x40 Reserved
         pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
     }
 
@@ -779,8 +779,7 @@ pub mod interest {
     /// ```text
     /// Flags:
     /// - X: Reserved
-    /// - F: Future         if F==1 then the interest refers to the future declarations. Note that if F==0 then:
-    ///                     - Declarations SHOULD NOT be sent after the Final;
+    /// - X: Reserved
     /// - Z: Extension      If Z==1 then at least one extension is present
     ///
     /// 7 6 5 4 3 2 1 0
@@ -816,14 +815,6 @@ pub mod interest {
     }
 
     impl DeclareInterest {
-        pub fn flags(&self) -> u8 {
-            let mut interest = self.interest;
-            if self.interest.future() {
-                interest += Interest::FUTURE;
-            }
-            interest.flags
-        }
-
         pub fn options(&self) -> u8 {
             let mut interest = self.interest;
             if let Some(we) = self.wire_expr.as_ref() {
@@ -862,8 +853,6 @@ pub mod interest {
     }
 
     impl Interest {
-        // Header
-        pub const FUTURE: Interest = Interest::flags(interest::flag::F);
         // Flags
         pub const KEYEXPRS: Interest = Interest::options(1);
         pub const SUBSCRIBERS: Interest = Interest::options(1 << 1);
@@ -880,10 +869,6 @@ pub mod interest {
                 | Interest::TOKENS.options,
         );
 
-        const fn flags(flags: u8) -> Self {
-            Self { flags, options: 0 }
-        }
-
         const fn options(options: u8) -> Self {
             Self { flags: 0, options }
         }
@@ -893,10 +878,6 @@ pub mod interest {
                 flags: 0,
                 options: 0,
             }
-        }
-
-        pub const fn future(&self) -> bool {
-            imsg::has_flag(self.flags, Self::FUTURE.flags)
         }
 
         pub const fn keyexprs(&self) -> bool {
@@ -938,9 +919,6 @@ pub mod interest {
 
             let mut s = Self::empty();
             if rng.gen_bool(0.5) {
-                s += Interest::FUTURE;
-            }
-            if rng.gen_bool(0.5) {
                 s += Interest::KEYEXPRS;
             }
             if rng.gen_bool(0.5) {
@@ -958,8 +936,7 @@ pub mod interest {
 
     impl PartialEq for Interest {
         fn eq(&self, other: &Self) -> bool {
-            self.future() == other.future()
-                && self.keyexprs() == other.keyexprs()
+           self.keyexprs() == other.keyexprs()
                 && self.subscribers() == other.subscribers()
                 && self.queryables() == other.queryables()
                 && self.tokens() == other.tokens()
@@ -970,11 +947,6 @@ pub mod interest {
     impl Debug for Interest {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "Interest {{ ")?;
-            if self.future() {
-                write!(f, "F:Y, ")?;
-            } else {
-                write!(f, "F:N, ")?;
-            }
             if self.keyexprs() {
                 write!(f, "K:Y, ")?;
             } else {
