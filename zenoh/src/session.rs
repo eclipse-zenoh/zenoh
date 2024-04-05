@@ -41,6 +41,7 @@ use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
 use crate::Selector;
+#[cfg(feature = "unstable")]
 use crate::SourceInfo;
 use crate::Value;
 use log::{error, trace, warn};

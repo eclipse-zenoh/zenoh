@@ -62,8 +62,11 @@ pub(crate) mod common {
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
 
     pub use crate::sample::builder::{
-        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+        QoSBuilderTrait,  TimestampBuilderTrait, ValueBuilderTrait,
     };
+
+    #[zenoh_macros::unstable]
+    pub use crate::sample::builder::SampleBuilderTrait;
 }
 
 /// Prelude to import when using Zenoh's sync API.
