@@ -129,7 +129,7 @@ impl Query {
         &self,
         key_expr: TryIntoKeyExpr,
         payload: IntoPayload,
-    ) -> ReplyBuilder<'_, 'b, ReplyBuilderPut>
+    ) -> ReplyPutBuilder<'_, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -171,7 +171,7 @@ impl Query {
     pub fn reply_del<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> ReplyBuilder<'_, 'b, ReplyBuilderDelete>
+    ) -> ReplyDeleteBuilder<'_, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -273,6 +273,10 @@ pub struct ReplyBuilder<'a, 'b, T> {
     #[cfg(feature = "unstable")]
     attachment: Option<Attachment>,
 }
+
+pub type ReplyPutBuilder<'a, 'b> = ReplyBuilder<'a, 'b, ReplyBuilderPut>;
+
+pub type ReplyDeleteBuilder<'a, 'b> = ReplyBuilder<'a, 'b, ReplyBuilderDelete>;
 
 impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
