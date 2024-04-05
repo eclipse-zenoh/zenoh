@@ -1014,7 +1014,7 @@ where
         // Body
         let id: interest::InterestId = self.codec.read(&mut *reader)?;
         let options: u8 = self.codec.read(&mut *reader)?;
-        let interest = Interest::from((imsg::flags(self.header), options));
+        let interest = Interest::from(options);
 
         let mut wire_expr = None;
         if interest.restricted() {

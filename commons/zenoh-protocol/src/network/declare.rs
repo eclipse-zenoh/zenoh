@@ -848,7 +848,6 @@ pub mod interest {
 
     #[derive(Clone, Copy)]
     pub struct Interest {
-        flags: u8,
         options: u8,
     }
 
@@ -870,14 +869,11 @@ pub mod interest {
         );
 
         const fn options(options: u8) -> Self {
-            Self { flags: 0, options }
+            Self { options }
         }
 
         pub const fn empty() -> Self {
-            Self {
-                flags: 0,
-                options: 0,
-            }
+            Self { options: 0 }
         }
 
         pub const fn keyexprs(&self) -> bool {
@@ -982,17 +978,17 @@ pub mod interest {
     impl Add for Interest {
         type Output = Self;
 
+        #[allow(clippy::suspicious_arithmetic_impl)] // Allows to implement Add & Sub for Interest
         fn add(self, rhs: Self) -> Self::Output {
             Self {
-                flags: self.flags | rhs.flags,
                 options: self.options | rhs.options,
             }
         }
     }
 
     impl AddAssign for Interest {
+        #[allow(clippy::suspicious_op_assign_impl)] // Allows to implement Add & Sub for Interest
         fn add_assign(&mut self, rhs: Self) {
-            self.flags |= rhs.flags;
             self.options |= rhs.options;
         }
     }
@@ -1002,7 +998,6 @@ pub mod interest {
 
         fn sub(self, rhs: Self) -> Self::Output {
             Self {
-                flags: self.flags & !rhs.flags,
                 options: self.options & !rhs.options,
             }
         }
@@ -1010,15 +1005,13 @@ pub mod interest {
 
     impl SubAssign for Interest {
         fn sub_assign(&mut self, rhs: Self) {
-            self.flags &= !rhs.flags;
             self.options &= !rhs.options;
         }
     }
 
-    impl From<(u8, u8)> for Interest {
-        fn from(value: (u8, u8)) -> Self {
-            let (flags, options) = value;
-            Self { flags, options }
+    impl From<u8> for Interest {
+        fn from(options: u8) -> Self {
+            Self { options }
         }
     }
 
