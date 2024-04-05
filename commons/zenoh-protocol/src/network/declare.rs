@@ -936,7 +936,7 @@ pub mod interest {
 
     impl PartialEq for Interest {
         fn eq(&self, other: &Self) -> bool {
-           self.keyexprs() == other.keyexprs()
+            self.keyexprs() == other.keyexprs()
                 && self.subscribers() == other.subscribers()
                 && self.queryables() == other.queryables()
                 && self.tokens() == other.tokens()
