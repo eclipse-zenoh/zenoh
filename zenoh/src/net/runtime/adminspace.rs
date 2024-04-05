@@ -39,8 +39,8 @@ use zenoh_protocol::{
     },
     network::{
         declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
-        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
-        ResponseFinal,
+        ext, Declare, DeclareBody, DeclareMode, DeclareQueryable, DeclareSubscriber, Push, Request,
+        Response, ResponseFinal,
     },
     zenoh::{PushBody, RequestBody},
 };
@@ -276,7 +276,7 @@ impl AdminSpace {
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
-            interest_id: None,
+            mode: DeclareMode::Push,
 
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -289,7 +289,7 @@ impl AdminSpace {
         });
 
         primitives.send_declare(Declare {
-            interest_id: None,
+            mode: DeclareMode::Push,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,

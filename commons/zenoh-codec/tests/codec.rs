@@ -31,6 +31,22 @@ use zenoh_protocol::{
     zenoh, zextunit, zextz64, zextzbuf,
 };
 
+#[test]
+fn zbuf_test() {
+    let mut buffer = vec![0u8; 64];
+
+    let zbuf = ZBuf::empty();
+    let mut writer = buffer.writer();
+
+    let codec = Zenoh080::new();
+    codec.write(&mut writer, &zbuf).unwrap();
+    println!("Buffer: {:?}", buffer);
+
+    let mut reader = buffer.reader();
+    let ret: ZBuf = codec.read(&mut reader).unwrap();
+    assert_eq!(ret, zbuf);
+}
+
 const NUM_ITER: usize = 100;
 const MAX_PAYLOAD_SIZE: usize = 256;
 
