@@ -25,12 +25,12 @@
 pub use common::*;
 pub(crate) mod common {
     // pub use crate::api::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    pub use zenoh_buffers::{
-        buffer::{Buffer, SplitBuffer},
-        reader::HasReader,
-        writer::HasWriter,
-    };
-    pub use zenoh_core::Resolve;
+    // pub use zenoh_buffers::{
+    //     buffer::{Buffer, SplitBuffer},
+    //     reader::HasReader,
+    //     writer::HasWriter,
+    // };
+    // pub use zenoh_core::Resolve;
 
     pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
     #[zenoh_macros::unstable]

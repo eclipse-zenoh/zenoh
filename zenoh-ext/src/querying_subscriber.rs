@@ -26,7 +26,7 @@ use zenoh::session::SessionRef;
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::{new_reception_timestamp, Timestamp};
 use zenoh::Result as ZResult;
-use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
+use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
 
 use crate::ExtractSample;
 

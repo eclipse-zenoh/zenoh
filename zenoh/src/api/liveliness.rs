@@ -40,6 +40,7 @@ use {
     zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo,
     zenoh_protocol::network::request,
 };
+use {zenoh_core::Resolve};
 
 #[zenoh_macros::unstable]
 pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;

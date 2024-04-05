@@ -20,7 +20,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::session::SessionRef;
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_result::{bail, ZResult};
 use zenoh_util::core::ResolveFuture;
 

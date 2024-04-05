@@ -31,7 +31,7 @@ use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
 use uhlc::Timestamp;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::{
     core::{EntityId, WireExpr},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
