@@ -54,9 +54,19 @@ impl SharedMemoryClientSetBuilder {
     pub fn with_client(
         self,
         id: ProtocolID,
-        client: Box<dyn SharedMemoryClient>,
+        client: Arc<dyn SharedMemoryClient>,
     ) -> SharedMemoryClientStorageBuilder {
         let clients = HashMap::from([(id, client)]);
+        SharedMemoryClientStorageBuilder::new(clients)
+    }
+
+    /// Add list of clients to the storage (without including the default client set)
+    #[zenoh_macros::unstable_doc]
+    pub fn with_clients(
+        self,
+        clients: &[(ProtocolID, Arc<dyn SharedMemoryClient>)],
+    ) -> SharedMemoryClientStorageBuilder {
+        let clients = clients.iter().cloned().collect();
         SharedMemoryClientStorageBuilder::new(clients)
     }
 
@@ -65,18 +75,18 @@ impl SharedMemoryClientSetBuilder {
     pub fn with_default_client_set(self) -> SharedMemoryClientStorageBuilder {
         let clients = HashMap::from([(
             POSIX_PROTOCOL_ID,
-            Box::new(PosixSharedMemoryClient {}) as Box<dyn SharedMemoryClient>,
+            Arc::new(PosixSharedMemoryClient {}) as Arc<dyn SharedMemoryClient>,
         )]);
         SharedMemoryClientStorageBuilder::new(clients)
     }
 }
 
 pub struct SharedMemoryClientStorageBuilder {
-    clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>,
+    clients: HashMap<ProtocolID, Arc<dyn SharedMemoryClient>>,
 }
 
 impl SharedMemoryClientStorageBuilder {
-    fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
+    fn new(clients: HashMap<ProtocolID, Arc<dyn SharedMemoryClient>>) -> Self {
         Self { clients }
     }
 
@@ -85,14 +95,14 @@ impl SharedMemoryClientStorageBuilder {
     pub fn with_client(
         mut self,
         id: ProtocolID,
-        client: Box<dyn SharedMemoryClient>,
+        client: Arc<dyn SharedMemoryClient>,
     ) -> ZResult<Self> {
         match self.clients.entry(id) {
             std::collections::hash_map::Entry::Occupied(occupied) => {
                 bail!("Client already exists for id {id}: {:?}!", occupied)
             }
             std::collections::hash_map::Entry::Vacant(vacant) => {
-                vacant.insert(client as Box<dyn SharedMemoryClient>);
+                vacant.insert(client as Arc<dyn SharedMemoryClient>);
                 Ok(self)
             }
         }
@@ -111,7 +121,7 @@ impl SharedMemoryClientStorageBuilder {
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct SharedMemoryClientStorage {
-    pub(crate) clients: ClientStorage<Box<dyn SharedMemoryClient>>,
+    pub(crate) clients: ClientStorage<Arc<dyn SharedMemoryClient>>,
     pub(crate) segments: RwLock<HashMap<GlobalDataSegmentID, Arc<dyn SharedMemorySegment>>>,
 }
 
@@ -136,7 +146,7 @@ impl SharedMemoryClientStorage {
         self.clients.get_clients().keys().copied().collect()
     }
 
-    fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
+    fn new(clients: HashMap<ProtocolID, Arc<dyn SharedMemoryClient>>) -> Self {
         Self {
             clients: ClientStorage::new(clients),
             segments: RwLock::default(),
