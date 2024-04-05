@@ -733,17 +733,37 @@ pub mod interest {
 
     /// # DeclareInterest message
     ///
-    /// The DECLARE INTEREST message is sent to request the transmission of current and/or future
+    /// The DECLARE INTEREST message is sent to request the transmission of current and optionally future
     /// declarations of a given kind matching a target keyexpr. E.g., a declare interest could be
     /// sent to request the transmisison of all current subscriptions matching `a/*`.
     ///
     /// The behaviour of a DECLARE INTEREST depends on the DECLARE MODE in the DECLARE MESSAGE:
-    /// - Push: only future declarations
+    /// - Push: invalid
     /// - Request: only current declarations
     /// - RequestContinous: current and future declarations
     /// - Response: invalid
     ///
-    /// E.g., the [`DeclareInterest`] message flow is the following:
+    /// E.g., the [`DeclareInterest`] message flow is the following for a Request:
+    ///
+    /// ```text
+    ///     A                   B
+    ///     |   DECL INTEREST   |
+    ///     |------------------>| -- Sent in Declare::Request.
+    ///     |                   |    This is a DeclareInterest e.g. for subscriber declarations.
+    ///     |                   |
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------| -- Sent in Declare::Response
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------| -- Sent in Declare::Response
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------| -- Sent in Declare::Response
+    ///     |                   |
+    ///     |       FINAL       |
+    ///     |<------------------| -- Sent in Declare::Response
+    /// ```
+    ///
+    ///
+    /// And the [`DeclareInterest`] message flow is the following for a ContinuousRequest:
     ///
     /// ```text
     ///     A                   B
@@ -752,11 +772,11 @@ pub mod interest {
     ///     |                   |    This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
     ///     |                   |
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------| -- Sent in Declare::Response
+    ///     |<------------------| -- Sent in Declare::Push
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------| -- Sent in Declare::Response
+    ///     |<------------------| -- Sent in Declare::Push
     ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------| -- Sent in Declare::Response
+    ///     |<------------------| -- Sent in Declare::Push
     ///     |                   |
     ///     |       FINAL       |
     ///     |<------------------| -- Sent in Declare::Response
@@ -784,7 +804,7 @@ pub mod interest {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|F|X|  D_INT  |
+    /// |Z|X|X|  D_INT  |
     /// +---------------+
     /// ~ intst_id:z32  ~
     /// +---------------+
