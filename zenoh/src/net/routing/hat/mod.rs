@@ -24,7 +24,7 @@ use super::{
     },
     router::RoutesIndexes,
 };
-use crate::runtime::Runtime;
+use crate::net::runtime::Runtime;
 use std::{any::Any, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};

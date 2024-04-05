@@ -227,9 +227,12 @@ pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 }
 
+pub mod runtime {
+    pub use crate::net::runtime::{AdminSpace, Runtime};
+}
+
 mod api;
-pub(crate) mod net;
-pub use net::runtime;
+mod net;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 #[cfg(feature = "unstable")]

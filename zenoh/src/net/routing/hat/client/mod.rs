@@ -22,7 +22,7 @@ use crate::{
         dispatcher::face::Face,
         router::{compute_data_routes, compute_query_routes, RoutesIndexes},
     },
-    runtime::Runtime,
+    net::runtime::Runtime,
 };
 
 use self::{
