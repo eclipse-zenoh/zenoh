@@ -85,6 +85,7 @@ jobs:
       repo: ${{ github.repository }}
       live-run: ${{ inputs.live-run || false }}
       branch: ${{ needs.tag.outputs.branch }}
+      unpublished-deps-patterns: "zenoh.*"
     secrets: inherit
 
   debian:
@@ -185,7 +186,7 @@ jobs:
       version: ${{ needs.tag.outputs.version }}
       repo: ${{ github.repository }}
       branch: ${{ needs.tag.outputs.branch }}
-      tags: "${{ github.repository }}:${{ needs.tag.outputs.version }}"
+      tags: "ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.version }}"
       binary: zenohd
       files: |
         zenohd
