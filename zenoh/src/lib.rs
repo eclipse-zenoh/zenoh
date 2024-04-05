@@ -82,8 +82,6 @@ extern crate zenoh_result;
 mod api;
 mod net;
 
-pub(crate) type Id = u32;
-
 use git_version::git_version;
 #[cfg(feature = "unstable")]
 use prelude::*;

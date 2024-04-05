@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+pub(crate) type Id = u32;
+
 pub(crate) mod admin;
 pub(crate) mod builders;
 pub(crate) mod encoding;

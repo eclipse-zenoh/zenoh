@@ -27,7 +27,7 @@ use crate::prelude::*;
 #[cfg(feature = "unstable")]
 use crate::{
     api::handlers::{Callback, DefaultHandler, IntoHandler},
-    Id,
+    api::Id,
 };
 use futures::Sink;
 use std::convert::TryFrom;

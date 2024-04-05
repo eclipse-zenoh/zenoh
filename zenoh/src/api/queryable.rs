@@ -22,7 +22,7 @@ use crate::api::session::SessionRef;
 use crate::api::session::Undeclarable;
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::Id;
+use crate::api::Id;
 #[cfg(feature = "unstable")]
 use crate::{api::query::ReplyKeyExpr, api::sample::Attachment};
 use std::fmt;

@@ -49,7 +49,7 @@ use crate::prelude::Locality;
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
-use crate::Id;
+use crate::api::Id;
 use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
