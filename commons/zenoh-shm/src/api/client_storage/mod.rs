@@ -108,6 +108,13 @@ impl SharedMemoryClientStorageBuilder {
         }
     }
 
+    /// Add list of clients to the storage
+    #[zenoh_macros::unstable_doc]
+    pub fn with_clients(mut self, clients: &[(ProtocolID, Arc<dyn SharedMemoryClient>)]) -> Self {
+        self.clients.extend(clients.iter().cloned());
+        self
+    }
+
     /// Build the storage with parameters specified on previous step
     #[zenoh_macros::unstable_doc]
     pub fn build(self) -> SharedMemoryClientStorage {
