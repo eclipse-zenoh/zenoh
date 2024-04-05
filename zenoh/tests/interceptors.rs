@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::sync::{Arc, Mutex};
+use zenoh_config::ValidatedMap;
 use zenoh_core::zlock;
 
 struct IntervalCounter {

@@ -70,7 +70,7 @@ pub struct AdminSpace {
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
-    Start(crate::config::PluginLoad),
+    Start(zenoh_config::PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -93,7 +93,7 @@ impl ConfigValidator for AdminSpace {
 impl AdminSpace {
     fn start_plugin(
         plugin_mgr: &mut plugins::PluginsManager,
-        config: &crate::config::PluginLoad,
+        config: &zenoh_config::PluginLoad,
         start_args: &Runtime,
     ) -> ZResult<()> {
         let name = &config.name;

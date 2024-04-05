@@ -36,7 +36,7 @@ pub(crate) mod common {
     #[zenoh_macros::unstable]
     pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
 
-    pub use crate::config::{self, Config, ValidatedMap};
+    pub use crate::config::{self, Config};
     pub use crate::handlers::IntoHandler;
     pub use crate::selector::{Parameter, Parameters, Selector};
     pub use crate::session::{Session, SessionDeclarations};

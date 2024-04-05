@@ -20,6 +20,7 @@ use std::str::FromStr;
 use std::thread::sleep;
 
 use async_std::task;
+use zenoh::config::ValidatedMap;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;

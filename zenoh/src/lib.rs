@@ -231,10 +231,15 @@ pub mod runtime {
     pub use crate::net::runtime::{AdminSpace, Runtime};
 }
 
+pub mod config {
+    pub use zenoh_config::{
+        client, default, peer, Config, ModeDependentValue, PermissionsConf, PluginLoad,
+        ValidatedMap,
+    };
+}
+
 mod api;
 mod net;
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-pub use zenoh_config as config;
 #[cfg(feature = "unstable")]
 pub mod plugins;
 pub mod prelude;
