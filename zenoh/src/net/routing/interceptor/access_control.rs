@@ -143,8 +143,15 @@ impl InterceptorTrait for IngressAclEnforcer {
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         let key_expr = cache
-            .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
+            .and_then(|i| match i.downcast_ref::<String>() {
+                Some(e) => Some(e.as_str()),
+                None => {
+                    log::debug!("[ACCESS LOG]: Cache content was not of type String");
+                    None
+                }
+            })
             .or_else(|| ctx.full_expr())?;
+
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
@@ -192,7 +199,13 @@ impl InterceptorTrait for EgressAclEnforcer {
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         let key_expr = cache
-            .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
+            .and_then(|i| match i.downcast_ref::<String>() {
+                Some(e) => Some(e.as_str()),
+                None => {
+                    log::debug!("[ACCESS LOG]: Cache content was not of type String");
+                    None
+                }
+            })
             .or_else(|| ctx.full_expr())?;
 
         if let NetworkBody::Push(Push {
