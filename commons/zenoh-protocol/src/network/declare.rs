@@ -806,8 +806,6 @@ pub mod interest {
     /// +-+-+-+-+-+-+-+-+
     /// |Z|X|X|  D_INT  |
     /// +---------------+
-    /// ~ intst_id:z32  ~
-    /// +---------------+
     /// |A|M|N|R|T|Q|S|K|  (*)
     /// +---------------+
     /// ~ key_scope:z16 ~  if R==1
@@ -829,7 +827,6 @@ pub mod interest {
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct DeclareInterest {
-        pub id: InterestId,
         pub interest: Interest,
         pub wire_expr: Option<WireExpr<'static>>,
     }
@@ -854,12 +851,10 @@ pub mod interest {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
-            let id: InterestId = rng.gen();
             let wire_expr = rng.gen_bool(0.5).then_some(WireExpr::rand());
             let interest = Interest::rand();
 
             Self {
-                id,
                 wire_expr,
                 interest,
             }

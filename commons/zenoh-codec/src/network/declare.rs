@@ -967,7 +967,6 @@ where
 
     fn write(self, writer: &mut W, x: &interest::DeclareInterest) -> Self::Output {
         let interest::DeclareInterest {
-            id,
             interest: _,
             wire_expr,
         } = x;
@@ -977,7 +976,6 @@ where
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, id)?;
         self.write(&mut *writer, x.options())?;
         if let Some(we) = wire_expr.as_ref() {
             self.write(&mut *writer, we)?;
@@ -1012,7 +1010,6 @@ where
         }
 
         // Body
-        let id: interest::InterestId = self.codec.read(&mut *reader)?;
         let options: u8 = self.codec.read(&mut *reader)?;
         let interest = Interest::from(options);
 
@@ -1035,7 +1032,6 @@ where
         }
 
         Ok(interest::DeclareInterest {
-            id,
             interest,
             wire_expr,
         })
