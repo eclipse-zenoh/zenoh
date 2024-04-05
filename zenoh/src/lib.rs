@@ -255,6 +255,9 @@ pub mod plugins {
     pub use crate::api::plugins::{RunningPluginTrait, ZenohPlugin};
 }
 
-pub mod prelude;
 #[cfg(feature = "shared-memory")]
-pub use zenoh_shm as shm;
+pub mod shm {
+    pub use zenoh_shm::SharedMemoryManager;
+}
+
+pub mod prelude;
