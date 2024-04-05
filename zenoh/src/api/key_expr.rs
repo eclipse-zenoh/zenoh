@@ -57,7 +57,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::{net::primitives::Primitives, prelude::Selector, Session, api::session::Undeclarable};
+use crate::{api::session::Undeclarable, net::primitives::Primitives, prelude::Selector, Session};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {

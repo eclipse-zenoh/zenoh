@@ -13,8 +13,8 @@
 //
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::scouting::WhatAmI;
 use zenoh::scouting::scout;
+use zenoh::scouting::WhatAmI;
 
 #[tokio::main]
 async fn main() {

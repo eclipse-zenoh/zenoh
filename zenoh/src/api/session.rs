@@ -12,6 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::api::admin;
+use crate::api::builders::publication::PublicationBuilder;
+use crate::api::builders::publication::PublicationBuilderDelete;
+use crate::api::builders::publication::PublicationBuilderPut;
 use crate::api::encoding::Encoding;
 use crate::api::handlers::{Callback, DefaultHandler};
 use crate::api::info::SessionInfo;
@@ -21,9 +24,6 @@ use crate::api::key_expr::KeyExprInner;
 use crate::api::liveliness::{Liveliness, LivelinessTokenState};
 use crate::api::publication::MatchingListenerState;
 use crate::api::publication::MatchingStatus;
-use crate::api::publication::PublicationBuilder;
-use crate::api::publication::PublicationBuilderDelete;
-use crate::api::publication::PublicationBuilderPut;
 use crate::api::query::GetBuilder;
 use crate::api::query::QueryState;
 use crate::api::query::Reply;

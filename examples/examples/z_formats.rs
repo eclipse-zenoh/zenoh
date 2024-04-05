@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use zenoh::key_expr::keyexpr;
 use zenoh::key_expr::kedefine;
 use zenoh::key_expr::keformat;
+use zenoh::key_expr::keyexpr;
 
 kedefine!(
     pub file_format: "user_id/${user_id:*}/file/${file:*/**}",

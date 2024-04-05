@@ -142,6 +142,8 @@ pub mod key_expr {
 }
 
 pub mod session {
+    pub use crate::api::builders::publication::SessionDeleteBuilder;
+    pub use crate::api::builders::publication::SessionPutBuilder;
     pub use crate::api::session::init;
     pub use crate::api::session::open;
     pub use crate::api::session::Session;
@@ -159,6 +161,8 @@ pub mod sample {
     pub use crate::api::sample::Locality;
     pub use crate::api::sample::Sample;
     pub use crate::api::sample::SampleKind;
+    #[zenoh_macros::unstable]
+    pub use crate::api::sample::SourceInfo;
 }
 
 pub mod value {
@@ -192,10 +196,10 @@ pub mod subscriber {
 }
 
 pub mod publication {
+    pub use crate::api::builders::publication::PublisherBuilder;
     pub use crate::api::publication::CongestionControl;
     pub use crate::api::publication::Priority;
     pub use crate::api::publication::Publisher;
-    pub use crate::api::publication::PublisherBuilder;
     #[zenoh_macros::unstable]
     pub use crate::api::publication::PublisherDeclarations;
 }

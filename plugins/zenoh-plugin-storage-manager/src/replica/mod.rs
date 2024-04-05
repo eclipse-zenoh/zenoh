@@ -28,8 +28,8 @@ use std::time::{Duration, SystemTime};
 use urlencoding::encode;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
 use zenoh::session::Session;
+use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
 pub mod align_queryable;
