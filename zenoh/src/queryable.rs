@@ -111,7 +111,7 @@ impl Query {
     #[inline(always)]
     #[cfg(feature = "unstable")]
     #[doc(hidden)]
-    pub fn reply_sample(&self, sample: Sample) -> ReplyBuilder<'_> {
+    pub fn reply_sample(&self, sample: Sample) -> ReplyBuilder<'_, 'static> {
         let Sample {
             key_expr,
             payload,
@@ -126,7 +126,7 @@ impl Query {
         } = sample;
         ReplyBuilder {
             query: self,
-            key_expr,
+            key_expr: Ok(key_expr),
             payload,
             kind,
             encoding,
@@ -145,18 +145,19 @@ impl Query {
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
-    pub fn reply<IntoKeyExpr, IntoPayload>(
+    pub fn reply<'b, TryIntoKeyExpr, IntoPayload>(
         &self,
-        key_expr: IntoKeyExpr,
+        key_expr: TryIntoKeyExpr,
         payload: IntoPayload,
-    ) -> ReplyBuilder<'_>
+    ) -> ReplyBuilder<'_, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
         IntoPayload: Into<Payload>,
     {
         ReplyBuilder {
             query: self,
-            key_expr: key_expr.into(),
+            key_expr: key_expr.try_into().map_err(Into::into),
             payload: payload.into(),
             kind: SampleKind::Put,
             timestamp: None,
@@ -187,13 +188,14 @@ impl Query {
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
-    pub fn reply_del<IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> ReplyBuilder<'_>
+    pub fn reply_del<'b, TryIntoKeyExpr>(&self, key_expr: TryIntoKeyExpr) -> ReplyBuilder<'_, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         ReplyBuilder {
             query: self,
-            key_expr: key_expr.into(),
+            key_expr: key_expr.try_into().map_err(Into::into),
             payload: Payload::empty(),
             kind: SampleKind::Delete,
             timestamp: None,
@@ -248,9 +250,9 @@ impl fmt::Display for Query {
 /// A builder returned by [`Query::reply()`](Query::reply) or [`Query::reply()`](Query::reply).
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct ReplyBuilder<'a> {
+pub struct ReplyBuilder<'a, 'b> {
     query: &'a Query,
-    key_expr: KeyExpr<'static>,
+    key_expr: ZResult<KeyExpr<'b>>,
     payload: Payload,
     kind: SampleKind,
     encoding: Encoding,
@@ -270,7 +272,7 @@ pub struct ReplyErrBuilder<'a> {
     value: Value,
 }
 
-impl<'a> ReplyBuilder<'a> {
+impl<'a, 'b> ReplyBuilder<'a, 'b> {
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
@@ -292,16 +294,17 @@ impl<'a> ReplyBuilder<'a> {
     }
 }
 
-impl<'a> Resolvable for ReplyBuilder<'a> {
+impl<'a, 'b> Resolvable for ReplyBuilder<'a, 'b> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for ReplyBuilder<'_> {
+impl<'a, 'b> SyncResolve for ReplyBuilder<'a, 'b> {
     fn res_sync(self) -> <Self as Resolvable>::To {
+        let key_expr = self.key_expr?;
         if !self.query._accepts_any_replies().unwrap_or(false)
-            && !self.query.key_expr().intersects(&self.key_expr)
+            && !self.query.key_expr().intersects(&key_expr)
         {
-            bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", self.key_expr, self.query.key_expr())
+            bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", &key_expr, self.query.key_expr())
         }
         #[allow(unused_mut)] // will be unused if feature = "unstable" is not enabled
         let mut ext_sinfo = None;
@@ -318,7 +321,7 @@ impl SyncResolve for ReplyBuilder<'_> {
             rid: self.query.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,
-                suffix: std::borrow::Cow::Owned(self.key_expr.into()),
+                suffix: std::borrow::Cow::Owned(key_expr.into()),
                 mapping: Mapping::Sender,
             },
             payload: ResponseBody::Reply(zenoh::Reply {
@@ -360,7 +363,7 @@ impl SyncResolve for ReplyBuilder<'_> {
     }
 }
 
-impl<'a> AsyncResolve for ReplyBuilder<'a> {
+impl<'a, 'b> AsyncResolve for ReplyBuilder<'a, 'b> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -434,7 +437,8 @@ impl fmt::Debug for QueryableState {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use futures::prelude::*;
 /// use zenoh::prelude::r#async::*;
 ///
@@ -447,7 +451,7 @@ impl fmt::Debug for QueryableState {
 ///         .await
 ///         .unwrap();
 /// }
-/// # })
+/// # }
 /// ```
 #[derive(Debug)]
 pub(crate) struct CallbackQueryable<'a> {
@@ -466,13 +470,14 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// queryable.undeclare().res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableUndeclaration<'a> {
@@ -512,13 +517,14 @@ impl Drop for CallbackQueryable<'_> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -535,7 +541,8 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -545,7 +552,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> QueryableBuilder<'a, 'b, Callback>
@@ -575,7 +582,8 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -586,7 +594,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
@@ -603,7 +611,8 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -616,7 +625,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// while let Ok(query) = queryable.recv_async().await {
     ///     println!(">> Handling query '{}'", query.selector());
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
@@ -668,7 +677,8 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -685,7 +695,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///         .await
 ///         .unwrap();
 /// }
-/// # })
+/// # }
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
@@ -699,7 +709,8 @@ impl<'a, Receiver> Queryable<'a, Receiver> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -708,7 +719,7 @@ impl<'a, Receiver> Queryable<'a, Receiver> {
     ///     .await
     ///     .unwrap();
     /// let queryable_id = queryable.id();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {

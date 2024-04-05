@@ -69,16 +69,16 @@ pub struct SourceInfo {
 
 #[test]
 #[cfg(feature = "unstable")]
-#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 fn source_info_stack_size() {
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 40);
-}
+    use crate::{
+        sample::{SourceInfo, SourceSn},
+        ZenohId,
+    };
 
-#[test]
-#[cfg(feature = "unstable")]
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn source_info_stack_size() {
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 48);
+    assert_eq!(std::mem::size_of::<ZenohId>(), 16);
+    assert_eq!(std::mem::size_of::<Option<ZenohId>>(), 17);
+    assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 16);
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 17 + 16 + 7);
 }
 
 #[zenoh_macros::unstable]

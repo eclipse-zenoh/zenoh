@@ -123,7 +123,6 @@ pub(crate) trait HatPubSubTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
         future: bool,
         aggregate: bool,
     );
@@ -172,7 +171,6 @@ pub(crate) trait HatQueriesTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
         future: bool,
         aggregate: bool,
     );

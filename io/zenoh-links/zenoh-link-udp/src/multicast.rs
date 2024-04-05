@@ -13,13 +13,15 @@
 //
 use super::{config::*, UDP_DEFAULT_MTU};
 use crate::{get_udp_addrs, socket_addr_to_udp_locator};
-use async_std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::{borrow::Cow, fmt};
+use tokio::net::UdpSocket;
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
 use zenoh_protocol::core::{Config, EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 pub struct LinkMulticastUdp {
@@ -118,7 +120,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *UDP_DEFAULT_MTU
     }
 
@@ -228,7 +230,10 @@ impl LinkManagerMulticastUdp {
             .bind(&SocketAddr::new(local_addr, 0).into())
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
 
-        let ucast_sock: UdpSocket = std::net::UdpSocket::from(ucast_sock).into();
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
+        ucast_sock.set_nonblocking(true)?;
+        let ucast_sock = UdpSocket::from_std(ucast_sock.into())?;
 
         // Establish a multicast UDP socket
         let mcast_sock = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
@@ -288,8 +293,12 @@ impl LinkManagerMulticastUdp {
             }
         };
 
-        // Build the async_std multicast UdpSocket
-        let mcast_sock: UdpSocket = std::net::UdpSocket::from(mcast_sock).into();
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
+        mcast_sock.set_nonblocking(true)?;
+
+        // Build the tokio multicast UdpSocket
+        let mcast_sock = UdpSocket::from_std(mcast_sock.into())?;
 
         let ucast_addr = ucast_sock
             .local_addr()

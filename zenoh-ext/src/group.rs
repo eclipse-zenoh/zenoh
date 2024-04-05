@@ -14,8 +14,6 @@
 
 //! To manage groups and group memeberships
 
-use async_std::sync::Mutex;
-use async_std::task::JoinHandle;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use futures::select;
@@ -25,6 +23,9 @@ use std::convert::TryInto;
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
+use zenoh::payload::PayloadReader;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
@@ -169,9 +170,9 @@ pub struct Group {
 impl Drop for Group {
     fn drop(&mut self) {
         // cancel background tasks
-        async_std::task::block_on(async {
+        tokio::runtime::Handle::current().block_on(async {
             while let Some(handle) = self.tasks.pop() {
-                let _ = handle.cancel().await;
+                handle.abort();
             }
         });
     }
@@ -186,7 +187,7 @@ async fn keep_alive_task(state: Arc<GroupState>) {
         .lease
         .mul_f32(state.local_member.refresh_ratio);
     loop {
-        async_std::task::sleep(period).await;
+        tokio::time::sleep(period).await;
         log::trace!("Sending Keep Alive for: {}", &state.local_member.mid);
         let _ = state.group_publisher.put(buf.clone()).res().await;
     }
@@ -195,7 +196,7 @@ async fn keep_alive_task(state: Arc<GroupState>) {
 fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
     let watch_dog = async move {
         loop {
-            async_std::task::sleep(period).await;
+            tokio::time::sleep(period).await;
             let now = Instant::now();
             let mut ms = s.members.lock().await;
             let expired_members: Vec<OwnedKeyExpr> = ms
@@ -221,7 +222,7 @@ fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
             }
         }
     };
-    async_std::task::spawn(watch_dog)
+    tokio::task::spawn(watch_dog)
 }
 
 async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
@@ -248,7 +249,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
         .await
         .unwrap();
     while let Ok(s) = sub.recv_async().await {
-        match bincode::deserialize::<GroupNetEvent>(&(s.payload().contiguous())) {
+        match bincode::deserialize_from::<PayloadReader, GroupNetEvent>(s.payload().reader()) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
                     log::debug!("Member join: {:?}", &je.member);
@@ -307,8 +308,8 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 while let Ok(reply) = receiver.recv_async().await {
                                     match reply.sample {
                                         Ok(sample) => {
-                                            match bincode::deserialize::<Member>(
-                                                &sample.payload().contiguous(),
+                                            match bincode::deserialize_from::<PayloadReader, Member>(
+                                                sample.payload().reader(),
                                             ) {
                                                 Ok(m) => {
                                                     let mut expiry = Instant::now();
@@ -393,10 +394,10 @@ impl Group {
 
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {
-            async_std::task::spawn(keep_alive_task(state.clone()));
+            tokio::task::spawn(keep_alive_task(state.clone()));
         }
-        let events_task = async_std::task::spawn(net_event_handler(z.clone(), state.clone()));
-        let queries_task = async_std::task::spawn(query_handler(z.clone(), state.clone()));
+        let events_task = tokio::task::spawn(net_event_handler(z.clone(), state.clone()));
+        let queries_task = tokio::task::spawn(query_handler(z.clone(), state.clone()));
         let watchdog_task = spawn_watchdog(state.clone(), Duration::from_secs(1));
         Ok(Group {
             state,
@@ -457,7 +458,7 @@ impl Group {
             };
             let r: bool = select! {
                 p = f.fuse() => p,
-                _ = async_std::task::sleep(timeout).fuse() => false,
+                _ = tokio::time::sleep(timeout).fuse() => false,
             };
             r
         }

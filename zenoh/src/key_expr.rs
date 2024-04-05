@@ -53,7 +53,7 @@ pub use zenoh_keyexpr::*;
 pub use zenoh_macros::{kedefine, keformat, kewrite};
 use zenoh_protocol::{
     core::{key_expr::canon::Canonizable, ExprId, WireExpr},
-    network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
+    network::{declare, DeclareBody, DeclareMode, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
 
@@ -606,13 +606,14 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
 /// session.undeclare(key_expr).res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct KeyExprUndeclaration<'a> {
@@ -663,6 +664,7 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(zenoh_protocol::network::Declare {
+            mode: DeclareMode::Push,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,

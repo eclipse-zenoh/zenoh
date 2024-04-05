@@ -35,7 +35,6 @@ pub(crate) fn declare_sub_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
     expr: Option<&WireExpr>,
-    current: bool,
     future: bool,
     aggregate: bool,
 ) {
@@ -82,7 +81,6 @@ pub(crate) fn declare_sub_interest(
                     face,
                     id,
                     Some(&mut res),
-                    current,
                     future,
                     aggregate,
                 );
@@ -96,7 +94,7 @@ pub(crate) fn declare_sub_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_sub_interest(&mut wtables, face, id, None, current, future, aggregate);
+        hat_code.declare_sub_interest(&mut wtables, face, id, None, future, aggregate);
     }
 }
 

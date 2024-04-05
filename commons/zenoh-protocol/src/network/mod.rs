@@ -20,9 +20,9 @@ pub mod response;
 use core::fmt;
 
 pub use declare::{
-    Declare, DeclareBody, DeclareInterest, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber,
-    DeclareToken, UndeclareInterest, UndeclareKeyExpr, UndeclareQueryable, UndeclareSubscriber,
-    UndeclareToken,
+    Declare, DeclareBody, DeclareFinal, DeclareInterest, DeclareKeyExpr, DeclareMode,
+    DeclareQueryable, DeclareSubscriber, DeclareToken, UndeclareKeyExpr, UndeclareQueryable,
+    UndeclareSubscriber, UndeclareToken,
 };
 pub use oam::Oam;
 pub use push::Push;

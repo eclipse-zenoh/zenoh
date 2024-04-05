@@ -22,8 +22,8 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use zenoh_protocol::network::declare::{FinalInterest, Interest, InterestId};
-use zenoh_protocol::network::{ext, Declare, DeclareBody};
+use zenoh_protocol::network::declare::{Interest, InterestId};
+use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareFinal, DeclareMode};
 use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
@@ -221,72 +221,77 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 log::warn!("Received unsupported {m:?}")
             }
-            zenoh_protocol::network::DeclareBody::DeclareInterest(m) => {
-                if m.interest.keyexprs() && m.interest.future() {
-                    register_expr_interest(
-                        &self.tables,
-                        &mut self.state.clone(),
-                        m.id,
-                        m.wire_expr.as_ref(),
-                    );
-                }
-                if m.interest.subscribers() {
-                    declare_sub_interest(
-                        ctrl_lock.as_ref(),
-                        &self.tables,
-                        &mut self.state.clone(),
-                        m.id,
-                        m.wire_expr.as_ref(),
-                        m.interest.current(),
-                        m.interest.future(),
-                        m.interest.aggregate(),
-                    );
-                }
-                if m.interest.queryables() {
-                    declare_qabl_interest(
-                        ctrl_lock.as_ref(),
-                        &self.tables,
-                        &mut self.state.clone(),
-                        m.id,
-                        m.wire_expr.as_ref(),
-                        m.interest.current(),
-                        m.interest.future(),
-                        m.interest.aggregate(),
-                    );
-                }
-                if m.interest.current() {
+            zenoh_protocol::network::DeclareBody::DeclareInterest(m) => match msg.mode {
+                DeclareMode::Request(id) | DeclareMode::RequestContinuous(id) => {
+                    if m.interest.keyexprs()
+                        && matches!(msg.mode, DeclareMode::RequestContinuous(_))
+                    {
+                        register_expr_interest(
+                            &self.tables,
+                            &mut self.state.clone(),
+                            id,
+                            m.wire_expr.as_ref(),
+                        );
+                    }
+                    if m.interest.subscribers() {
+                        declare_sub_interest(
+                            ctrl_lock.as_ref(),
+                            &self.tables,
+                            &mut self.state.clone(),
+                            id,
+                            m.wire_expr.as_ref(),
+                            matches!(msg.mode, DeclareMode::RequestContinuous(_)),
+                            m.interest.aggregate(),
+                        );
+                    }
+                    if m.interest.queryables() {
+                        declare_qabl_interest(
+                            ctrl_lock.as_ref(),
+                            &self.tables,
+                            &mut self.state.clone(),
+                            id,
+                            m.wire_expr.as_ref(),
+                            matches!(msg.mode, DeclareMode::RequestContinuous(_)),
+                            m.interest.aggregate(),
+                        );
+                    }
                     self.state.primitives.send_declare(RoutingContext::new_out(
                         Declare {
+                            mode: DeclareMode::Response(id),
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::FinalInterest(FinalInterest { id: m.id }),
+                            body: DeclareBody::DeclareFinal(DeclareFinal),
                         },
                         self.clone(),
                     ));
                 }
-            }
-            zenoh_protocol::network::DeclareBody::FinalInterest(m) => {
-                get_mut_unchecked(&mut self.state.clone())
-                    .local_interests
-                    .entry(m.id)
-                    .and_modify(|interest| interest.2 = true);
-            }
-            zenoh_protocol::network::DeclareBody::UndeclareInterest(m) => {
-                unregister_expr_interest(&self.tables, &mut self.state.clone(), m.id);
-                undeclare_sub_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    m.id,
-                );
-                undeclare_qabl_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    m.id,
-                );
-            }
+                _ => log::debug!("Received invalid DeclareInterest in a {:?}!", msg.mode),
+            },
+            zenoh_protocol::network::DeclareBody::DeclareFinal(_) => match msg.mode {
+                DeclareMode::Response(id) => {
+                    get_mut_unchecked(&mut self.state.clone())
+                        .local_interests
+                        .entry(id)
+                        .and_modify(|interest| interest.2 = true);
+                }
+                DeclareMode::RequestContinuous(id) => {
+                    unregister_expr_interest(&self.tables, &mut self.state.clone(), id);
+                    undeclare_sub_interest(
+                        ctrl_lock.as_ref(),
+                        &self.tables,
+                        &mut self.state.clone(),
+                        id,
+                    );
+                    undeclare_qabl_interest(
+                        ctrl_lock.as_ref(),
+                        &self.tables,
+                        &mut self.state.clone(),
+                        id,
+                    );
+                }
+                _ => log::debug!("Received invalid DeclareFinal in a {:?}!", msg.mode),
+            },
         }
         drop(ctrl_lock);
     }

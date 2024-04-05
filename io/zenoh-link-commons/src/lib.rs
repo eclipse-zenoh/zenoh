@@ -21,6 +21,7 @@ extern crate alloc;
 
 mod listener;
 mod multicast;
+pub mod tls;
 mod unicast;
 
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};
@@ -31,6 +32,7 @@ pub use multicast::*;
 use serde::Serialize;
 pub use unicast::*;
 use zenoh_protocol::core::Locator;
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::ZResult;
 
 /*************************************/
@@ -44,7 +46,7 @@ pub struct Link {
     pub src: Locator,
     pub dst: Locator,
     pub group: Option<Locator>,
-    pub mtu: u16,
+    pub mtu: BatchSize,
     pub is_reliable: bool,
     pub is_streamed: bool,
     pub interfaces: Vec<String>,
@@ -56,9 +58,8 @@ pub trait LocatorInspector: Default {
     async fn is_multicast(&self, locator: &Locator) -> ZResult<bool>;
 }
 
-#[async_trait]
 pub trait ConfigurationInspector<C>: Default {
-    async fn inspect_config(&self, configuration: &C) -> ZResult<String>;
+    fn inspect_config(&self, configuration: &C) -> ZResult<String>;
 }
 
 impl fmt::Display for Link {

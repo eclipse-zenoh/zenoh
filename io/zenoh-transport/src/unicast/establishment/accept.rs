@@ -25,10 +25,10 @@ use crate::{
     },
     TransportManager,
 };
-use async_std::sync::Mutex;
 use async_trait::async_trait;
 use rand::Rng;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasynclock, zcondfeat, zerror};
@@ -167,9 +167,11 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         // Check if the version is supported
         if init_syn.version != input.mine_version {
             let e = zerror!(
-                "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
+                "Rejecting InitSyn on {} because of unsupported Zenoh protocol version (expected: {}, received: {}) from: {}",
                 self.link,
-                init_syn.zid
+                input.mine_version,
+                init_syn.version,
+                init_syn.zid,
             );
             return Err((e.into(), Some(close::reason::INVALID)));
         }

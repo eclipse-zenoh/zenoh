@@ -15,25 +15,24 @@ use super::{
     get_udp_addrs, socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU,
     UDP_MAX_MTU,
 };
-use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
-use async_std::prelude::*;
-use async_std::sync::Mutex as AsyncMutex;
-use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
+use tokio::net::UdpSocket;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
     get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
     LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Mvar;
-use zenoh_sync::Signal;
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (Vec<u8>, usize);
@@ -202,7 +201,7 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *UDP_DEFAULT_MTU
     }
 
@@ -279,7 +278,9 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
-        zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface);
+        if let Some(iface) = iface {
+            zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        }
 
         // Connect the socket to the remote address
         socket.connect(dst_addr).await.map_err(|e| {
@@ -316,7 +317,9 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
-        zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface);
+        if let Some(iface) = iface {
+            zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        }
 
         let local_addr = socket.local_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
@@ -388,20 +391,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                         endpoint.config(),
                     )?;
 
-                    let active = Arc::new(AtomicBool::new(true));
-                    let signal = Signal::new();
-
-                    let c_active = active.clone();
-                    let c_signal = signal.clone();
+                    let token = self.listeners.token.child_token();
+                    let c_token = token.clone();
                     let c_manager = self.manager.clone();
 
-                    let handle = task::spawn(async move {
-                        accept_read_task(socket, c_active, c_signal, c_manager).await
-                    });
+                    let task = async move { accept_read_task(socket, c_token, c_manager).await };
 
                     let locator = endpoint.to_locator();
                     self.listeners
-                        .add_listener(endpoint, local_addr, active, signal, handle)
+                        .add_listener(endpoint, local_addr, task, token)
                         .await?;
 
                     return Ok(locator);
@@ -453,19 +451,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         Ok(())
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
+    async fn get_listeners(&self) -> Vec<EndPoint> {
         self.listeners.get_endpoints()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
+    async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
     }
 }
 
 async fn accept_read_task(
     socket: UdpSocket,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
     let socket = Arc::new(socket);
@@ -489,19 +486,9 @@ async fn accept_read_task(
         };
     }
 
-    enum Action {
-        Receive((usize, SocketAddr)),
-        Stop,
-    }
-
-    async fn receive(socket: Arc<UdpSocket>, buffer: &mut [u8]) -> ZResult<Action> {
+    async fn receive(socket: Arc<UdpSocket>, buffer: &mut [u8]) -> ZResult<(usize, SocketAddr)> {
         let res = socket.recv_from(buffer).await.map_err(|e| zerror!(e))?;
-        Ok(Action::Receive(res))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok(res)
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
@@ -511,65 +498,66 @@ async fn accept_read_task(
     })?;
 
     log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
-    // Buffers for deserialization
-    while active.load(Ordering::Acquire) {
-        let mut buff = zenoh_buffers::vec::uninit(UDP_MAX_MTU as usize);
-        // Wait for incoming connections
-        let (n, dst_addr) = match receive(socket.clone(), &mut buff)
-            .race(stop(signal.clone()))
-            .await
-        {
-            Ok(action) => match action {
-                Action::Receive((n, addr)) => (n, addr),
-                Action::Stop => break,
-            },
-            Err(e) => {
-                log::warn!("{}. Hint: increase the system open file limit.", e);
-                // Throttle the accept loop upon an error
-                // NOTE: This might be due to various factors. However, the most common case is that
-                //       the process has reached the maximum number of open files in the system. On
-                //       Linux systems this limit can be changed by using the "ulimit" command line
-                //       tool. In case of systemd-based systems, this can be changed by using the
-                //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*UDP_ACCEPT_THROTTLE_TIME)).await;
-                continue;
-            }
-        };
 
-        let link = loop {
-            let res = zgetlink!(src_addr, dst_addr);
-            match res {
-                Some(link) => break link.upgrade(),
-                None => {
-                    // A new peers has sent data to this socket
-                    log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
-                    let unconnected = Arc::new(LinkUnicastUdpUnconnected {
-                        socket: Arc::downgrade(&socket),
-                        links: links.clone(),
-                        input: Mvar::new(),
-                        leftover: AsyncMutex::new(None),
-                    });
-                    zaddlink!(src_addr, dst_addr, Arc::downgrade(&unconnected));
-                    // Create the new link object
-                    let link = Arc::new(LinkUnicastUdp::new(
-                        src_addr,
-                        dst_addr,
-                        LinkUnicastUdpVariant::Unconnected(unconnected),
-                    ));
-                    // Add the new link to the set of connected peers
-                    if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-                        log::error!("{}-{}: {}", file!(), line!(), e)
+    loop {
+        // Buffers for deserialization
+        let mut buff = zenoh_buffers::vec::uninit(UDP_MAX_MTU as usize);
+
+        tokio::select! {
+            _ = token.cancelled() => break,
+
+            res = receive(socket.clone(), &mut buff) => {
+                match res {
+                    Ok((n, dst_addr)) => {
+                        let link = loop {
+                            let res = zgetlink!(src_addr, dst_addr);
+                            match res {
+                                Some(link) => break link.upgrade(),
+                                None => {
+                                    // A new peers has sent data to this socket
+                                    log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
+                                    let unconnected = Arc::new(LinkUnicastUdpUnconnected {
+                                        socket: Arc::downgrade(&socket),
+                                        links: links.clone(),
+                                        input: Mvar::new(),
+                                        leftover: AsyncMutex::new(None),
+                                    });
+                                    zaddlink!(src_addr, dst_addr, Arc::downgrade(&unconnected));
+                                    // Create the new link object
+                                    let link = Arc::new(LinkUnicastUdp::new(
+                                        src_addr,
+                                        dst_addr,
+                                        LinkUnicastUdpVariant::Unconnected(unconnected),
+                                    ));
+                                    // Add the new link to the set of connected peers
+                                    if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                                        log::error!("{}-{}: {}", file!(), line!(), e)
+                                    }
+                                }
+                            }
+                        };
+
+                        match link {
+                            Some(link) => {
+                                link.received(buff, n).await;
+                            }
+                            None => {
+                                zdellink!(src_addr, dst_addr);
+                            }
+                        }
+                    }
+
+                    Err(e) => {
+                        log::warn!("{}. Hint: increase the system open file limit.", e);
+                        // Throttle the accept loop upon an error
+                        // NOTE: This might be due to various factors. However, the most common case is that
+                        //       the process has reached the maximum number of open files in the system. On
+                        //       Linux systems this limit can be changed by using the "ulimit" command line
+                        //       tool. In case of systemd-based systems, this can be changed by using the
+                        //       "sysctl" command line tool.
+                        tokio::time::sleep(Duration::from_micros(*UDP_ACCEPT_THROTTLE_TIME)).await;
                     }
                 }
-            }
-        };
-
-        match link {
-            Some(link) => {
-                link.received(buff, n).await;
-            }
-            None => {
-                zdellink!(src_addr, dst_addr);
             }
         }
     }

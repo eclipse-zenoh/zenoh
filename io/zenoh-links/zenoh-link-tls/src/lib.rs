@@ -17,8 +17,6 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use async_rustls::rustls::ServerName;
-use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use config::{
     TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_BASE64, TLS_CLIENT_CERTIFICATE_FILE,
@@ -26,19 +24,22 @@ use config::{
     TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_BASE64, TLS_SERVER_CERTIFICATE_FILE,
     TLS_SERVER_NAME_VERIFICATION, TLS_SERVER_PRIVATE_KEY_BASE_64, TLS_SERVER_PRIVATE_KEY_FILE,
 };
+use rustls_pki_types::ServerName;
 use secrecy::ExposeSecret;
 use std::{convert::TryFrom, net::SocketAddr};
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::{
-    endpoint::{self, Address},
-    Locator,
+use zenoh_protocol::{
+    core::{
+        endpoint::{self, Address},
+        Locator,
+    },
+    transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
 mod unicast;
-mod verify;
 pub use unicast::*;
 
 // Default MTU (TLS PDU) in bytes.
@@ -47,7 +48,7 @@ pub use unicast::*;
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the TLS MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
-const TLS_MAX_MTU: u16 = u16::MAX;
+const TLS_MAX_MTU: BatchSize = BatchSize::MAX;
 pub const TLS_LOCATOR_PREFIX: &str = "tls";
 
 #[derive(Default, Clone, Copy)]
@@ -65,9 +66,8 @@ impl LocatorInspector for TlsLocatorInspector {
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
 
-#[async_trait]
 impl ConfigurationInspector<Config> for TlsConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
+    fn inspect_config(&self, config: &Config) -> ZResult<String> {
         let mut ps: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().tls();
@@ -175,7 +175,7 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
 
 zconfigurable! {
     // Default MTU (TLS PDU) in bytes.
-    static ref TLS_DEFAULT_MTU: u16 = TLS_MAX_MTU;
+    static ref TLS_DEFAULT_MTU: BatchSize = TLS_MAX_MTU;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:
@@ -213,7 +213,7 @@ pub mod config {
 }
 
 pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
-    match address.as_str().to_socket_addrs().await?.next() {
+    match tokio::net::lookup_host(address.as_str()).await?.next() {
         Some(addr) => Ok(addr),
         None => bail!("Couldn't resolve TLS locator address: {}", address),
     }
@@ -227,7 +227,7 @@ pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
         .ok_or_else(|| zerror!("Invalid TLS address").into())
 }
 
-pub fn get_tls_server_name(address: &Address<'_>) -> ZResult<ServerName> {
+pub fn get_tls_server_name<'a>(address: &'a Address<'a>) -> ZResult<ServerName<'a>> {
     Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
 }
 

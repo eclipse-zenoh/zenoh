@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{prelude::FutureExt, task};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 use zenoh_protocol::{
     core::{
         Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
@@ -34,12 +33,6 @@ const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_SIZE: usize = 131_072;
 const MSG_DEFRAG_BUF: usize = 128_000;
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
@@ -104,14 +97,14 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Wait that the client transport has been closed
     ztimeout!(async {
         while client_transport.get_zid().is_ok() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
     // Wait on the router manager that the transport has been closed
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -121,27 +114,24 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait a little bit
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+        while !router_manager.get_listeners().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn transport_unicast_defragmentation_tcp_only() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_defragmentation_tcp_only() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
 
     // Define the locators
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 11000).parse().unwrap();
@@ -165,21 +155,16 @@ fn transport_unicast_defragmentation_tcp_only() {
         },
     ];
     // Run
-    task::block_on(async {
-        for ch in channel.iter() {
-            run(&endpoint, *ch, MSG_SIZE).await;
-        }
-    });
+    for ch in channel.iter() {
+        run(&endpoint, *ch, MSG_SIZE).await;
+    }
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn transport_unicast_defragmentation_ws_only() {
+async fn transport_unicast_defragmentation_ws_only() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
 
     // Define the locators
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
@@ -203,21 +188,16 @@ fn transport_unicast_defragmentation_ws_only() {
         },
     ];
     // Run
-    task::block_on(async {
-        for ch in channel.iter() {
-            run(&endpoint, *ch, MSG_SIZE).await;
-        }
-    });
+    for ch in channel.iter() {
+        run(&endpoint, *ch, MSG_SIZE).await;
+    }
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn transport_unicast_defragmentation_unixpipe_only() {
+async fn transport_unicast_defragmentation_unixpipe_only() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
 
     // Define the locators
     let endpoint: EndPoint = "unixpipe/transport_unicast_defragmentation_unixpipe_only"
@@ -243,9 +223,7 @@ fn transport_unicast_defragmentation_unixpipe_only() {
         },
     ];
     // Run
-    task::block_on(async {
-        for ch in channel.iter() {
-            run(&endpoint, *ch, MSG_SIZE).await;
-        }
-    });
+    for ch in channel.iter() {
+        run(&endpoint, *ch, MSG_SIZE).await;
+    }
 }

@@ -70,9 +70,11 @@ fn payload_to_json(payload: &Payload, encoding: &Encoding) -> serde_json::Value 
             match encoding {
                 // If it is a JSON try to deserialize as json, if it fails fallback to base64
                 &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
-                    serde_json::from_slice::<serde_json::Value>(&payload.contiguous()).unwrap_or(
-                        serde_json::Value::String(StringOrBase64::from(payload).into_string()),
-                    )
+                    payload
+                        .deserialize::<serde_json::Value>()
+                        .unwrap_or_else(|_| {
+                            serde_json::Value::String(StringOrBase64::from(payload).into_string())
+                        })
                 }
                 // otherwise convert to JSON string
                 _ => serde_json::Value::String(StringOrBase64::from(payload).into_string()),
@@ -124,7 +126,10 @@ fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.key_expr().as_str(),
-        String::from_utf8_lossy(&sample.payload().contiguous())
+        sample
+            .payload()
+            .deserialize::<Cow<str>>()
+            .unwrap_or_default()
     )
 }
 
@@ -134,7 +139,7 @@ fn result_to_html(sample: Result<Sample, Value>) -> String {
         Err(err) => {
             format!(
                 "<dt>ERROR</dt>\n<dd>{}</dd>\n",
-                String::from_utf8_lossy(&err.payload.contiguous())
+                err.payload.deserialize::<Cow<str>>().unwrap_or_default()
             )
         }
     }
@@ -160,12 +165,15 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
             Ok(sample) => response(
                 StatusCode::Ok,
                 Cow::from(sample.encoding()).as_ref(),
-                String::from_utf8_lossy(&sample.payload().contiguous()).as_ref(),
+                &sample
+                    .payload()
+                    .deserialize::<Cow<str>>()
+                    .unwrap_or_default(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
                 Cow::from(&value.encoding).as_ref(),
-                String::from_utf8_lossy(&value.payload.contiguous()).as_ref(),
+                &value.payload.deserialize::<Cow<str>>().unwrap_or_default(),
             ),
         },
         Err(_) => response(StatusCode::Ok, "", ""),

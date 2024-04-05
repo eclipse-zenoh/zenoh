@@ -27,12 +27,12 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::network::declare::{Interest, InterestId, SubscriberId};
-use zenoh_protocol::network::{DeclareInterest, UndeclareInterest};
+use zenoh_protocol::network::{DeclareFinal, DeclareInterest};
 use zenoh_protocol::{
     core::{Reliability, WhatAmI},
     network::declare::{
         common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareSubscriber, UndeclareSubscriber,
+        DeclareMode, DeclareSubscriber, UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -55,6 +55,7 @@ fn propagate_simple_subscription_to(
         let key_expr = Resource::decl_key(res, dst_face);
         dst_face.primitives.send_declare(RoutingContext::with_expr(
             Declare {
+                mode: DeclareMode::Push,
                 ext_qos: ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -131,6 +132,7 @@ fn declare_client_subscription(
             .primitives
             .send_declare(RoutingContext::with_expr(
                 Declare {
+                    mode: DeclareMode::Push,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -164,6 +166,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
         if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    mode: DeclareMode::Push,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -198,6 +201,7 @@ pub(super) fn undeclare_client_subscription(
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            mode: DeclareMode::Push,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -243,10 +247,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         if face.whatami != WhatAmI::Client {
             for res in face_hat_mut!(&mut src_face).remote_sub_interests.values() {
                 let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                let interest = Interest::KEYEXPRS
-                    + Interest::SUBSCRIBERS
-                    + Interest::CURRENT
-                    + Interest::FUTURE;
+                let interest = Interest::KEYEXPRS + Interest::SUBSCRIBERS;
                 get_mut_unchecked(face).local_interests.insert(
                     id,
                     (interest, res.as_ref().map(|res| (*res).clone()), false),
@@ -254,11 +255,11 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face));
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
+                        mode: DeclareMode::RequestContinuous(id),
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareInterest(DeclareInterest {
-                            id,
                             interest,
                             wire_expr,
                         }),
@@ -279,7 +280,6 @@ impl HatPubSubTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
         future: bool,
         _aggregate: bool,
     ) {
@@ -292,25 +292,24 @@ impl HatPubSubTrait for HatCode {
             .filter(|f| f.whatami != WhatAmI::Client)
         {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-            let mut interest = Interest::KEYEXPRS + Interest::SUBSCRIBERS;
-            if current {
-                interest += Interest::CURRENT;
-            }
-            if future {
-                interest += Interest::FUTURE;
-            }
+            let interest = Interest::KEYEXPRS + Interest::SUBSCRIBERS;
+            let mode = if future {
+                DeclareMode::RequestContinuous(id)
+            } else {
+                DeclareMode::Request(id)
+            };
             get_mut_unchecked(dst_face).local_interests.insert(
                 id,
-                (interest, res.as_ref().map(|res| (*res).clone()), !current),
+                (interest, res.as_ref().map(|res| (*res).clone()), false),
             );
             let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    mode,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareInterest(DeclareInterest {
-                        id,
                         interest,
                         wire_expr,
                     }),
@@ -349,13 +348,11 @@ impl HatPubSubTrait for HatCode {
                         if int.subscribers() && (*res == interest) {
                             dst_face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
+                                    mode: DeclareMode::Response(id),
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareInterest(UndeclareInterest {
-                                        id,
-                                        ext_wire_expr: WireExprType::null(),
-                                    }),
+                                    body: DeclareBody::DeclareFinal(DeclareFinal),
                                 },
                                 res.as_ref().map(|res| res.expr()).unwrap_or_default(),
                             ));

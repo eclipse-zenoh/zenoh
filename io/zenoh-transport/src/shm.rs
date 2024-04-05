@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{sync::RwLock, task};
+use tokio::sync::RwLock;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasyncread, zasyncwrite, zerror};
@@ -222,10 +222,14 @@ pub fn map_zslice_to_shmbuf(
     let shmbinfo: SharedMemoryBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
     // First, try in read mode allowing concurrenct lookups
-    let r_guard = task::block_on(async { zasyncread!(shmr) });
+    let r_guard = tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async { zasyncread!(shmr) })
+    });
     let smb = r_guard.try_read_shmbuf(&shmbinfo).or_else(|_| {
         drop(r_guard);
-        let mut w_guard = task::block_on(async { zasyncwrite!(shmr) });
+        let mut w_guard = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async { zasyncwrite!(shmr) })
+        });
         w_guard.read_shmbuf(&shmbinfo)
     })?;
 

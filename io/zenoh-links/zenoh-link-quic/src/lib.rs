@@ -17,7 +17,6 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use config::{
     TLS_ROOT_CA_CERTIFICATE_BASE64, TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_BASE64,
@@ -29,9 +28,12 @@ use std::net::SocketAddr;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::{
-    endpoint::{Address, Parameters},
-    Locator,
+use zenoh_protocol::{
+    core::{
+        endpoint::{Address, Parameters},
+        Locator,
+    },
+    transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -48,7 +50,7 @@ pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the QUIC MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
-const QUIC_MAX_MTU: u16 = u16::MAX;
+const QUIC_MAX_MTU: BatchSize = BatchSize::MAX;
 pub const QUIC_LOCATOR_PREFIX: &str = "quic";
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -68,9 +70,8 @@ impl LocatorInspector for QuicLocatorInspector {
 #[derive(Default, Clone, Copy, Debug)]
 pub struct QuicConfigurator;
 
-#[async_trait]
 impl ConfigurationInspector<Config> for QuicConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
+    fn inspect_config(&self, config: &Config) -> ZResult<String> {
         let mut ps: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().tls();
@@ -139,7 +140,7 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
 
 zconfigurable! {
     // Default MTU (QUIC PDU) in bytes.
-    static ref QUIC_DEFAULT_MTU: u16 = QUIC_MAX_MTU;
+    static ref QUIC_DEFAULT_MTU: BatchSize = QUIC_MAX_MTU;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:
@@ -168,7 +169,7 @@ pub mod config {
 }
 
 async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
-    match address.as_str().to_socket_addrs().await?.next() {
+    match tokio::net::lookup_host(address.as_str()).await?.next() {
         Some(addr) => Ok(addr),
         None => bail!("Couldn't resolve QUIC locator address: {}", address),
     }

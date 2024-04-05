@@ -39,6 +39,7 @@ use crate::network::NetworkMessage;
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 pub type BatchSize = u16;
+pub type AtomicBatchSize = core::sync::atomic::AtomicU16;
 
 pub mod batch_size {
     use super::BatchSize;
@@ -63,6 +64,15 @@ pub mod id {
 #[derive(Debug)]
 pub struct TransportMessageLowLatency {
     pub body: TransportBodyLowLatency,
+}
+
+impl TryFrom<NetworkMessage> for TransportMessageLowLatency {
+    type Error = zenoh_result::Error;
+    fn try_from(msg: NetworkMessage) -> Result<Self, Self::Error> {
+        Ok(Self {
+            body: TransportBodyLowLatency::Network(msg),
+        })
+    }
 }
 
 #[allow(clippy::large_enum_variant)]

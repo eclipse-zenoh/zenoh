@@ -45,7 +45,8 @@ pub use zenoh_protocol::core::CongestionControl;
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
@@ -55,7 +56,7 @@ pub use zenoh_protocol::core::CongestionControl;
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 
@@ -63,7 +64,8 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
@@ -75,7 +77,7 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
@@ -245,20 +247,22 @@ impl std::fmt::Debug for PublisherRef<'_> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
 /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
 /// publisher.put("value").res().await.unwrap();
-/// # })
+/// # }
 /// ```
 ///
 ///
 /// `Publisher` implements the `Sink` trait which is useful to forward
 /// streams to zenoh.
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use futures::StreamExt;
 /// use zenoh::prelude::r#async::*;
 ///
@@ -266,7 +270,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// let mut subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
 /// let publisher = session.declare_publisher("another/key/expression").res().await.unwrap();
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
-/// # })
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
@@ -284,7 +288,8 @@ impl<'a> Publisher<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -293,7 +298,7 @@ impl<'a> Publisher<'a> {
     ///     .await
     ///     .unwrap();
     /// let publisher_id = publisher.id();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
@@ -342,14 +347,15 @@ impl<'a> Publisher<'a> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap().into_arc();
     /// let matching_listener = publisher.matching_listener().res().await.unwrap();
     ///
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(matching_status) = matching_listener.recv_async().await {
     ///         if matching_status.matching_subscribers() {
     ///             println!("Publisher has matching subscribers.");
@@ -358,7 +364,7 @@ impl<'a> Publisher<'a> {
     ///         }
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn into_arc(self) -> std::sync::Arc<Self> {
@@ -382,13 +388,14 @@ impl<'a> Publisher<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
     /// publisher.put("value").res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn put<IntoPayload>(&self, payload: IntoPayload) -> Publication
@@ -402,13 +409,14 @@ impl<'a> Publisher<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
     /// publisher.delete().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     pub fn delete(&self) -> Publication {
         self._write(SampleKind::Delete, Payload::empty())
@@ -421,7 +429,8 @@ impl<'a> Publisher<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -432,7 +441,7 @@ impl<'a> Publisher<'a> {
     ///     .await
     ///     .unwrap()
     ///     .matching_subscribers();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
@@ -449,7 +458,8 @@ impl<'a> Publisher<'a> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -462,7 +472,7 @@ impl<'a> Publisher<'a> {
     ///         println!("Publisher has NO MORE matching subscribers.");
     ///     }
     /// }
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
@@ -476,13 +486,14 @@ impl<'a> Publisher<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
     /// publisher.undeclare().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
@@ -499,14 +510,15 @@ impl<'a> Publisher<'a> {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
 /// let publisher = session.declare_publisher("key/expression").res().await.unwrap().into_arc();
 /// let matching_listener = publisher.matching_listener().res().await.unwrap();
 ///
-/// async_std::task::spawn(async move {
+/// tokio::task::spawn(async move {
 ///     while let Ok(matching_status) = matching_listener.recv_async().await {
 ///         if matching_status.matching_subscribers() {
 ///             println!("Publisher has matching subscribers.");
@@ -515,20 +527,21 @@ impl<'a> Publisher<'a> {
 ///         }
 ///     }
 /// }).await;
-/// # })
+/// # }
 /// ```
 #[zenoh_macros::unstable]
 pub trait PublisherDeclarations {
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap().into_arc();
     /// let matching_listener = publisher.matching_listener().res().await.unwrap();
     ///
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(matching_status) = matching_listener.recv_async().await {
     ///         if matching_status.matching_subscribers() {
     ///             println!("Publisher has matching subscribers.");
@@ -537,7 +550,7 @@ pub trait PublisherDeclarations {
     ///         }
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler>;
@@ -547,14 +560,15 @@ pub trait PublisherDeclarations {
 impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap().into_arc();
     /// let matching_listener = publisher.matching_listener().res().await.unwrap();
     ///
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(matching_status) = matching_listener.recv_async().await {
     ///         if matching_status.matching_subscribers() {
     ///             println!("Publisher has matching subscribers.");
@@ -563,7 +577,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     ///         }
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler> {
@@ -584,13 +598,14 @@ impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
 /// publisher.undeclare().res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct PublisherUndeclaration<'a> {
@@ -658,7 +673,8 @@ impl<'a> Publication<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -667,7 +683,7 @@ impl<'a> Publication<'a> {
     ///     source_id: Some(publisher.id()),
     ///     source_sn: Some(0),
     /// }).res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
@@ -741,7 +757,8 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
@@ -752,7 +769,7 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -1070,13 +1087,14 @@ impl TryFrom<ProtocolPriority> for Priority {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
 /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
 /// let matching_status = publisher.matching_status().res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[zenoh_macros::unstable]
 #[derive(Copy, Clone, Debug)]
@@ -1090,7 +1108,8 @@ impl MatchingStatus {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -1101,7 +1120,7 @@ impl MatchingStatus {
     ///     .await
     ///     .unwrap()
     ///     .matching_subscribers();
-    /// # })
+    /// # }
     /// ```
     pub fn matching_subscribers(&self) -> bool {
         self.matching
@@ -1122,7 +1141,8 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -1139,7 +1159,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
@@ -1161,7 +1181,8 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let mut n = 0;
@@ -1173,7 +1194,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
@@ -1191,7 +1212,8 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -1209,7 +1231,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     ///         println!("Publisher has NO MORE matching subscribers.");
     ///     }
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
@@ -1317,7 +1339,8 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -1330,7 +1353,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 ///         println!("Publisher has NO MORE matching subscribers.");
 ///     }
 /// }
-/// # })
+/// # }
 /// ```
 #[zenoh_macros::unstable]
 pub struct MatchingListener<'a, Receiver> {
@@ -1347,14 +1370,15 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
     /// let matching_listener = publisher.matching_listener().res().await.unwrap();
     /// matching_listener.undeclare().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {

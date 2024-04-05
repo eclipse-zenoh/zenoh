@@ -61,7 +61,8 @@ impl fmt::Debug for SubscriberState {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -71,7 +72,7 @@ impl fmt::Debug for SubscriberState {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[derive(Debug)]
 pub(crate) struct SubscriberInner<'a> {
@@ -88,7 +89,8 @@ impl<'a> SubscriberInner<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -100,7 +102,7 @@ impl<'a> SubscriberInner<'a> {
     ///     .await
     ///     .unwrap();
     /// subscriber.undeclare().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
@@ -118,7 +120,8 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -128,7 +131,7 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 ///     .await
 ///     .unwrap();
 /// subscriber.undeclare().res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberUndeclaration<'a> {
@@ -168,7 +171,8 @@ impl Drop for SubscriberInner<'_> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -178,7 +182,7 @@ impl Drop for SubscriberInner<'_> {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -217,7 +221,8 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -227,7 +232,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Callback>
@@ -259,7 +264,8 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -270,7 +276,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
@@ -287,7 +293,8 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -300,7 +307,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
@@ -418,7 +425,8 @@ where
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -431,7 +439,7 @@ where
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
 /// }
-/// # })
+/// # }
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
@@ -445,7 +453,8 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -454,7 +463,7 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     ///     .await
     ///     .unwrap();
     /// let subscriber_id = subscriber.id();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
@@ -476,7 +485,8 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -485,7 +495,7 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     ///     .await
     ///     .unwrap();
     /// subscriber.undeclare().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
