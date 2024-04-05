@@ -85,6 +85,7 @@ jobs:
       repo: ${{ github.repository }}
       live-run: ${{ inputs.live-run || false }}
       branch: ${{ needs.tag.outputs.branch }}
+      unpublished-deps-patterns: "zenoh.*"
     secrets: inherit
 
   debian:
