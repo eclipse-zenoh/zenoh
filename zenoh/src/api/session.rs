@@ -89,7 +89,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
-            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
+            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr, DeclareMode,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
         ext,
@@ -900,7 +900,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        interest_id: None,
+                        mode: DeclareMode::Push,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1113,7 +1113,7 @@ impl Session {
             // };
 
             primitives.send_declare(Declare {
-                interest_id: None,
+                mode: DeclareMode::Push,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1170,7 +1170,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        interest_id: None,
+                        mode: DeclareMode::Push,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1222,7 +1222,7 @@ impl Session {
                 distance: 0,
             };
             primitives.send_declare(Declare {
-                interest_id: None,
+                mode: DeclareMode::Push,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1244,7 +1244,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    interest_id: None,
+                    mode: DeclareMode::Push,
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1280,7 +1280,7 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(Declare {
-            interest_id: None,
+            mode: DeclareMode::Push,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1305,7 +1305,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    interest_id: None,
+                    mode: DeclareMode::Push,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -2077,8 +2077,7 @@ impl Primitives for Session {
             DeclareBody::DeclareToken(_) => todo!(),
             DeclareBody::UndeclareToken(_) => todo!(),
             DeclareBody::DeclareInterest(_) => todo!(),
-            DeclareBody::FinalInterest(_) => todo!(),
-            DeclareBody::UndeclareInterest(_) => todo!(),
+            DeclareBody::DeclareFinal(_) => todo!(),
         }
     }
 
