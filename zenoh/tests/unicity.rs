@@ -18,6 +18,7 @@ use tokio::runtime::Handle;
 use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh_core::ztimeout;
+use zenoh::config::EndPoint;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

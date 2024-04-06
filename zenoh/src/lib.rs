@@ -258,8 +258,8 @@ pub mod runtime {
 
 pub mod config {
     pub use zenoh_config::{
-        client, default, peer, Config, ModeDependentValue, PermissionsConf, PluginLoad,
-        ValidatedMap,
+        client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
+        PluginLoad, ValidatedMap, ZenohId,
     };
 }
 

@@ -15,6 +15,7 @@ use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
+use zenoh::config::ZenohId;
 
 #[tokio::main]
 async fn main() {

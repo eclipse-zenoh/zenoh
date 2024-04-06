@@ -13,10 +13,10 @@ use std::future::Ready;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::api::publication::Priority;
 use crate::api::builders::sample::SampleBuilderTrait;
 use crate::api::builders::sample::{QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait};
 use crate::api::key_expr::KeyExpr;
+use crate::api::publication::Priority;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
 use crate::api::sample::Locality;

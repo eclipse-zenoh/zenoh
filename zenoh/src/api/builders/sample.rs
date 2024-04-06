@@ -17,6 +17,7 @@ use std::marker::PhantomData;
 use crate::api::encoding::Encoding;
 use crate::api::key_expr::KeyExpr;
 use crate::api::payload::Payload;
+use crate::api::publication::Priority;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
 use crate::api::sample::QoS;
@@ -26,7 +27,6 @@ use crate::api::sample::SampleKind;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::value::Value;
-use crate::api::publication::Priority;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;

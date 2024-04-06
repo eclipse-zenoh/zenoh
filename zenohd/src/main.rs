@@ -15,10 +15,11 @@ use clap::Parser;
 use futures::future;
 use git_version::git_version;
 use std::collections::HashSet;
+use zenoh::config::EndPoint;
 use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
 use zenoh::plugins::PluginsManager;
-use zenoh::prelude::{EndPoint, WhatAmI};
 use zenoh::runtime::{AdminSpace, Runtime};
+use zenoh::scouting::WhatAmI;
 use zenoh::Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");

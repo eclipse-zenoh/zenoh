@@ -1,4 +1,4 @@
-use zenoh_config::{ConnectionRetryConf, ValidatedMap};
+use zenoh_config::{ConnectionRetryConf, ValidatedMap, EndPoint};
 
 use zenoh::prelude::sync::*;
 

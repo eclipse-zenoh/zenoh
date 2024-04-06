@@ -27,6 +27,7 @@ use crate::api::payload::Payload;
 use crate::api::publication::MatchingListenerState;
 #[zenoh_macros::unstable]
 use crate::api::publication::MatchingStatus;
+use crate::api::publication::Priority;
 use crate::api::query::GetBuilder;
 use crate::api::query::QueryState;
 use crate::api::query::Reply;
@@ -73,7 +74,6 @@ use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_config::Config;
 use zenoh_config::Notifier;
-use crate::api::publication::Priority;
 use zenoh_core::Resolvable;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 use zenoh_protocol::core::Reliability;
