@@ -23,7 +23,7 @@ pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
-use zenoh_config::Priority;
+use crate::api::publication::Priority;
 use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::core::Timestamp;

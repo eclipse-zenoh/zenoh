@@ -23,7 +23,7 @@ use crate::prelude::*;
 use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
-use zenoh_config::Priority;
+use crate::api::publication::Priority;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::ZResult;

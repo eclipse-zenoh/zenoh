@@ -73,7 +73,7 @@ use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_config::Config;
 use zenoh_config::Notifier;
-use zenoh_config::Priority;
+use crate::api::publication::Priority;
 use zenoh_core::Resolvable;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 use zenoh_protocol::core::Reliability;

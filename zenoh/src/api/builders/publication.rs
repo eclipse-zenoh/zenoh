@@ -13,6 +13,7 @@ use std::future::Ready;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::api::publication::Priority;
 use crate::api::builders::sample::SampleBuilderTrait;
 use crate::api::builders::sample::{QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait};
 use crate::api::key_expr::KeyExpr;

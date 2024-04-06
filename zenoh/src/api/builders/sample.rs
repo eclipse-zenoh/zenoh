@@ -26,8 +26,8 @@ use crate::api::sample::SampleKind;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::value::Value;
+use crate::api::publication::Priority;
 use uhlc::Timestamp;
-use zenoh_config::Priority;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
 
