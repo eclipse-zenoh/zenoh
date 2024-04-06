@@ -16,16 +16,15 @@ use std::future::Ready;
 use crate::api::builders::sample::SampleBuilderTrait;
 use crate::api::builders::sample::{QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait};
 use crate::api::key_expr::KeyExpr;
-use crate::api::publication::Priority;
+#[cfg(feature = "unstable")]
+use crate::api::sample::Attachment;
 use crate::api::sample::Locality;
 use crate::api::sample::SampleKind;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::session::SessionRef;
 use crate::api::value::Value;
-use crate::api::{
-    encoding::Encoding, payload::Payload, publication::Publisher, sample::Attachment,
-};
+use crate::api::{encoding::Encoding, payload::Payload, publication::Publisher};
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
 use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::network::Mapping;

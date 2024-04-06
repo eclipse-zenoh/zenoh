@@ -149,6 +149,7 @@ pub mod key_expr {
 pub mod session {
     pub use crate::api::builders::publication::SessionDeleteBuilder;
     pub use crate::api::builders::publication::SessionPutBuilder;
+    #[zenoh_macros::unstable]
     pub use crate::api::session::init;
     pub use crate::api::session::open;
     pub use crate::api::session::Session;
@@ -162,7 +163,9 @@ pub mod sample {
     pub use crate::api::builders::sample::SampleBuilderTrait;
     pub use crate::api::builders::sample::TimestampBuilderTrait;
     pub use crate::api::builders::sample::ValueBuilderTrait;
+    #[zenoh_macros::unstable]
     pub use crate::api::sample::Attachment;
+    #[zenoh_macros::unstable]
     pub use crate::api::sample::Locality;
     pub use crate::api::sample::Sample;
     pub use crate::api::sample::SampleKind;
@@ -212,7 +215,9 @@ pub mod publication {
 pub mod query {
     pub use crate::api::query::Mode;
     pub use crate::api::query::Reply;
+    #[zenoh_macros::unstable]
     pub use crate::api::query::ReplyKeyExpr;
+    #[zenoh_macros::unstable]
     pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
     pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 }
@@ -236,6 +241,7 @@ pub mod scouting {
     pub use crate::api::scouting::WhatAmI;
 }
 
+#[cfg(feature = "unstable")]
 pub mod liveliness {
     pub use crate::api::liveliness::Liveliness;
     pub use crate::api::liveliness::LivelinessSubscriberBuilder;

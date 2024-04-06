@@ -22,7 +22,10 @@ use crate::api::key_expr::KeyExpr;
 use crate::api::key_expr::KeyExprInner;
 #[zenoh_macros::unstable]
 use crate::api::liveliness::{Liveliness, LivelinessTokenState};
+use crate::api::payload::Payload;
+#[zenoh_macros::unstable]
 use crate::api::publication::MatchingListenerState;
+#[zenoh_macros::unstable]
 use crate::api::publication::MatchingStatus;
 use crate::api::query::GetBuilder;
 use crate::api::query::QueryState;
@@ -34,7 +37,12 @@ use crate::api::queryable::QueryableState;
 use crate::api::sample::Attachment;
 use crate::api::sample::DataInfo;
 use crate::api::sample::DataInfoIntoSample;
+use crate::api::sample::Locality;
 use crate::api::sample::QoS;
+use crate::api::sample::Sample;
+use crate::api::sample::SampleKind;
+#[cfg(feature = "unstable")]
+use crate::api::sample::SourceInfo;
 use crate::api::selector::Parameters;
 use crate::api::selector::Selector;
 use crate::api::selector::TIME_RANGE_KEY;
@@ -45,15 +53,9 @@ use crate::api::Id;
 use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
-use crate::payload::Payload;
-use crate::prelude::Locality;
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
-use crate::Priority;
-use crate::Sample;
-use crate::SampleKind;
-use crate::SourceInfo;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -71,6 +73,7 @@ use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_config::Config;
 use zenoh_config::Notifier;
+use zenoh_config::Priority;
 use zenoh_core::Resolvable;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 use zenoh_protocol::core::Reliability;

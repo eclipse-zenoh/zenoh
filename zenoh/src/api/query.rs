@@ -18,11 +18,12 @@ use crate::api::key_expr::KeyExpr;
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
 use crate::api::sample::QoSBuilder;
+use crate::api::session::Session;
 use crate::prelude::*;
-use crate::Session;
 use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
+use zenoh_config::Priority;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::ZResult;

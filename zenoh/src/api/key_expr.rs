@@ -56,7 +56,10 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::{api::session::Undeclarable, net::primitives::Primitives, prelude::Selector, Session};
+use crate::{
+    api::session::Session, api::session::Undeclarable, net::primitives::Primitives,
+    prelude::Selector,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
@@ -552,7 +555,7 @@ impl<'a> KeyExpr<'a> {
             _ => false,
         }
     }
-    pub(crate) fn to_wire(&'a self, session: &crate::Session) -> WireExpr<'a> {
+    pub(crate) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,

@@ -18,7 +18,9 @@ use super::key_expr::KeyExpr;
 use crate::api::builders::sample::SampleBuilder;
 use crate::api::encoding::Encoding;
 use crate::api::handlers::{locked, DefaultHandler};
-use crate::api::sample::{QoSBuilder, SourceInfo};
+use crate::api::sample::QoSBuilder;
+#[cfg(feature = "unstable")]
+use crate::api::sample::SourceInfo;
 use crate::api::session::SessionRef;
 use crate::api::session::Undeclarable;
 use crate::api::Id;
@@ -31,6 +33,7 @@ use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
 use uhlc::Timestamp;
+use zenoh_config::Priority;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::{
     core::{EntityId, WireExpr},
@@ -145,7 +148,9 @@ impl Query {
                 encoding: Encoding::default(),
             },
             timestamp: None,
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -183,7 +188,9 @@ impl Query {
             qos: response::ext::QoSType::RESPONSE.into(),
             kind: ReplyBuilderDelete,
             timestamp: None,
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -284,6 +291,7 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     #[cfg(feature = "unstable")]
     fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {

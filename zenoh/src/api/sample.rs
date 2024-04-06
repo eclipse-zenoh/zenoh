@@ -18,12 +18,12 @@ use crate::api::encoding::Encoding;
 use crate::api::key_expr::KeyExpr;
 use crate::api::value::Value;
 use crate::payload::Payload;
-use crate::Priority;
 #[zenoh_macros::unstable]
 pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
+use zenoh_config::Priority;
 use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::core::Timestamp;

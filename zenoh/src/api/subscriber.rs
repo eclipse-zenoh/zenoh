@@ -15,10 +15,10 @@
 //! Subscribing primitives.
 use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::api::key_expr::KeyExpr;
+use crate::api::sample::Locality;
 use crate::api::sample::Sample;
 use crate::api::session::Undeclarable;
 use crate::api::Id;
-use crate::prelude::Locality;
 use crate::{api::session::SessionRef, Result as ZResult};
 use std::fmt;
 use std::future::Ready;
