@@ -13,7 +13,7 @@
 //
 
 //! Value primitives.
-use crate::{encoding::Encoding, payload::Payload};
+use crate::{encoding::Encoding, payload::Payload, sample::builder::ValueBuilderTrait};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the [`Payload`] should be interpreted.
 #[non_exhaustive]
@@ -36,7 +36,6 @@ impl Value {
             encoding: Encoding::default(),
         }
     }
-
     /// Creates an empty [`Value`].
     pub const fn empty() -> Self {
         Value {
@@ -44,15 +43,29 @@ impl Value {
             encoding: Encoding::default(),
         }
     }
+    /// Checks if the [`Value`] is empty.
+    /// Value is considered empty if its payload is empty and encoding is default.
+    pub fn is_empty(&self) -> bool {
+        self.payload.is_empty() && self.encoding == Encoding::default()
+    }
+}
 
-    /// Sets the encoding of this [`Value`]`.
-    #[inline(always)]
-    pub fn with_encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
-    where
-        IntoEncoding: Into<Encoding>,
-    {
-        self.encoding = encoding.into();
-        self
+impl ValueBuilderTrait for Value {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            encoding: encoding.into(),
+            ..self
+        }
+    }
+    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+        Self {
+            payload: payload.into(),
+            ..self
+        }
+    }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let Value { payload, encoding } = value.into();
+        Self { payload, encoding }
     }
 }
 
@@ -65,5 +78,20 @@ where
             payload: t.into(),
             encoding: Encoding::default(),
         }
+    }
+}
+
+impl<T> From<Option<T>> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: Option<T>) -> Self {
+        t.map_or_else(Value::empty, Into::into)
+    }
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Value::empty()
     }
 }
