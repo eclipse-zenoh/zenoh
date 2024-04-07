@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use zenoh::prelude::*;
+use zenoh::prelude as zenoh;
 
-kedefine!(
+zenoh::kedefine!(
     pub file_format: "user_id/${user_id:*}/file/${file:*/**}",
     pub(crate) settings_format: "user_id/${user_id:*}/settings/${setting:**}"
 );
@@ -23,7 +23,7 @@ fn main() {
     // Formatting
     let mut formatter = file_format::formatter();
     let file = "hi/there";
-    let ke = keformat!(formatter, user_id = 42, file).unwrap();
+    let ke = zenoh::keformat!(formatter, user_id = 42, file).unwrap();
     println!("{formatter:?} => {ke}");
     // Parsing
     let settings_ke = keyexpr::new("user_id/30/settings/dark_mode").unwrap();
