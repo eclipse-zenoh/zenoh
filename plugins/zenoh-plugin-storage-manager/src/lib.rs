@@ -30,6 +30,7 @@ use storages_mgt::StorageMessage;
 use zenoh::core::SyncResolve;
 use zenoh::internal::zlock;
 use zenoh::key_expr::keyexpr;
+use zenoh::plugins::LibLoader;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::runtime::Runtime;
 use zenoh::selector::Selector;
@@ -46,7 +47,6 @@ use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginReport;
 use zenoh_plugin_trait::PluginStatusRec;
-use zenoh_util::LibLoader;
 
 mod backends_mgt;
 use backends_mgt::*;

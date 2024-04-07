@@ -25,6 +25,7 @@ use zenoh::buffers::SplitBuffer;
 use zenoh::buffers::ZBuf;
 use zenoh::core::AsyncResolve;
 use zenoh::internal::bail;
+use zenoh::internal::{zenoh_home, Timed, TimedEvent, Timer};
 use zenoh::key_expr::keyexpr_tree::KeyedSetProvider;
 use zenoh::key_expr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
 use zenoh::key_expr::keyexpr_tree::{KeBoxTree, NonWild, UnknownWildness};
@@ -39,7 +40,6 @@ use zenoh::value::Value;
 use zenoh::{session::Session, Result as ZResult};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
-use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";

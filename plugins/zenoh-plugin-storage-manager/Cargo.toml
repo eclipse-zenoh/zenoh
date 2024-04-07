@@ -48,7 +48,6 @@ serde_json = { workspace = true }
 urlencoding = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"] }
 zenoh-plugin-trait = { workspace = true }
-zenoh-util = { workspace = true }
 zenoh_backend_traits = { workspace = true }
 
 [build-dependencies]
