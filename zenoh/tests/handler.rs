@@ -1,4 +1,4 @@
-use zenoh::session::SessionDeclarations;
+use zenoh::{sample::ValueBuilderTrait, session::SessionDeclarations};
 use zenoh_config::Config;
 
 //

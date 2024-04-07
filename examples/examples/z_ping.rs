@@ -18,6 +18,7 @@ use zenoh::key_expr::keyexpr;
 use zenoh::payload::Payload;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
+use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::SessionDeclarations;
 use zenoh_examples::CommonArgs;
 

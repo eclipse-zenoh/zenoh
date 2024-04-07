@@ -14,10 +14,7 @@
 
 //! Queryable primitives.
 use super::{
-    builders::sample::{
-        QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
-        ValueBuilderTrait,
-    },
+    builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
@@ -43,6 +40,7 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
     super::{
+        builders::sample::SampleBuilderTrait,
         query::ReplyKeyExpr,
         sample::{Attachment, SourceInfo},
     },

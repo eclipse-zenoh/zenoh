@@ -20,6 +20,7 @@ use zenoh::config::EndPoint;
 use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
+use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::{Session, SessionDeclarations};
 use zenoh_config as config;
 use zenoh_core::ztimeout;

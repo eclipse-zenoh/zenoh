@@ -64,7 +64,7 @@ fn pubsub() {
 fn queries() {
     use zenoh::{
         prelude::sync::*,
-        sample::{Attachment, SampleBuilderTrait},
+        sample::{Attachment, SampleBuilderTrait, ValueBuilderTrait},
         session::SessionDeclarations,
     };
     use zenoh_config::Config;

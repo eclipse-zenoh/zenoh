@@ -36,7 +36,7 @@ use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
-use zenoh::sample::{Sample, SampleKind};
+use zenoh::sample::{Sample, SampleKind, ValueBuilderTrait};
 use zenoh::selector::{Parameters, Selector, TIME_RANGE_KEY};
 use zenoh::session::{Session, SessionDeclarations};
 use zenoh::value::Value;

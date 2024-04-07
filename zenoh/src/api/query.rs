@@ -14,13 +14,13 @@
 
 //! Query primitives.
 use super::{
-    builders::sample::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait},
+    builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     payload::Payload,
     publication::Priority,
-    sample::{Locality, QoSBuilder, Sample, SourceInfo},
+    sample::{Locality, QoSBuilder, Sample},
     selector::Selector,
     session::Session,
     value::Value,
@@ -32,7 +32,10 @@ use zenoh_protocol::core::{CongestionControl, ZenohId};
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
-use crate::api::sample::Attachment;
+use super::{
+    builders::sample::SampleBuilderTrait,
+    sample::{Attachment, SourceInfo},
+};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;

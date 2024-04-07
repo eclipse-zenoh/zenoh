@@ -21,7 +21,7 @@ use super::{
     info::SessionInfo,
     key_expr::{KeyExpr, KeyExprInner},
     payload::Payload,
-    publication::{Priority, Publisher},
+    publication::Priority,
     query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
@@ -74,10 +74,11 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 use zenoh_util::core::AsyncResolve;
 
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use {
     super::{
         liveliness::{Liveliness, LivelinessTokenState},
+        publication::Publisher,
         publication::{MatchingListenerState, MatchingStatus},
         sample::{Attachment, SourceInfo},
     },

@@ -33,6 +33,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::publication::Priority;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
+use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::Session;
 use zenoh::session::SessionDeclarations;
 use zenoh::Error as ZError;

@@ -17,7 +17,7 @@ use std::time::Duration;
 use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
-use zenoh::sample::SampleKind;
+use zenoh::sample::{QoSBuilderTrait, SampleKind};
 use zenoh::session::{Session, SessionDeclarations};
 use zenoh::subscriber::Reliability;
 use zenoh::value::Value;

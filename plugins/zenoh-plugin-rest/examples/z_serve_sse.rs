@@ -17,6 +17,7 @@ use zenoh::config::Config;
 use zenoh::key_expr::keyexpr;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
+use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::SessionDeclarations;
 
 const HTML: &str = r#"
