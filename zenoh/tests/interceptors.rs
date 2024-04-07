@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use zenoh::session::SessionDeclarations;
 use zenoh_config::{Config, ValidatedMap};
 use zenoh_core::zlock;
+use zenoh_core::SyncResolve;
 
 struct IntervalCounter {
     first_tick: bool,
@@ -62,8 +63,6 @@ impl IntervalCounter {
 
 fn downsampling_by_keyexpr_impl(egress: bool) {
     let _ = env_logger::builder().is_test(true).try_init();
-
-    use zenoh::prelude::sync::*;
 
     let ds_cfg = format!(
         r#"
@@ -180,8 +179,6 @@ fn downsampling_by_keyexpr() {
 fn downsampling_by_interface_impl(egress: bool) {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    use zenoh::prelude::sync::*;
-
     let ds_cfg = format!(
         r#"
           [
@@ -281,8 +278,6 @@ fn downsampling_by_interface() {
 #[should_panic(expected = "unknown variant `down`")]
 fn downsampling_config_error_wrong_strategy() {
     let _ = env_logger::builder().is_test(true).try_init();
-
-    use zenoh::prelude::sync::*;
 
     let mut config = Config::default();
     config

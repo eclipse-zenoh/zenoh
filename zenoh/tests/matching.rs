@@ -14,11 +14,11 @@
 use std::str::FromStr;
 use std::time::Duration;
 use zenoh::config::Locator;
-use zenoh::prelude::r#async::*;
 use zenoh::session::Session;
 use zenoh_config as config;
 use zenoh_config::peer;
 use zenoh_core::ztimeout;
+use zenoh_core::AsyncResolve;
 use zenoh_result::ZResult as Result;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

@@ -116,6 +116,11 @@ pub const FEATURES: &str = concat_enabled_features!(
 
 pub use crate::api::session::open;
 
+pub mod core {
+    pub use zenoh_core::AsyncResolve;
+    pub use zenoh_core::SyncResolve;
+}
+
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
 pub mod buffers {
@@ -277,4 +282,4 @@ pub mod shm {
     pub use zenoh_shm::SharedMemoryManager;
 }
 
-pub mod prelude;
+// pub mod prelude;

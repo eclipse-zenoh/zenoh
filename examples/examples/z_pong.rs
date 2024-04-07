@@ -13,8 +13,8 @@
 //
 use clap::Parser;
 use zenoh::config::Config;
+use zenoh::core::SyncResolve;
 use zenoh::key_expr::keyexpr;
-use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
 use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::SessionDeclarations;

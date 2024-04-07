@@ -14,8 +14,8 @@
 use clap::{arg, Command};
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 use zenoh::key_expr::keyexpr;
-use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
 use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::SessionDeclarations;

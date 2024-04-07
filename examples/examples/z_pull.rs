@@ -13,9 +13,9 @@
 //
 use clap::Parser;
 use std::time::Duration;
+use zenoh::core::AsyncResolve;
 use zenoh::{
-    config::Config, handlers::RingBuffer, key_expr::KeyExpr, prelude::r#async::*,
-    session::SessionDeclarations,
+    config::Config, handlers::RingBuffer, key_expr::KeyExpr, session::SessionDeclarations,
 };
 use zenoh_examples::CommonArgs;
 

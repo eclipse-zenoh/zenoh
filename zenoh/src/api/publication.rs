@@ -1148,7 +1148,8 @@ mod tests {
 
     #[test]
     fn sample_kind_integrity_in_put_builder() {
-        use crate::{api::session::open, prelude::sync::*};
+        use crate::api::session::open;
+        use zenoh_core::SyncResolve;
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/put_builder";
         const VALUE: &str = "zenoh";

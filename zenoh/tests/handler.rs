@@ -17,7 +17,8 @@ use zenoh_config::Config;
 #[test]
 fn pubsub_with_ringbuffer() {
     use std::{thread, time::Duration};
-    use zenoh::{handlers::RingBuffer, prelude::sync::*};
+    use zenoh::handlers::RingBuffer;
+    use zenoh_core::SyncResolve;
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let sub = zenoh
@@ -49,7 +50,8 @@ fn pubsub_with_ringbuffer() {
 
 #[test]
 fn query_with_ringbuffer() {
-    use zenoh::{handlers::RingBuffer, prelude::sync::*};
+    use zenoh::handlers::RingBuffer;
+    use zenoh_core::SyncResolve;
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let queryable = zenoh

@@ -13,8 +13,8 @@
 //
 use clap::Parser;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 use zenoh::key_expr::KeyExpr;
-use zenoh::prelude::r#async::*;
 use zenoh::session::SessionDeclarations;
 use zenoh_examples::CommonArgs;
 use zenoh_ext::SubscriberForward;

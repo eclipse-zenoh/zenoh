@@ -21,7 +21,6 @@ use crate::api::value::Value;
 use crate::encoding::Encoding;
 use crate::net::primitives::Primitives;
 use crate::payload::Payload;
-use crate::prelude::sync::SyncResolve;
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
@@ -31,6 +30,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_core::SyncResolve;
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::network::declare::QueryableId;
 use zenoh_protocol::{

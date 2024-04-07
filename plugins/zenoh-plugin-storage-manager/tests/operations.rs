@@ -21,8 +21,8 @@ use std::thread::sleep;
 
 use async_std::task;
 use zenoh::config::{Config, ValidatedMap};
+use zenoh::core::AsyncResolve;
 use zenoh::payload::StringOrBase64;
-use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::sample::Sample;
 use zenoh::session::Session;

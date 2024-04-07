@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::core::AsyncResolve;
 use zenoh::scouting::scout;
 use zenoh::scouting::WhatAmI;
 

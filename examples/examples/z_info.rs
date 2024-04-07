@@ -14,7 +14,7 @@
 use clap::Parser;
 use zenoh::config::Config;
 use zenoh::config::ZenohId;
-use zenoh::prelude::r#async::*;
+use zenoh::core::AsyncResolve;
 use zenoh::session::SessionDeclarations;
 use zenoh_examples::CommonArgs;
 

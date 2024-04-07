@@ -29,7 +29,6 @@ use zenoh::key_expr::keyexpr;
 use zenoh::key_expr::KeyExpr;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::payload::PayloadReader;
-use zenoh::prelude::r#async::*;
 use zenoh::publication::Priority;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
@@ -38,6 +37,7 @@ use zenoh::session::Session;
 use zenoh::session::SessionDeclarations;
 use zenoh::Error as ZError;
 use zenoh::Result as ZResult;
+use zenoh_core::AsyncResolve;
 use zenoh_result::bail;
 use zenoh_sync::Condition;
 

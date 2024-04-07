@@ -14,9 +14,9 @@
 use clap::Parser;
 use std::time::{Duration, Instant};
 use zenoh::config::Config;
+use zenoh::core::SyncResolve;
 use zenoh::key_expr::keyexpr;
 use zenoh::payload::Payload;
-use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
 use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::SessionDeclarations;

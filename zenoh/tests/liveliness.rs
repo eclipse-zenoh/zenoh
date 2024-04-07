@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
-use zenoh::prelude::r#async::*;
 use zenoh_config as config;
 use zenoh_core::ztimeout;
+use zenoh_core::AsyncResolve;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

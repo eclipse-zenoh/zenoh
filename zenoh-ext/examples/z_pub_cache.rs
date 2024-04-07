@@ -14,7 +14,7 @@
 use clap::{arg, Command};
 use std::time::Duration;
 use zenoh::config::{Config, ModeDependentValue};
-use zenoh::prelude::r#async::*;
+use zenoh::core::AsyncResolve;
 use zenoh_ext::*;
 
 #[tokio::main]
