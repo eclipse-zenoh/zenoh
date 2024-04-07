@@ -201,13 +201,13 @@ pub mod sample {
     pub use crate::api::builders::sample::TimestampBuilderTrait;
     pub use crate::api::builders::sample::ValueBuilderTrait;
     #[zenoh_macros::unstable]
-    pub use crate::api::sample::Attachment;
-    #[zenoh_macros::unstable]
     pub use crate::api::sample::Locality;
     pub use crate::api::sample::Sample;
     pub use crate::api::sample::SampleKind;
     #[zenoh_macros::unstable]
     pub use crate::api::sample::SourceInfo;
+    #[zenoh_macros::unstable]
+    pub use crate::api::sample::{Attachment, AttachmentBuilder, AttachmentIterator};
 }
 
 /// Value primitives
@@ -235,6 +235,7 @@ pub mod selector {
     pub use crate::api::selector::Parameters;
     pub use crate::api::selector::Selector;
     pub use crate::api::selector::TIME_RANGE_KEY;
+    pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 }
 
 /// Subscribing primitives
@@ -330,6 +331,7 @@ pub mod plugins {
 
 #[doc(hidden)]
 pub mod internal {
+    pub use zenoh_core::zasync_executor_init;
     pub use zenoh_core::zerror;
     pub use zenoh_core::zlock;
     pub use zenoh_macros::unstable;
