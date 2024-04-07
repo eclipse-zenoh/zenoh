@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Queryable primitives.
 use super::{
     builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
     encoding::Encoding,

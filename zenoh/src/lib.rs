@@ -130,6 +130,36 @@ pub mod buffers {
     pub use zenoh_buffers::{ZBuf, ZSlice};
 }
 
+/// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
+///
+/// In Zenoh, operations are performed on keys. To allow addressing multiple keys with a single operation, we use Key Expressions (KE).
+/// KEs are a small language that express sets of keys through a glob-like language.
+///
+/// These semantics can be a bit difficult to implement, so this module provides the following facilities:
+///
+/// # Storing Key Expressions
+/// This module provides 3 flavours to store strings that have been validated to respect the KE syntax:
+/// - [`keyexpr`] is the equivalent of a [`str`],
+/// - [`OwnedKeyExpr`] works like an [`std::sync::Arc<str>`],
+/// - [`KeyExpr`] works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
+/// routing and network usage.
+///
+/// All of these types [`Deref`](core::ops::Deref) to [`keyexpr`], which notably has methods to check whether a given [`keyexpr::intersects`] with another,
+/// or even if a [`keyexpr::includes`] another.
+///
+/// # Tying values to Key Expressions
+/// When storing values tied to Key Expressions, you might want something more specialized than a [`HashMap`](std::collections::HashMap) if you want to respect
+/// the Key Expression semantics with high performance.
+///
+/// Enter [KeTrees](keyexpr_tree). These are data-structures specially built to store KE-value pairs in a manner that supports the set-semantics of KEs.
+///
+/// # Building and parsing Key Expressions
+/// A common issue in REST API is the association of meaning to sections of the URL, and respecting that API in a convenient manner.
+/// The same issue arises naturally when designing a KE space, and [`KeFormat`](format::KeFormat) was designed to help you with this,
+/// both in constructing and in parsing KEs that fit the formats you've defined.
+///
+/// [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+/// as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 pub mod key_expr {
     pub mod keyexpr_tree {
         pub use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
@@ -151,6 +181,7 @@ pub mod key_expr {
     }
 }
 
+/// Zenoh [`Session`](crate::session::Session) and associated types
 pub mod session {
     pub use crate::api::builders::publication::SessionDeleteBuilder;
     pub use crate::api::builders::publication::SessionPutBuilder;
@@ -162,6 +193,7 @@ pub mod session {
     pub use crate::api::session::SessionRef;
 }
 
+/// Sample primitives
 pub mod sample {
     pub use crate::api::builders::sample::QoSBuilderTrait;
     pub use crate::api::builders::sample::SampleBuilder;
@@ -178,14 +210,17 @@ pub mod sample {
     pub use crate::api::sample::SourceInfo;
 }
 
+/// Value primitives
 pub mod value {
     pub use crate::api::value::Value;
 }
 
+/// Encoding support
 pub mod encoding {
     pub use crate::api::encoding::Encoding;
 }
 
+/// Payload primitives
 pub mod payload {
     pub use crate::api::payload::Deserialize;
     pub use crate::api::payload::Payload;
@@ -194,6 +229,7 @@ pub mod payload {
     pub use crate::api::payload::StringOrBase64;
 }
 
+/// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 pub mod selector {
     pub use crate::api::selector::Parameter;
     pub use crate::api::selector::Parameters;
@@ -201,6 +237,7 @@ pub mod selector {
     pub use crate::api::selector::TIME_RANGE_KEY;
 }
 
+/// Subscribing primitives
 pub mod subscriber {
     pub use crate::api::subscriber::FlumeSubscriber;
     pub use crate::api::subscriber::Subscriber;
@@ -209,6 +246,7 @@ pub mod subscriber {
     pub use zenoh_protocol::core::Reliability;
 }
 
+/// Publishing primitives
 pub mod publication {
     pub use crate::api::builders::publication::PublisherBuilder;
     pub use crate::api::publication::Priority;
@@ -218,6 +256,7 @@ pub mod publication {
     pub use zenoh_protocol::core::CongestionControl;
 }
 
+/// Query primitives
 pub mod query {
     pub use crate::api::query::Mode;
     pub use crate::api::query::Reply;
@@ -228,12 +267,14 @@ pub mod query {
     pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 }
 
+/// Queryable primitives
 pub mod queryable {
     pub use crate::api::queryable::Query;
     pub use crate::api::queryable::Queryable;
     pub use crate::api::queryable::QueryableBuilder;
 }
 
+/// Callback handler trait
 pub mod handlers {
     pub use crate::api::handlers::locked;
     pub use crate::api::handlers::DefaultHandler;
@@ -241,6 +282,7 @@ pub mod handlers {
     pub use crate::api::handlers::RingBuffer;
 }
 
+/// Scouting primitives
 pub mod scouting {
     pub use crate::api::scouting::scout;
     pub use crate::api::scouting::ScoutBuilder;
@@ -250,12 +292,14 @@ pub mod scouting {
     pub use zenoh_protocol::scouting::Hello;
 }
 
+/// Liveliness primitives
 #[cfg(feature = "unstable")]
 pub mod liveliness {
     pub use crate::api::liveliness::Liveliness;
     pub use crate::api::liveliness::LivelinessSubscriberBuilder;
 }
 
+/// Timestamp support
 pub mod time {
     pub use crate::api::time::new_reception_timestamp;
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
@@ -267,11 +311,13 @@ pub mod runtime {
     pub use zenoh_runtime::ZRuntime;
 }
 
+/// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
 pub mod config {
-    pub use zenoh_config::{
-        client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
-        PluginLoad, ValidatedMap, ZenohId,
-    };
+    // pub use zenoh_config::{
+    //     client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
+    //     PluginLoad, ValidatedMap, ZenohId,
+    // };
+    pub use zenoh_config::*;
 }
 
 #[doc(hidden)]

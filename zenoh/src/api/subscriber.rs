@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Subscribing primitives.
 use super::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,

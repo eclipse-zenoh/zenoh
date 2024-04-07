@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
-
 use super::{key_expr::KeyExpr, queryable::Query};
 use std::{
     borrow::{Borrow, Cow},

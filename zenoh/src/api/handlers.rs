@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Callback handler trait.
 use super::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 use std::sync::{Arc, Mutex, Weak};
 use zenoh_collections::RingBuffer as RingBufferInner;

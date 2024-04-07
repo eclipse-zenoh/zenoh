@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Publishing primitives.
 use super::{
     builders::publication::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,

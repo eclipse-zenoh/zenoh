@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Sample primitives
 use super::{
     builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
     encoding::Encoding,

@@ -12,9 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Liveliness primitives.
-//!
-//! see [`Liveliness`]
 use super::{
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
