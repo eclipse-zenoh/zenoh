@@ -15,9 +15,9 @@ use super::PublicationCacheBuilder;
 use std::convert::TryInto;
 use std::sync::Arc;
 use zenoh::{
+    core::Error,
     key_expr::KeyExpr,
     session::{Session, SessionRef},
-    Error,
 };
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)

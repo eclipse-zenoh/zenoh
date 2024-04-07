@@ -85,11 +85,6 @@ mod net;
 use git_version::git_version;
 use zenoh_util::concat_enabled_features;
 
-/// A zenoh error.
-pub use zenoh_result::Error;
-/// A zenoh result.
-pub use zenoh_result::ZResult as Result;
-
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
 pub const FEATURES: &str = concat_enabled_features!(
@@ -116,11 +111,18 @@ pub const FEATURES: &str = concat_enabled_features!(
 
 pub use crate::api::session::open;
 
+// pub mod prelude;
+
+/// Zenoh core types
 pub mod core {
     pub use zenoh_core::AsyncResolve;
     pub use zenoh_core::Resolvable;
     pub use zenoh_core::Resolve;
     pub use zenoh_core::SyncResolve;
+    /// A zenoh error.
+    pub use zenoh_result::Error;
+    /// A zenoh result.
+    pub use zenoh_result::ZResult as Result;
 }
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
@@ -346,5 +348,3 @@ pub mod internal {
 pub mod shm {
     pub use zenoh_shm::SharedMemoryManager;
 }
-
-// pub mod prelude;

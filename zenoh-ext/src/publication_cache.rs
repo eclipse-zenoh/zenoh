@@ -15,6 +15,7 @@ use flume::{bounded, Sender};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
+use zenoh::core::Error;
 use zenoh::core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh::internal::ResolveFuture;
 use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
@@ -24,8 +25,7 @@ use zenoh::sample::{Locality, Sample};
 use zenoh::selector::Parameters;
 use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::Error;
-use zenoh::{internal::bail, Result as ZResult};
+use zenoh::{core::Result as ZResult, internal::bail};
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]

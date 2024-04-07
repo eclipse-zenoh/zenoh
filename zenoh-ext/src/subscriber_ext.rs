@@ -14,9 +14,9 @@
 use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
 use std::time::Duration;
+use zenoh::core::Result as ZResult;
 use zenoh::query::ReplyKeyExpr;
 use zenoh::sample::Locality;
-use zenoh::Result as ZResult;
 use zenoh::{
     liveliness::LivelinessSubscriberBuilder,
     query::{QueryConsolidation, QueryTarget},

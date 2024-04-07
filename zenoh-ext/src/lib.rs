@@ -25,7 +25,7 @@ pub use subscriber_ext::SubscriberBuilderExt;
 pub use subscriber_ext::SubscriberForward;
 use zenoh::internal::zerror;
 use zenoh::query::Reply;
-use zenoh::{sample::Sample, Result as ZResult};
+use zenoh::{core::Result as ZResult, sample::Sample};
 
 /// The space of keys to use in a [`FetchingSubscriber`].
 pub enum KeySpace {

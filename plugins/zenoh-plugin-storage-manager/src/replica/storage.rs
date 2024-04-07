@@ -37,7 +37,7 @@ use zenoh::sample::{SampleBuilder, ValueBuilderTrait};
 use zenoh::session::SessionDeclarations;
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
-use zenoh::{session::Session, Result as ZResult};
+use zenoh::{core::Result as ZResult, session::Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
 

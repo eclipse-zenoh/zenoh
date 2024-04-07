@@ -26,6 +26,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use zenoh::core::AsyncResolve;
+use zenoh::core::Error as ZError;
+use zenoh::core::Result as ZResult;
 use zenoh::internal::bail;
 use zenoh::internal::Condition;
 use zenoh::key_expr::keyexpr;
@@ -38,8 +40,6 @@ use zenoh::query::ConsolidationMode;
 use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::Session;
 use zenoh::session::SessionDeclarations;
-use zenoh::Error as ZError;
-use zenoh::Result as ZResult;
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";
 const EVENT_POSTFIX: &str = "evt";

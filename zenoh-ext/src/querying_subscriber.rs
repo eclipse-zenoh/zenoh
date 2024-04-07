@@ -27,7 +27,7 @@ use zenoh::selector::Selector;
 use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::{new_reception_timestamp, Timestamp};
-use zenoh::{Error, Result as ZResult};
+use zenoh::{core::Error, core::Result as ZResult};
 
 use crate::ExtractSample;
 

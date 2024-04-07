@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::sync::Arc;
+use zenoh::core::Result as ZResult;
 use zenoh::session::Session;
-use zenoh::Result as ZResult;
 use zenoh_backend_traits::config::StorageConfig;
 
 pub use super::replica::{Replica, StorageService};
