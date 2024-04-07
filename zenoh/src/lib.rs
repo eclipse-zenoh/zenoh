@@ -82,12 +82,8 @@ extern crate zenoh_result;
 mod api;
 mod net;
 
-use git_version::git_version;
-use zenoh_util::concat_enabled_features;
-
-const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
-
-pub const FEATURES: &str = concat_enabled_features!(
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",
     features = [
         "auth_pubkey",
@@ -111,7 +107,7 @@ pub const FEATURES: &str = concat_enabled_features!(
 
 pub use crate::api::session::open;
 
-// pub mod prelude;
+pub mod prelude;
 
 /// Zenoh core types
 pub mod core {
@@ -188,6 +184,7 @@ pub mod session {
     pub use crate::api::builders::publication::SessionDeleteBuilder;
     pub use crate::api::builders::publication::SessionPutBuilder;
     #[zenoh_macros::unstable]
+    #[doc(hidden)]
     pub use crate::api::session::init;
     pub use crate::api::session::open;
     pub use crate::api::session::Session;

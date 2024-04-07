@@ -16,62 +16,60 @@
 //!
 //! This prelude is similar to the standard library's prelude in that you'll
 //! almost always want to import its entire contents, but unlike the standard
-//! library's prelude you'll have to do so manually. An example of using this is:
+//! library's prelude you'll have to do so manually.
+//!
+//! There are three variants of the prelude: full, sync and async. The sync one excludes the [`AsyncResolve`](crate::core::AsyncResolve) trait and the async one excludes the [`SyncResolve`](crate::core::SyncResolve) trait.
+//! When specific sync or async prelude is included, the `res()` function of buildes works synchronously or asynchronously, respectively.
+//!
+//! If root prelude is included, the `res_sync()` or `res_async()` function of builders should be called explicitly.
+//!
+//! Examples:
 //!
 //! ```
-//! use zenoh::prelude::r#async::*;
+//!`use zenoh::prelude::*;
+//! ```
+//! ```
+//!`use zenoh::prelude::sync::*;
+//! ```
+//! ```
+//!`use zenoh::prelude::r#async::*;
 //! ```
 
-// pub use common::*;
-// pub(crate) mod common {
-// pub use crate::api::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-// pub use zenoh_buffers::{
-//     buffer::{Buffer, SplitBuffer},
-//     reader::HasReader,
-//     writer::HasWriter,
-// };
-// pub use zenoh_core::Resolve;
+// All API types and traits in flat namespace
+pub(crate) mod flat {
+    pub use crate::buffers::*;
+    pub use crate::config::*;
+    pub use crate::core::{AsyncResolve, Error, Resolvable, Resolve, Result, SyncResolve};
+    pub use crate::encoding::*;
+    pub use crate::handlers::*;
+    pub use crate::key_expr::*;
+    pub use crate::payload::*;
+    pub use crate::plugins::*;
+    pub use crate::publication::*;
+    pub use crate::query::*;
+    pub use crate::queryable::*;
+    pub use crate::sample::*;
+    pub use crate::scouting::*;
+    pub use crate::selector::*;
+    pub use crate::session::*;
+    #[cfg(feature = "shared-memory")]
+    pub use crate::shm::*;
+    pub use crate::subscriber::*;
+    pub use crate::time::*;
+    pub use crate::value::*;
+}
 
-// pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
-// #[zenoh_macros::unstable]
-// pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
-
-// pub use crate::config::{self, Config};
-// pub use crate::handlers::IntoHandler;
-// pub use crate::selector::{Parameter, Parameters, Selector};
-// pub use crate::session::{Session, SessionDeclarations};
-
-// pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
-
-// pub use crate::api::encoding::Encoding;
-// pub use crate::api::value::Value;
-/// The encoding of a zenoh `Value`.
-// pub use crate::payload::{Deserialize, Payload, Serialize};
-
-// #[zenoh_macros::unstable]
-// pub use crate::api::sample::Locality;
-// #[zenoh_macros::unstable]
-// pub use crate::api::sample::SourceInfo;
-// pub use crate::api::sample::{Sample, SampleKind};
-// pub use crate::api::publication::Priority;
-// #[zenoh_macros::unstable]
-// pub use crate::api::publication::PublisherDeclarations;
-// pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
-// pub use crate::api::builders::sample::{
-//     QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
-// };
-
-//     #[zenoh_macros::unstable]
-//     pub use crate::api::builders::sample::SampleBuilderTrait;
-// }
+pub use crate::core::AsyncResolve;
+pub use crate::core::SyncResolve;
+pub use flat::*;
 
 /// Prelude to import when using Zenoh's sync API.
 pub mod sync {
-    // pub use super::common::*;
-    pub use zenoh_core::SyncResolve;
+    pub use super::flat::*;
+    pub use crate::core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
 pub mod r#async {
-    // pub use super::common::*;
-    pub use zenoh_core::AsyncResolve;
+    pub use super::flat::*;
+    pub use crate::core::AsyncResolve;
 }
