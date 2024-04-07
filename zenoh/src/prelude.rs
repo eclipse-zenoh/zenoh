@@ -32,7 +32,7 @@ pub(crate) mod common {
     // };
     // pub use zenoh_core::Resolve;
 
-    pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
+    // pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
     #[zenoh_macros::unstable]
     pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
 

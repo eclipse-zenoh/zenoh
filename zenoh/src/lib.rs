@@ -83,8 +83,6 @@ mod api;
 mod net;
 
 use git_version::git_version;
-#[cfg(feature = "unstable")]
-use prelude::*;
 use zenoh_util::concat_enabled_features;
 
 /// A zenoh error.
