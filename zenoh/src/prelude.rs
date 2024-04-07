@@ -44,7 +44,7 @@ pub(crate) mod common {
     // pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 
     // pub use crate::api::encoding::Encoding;
-    pub use crate::api::value::Value;
+    // pub use crate::api::value::Value;
     /// The encoding of a zenoh `Value`.
     pub use crate::payload::{Deserialize, Payload, Serialize};
 

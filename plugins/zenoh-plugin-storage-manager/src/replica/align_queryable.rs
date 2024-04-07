@@ -25,6 +25,7 @@ use zenoh::selector::Selector;
 use zenoh::session::Session;
 use zenoh::session::SessionDeclarations;
 use zenoh::time::Timestamp;
+use zenoh::value::Value;
 
 pub struct AlignQueryable {
     session: Arc<Session>,

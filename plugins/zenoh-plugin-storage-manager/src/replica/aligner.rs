@@ -24,6 +24,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::sample::SampleBuilder;
 use zenoh::session::Session;
 use zenoh::time::Timestamp;
+use zenoh::value::Value;
 
 pub struct Aligner {
     session: Arc<Session>,

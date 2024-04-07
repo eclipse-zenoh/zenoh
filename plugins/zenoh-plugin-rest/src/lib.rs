@@ -38,6 +38,7 @@ use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::{Parameters, Selector, TIME_RANGE_KEY};
 use zenoh::session::{Session, SessionDeclarations};
+use zenoh::value::Value;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 
