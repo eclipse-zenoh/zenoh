@@ -24,7 +24,6 @@ fn get_loopback_interface() -> Option<Interface> {
     ifs.sort_by(|a, b| a.name.cmp(&b.name));
     ifs.into_iter().find(|i| i.is_loopback())
 }
-
 fn test_pub_sub_deny() {
     let mut config_router = Config::default();
     config_router.set_mode(Some(WhatAmI::Router)).unwrap();
@@ -43,15 +42,15 @@ fn test_pub_sub_deny() {
         .unwrap();
     config_router
         .insert_json5(
-            "transport",
+            "acl",
             r#"{
-              acl: {
+             
                 "enabled": true,
                 "default_permission": "deny",
                 "rules":
                 [
                 ]
-              }
+              
             }"#,
         )
         .unwrap();
@@ -127,15 +126,15 @@ fn test_pub_sub_allow() {
         .unwrap();
     config_router
         .insert_json5(
-            "transport",
+            "acl",
             r#"{
-            acl: {
+            
               "enabled": true,
               "default_permission": "allow",
               "rules":
               [
               ]
-            }
+            
           }"#,
         )
         .unwrap();
@@ -192,7 +191,6 @@ fn test_pub_sub_allow() {
     std::thread::sleep(std::time::Duration::from_millis(10));
     assert_eq!(*zlock!(received_value), VALUE);
 }
-
 fn test_pub_sub_allow_then_deny(interface_name: &str) {
     let mut config_router = Config::default();
     config_router.set_mode(Some(WhatAmI::Router)).unwrap();
@@ -212,7 +210,7 @@ fn test_pub_sub_allow_then_deny(interface_name: &str) {
     let acl_js = format!(
         r#"
         {{
-        acl: {{
+       
           "enabled": true,
           "default_permission": "allow",
           "rules":
@@ -231,12 +229,12 @@ fn test_pub_sub_allow_then_deny(interface_name: &str) {
               ]
             }},
           ]
-        }}
+       
     }}
     "#,
         interface_name
     );
-    config_router.insert_json5("transport", &acl_js).unwrap();
+    config_router.insert_json5("acl", &acl_js).unwrap();
     let mut config_sub = Config::default();
     config_sub.set_mode(Some(WhatAmI::Client)).unwrap();
     config_sub
@@ -308,7 +306,6 @@ fn test_pub_sub_deny_then_allow(interface_name: &str) {
     let acl_js = format!(
         r#"
         {{
-        acl: {{
           "enabled": true,
           "default_permission": "deny",
           "rules":
@@ -328,12 +325,11 @@ fn test_pub_sub_deny_then_allow(interface_name: &str) {
               ]
             }},
           ]
-        }}
     }}
     "#,
         interface_name
     );
-    config_router.insert_json5("transport", &acl_js).unwrap();
+    config_router.insert_json5("acl", &acl_js).unwrap();
 
     let mut config_sub = Config::default();
     config_sub.set_mode(Some(WhatAmI::Client)).unwrap();
@@ -405,16 +401,14 @@ fn test_get_queryable_deny() {
         .unwrap();
     config_router
         .insert_json5(
-            "transport",
+            "acl",
             r#"{
-          acl: {
             "enabled": true,
             "default_permission": "deny",
             "rules":
             [
               
             ]
-          }
         }"#,
         )
         .unwrap();
@@ -487,16 +481,15 @@ fn test_get_queryable_allow() {
         .unwrap();
     config_router
         .insert_json5(
-            "transport",
+            "acl",
             r#"{
-          acl: {
             "enabled": true,
             "default_permission": "allow",
             "rules":
             [
               
             ]
-          }
+          
         }"#,
         )
         .unwrap();
@@ -570,7 +563,6 @@ fn test_get_queryable_allow_then_deny(interface_name: &str) {
     let acl_js = format!(
         r#"
         {{
-        acl: {{
           "enabled": true,
           "default_permission": "allow",
           "rules":
@@ -590,12 +582,11 @@ fn test_get_queryable_allow_then_deny(interface_name: &str) {
               ]
             }},
           ]
-        }}
     }}
     "#,
         interface_name
     );
-    config_router.insert_json5("transport", &acl_js).unwrap();
+    config_router.insert_json5("acl", &acl_js).unwrap();
     let mut config_qbl = Config::default();
     config_qbl.set_mode(Some(WhatAmI::Client)).unwrap();
     config_qbl
@@ -666,7 +657,6 @@ fn test_get_queryable_deny_then_allow(interface_name: &str) {
     let acl_js = format!(
         r#"
         {{
-        acl: {{
           "enabled": true,
           "default_permission": "deny",
           "rules":
@@ -686,12 +676,11 @@ fn test_get_queryable_deny_then_allow(interface_name: &str) {
               ]
             }},
           ]
-        }}
     }}
     "#,
         interface_name
     );
-    config_router.insert_json5("transport", &acl_js).unwrap();
+    config_router.insert_json5("acl", &acl_js).unwrap();
     let mut config_qbl = Config::default();
     config_qbl.set_mode(Some(WhatAmI::Client)).unwrap();
     config_qbl

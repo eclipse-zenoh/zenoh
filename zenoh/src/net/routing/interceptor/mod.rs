@@ -65,7 +65,7 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
-    res.extend(acl_interceptor_factories(config.transport().acl().clone())?);
+    res.extend(acl_interceptor_factories(config.acl())?);
 
     Ok(res)
 }

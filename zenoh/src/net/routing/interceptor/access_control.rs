@@ -47,7 +47,9 @@ struct IngressAclEnforcer {
     zid: ZenohId,
 }
 
-pub(crate) fn acl_interceptor_factories(acl_config: AclConfig) -> ZResult<Vec<InterceptorFactory>> {
+pub(crate) fn acl_interceptor_factories(
+    acl_config: &AclConfig,
+) -> ZResult<Vec<InterceptorFactory>> {
     let mut res: Vec<InterceptorFactory> = vec![];
 
     if acl_config.enabled {
@@ -254,7 +256,7 @@ pub trait AclActionMethods {
         let policy_enforcer = self.policy_enforcer();
         let interface_list = self.interface_list();
         let zid = self.zid();
-        let mut decision = policy_enforcer.default_permission.clone();
+        let mut decision = policy_enforcer.default_permission;
         for subject in &interface_list {
             match policy_enforcer.policy_decision_point(
                 *subject,
@@ -289,7 +291,7 @@ pub trait AclActionMethods {
         let policy_enforcer = self.policy_enforcer();
         let interface_list = self.interface_list();
         let zid = self.zid();
-        let mut decision = policy_enforcer.default_permission.clone();
+        let mut decision = policy_enforcer.default_permission;
         for subject in &interface_list {
             match policy_enforcer.policy_decision_point(
                 *subject,
@@ -323,7 +325,7 @@ pub trait AclActionMethods {
         let policy_enforcer = self.policy_enforcer();
         let interface_list = self.interface_list();
         let zid = self.zid();
-        let mut decision = policy_enforcer.default_permission.clone();
+        let mut decision = policy_enforcer.default_permission;
         for subject in &interface_list {
             match policy_enforcer.policy_decision_point(
                 *subject,
@@ -361,7 +363,7 @@ pub trait AclActionMethods {
         let policy_enforcer = self.policy_enforcer();
         let interface_list = self.interface_list();
         let zid = self.zid();
-        let mut decision = policy_enforcer.default_permission.clone();
+        let mut decision = policy_enforcer.default_permission;
         for subject in &interface_list {
             match policy_enforcer.policy_decision_point(
                 *subject,

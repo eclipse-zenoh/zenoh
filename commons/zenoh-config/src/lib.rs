@@ -72,7 +72,7 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum DownsamplingFlow {
     Egress,
@@ -124,7 +124,7 @@ pub enum Subject {
     Interface(String),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
     Put,
@@ -133,7 +133,7 @@ pub enum Action {
     DeclareQueryable,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Permission {
     Allow,
@@ -472,11 +472,7 @@ validated_struct::validator! {
                     known_keys_file: Option<String>,
                 },
             },
-            pub acl: AclConfig {
-                pub enabled: bool,
-                pub default_permission: Permission,
-                pub rules: Option<Vec<AclConfigRules>>
-            }
+
         },
         /// Configuration of the admin space.
         pub adminspace: #[derive(Default)]
@@ -501,6 +497,11 @@ validated_struct::validator! {
 
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
+        pub acl: AclConfig {
+            pub enabled: bool,
+            pub default_permission: Permission,
+            pub rules: Option<Vec<AclConfigRules>>
+        },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.

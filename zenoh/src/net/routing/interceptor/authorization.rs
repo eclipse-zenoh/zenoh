@@ -124,11 +124,11 @@ impl PolicyEnforcer {
     /*
        initializes the policy_enforcer
     */
-    pub fn init(&mut self, acl_config: AclConfig) -> ZResult<()> {
+    pub fn init(&mut self, acl_config: &AclConfig) -> ZResult<()> {
         self.acl_enabled = acl_config.enabled;
         self.default_permission = acl_config.default_permission;
         if self.acl_enabled {
-            if let Some(rules) = acl_config.rules {
+            if let Some(rules) = &acl_config.rules {
                 if rules.is_empty() {
                     log::warn!("[ACCESS LOG]: ACL ruleset in config file is empty!!!");
                     self.policy_map = PolicyMap::default();
@@ -171,7 +171,7 @@ impl PolicyEnforcer {
     */
     pub fn policy_information_point(
         &self,
-        config_rule_set: Vec<AclConfigRules>,
+        config_rule_set: &Vec<AclConfigRules>,
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
@@ -182,9 +182,9 @@ impl PolicyEnforcer {
                             policy_rules.push(PolicyRule {
                                 subject: Subject::Interface(subject.clone()),
                                 key_expr: key_expr.clone(),
-                                action: action.clone(),
-                                permission: config_rule.permission.clone(),
-                                flow: flow.clone(),
+                                action: *action,
+                                permission: config_rule.permission,
+                                flow: *flow,
                             })
                         }
                     }
@@ -219,8 +219,8 @@ impl PolicyEnforcer {
         match policy_map.get(&subject) {
             Some(single_policy) => {
                 let deny_result = single_policy
-                    .flow(flow.clone())
-                    .action(action.clone())
+                    .flow(flow)
+                    .action(action)
                     .deny
                     .nodes_including(keyexpr::new(&key_expr)?)
                     .count();
@@ -244,7 +244,7 @@ impl PolicyEnforcer {
                     }
                 }
             }
-            None => Ok(self.default_permission.clone()),
+            None => Ok(self.default_permission),
         }
     }
 }
