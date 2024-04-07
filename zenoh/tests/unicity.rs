@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use config::WhatAmI;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,6 +19,7 @@ use tokio::runtime::Handle;
 use zenoh::config::EndPoint;
 use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
+use zenoh::publication::CongestionControl;
 use zenoh::session::{Session, SessionDeclarations};
 use zenoh_config as config;
 use zenoh_core::ztimeout;

@@ -13,6 +13,7 @@
 //
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
+use zenoh::publication::CongestionControl;
 use zenoh::sample::QoSBuilderTrait;
 use zenoh::{publication::Priority, session::SessionDeclarations};
 use zenoh_core::ztimeout;

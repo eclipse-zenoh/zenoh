@@ -18,6 +18,7 @@ use std::time::Duration;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
+use zenoh::publication::CongestionControl;
 use zenoh::sample::QoSBuilderTrait;
 use zenoh::session::{Session, SessionDeclarations};
 use zenoh::Result;
