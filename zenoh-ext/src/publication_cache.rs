@@ -18,6 +18,7 @@ use std::future::Ready;
 use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
+use zenoh::sample::Locality;
 use zenoh::selector::Parameters;
 use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::FlumeSubscriber;

@@ -22,11 +22,13 @@ use crate::api::key_expr::KeyExpr;
 use crate::api::payload::Payload;
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
+use crate::api::sample::Locality;
+#[zenoh_macros::unstable]
+use crate::api::sample::SourceInfo;
 use crate::api::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
 use crate::api::session::SessionRef;
 use crate::api::session::Undeclarable;
 use crate::net::primitives::Primitives;
-use crate::prelude::*;
 #[cfg(feature = "unstable")]
 use crate::{
     api::handlers::{Callback, DefaultHandler, IntoHandler},

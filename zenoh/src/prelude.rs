@@ -48,10 +48,8 @@ pub(crate) mod common {
     /// The encoding of a zenoh `Value`.
     // pub use crate::payload::{Deserialize, Payload, Serialize};
 
-    #[zenoh_macros::unstable]
-    pub use crate::api::sample::Locality;
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) use crate::api::sample::Locality;
+    // #[zenoh_macros::unstable]
+    // pub use crate::api::sample::Locality;
     #[zenoh_macros::unstable]
     pub use crate::api::sample::SourceInfo;
     pub use crate::api::sample::{Sample, SampleKind};

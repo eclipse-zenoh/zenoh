@@ -20,6 +20,7 @@ use crate::api::payload::Payload;
 use crate::api::publication::Priority;
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
+use crate::api::sample::Locality;
 use crate::api::sample::QoSBuilder;
 use crate::api::selector::Selector;
 use crate::api::session::Session;

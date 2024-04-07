@@ -29,6 +29,7 @@ use urlencoding::encode;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
+use zenoh::sample::Locality;
 use zenoh::session::Session;
 use zenoh::session::SessionDeclarations;
 use zenoh::time::Timestamp;
