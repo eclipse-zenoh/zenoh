@@ -123,17 +123,6 @@ pub mod core {
     pub use zenoh_core::SyncResolve;
 }
 
-#[doc(hidden)]
-pub mod internal {
-    pub use zenoh_core::zerror;
-    pub use zenoh_core::zlock;
-    pub use zenoh_macros::unstable;
-    pub use zenoh_result::bail;
-    pub use zenoh_sync::Condition;
-    pub use zenoh_util::core::ResolveFuture;
-    pub use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
-}
-
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
 pub mod buffers {
@@ -285,12 +274,24 @@ pub mod config {
     };
 }
 
+#[doc(hidden)]
 pub mod plugins {
     pub use crate::api::plugins::PluginsManager;
     pub use crate::api::plugins::Response;
     pub use crate::api::plugins::RunningPlugin;
     pub use crate::api::plugins::{RunningPluginTrait, ZenohPlugin};
+}
+
+#[doc(hidden)]
+pub mod internal {
+    pub use zenoh_core::zerror;
+    pub use zenoh_core::zlock;
+    pub use zenoh_macros::unstable;
+    pub use zenoh_result::bail;
+    pub use zenoh_sync::Condition;
+    pub use zenoh_util::core::ResolveFuture;
     pub use zenoh_util::LibLoader;
+    pub use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
 }
 
 #[cfg(feature = "shared-memory")]
