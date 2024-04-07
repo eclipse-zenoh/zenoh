@@ -19,7 +19,7 @@ use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::selector::Parameters;
-use zenoh::session::SessionRef;
+use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_result::{bail, ZResult};

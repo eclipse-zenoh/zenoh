@@ -16,6 +16,7 @@ use clap::Command;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::query::ReplyKeyExpr;
+use zenoh::session::SessionDeclarations;
 use zenoh_ext::*;
 
 #[tokio::main]

@@ -14,6 +14,7 @@
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
+use zenoh::session::{Session, SessionDeclarations};
 use zenoh_config::peer;
 use zenoh_core::ztimeout;
 

@@ -1092,6 +1092,8 @@ impl Drop for MatchingListenerInner<'_> {
 mod tests {
     use zenoh_config::Config;
 
+    use crate::api::session::SessionDeclarations;
+
     #[test]
     fn priority_from() {
         use super::Priority as APrio;

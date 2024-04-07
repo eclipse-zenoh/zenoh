@@ -13,9 +13,10 @@
 //
 use clap::Parser;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
-use zenoh_examples::CommonArgs;
 use zenoh::config::ZenohId;
+use zenoh::prelude::r#async::*;
+use zenoh::session::SessionDeclarations;
+use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {

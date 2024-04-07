@@ -19,6 +19,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
 use zenoh::sample::QoSBuilderTrait;
+use zenoh::session::{Session, SessionDeclarations};
 use zenoh::Result;
 use zenoh_core::ztimeout;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};

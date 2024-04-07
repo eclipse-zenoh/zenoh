@@ -16,6 +16,7 @@ use clap::Parser;
 use std::convert::TryInto;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
+use zenoh::session::SessionDeclarations;
 use zenoh_examples::CommonArgs;
 
 fn main() {

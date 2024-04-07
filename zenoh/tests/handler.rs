@@ -1,3 +1,4 @@
+use zenoh::session::SessionDeclarations;
 use zenoh_config::Config;
 
 //

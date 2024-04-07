@@ -23,6 +23,7 @@ use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::selector::Selector;
 use zenoh::session::Session;
+use zenoh::session::SessionDeclarations;
 use zenoh::time::Timestamp;
 
 pub struct AlignQueryable {

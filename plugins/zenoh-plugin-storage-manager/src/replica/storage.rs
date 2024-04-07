@@ -32,6 +32,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::query::{ConsolidationMode, QueryTarget};
 use zenoh::sample::SampleBuilder;
 use zenoh::sample::{Sample, SampleKind};
+use zenoh::session::SessionDeclarations;
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
 use zenoh::{session::Session, Result as ZResult};

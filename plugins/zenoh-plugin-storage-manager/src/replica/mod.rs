@@ -30,6 +30,7 @@ use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::session::Session;
+use zenoh::session::SessionDeclarations;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 

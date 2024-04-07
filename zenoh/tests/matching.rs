@@ -15,6 +15,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use zenoh::config::Locator;
 use zenoh::prelude::r#async::*;
+use zenoh::session::Session;
 use zenoh_config as config;
 use zenoh_config::peer;
 use zenoh_core::ztimeout;
@@ -45,6 +46,7 @@ async fn create_session_pair(locator: &str) -> (Session, Session) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_any() -> Result<()> {
     use flume::RecvTimeoutError;
+    use zenoh::session::SessionDeclarations;
 
     let (session1, session2) = create_session_pair("tcp/127.0.0.1:18001").await;
 
@@ -106,6 +108,7 @@ async fn zenoh_matching_status_any() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_remote() -> Result<()> {
     use flume::RecvTimeoutError;
+    use zenoh::session::SessionDeclarations;
     let session1 = ztimeout!(zenoh::open(peer()).res_async()).unwrap();
 
     let session2 = ztimeout!(zenoh::open(peer()).res_async()).unwrap();
@@ -169,6 +172,7 @@ async fn zenoh_matching_status_remote() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_local() -> Result<()> {
     use flume::RecvTimeoutError;
+    use zenoh::session::SessionDeclarations;
 
     let session1 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
 

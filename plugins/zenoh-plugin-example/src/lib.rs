@@ -26,6 +26,7 @@ use zenoh::key_expr::{keyexpr, KeyExpr};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
+use zenoh::session::SessionDeclarations;
 use zenoh_core::zlock;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, ZResult};

@@ -14,7 +14,7 @@
 #[cfg(feature = "unstable")]
 #[test]
 fn pubsub() {
-    use zenoh::prelude::sync::*;
+    use zenoh::{prelude::sync::*, session::SessionDeclarations};
     use zenoh_config::Config;
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
@@ -62,7 +62,11 @@ fn pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn queries() {
-    use zenoh::{prelude::sync::*, sample::Attachment, sample::SampleBuilderTrait};
+    use zenoh::{
+        prelude::sync::*,
+        sample::{Attachment, SampleBuilderTrait},
+        session::SessionDeclarations,
+    };
     use zenoh_config::Config;
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
