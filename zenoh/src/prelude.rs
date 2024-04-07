@@ -22,56 +22,56 @@
 //! use zenoh::prelude::r#async::*;
 //! ```
 
-pub use common::*;
-pub(crate) mod common {
-    // pub use crate::api::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    // pub use zenoh_buffers::{
-    //     buffer::{Buffer, SplitBuffer},
-    //     reader::HasReader,
-    //     writer::HasWriter,
-    // };
-    // pub use zenoh_core::Resolve;
+// pub use common::*;
+// pub(crate) mod common {
+// pub use crate::api::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
+// pub use zenoh_buffers::{
+//     buffer::{Buffer, SplitBuffer},
+//     reader::HasReader,
+//     writer::HasWriter,
+// };
+// pub use zenoh_core::Resolve;
 
-    // pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
-    // #[zenoh_macros::unstable]
-    // pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
+// pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
+// #[zenoh_macros::unstable]
+// pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
 
-    // pub use crate::config::{self, Config};
-    // pub use crate::handlers::IntoHandler;
-    // pub use crate::selector::{Parameter, Parameters, Selector};
-    // pub use crate::session::{Session, SessionDeclarations};
+// pub use crate::config::{self, Config};
+// pub use crate::handlers::IntoHandler;
+// pub use crate::selector::{Parameter, Parameters, Selector};
+// pub use crate::session::{Session, SessionDeclarations};
 
-    // pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+// pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 
-    // pub use crate::api::encoding::Encoding;
-    // pub use crate::api::value::Value;
-    /// The encoding of a zenoh `Value`.
-    // pub use crate::payload::{Deserialize, Payload, Serialize};
+// pub use crate::api::encoding::Encoding;
+// pub use crate::api::value::Value;
+/// The encoding of a zenoh `Value`.
+// pub use crate::payload::{Deserialize, Payload, Serialize};
 
-    // #[zenoh_macros::unstable]
-    // pub use crate::api::sample::Locality;
-    // #[zenoh_macros::unstable]
-    // pub use crate::api::sample::SourceInfo;
-    // pub use crate::api::sample::{Sample, SampleKind};
-    // pub use crate::api::publication::Priority;
-    // #[zenoh_macros::unstable]
-    // pub use crate::api::publication::PublisherDeclarations;
-    // pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
-    // pub use crate::api::builders::sample::{
-    //     QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
-    // };
+// #[zenoh_macros::unstable]
+// pub use crate::api::sample::Locality;
+// #[zenoh_macros::unstable]
+// pub use crate::api::sample::SourceInfo;
+// pub use crate::api::sample::{Sample, SampleKind};
+// pub use crate::api::publication::Priority;
+// #[zenoh_macros::unstable]
+// pub use crate::api::publication::PublisherDeclarations;
+// pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
+// pub use crate::api::builders::sample::{
+//     QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+// };
 
-    #[zenoh_macros::unstable]
-    pub use crate::api::builders::sample::SampleBuilderTrait;
-}
+//     #[zenoh_macros::unstable]
+//     pub use crate::api::builders::sample::SampleBuilderTrait;
+// }
 
 /// Prelude to import when using Zenoh's sync API.
 pub mod sync {
-    pub use super::common::*;
+    // pub use super::common::*;
     pub use zenoh_core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
 pub mod r#async {
-    pub use super::common::*;
+    // pub use super::common::*;
     pub use zenoh_core::AsyncResolve;
 }

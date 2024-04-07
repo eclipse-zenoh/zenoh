@@ -14,7 +14,7 @@
 #[cfg(feature = "unstable")]
 #[test]
 fn pubsub() {
-    use zenoh::{prelude::sync::*, session::SessionDeclarations};
+    use zenoh::{prelude::sync::*, sample::SampleBuilderTrait, session::SessionDeclarations};
     use zenoh_config::Config;
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
