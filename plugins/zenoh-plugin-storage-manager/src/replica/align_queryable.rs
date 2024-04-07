@@ -21,6 +21,7 @@ use std::str::FromStr;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
+use zenoh::sample::Sample;
 use zenoh::selector::Selector;
 use zenoh::session::Session;
 use zenoh::session::SessionDeclarations;

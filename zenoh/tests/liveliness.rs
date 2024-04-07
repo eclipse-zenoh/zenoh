@@ -22,7 +22,7 @@ const SLEEP: Duration = Duration::from_secs(1);
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_liveliness() {
-    use zenoh::session::SessionDeclarations;
+    use zenoh::{sample::SampleKind, session::SessionDeclarations};
 
     let mut c1 = config::peer();
     c1.listen

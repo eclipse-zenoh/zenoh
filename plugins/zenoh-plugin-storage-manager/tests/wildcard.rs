@@ -25,6 +25,7 @@ use zenoh::config::{Config, ValidatedMap};
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
+use zenoh::sample::Sample;
 use zenoh::session::Session;
 use zenoh::time::Timestamp;
 use zenoh_core::zasync_executor_init;

@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use zenoh::config::Config;
 use zenoh::key_expr::{keyexpr, KeyExpr};
 use zenoh::prelude::r#async::*;
+use zenoh::sample::{Sample, SampleKind};
 use zenoh::session::SessionDeclarations;
 use zenoh_examples::CommonArgs;
 

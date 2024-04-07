@@ -19,8 +19,8 @@ use zenoh::sample::Locality;
 use zenoh::Result as ZResult;
 use zenoh::{
     liveliness::LivelinessSubscriberBuilder,
-    prelude::Sample,
     query::{QueryConsolidation, QueryTarget},
+    sample::Sample,
     subscriber::{Reliability, Subscriber, SubscriberBuilder},
 };
 

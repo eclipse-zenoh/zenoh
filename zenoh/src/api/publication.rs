@@ -1090,9 +1090,9 @@ impl Drop for MatchingListenerInner<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::api::{sample::SampleKind, session::SessionDeclarations};
     use zenoh_config::Config;
-
-    use crate::api::session::SessionDeclarations;
+    use zenoh_core::SyncResolve;
 
     #[test]
     fn priority_from() {
@@ -1120,7 +1120,7 @@ mod tests {
 
     #[test]
     fn sample_kind_integrity_in_publication() {
-        use crate::{api::session::open, prelude::sync::*};
+        use crate::api::session::open;
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/publication";
         const VALUE: &str = "zenoh";
