@@ -13,10 +13,10 @@
 //
 
 //! Queryable primitives.
-use super::key_expr::KeyExpr;
 use crate::api::builders::sample::SampleBuilder;
 use crate::api::encoding::Encoding;
 use crate::api::handlers::{locked, DefaultHandler};
+use crate::api::key_expr::KeyExpr;
 use crate::api::publication::Priority;
 use crate::api::sample::QoSBuilder;
 #[cfg(feature = "unstable")]
@@ -34,6 +34,8 @@ use std::ops::Deref;
 use std::sync::Arc;
 use uhlc::Timestamp;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+#[zenoh_macros::unstable]
+use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::core::ZenohId;
 use zenoh_protocol::{
     core::{EntityId, WireExpr},

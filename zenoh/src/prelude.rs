@@ -33,8 +33,8 @@ pub(crate) mod common {
     // pub use zenoh_core::Resolve;
 
     // pub use zenoh_protocol::core::{EndPoint, Locator, ZenohId};
-    #[zenoh_macros::unstable]
-    pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
+    // #[zenoh_macros::unstable]
+    // pub use zenoh_protocol::core::{EntityGlobalId, EntityId};
 
     pub use crate::config::{self, Config};
     pub use crate::handlers::IntoHandler;

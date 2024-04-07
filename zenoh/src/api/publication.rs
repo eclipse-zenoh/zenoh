@@ -38,6 +38,10 @@ use std::task::{Context, Poll};
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_keyexpr::keyexpr;
 pub use zenoh_protocol::core::CongestionControl;
+#[zenoh_macros::unstable]
+use zenoh_protocol::core::EntityGlobalId;
+#[zenoh_macros::unstable]
+use zenoh_protocol::core::EntityId;
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Push;
 use zenoh_protocol::zenoh::Del;
