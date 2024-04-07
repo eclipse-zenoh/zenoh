@@ -20,7 +20,7 @@ const N: usize = 10;
 const K: u32 = 3;
 
 #[tokio::main]
-async fn main() -> Result<(), zenoh::Error> {
+async fn main() -> Result<(), ZError> {
     // Initiate logging
     env_logger::init();
 

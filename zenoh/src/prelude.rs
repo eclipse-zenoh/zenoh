@@ -39,7 +39,7 @@
 pub(crate) mod flat {
     pub use crate::buffers::*;
     pub use crate::config::*;
-    pub use crate::core::{Error, Resolvable, Resolve, Result};
+    pub use crate::core::{Error as ZError, Resolvable, Resolve, Result as ZResult};
     pub use crate::encoding::*;
     pub use crate::handlers::*;
     pub use crate::key_expr::*;
