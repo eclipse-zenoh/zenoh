@@ -15,6 +15,7 @@ use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh::query::QueryTarget;
 use zenoh::selector::Selector;
 use zenoh_examples::CommonArgs;
 

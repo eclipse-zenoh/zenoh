@@ -16,8 +16,10 @@
 //!
 //! see [`Liveliness`]
 use crate::api::handlers::IntoHandler;
+use crate::api::query::{QueryConsolidation, QueryTarget};
 use crate::api::session::Session;
 use zenoh_core::Resolve;
+
 #[zenoh_macros::unstable]
 use {
     crate::{

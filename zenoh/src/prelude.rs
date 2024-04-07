@@ -41,7 +41,7 @@ pub(crate) mod common {
     // pub use crate::selector::{Parameter, Parameters, Selector};
     // pub use crate::session::{Session, SessionDeclarations};
 
-    pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+    // pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 
     pub use crate::api::encoding::Encoding;
     pub use crate::api::value::Value;
