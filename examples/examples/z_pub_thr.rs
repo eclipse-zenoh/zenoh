@@ -16,7 +16,7 @@ use clap::Parser;
 use std::convert::TryInto;
 use zenoh::payload::Payload;
 use zenoh::prelude::sync::*;
-use zenoh::publication::CongestionControl;
+use zenoh::publication::{CongestionControl, Priority};
 use zenoh::session::SessionDeclarations;
 use zenoh_examples::CommonArgs;
 

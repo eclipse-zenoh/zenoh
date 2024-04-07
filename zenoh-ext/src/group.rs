@@ -30,6 +30,7 @@ use zenoh::key_expr::KeyExpr;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::payload::PayloadReader;
 use zenoh::prelude::r#async::*;
+use zenoh::publication::Priority;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
 use zenoh::session::Session;
