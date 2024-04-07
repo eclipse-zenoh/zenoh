@@ -17,6 +17,7 @@ use crate::api::builders::sample::SampleBuilder;
 use crate::api::encoding::Encoding;
 use crate::api::handlers::{locked, DefaultHandler, IntoHandler};
 use crate::api::key_expr::KeyExpr;
+use crate::api::payload::Payload;
 use crate::api::publication::Priority;
 use crate::api::sample::QoSBuilder;
 #[cfg(feature = "unstable")]

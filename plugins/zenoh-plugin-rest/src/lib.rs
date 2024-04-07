@@ -31,7 +31,7 @@ use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::encoding::Encoding;
 use zenoh::key_expr::{keyexpr, KeyExpr};
-use zenoh::payload::StringOrBase64;
+use zenoh::payload::{Payload, StringOrBase64};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};

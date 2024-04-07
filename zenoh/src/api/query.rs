@@ -16,6 +16,7 @@
 use crate::api::encoding::Encoding;
 use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::api::key_expr::KeyExpr;
+use crate::api::payload::Payload;
 use crate::api::publication::Priority;
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
