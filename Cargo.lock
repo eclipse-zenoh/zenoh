@@ -4955,10 +4955,7 @@ dependencies = [
  "serde_json",
  "urlencoding",
  "zenoh",
- "zenoh-collections",
- "zenoh-core",
  "zenoh-plugin-trait",
- "zenoh-result",
  "zenoh-util",
  "zenoh_backend_traits",
 ]

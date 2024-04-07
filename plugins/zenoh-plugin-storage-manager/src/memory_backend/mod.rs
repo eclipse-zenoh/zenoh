@@ -18,10 +18,10 @@ use std::sync::Arc;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::time::Timestamp;
 use zenoh::value::Value;
+use zenoh::Result as ZResult;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
-use zenoh_result::ZResult;
 
 use crate::MEMORY_BACKEND_NAME;
 
