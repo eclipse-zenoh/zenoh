@@ -198,7 +198,7 @@
     //       ]
     //     },
     //  ]
-    //}
+    //},
   /// Configure internal transport parameters
   transport: {
     unicast: {
