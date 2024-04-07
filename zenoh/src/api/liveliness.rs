@@ -18,6 +18,7 @@
 use crate::api::handlers::IntoHandler;
 use crate::api::query::{QueryConsolidation, QueryTarget};
 use crate::api::sample::Locality;
+use crate::api::sample::SourceInfo;
 use crate::api::session::Session;
 use zenoh_core::Resolve;
 

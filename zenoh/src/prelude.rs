@@ -50,8 +50,8 @@ pub(crate) mod common {
 
     // #[zenoh_macros::unstable]
     // pub use crate::api::sample::Locality;
-    #[zenoh_macros::unstable]
-    pub use crate::api::sample::SourceInfo;
+    // #[zenoh_macros::unstable]
+    // pub use crate::api::sample::SourceInfo;
     pub use crate::api::sample::{Sample, SampleKind};
 
     pub use crate::api::publication::Priority;
