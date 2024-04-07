@@ -17,6 +17,7 @@ use crate::api::builders::publication::{
     PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherDeleteBuilder,
     PublisherPutBuilder,
 };
+use crate::api::encoding::Encoding;
 use crate::api::key_expr::KeyExpr;
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;

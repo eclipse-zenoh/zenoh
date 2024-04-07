@@ -13,6 +13,7 @@
 //
 
 //! Query primitives.
+use crate::api::encoding::Encoding;
 use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::api::key_expr::KeyExpr;
 use crate::api::publication::Priority;
