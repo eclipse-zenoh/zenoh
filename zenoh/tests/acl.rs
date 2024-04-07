@@ -51,31 +51,31 @@ fn test_acl() {
     let config_qbl = &config_pub;
     let config_get = &config_sub;
 
-    test_pub_sub_allow(config_router.clone(), &config_sub, &config_pub);
-    test_pub_sub_deny(config_router.clone(), &config_sub, &config_pub);
-    test_get_queryable_allow(config_router.clone(), config_qbl, config_get);
-    test_get_queryable_deny(config_router.clone(), config_qbl, config_get);
+    test_pub_sub_allow(&config_router, &config_sub, &config_pub);
+    test_pub_sub_deny(&config_router, &config_sub, &config_pub);
+    test_get_queryable_allow(&config_router, config_qbl, config_get);
+    test_get_queryable_deny(&config_router, config_qbl, config_get);
     if let Some(loopback_face) = get_loopback_interface() {
         test_pub_sub_allow_then_deny(
-            config_router.clone(),
+            &config_router,
             &config_sub,
             &config_pub,
             &loopback_face.name,
         );
         test_pub_sub_deny_then_allow(
-            config_router.clone(),
+            &config_router,
             &config_sub,
             &config_pub,
             &loopback_face.name,
         );
         test_get_queryable_allow_then_deny(
-            config_router.clone(),
+            &config_router,
             config_qbl,
             config_get,
             &loopback_face.name,
         );
         test_get_queryable_deny_then_allow(
-            config_router.clone(),
+            &config_router,
             config_qbl,
             config_get,
             &loopback_face.name,
@@ -89,7 +89,8 @@ fn get_loopback_interface() -> Option<Interface> {
     ifs.into_iter().find(|i| i.is_loopback())
 }
 
-fn test_pub_sub_deny(mut config_router: Config, config_pub: &Config, config_sub: &Config) {
+fn test_pub_sub_deny(config_router: &Config, config_pub: &Config, config_sub: &Config) {
+    let mut config_router = config_router.clone();
     config_router
         .insert_json5(
             "acl",
@@ -126,7 +127,8 @@ fn test_pub_sub_deny(mut config_router: Config, config_pub: &Config, config_sub:
     assert_ne!(*zlock!(received_value), VALUE);
 }
 
-fn test_pub_sub_allow(mut config_router: Config, config_pub: &Config, config_sub: &Config) {
+fn test_pub_sub_allow(config_router: &Config, config_pub: &Config, config_sub: &Config) {
+    let mut config_router = config_router.clone();
     config_router
         .insert_json5(
             "acl",
@@ -165,11 +167,12 @@ fn test_pub_sub_allow(mut config_router: Config, config_pub: &Config, config_sub
     assert_eq!(*zlock!(received_value), VALUE);
 }
 fn test_pub_sub_allow_then_deny(
-    mut config_router: Config,
+    config_router: &Config,
     config_pub: &Config,
     config_sub: &Config,
     interface_name: &str,
 ) {
+    let mut config_router = config_router.clone();
     let acl_js = format!(
         r#"
         {{
@@ -221,11 +224,12 @@ fn test_pub_sub_allow_then_deny(
     assert_ne!(*zlock!(received_value), VALUE);
 }
 fn test_pub_sub_deny_then_allow(
-    mut config_router: Config,
+    config_router: &Config,
     config_pub: &Config,
     config_sub: &Config,
     interface_name: &str,
 ) {
+    let mut config_router = config_router.clone();
     let acl_js = format!(
         r#"
         {{
@@ -277,7 +281,8 @@ fn test_pub_sub_deny_then_allow(
     assert_eq!(*zlock!(received_value), VALUE);
 }
 
-fn test_get_queryable_deny(mut config_router: Config, config_qbl: &Config, config_get: &Config) {
+fn test_get_queryable_deny(config_router: &Config, config_qbl: &Config, config_get: &Config) {
+    let mut config_router = config_router.clone();
     config_router
         .insert_json5(
             "acl",
@@ -321,7 +326,8 @@ fn test_get_queryable_deny(mut config_router: Config, config_qbl: &Config, confi
     assert_ne!(received_value, VALUE);
 }
 
-fn test_get_queryable_allow(mut config_router: Config, config_qbl: &Config, config_get: &Config) {
+fn test_get_queryable_allow(config_router: &Config, config_qbl: &Config, config_get: &Config) {
+    let mut config_router = config_router.clone();
     config_router
         .insert_json5(
             "acl",
@@ -365,11 +371,12 @@ fn test_get_queryable_allow(mut config_router: Config, config_qbl: &Config, conf
 }
 
 fn test_get_queryable_allow_then_deny(
-    mut config_router: Config,
+    config_router: &Config,
     config_qbl: &Config,
     config_get: &Config,
     interface_name: &str,
 ) {
+    let mut config_router = config_router.clone();
     let acl_js = format!(
         r#"
         {{
@@ -428,11 +435,12 @@ fn test_get_queryable_allow_then_deny(
 }
 
 fn test_get_queryable_deny_then_allow(
-    mut config_router: Config,
+    config_router: &Config,
     config_qbl: &Config,
     config_get: &Config,
     interface_name: &str,
 ) {
+    let mut config_router = config_router.clone();
     let acl_js = format!(
         r#"
         {{
