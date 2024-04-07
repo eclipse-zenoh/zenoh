@@ -57,8 +57,8 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 use crate::{
-    api::session::Session, api::session::Undeclarable, net::primitives::Primitives,
-    prelude::Selector,
+    api::selector::Selector, api::session::Session, api::session::Undeclarable,
+    net::primitives::Primitives,
 };
 
 #[derive(Clone, Debug)]

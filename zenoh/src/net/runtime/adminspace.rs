@@ -530,7 +530,7 @@ fn router_data(context: &AdminContext, query: Query) {
         });
         #[cfg(feature = "stats")]
         {
-            let stats = crate::prelude::Parameters::decode(&query.selector())
+            let stats = crate::api::selector::Parameters::decode(&query.selector())
                 .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
             if stats {
                 json.as_object_mut().unwrap().insert(
@@ -561,7 +561,7 @@ fn router_data(context: &AdminContext, query: Query) {
 
     #[cfg(feature = "stats")]
     {
-        let stats = crate::prelude::Parameters::decode(&query.selector())
+        let stats = crate::api::selector::Parameters::decode(&query.selector())
             .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
         if stats {
             json.as_object_mut().unwrap().insert(

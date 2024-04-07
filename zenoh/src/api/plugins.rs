@@ -14,7 +14,7 @@
 
 //! `zenohd`'s plugin system. For more details, consult the [detailed documentation](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Plugins/Zenoh%20Plugins.md).
 
-use crate::{net::runtime::Runtime, prelude::Selector};
+use crate::{api::selector::Selector, net::runtime::Runtime};
 use zenoh_core::zconfigurable;
 
 use zenoh_plugin_trait::{

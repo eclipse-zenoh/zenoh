@@ -19,6 +19,7 @@ use crate::api::publication::Priority;
 #[zenoh_macros::unstable]
 use crate::api::sample::Attachment;
 use crate::api::sample::QoSBuilder;
+use crate::api::selector::Selector;
 use crate::api::session::Session;
 use crate::prelude::*;
 use std::collections::HashMap;

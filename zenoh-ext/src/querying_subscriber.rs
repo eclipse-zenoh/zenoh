@@ -22,6 +22,7 @@ use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::sample::SampleBuilder;
+use zenoh::selector::Selector;
 use zenoh::session::SessionRef;
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::{new_reception_timestamp, Timestamp};

@@ -31,6 +31,7 @@ use zenoh::key_expr::keyexpr;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
+use zenoh::selector::Selector;
 use zenoh::session::Session;
 use zenoh_backend_traits::config::ConfigDiff;
 use zenoh_backend_traits::config::PluginConfig;

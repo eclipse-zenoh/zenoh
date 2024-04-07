@@ -21,6 +21,8 @@ use crate::api::publication::Priority;
 use crate::api::sample::QoSBuilder;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
+use crate::api::selector::Parameters;
+use crate::api::selector::Selector;
 use crate::api::session::SessionRef;
 use crate::api::session::Undeclarable;
 use crate::api::Id;
