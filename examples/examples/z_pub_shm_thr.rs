@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::publication::CongestionControl;
-use zenoh::shm::SharedMemoryManager;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

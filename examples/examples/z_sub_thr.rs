@@ -13,9 +13,7 @@
 //
 use clap::Parser;
 use std::time::Instant;
-use zenoh::config::Config;
-use zenoh::core::SyncResolve;
-use zenoh::session::SessionDeclarations;
+use zenoh::prelude::sync::*;
 use zenoh_examples::CommonArgs;
 
 struct Stats {

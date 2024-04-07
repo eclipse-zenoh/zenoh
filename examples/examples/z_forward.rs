@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
-use zenoh::key_expr::KeyExpr;
-use zenoh::session::SessionDeclarations;
+use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 use zenoh_ext::SubscriberForward;
 

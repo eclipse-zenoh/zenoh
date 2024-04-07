@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::config::ZenohId;
-use zenoh::core::AsyncResolve;
-use zenoh::session::SessionDeclarations;
+use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

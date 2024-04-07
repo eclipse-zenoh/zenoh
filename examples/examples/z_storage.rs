@@ -16,11 +16,7 @@
 use clap::Parser;
 use futures::select;
 use std::collections::HashMap;
-use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
-use zenoh::key_expr::{keyexpr, KeyExpr};
-use zenoh::sample::{Sample, SampleKind};
-use zenoh::session::SessionDeclarations;
+use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

@@ -13,11 +13,7 @@
 //
 use clap::Parser;
 use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
-use zenoh::key_expr::KeyExpr;
-use zenoh::sample::SampleBuilderTrait;
-use zenoh::session::SessionDeclarations;
+use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

@@ -13,10 +13,7 @@
 //
 use clap::arg;
 use clap::Command;
-use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
-use zenoh::query::ReplyKeyExpr;
-use zenoh::session::SessionDeclarations;
+use zenoh::prelude::r#async::*;
 use zenoh_ext::*;
 
 #[tokio::main]
