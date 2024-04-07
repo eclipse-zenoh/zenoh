@@ -17,7 +17,9 @@ use std::future::Ready;
 use std::mem::swap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zenoh::core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh::handlers::{locked, DefaultHandler, IntoHandler};
+use zenoh::internal::zlock;
 use zenoh::key_expr::KeyExpr;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait};
@@ -25,8 +27,7 @@ use zenoh::selector::Selector;
 use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::{new_reception_timestamp, Timestamp};
-use zenoh::Result as ZResult;
-use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh::{Error, Result as ZResult};
 
 use crate::ExtractSample;
 
@@ -162,7 +163,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
 
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
-    #[zenoh_macros::unstable]
+    #[zenoh::internal::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
@@ -174,7 +175,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
         IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<Error>,
     {
         self.query_selector = Some(query_selector.try_into().map_err(Into::into));
         self
@@ -522,7 +523,7 @@ where
 
     /// Restrict the matching publications that will be receive by this [`FetchingSubscriber`]
     /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
-    #[zenoh_macros::unstable]
+    #[zenoh::internal::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;

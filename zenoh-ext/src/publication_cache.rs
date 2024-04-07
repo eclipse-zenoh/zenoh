@@ -15,15 +15,17 @@ use flume::{bounded, Sender};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
+use zenoh::core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh::internal::ResolveFuture;
 use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
 use zenoh::queryable::{Query, Queryable};
+use zenoh::runtime::ZRuntime;
 use zenoh::sample::{Locality, Sample};
 use zenoh::selector::Parameters;
 use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_result::{bail, ZResult};
-use zenoh_util::core::ResolveFuture;
+use zenoh::Error;
+use zenoh::{internal::bail, Result as ZResult};
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
@@ -57,7 +59,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<Error>,
     {
         self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
         self
@@ -65,7 +67,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
 
     /// Restrict the matching queries that will be receive by this [`PublicationCache`]'s queryable
     /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
-    #[zenoh_macros::unstable]
+    #[zenoh::internal::unstable]
     #[inline]
     pub fn queryable_allowed_origin(mut self, origin: Locality) -> Self {
         self.queryable_origin = Some(origin);
@@ -169,7 +171,7 @@ impl<'a> PublicationCache<'a> {
 
         // TODO(yuyuan): use CancellationToken to manage it
         let (stoptx, stoprx) = bounded::<bool>(1);
-        zenoh_runtime::ZRuntime::TX.spawn(async move {
+        ZRuntime::TX.spawn(async move {
             let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                 HashMap::with_capacity(resources_limit.unwrap_or(32));
             let limit = resources_limit.unwrap_or(usize::MAX);

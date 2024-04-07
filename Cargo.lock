@@ -4623,12 +4623,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "zenoh",
- "zenoh-core",
- "zenoh-macros",
- "zenoh-result",
- "zenoh-runtime",
- "zenoh-sync",
- "zenoh-util",
 ]
 
 [[package]]

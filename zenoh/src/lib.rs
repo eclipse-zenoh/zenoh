@@ -118,7 +118,19 @@ pub use crate::api::session::open;
 
 pub mod core {
     pub use zenoh_core::AsyncResolve;
+    pub use zenoh_core::Resolvable;
+    pub use zenoh_core::Resolve;
     pub use zenoh_core::SyncResolve;
+}
+
+#[doc(hidden)]
+pub mod internal {
+    pub use zenoh_core::zerror;
+    pub use zenoh_core::zlock;
+    pub use zenoh_macros::unstable;
+    pub use zenoh_result::bail;
+    pub use zenoh_sync::Condition;
+    pub use zenoh_util::core::ResolveFuture;
 }
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
@@ -259,8 +271,10 @@ pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 }
 
+#[doc(hidden)]
 pub mod runtime {
     pub use crate::net::runtime::{AdminSpace, Runtime};
+    pub use zenoh_runtime::ZRuntime;
 }
 
 pub mod config {
