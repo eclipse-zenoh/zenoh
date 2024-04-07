@@ -15,38 +15,21 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
-use crate::api::handlers::IntoHandler;
-use crate::api::query::{QueryConsolidation, QueryTarget};
-use crate::api::sample::Locality;
-use crate::api::sample::SourceInfo;
-use crate::api::session::Session;
-use zenoh_core::Resolve;
-
-#[zenoh_macros::unstable]
-use {
-    crate::{
-        api::handlers::locked,
-        api::handlers::DefaultHandler,
-        api::key_expr::KeyExpr,
-        api::session::SessionRef,
-        api::session::Undeclarable,
-        api::subscriber::{Subscriber, SubscriberInner},
-        prelude::*,
-    },
-    crate::{api::query::Reply, api::Id},
-    std::convert::TryInto,
-    std::future::Ready,
-    std::sync::Arc,
-    std::time::Duration,
-    zenoh_config::unwrap_or_default,
-    zenoh_core::AsyncResolve,
-    zenoh_core::Resolvable,
-    zenoh_core::Result as ZResult,
-    zenoh_core::SyncResolve,
-    zenoh_keyexpr::keyexpr,
-    zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo,
-    zenoh_protocol::network::request,
+use super::{
+    handlers::{locked, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    query::{QueryConsolidation, QueryTarget, Reply},
+    sample::{Locality, Sample, SourceInfo},
+    session::{Session, SessionRef, Undeclarable},
+    subscriber::{Subscriber, SubscriberInner},
+    Id,
 };
+use std::{convert::TryInto, future::Ready, sync::Arc, time::Duration};
+use zenoh_config::unwrap_or_default;
+use zenoh_core::Resolve;
+use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::network::{declare::subscriber::ext::SubscriberInfo, request};
 
 #[zenoh_macros::unstable]
 pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::payload::Payload;
+use super::payload::Payload;
 use phf::phf_map;
 use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
 use zenoh_buffers::{ZBuf, ZSlice};

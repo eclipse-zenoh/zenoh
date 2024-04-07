@@ -11,10 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::api::sample::Locality;
-use crate::{
-    api::encoding::Encoding, api::key_expr::KeyExpr, api::payload::Payload, api::queryable::Query,
-    api::sample::DataInfo, api::sample::SampleKind, api::session::Session,
+use super::{
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    payload::Payload,
+    queryable::Query,
+    sample::Locality,
+    sample::{DataInfo, SampleKind},
+    session::Session,
 };
 use std::{
     collections::hash_map::DefaultHasher,

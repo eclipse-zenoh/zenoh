@@ -13,41 +13,41 @@
 //
 
 //! Queryable primitives.
-use crate::api::builders::sample::SampleBuilder;
-use crate::api::encoding::Encoding;
-use crate::api::handlers::{locked, DefaultHandler, IntoHandler};
-use crate::api::key_expr::KeyExpr;
-use crate::api::payload::Payload;
-use crate::api::publication::Priority;
-use crate::api::sample::Locality;
-use crate::api::sample::QoSBuilder;
-#[cfg(feature = "unstable")]
-use crate::api::sample::SourceInfo;
-use crate::api::selector::Parameters;
-use crate::api::selector::Selector;
-use crate::api::session::SessionRef;
-use crate::api::session::Undeclarable;
-use crate::api::value::Value;
-use crate::api::Id;
+use super::{
+    builders::sample::{
+        QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
+        ValueBuilderTrait,
+    },
+    encoding::Encoding,
+    handlers::{locked, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    payload::Payload,
+    publication::Priority,
+    sample::{Locality, QoSBuilder, Sample, SampleKind},
+    selector::{Parameters, Selector},
+    session::{SessionRef, Undeclarable},
+    value::Value,
+    Id,
+};
 use crate::net::primitives::Primitives;
-use crate::prelude::*;
-#[cfg(feature = "unstable")]
-use crate::{api::query::ReplyKeyExpr, api::sample::Attachment};
-use std::fmt;
-use std::future::Ready;
-use std::ops::Deref;
-use std::sync::Arc;
+use std::{fmt, future::Ready, ops::Deref, sync::Arc};
 use uhlc::Timestamp;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-#[zenoh_macros::unstable]
-use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::core::ZenohId;
 use zenoh_protocol::{
-    core::{EntityId, WireExpr},
+    core::{CongestionControl, EntityId, WireExpr, ZenohId},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
 use zenoh_result::ZResult;
+
+#[zenoh_macros::unstable]
+use {
+    super::{
+        query::ReplyKeyExpr,
+        sample::{Attachment, SourceInfo},
+    },
+    zenoh_protocol::core::EntityGlobalId,
+};
 
 pub(crate) struct QueryInner {
     /// The key expression of this Query.

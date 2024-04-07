@@ -11,85 +11,50 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::api::admin;
-use crate::api::builders::publication::PublicationBuilder;
-use crate::api::builders::publication::PublicationBuilderDelete;
-use crate::api::builders::publication::PublicationBuilderPut;
-use crate::api::encoding::Encoding;
-use crate::api::handlers::{Callback, DefaultHandler};
-use crate::api::info::SessionInfo;
-use crate::api::key_expr::KeyExpr;
-use crate::api::key_expr::KeyExprInner;
-#[zenoh_macros::unstable]
-use crate::api::liveliness::{Liveliness, LivelinessTokenState};
-use crate::api::payload::Payload;
-#[zenoh_macros::unstable]
-use crate::api::publication::MatchingListenerState;
-#[zenoh_macros::unstable]
-use crate::api::publication::MatchingStatus;
-use crate::api::publication::Priority;
-use crate::api::query::GetBuilder;
-use crate::api::query::QueryState;
-use crate::api::query::Reply;
-use crate::api::queryable::Query;
-use crate::api::queryable::QueryInner;
-use crate::api::queryable::QueryableState;
-#[cfg(feature = "unstable")]
-use crate::api::sample::Attachment;
-use crate::api::sample::DataInfo;
-use crate::api::sample::DataInfoIntoSample;
-use crate::api::sample::Locality;
-use crate::api::sample::QoS;
-use crate::api::sample::Sample;
-use crate::api::sample::SampleKind;
-#[cfg(feature = "unstable")]
-use crate::api::sample::SourceInfo;
-use crate::api::selector::Parameters;
-use crate::api::selector::Selector;
-use crate::api::selector::TIME_RANGE_KEY;
-use crate::api::subscriber::SubscriberBuilder;
-use crate::api::subscriber::SubscriberState;
-use crate::api::value::Value;
-use crate::api::Id;
-use crate::net::primitives::Primitives;
-use crate::net::routing::dispatcher::face::Face;
-use crate::net::runtime::Runtime;
-use crate::publication::*;
-use crate::query::*;
-use crate::queryable::*;
+use super::{
+    admin,
+    builders::publication::{
+        PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+    },
+    encoding::Encoding,
+    handlers::{Callback, DefaultHandler},
+    info::SessionInfo,
+    key_expr::{KeyExpr, KeyExprInner},
+    payload::Payload,
+    publication::{Priority, Publisher},
+    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
+    queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
+    sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
+    selector::{Parameters, Selector, TIME_RANGE_KEY},
+    subscriber::{SubscriberBuilder, SubscriberState},
+    value::Value,
+    Id,
+};
+use crate::net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime};
 use log::{error, trace, warn};
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::fmt;
-use std::future::Ready;
-use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::Arc;
-use std::sync::RwLock;
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    fmt,
+    future::Ready,
+    ops::Deref,
+    sync::{
+        atomic::{AtomicU16, Ordering},
+        Arc, RwLock,
+    },
+    time::Duration,
+};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::unwrap_or_default;
-use zenoh_config::Config;
-use zenoh_config::Notifier;
-use zenoh_core::Resolvable;
-use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
-use zenoh_protocol::core::Reliability;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::declare::SubscriberId;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::ext;
-use zenoh_protocol::network::AtomicRequestId;
-use zenoh_protocol::network::RequestId;
-use zenoh_protocol::zenoh::reply::ReplyBody;
-use zenoh_protocol::zenoh::Del;
-use zenoh_protocol::zenoh::Put;
+use zenoh_config::{unwrap_or_default, Config, Notifier};
+use zenoh_core::{
+    zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, SyncResolve,
+};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, ExprId, Reliability, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
     network::{
         declare::{
@@ -98,15 +63,27 @@ use zenoh_protocol::{
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
         request::{self, ext::TargetType, Request},
-        Mapping, Push, Response, ResponseFinal,
+        AtomicRequestId, Mapping, Push, RequestId, Response, ResponseFinal,
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
-        PushBody, RequestBody, ResponseBody,
+        reply::ReplyBody,
+        Del, PushBody, Put, RequestBody, ResponseBody,
     },
 };
 use zenoh_result::ZResult;
 use zenoh_util::core::AsyncResolve;
+
+#[zenoh_macros::unstable]
+use {
+    super::{
+        liveliness::{Liveliness, LivelinessTokenState},
+        publication::{MatchingListenerState, MatchingStatus},
+        sample::{Attachment, SourceInfo},
+    },
+    zenoh_protocol::network::declare::SubscriberId,
+    zenoh_protocol::network::ext,
+};
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;

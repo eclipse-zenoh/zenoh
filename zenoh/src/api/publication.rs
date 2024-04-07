@@ -13,46 +13,42 @@
 //
 
 //! Publishing primitives.
-use crate::api::builders::publication::{
-    PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherDeleteBuilder,
-    PublisherPutBuilder,
+use super::{
+    builders::publication::{
+        PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
+        PublisherDeleteBuilder, PublisherPutBuilder,
+    },
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    payload::Payload,
+    sample::{DataInfo, Locality, QoS, Sample, SampleFields, SampleKind},
+    session::{SessionRef, Undeclarable},
 };
-use crate::api::encoding::Encoding;
-use crate::api::key_expr::KeyExpr;
-use crate::api::payload::Payload;
-#[zenoh_macros::unstable]
-use crate::api::sample::Attachment;
-use crate::api::sample::Locality;
-#[zenoh_macros::unstable]
-use crate::api::sample::SourceInfo;
-use crate::api::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
-use crate::api::session::SessionRef;
-use crate::api::session::Undeclarable;
 use crate::net::primitives::Primitives;
-#[cfg(feature = "unstable")]
-use crate::{
-    api::handlers::{Callback, DefaultHandler, IntoHandler},
-    api::Id,
-};
 use futures::Sink;
-use std::convert::TryFrom;
-use std::future::Ready;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    convert::TryFrom,
+    future::Ready,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_keyexpr::keyexpr;
-pub use zenoh_protocol::core::CongestionControl;
+use zenoh_protocol::{
+    core::CongestionControl,
+    network::{push::ext, Push},
+    zenoh::{Del, PushBody, Put},
+};
+use zenoh_result::{Error, ZResult};
+
 #[zenoh_macros::unstable]
-use zenoh_protocol::core::EntityGlobalId;
-#[zenoh_macros::unstable]
-use zenoh_protocol::core::EntityId;
-use zenoh_protocol::network::push::ext;
-use zenoh_protocol::network::Push;
-use zenoh_protocol::zenoh::Del;
-use zenoh_protocol::zenoh::PushBody;
-use zenoh_protocol::zenoh::Put;
-use zenoh_result::Error;
-use zenoh_result::ZResult;
+use {
+    crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
+    crate::api::sample::{Attachment, SourceInfo},
+    crate::api::Id,
+    zenoh_protocol::core::EntityGlobalId,
+    zenoh_protocol::core::EntityId,
+};
 
 #[zenoh_macros::unstable]
 #[derive(Clone)]

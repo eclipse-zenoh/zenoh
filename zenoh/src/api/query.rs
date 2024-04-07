@@ -13,27 +13,26 @@
 //
 
 //! Query primitives.
-use crate::api::encoding::Encoding;
-use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
-use crate::api::key_expr::KeyExpr;
-use crate::api::payload::Payload;
-use crate::api::publication::Priority;
-#[zenoh_macros::unstable]
-use crate::api::sample::Attachment;
-use crate::api::sample::Locality;
-use crate::api::sample::QoSBuilder;
-use crate::api::sample::SourceInfo;
-use crate::api::selector::Selector;
-use crate::api::session::Session;
-use crate::api::value::Value;
-use crate::prelude::*;
-use std::collections::HashMap;
-use std::future::Ready;
-use std::time::Duration;
+use super::{
+    builders::sample::{QoSBuilderTrait, SampleBuilderTrait, ValueBuilderTrait},
+    encoding::Encoding,
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    payload::Payload,
+    publication::Priority,
+    sample::{Locality, QoSBuilder, Sample, SourceInfo},
+    selector::Selector,
+    session::Session,
+    value::Value,
+};
+use std::{collections::HashMap, future::Ready, time::Duration};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::ZenohId;
+use zenoh_protocol::core::{CongestionControl, ZenohId};
 use zenoh_result::ZResult;
+
+#[zenoh_macros::unstable]
+use crate::api::sample::Attachment;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;

@@ -13,24 +13,25 @@
 //
 
 //! Subscribing primitives.
-use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
-use crate::api::key_expr::KeyExpr;
-use crate::api::sample::Locality;
-use crate::api::sample::Sample;
-use crate::api::session::Undeclarable;
-use crate::api::Id;
-use crate::{api::session::SessionRef, Result as ZResult};
-use std::fmt;
-use std::future::Ready;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use super::{
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    sample::{Locality, Sample},
+    session::{SessionRef, Undeclarable},
+    Id,
+};
+use std::{
+    fmt,
+    future::Ready,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
+use zenoh_result::ZResult;
+
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-
-/// The kind of reliability.
-pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,

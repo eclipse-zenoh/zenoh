@@ -13,21 +13,24 @@
 //
 
 //! Sample primitives
-use crate::api::builders::sample::{QoSBuilderTrait, ValueBuilderTrait};
-use crate::api::encoding::Encoding;
-use crate::api::key_expr::KeyExpr;
-use crate::api::publication::Priority;
-use crate::api::value::Value;
-use crate::payload::Payload;
+use super::{
+    builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    payload::Payload,
+    publication::Priority,
+    value::Value,
+};
+use std::{convert::TryFrom, fmt};
+use zenoh_protocol::{
+    core::{CongestionControl, EntityGlobalId, Timestamp},
+    network::declare::ext::QoSType,
+};
+
 #[zenoh_macros::unstable]
 pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 #[zenoh_macros::unstable]
 use serde::Serialize;
-use std::{convert::TryFrom, fmt};
-use zenoh_protocol::core::CongestionControl;
-use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::core::Timestamp;
-use zenoh_protocol::network::declare::ext::QoSType;
 
 pub type SourceSn = u64;
 

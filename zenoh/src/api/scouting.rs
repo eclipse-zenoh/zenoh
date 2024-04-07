@@ -17,14 +17,8 @@ use futures::StreamExt;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
 use tokio::net::UdpSocket;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::core::WhatAmIMatcher;
+use zenoh_protocol::{core::WhatAmIMatcher, scouting::Hello};
 use zenoh_result::ZResult;
-
-/// Constants and helpers for zenoh `whatami` flags.
-pub use zenoh_protocol::core::WhatAmI;
-
-/// A zenoh Hello message.
-pub use zenoh_protocol::scouting::Hello;
 
 /// A builder for initializing a [`Scout`].
 ///

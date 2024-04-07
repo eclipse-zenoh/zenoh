@@ -14,12 +14,7 @@
 
 //! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 
-use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
-use zenoh_result::ZResult;
-pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
-
-use crate::{api::key_expr::KeyExpr, api::queryable::Query};
-
+use super::{key_expr::KeyExpr, queryable::Query};
 use std::{
     borrow::{Borrow, Cow},
     collections::HashMap,
@@ -27,6 +22,9 @@ use std::{
     hash::Hash,
     str::FromStr,
 };
+use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
+use zenoh_result::ZResult;
+pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of parameters

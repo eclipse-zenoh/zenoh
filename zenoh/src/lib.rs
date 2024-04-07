@@ -196,18 +196,19 @@ pub mod selector {
 
 pub mod subscriber {
     pub use crate::api::subscriber::FlumeSubscriber;
-    pub use crate::api::subscriber::Reliability;
     pub use crate::api::subscriber::Subscriber;
     pub use crate::api::subscriber::SubscriberBuilder;
+    /// The kind of reliability.
+    pub use zenoh_protocol::core::Reliability;
 }
 
 pub mod publication {
     pub use crate::api::builders::publication::PublisherBuilder;
-    pub use crate::api::publication::CongestionControl;
     pub use crate::api::publication::Priority;
     pub use crate::api::publication::Publisher;
     #[zenoh_macros::unstable]
     pub use crate::api::publication::PublisherDeclarations;
+    pub use zenoh_protocol::core::CongestionControl;
 }
 
 pub mod query {
@@ -236,7 +237,10 @@ pub mod handlers {
 pub mod scouting {
     pub use crate::api::scouting::scout;
     pub use crate::api::scouting::ScoutBuilder;
-    pub use crate::api::scouting::WhatAmI;
+    /// Constants and helpers for zenoh `whatami` flags.
+    pub use zenoh_protocol::core::WhatAmI;
+    /// A zenoh Hello message.
+    pub use zenoh_protocol::scouting::Hello;
 }
 
 #[cfg(feature = "unstable")]
