@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::api::handlers::{locked, Callback, DefaultHandler};
+use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
 use futures::StreamExt;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
@@ -139,7 +139,7 @@ impl ScoutBuilder<DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Hello>,
+        Handler: IntoHandler<'static, Hello>,
     {
         let ScoutBuilder {
             what,
@@ -156,7 +156,7 @@ impl ScoutBuilder<DefaultHandler> {
 
 impl<Handler> Resolvable for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Scout<Handler::Handler>>;
@@ -164,7 +164,7 @@ where
 
 impl<Handler> SyncResolve for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
@@ -175,7 +175,7 @@ where
 
 impl<Handler> AsyncResolve for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;

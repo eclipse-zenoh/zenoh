@@ -15,7 +15,7 @@
 //! Queryable primitives.
 use crate::api::builders::sample::SampleBuilder;
 use crate::api::encoding::Encoding;
-use crate::api::handlers::{locked, DefaultHandler};
+use crate::api::handlers::{locked, DefaultHandler, IntoHandler};
 use crate::api::key_expr::KeyExpr;
 use crate::api::publication::Priority;
 use crate::api::sample::QoSBuilder;
@@ -755,7 +755,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Query>,
+        Handler: IntoHandler<'static, Query>,
     {
         let QueryableBuilder {
             session,

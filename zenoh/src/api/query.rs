@@ -13,7 +13,7 @@
 //
 
 //! Query primitives.
-use crate::api::handlers::{locked, Callback, DefaultHandler};
+use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::api::key_expr::KeyExpr;
 use crate::api::publication::Priority;
 #[zenoh_macros::unstable]

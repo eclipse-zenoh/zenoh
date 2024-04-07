@@ -875,7 +875,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, MatchingStatus>,
+        Handler: IntoHandler<'static, MatchingStatus>,
     {
         let MatchingListenerBuilder {
             publisher,

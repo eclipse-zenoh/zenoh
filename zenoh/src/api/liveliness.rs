@@ -15,7 +15,9 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
+use crate::api::handlers::IntoHandler;
 use zenoh_core::Resolve;
+
 #[zenoh_macros::unstable]
 use {
     crate::{
