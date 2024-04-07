@@ -13,6 +13,7 @@
 //
 use clap::{arg, Command};
 use std::time::Duration;
+use zenoh::config::Config;
 use zenoh::key_expr::keyexpr;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;

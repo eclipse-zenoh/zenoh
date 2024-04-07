@@ -15,6 +15,7 @@
 #[test]
 fn pubsub() {
     use zenoh::prelude::sync::*;
+    use zenoh_config::Config;
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
@@ -62,6 +63,7 @@ fn pubsub() {
 #[test]
 fn queries() {
     use zenoh::{prelude::sync::*, sample::Attachment, sample::SampleBuilderTrait};
+    use zenoh_config::Config;
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh

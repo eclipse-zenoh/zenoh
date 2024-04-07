@@ -15,10 +15,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
+use zenoh::config::EndPoint;
 use zenoh::key_expr::KeyExpr;
 use zenoh::prelude::r#async::*;
+use zenoh_config as config;
 use zenoh_core::ztimeout;
-use zenoh::config::EndPoint;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

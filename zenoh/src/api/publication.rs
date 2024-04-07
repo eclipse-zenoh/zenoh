@@ -1090,6 +1090,8 @@ impl Drop for MatchingListenerInner<'_> {
 
 #[cfg(test)]
 mod tests {
+    use zenoh_config::Config;
+
     #[test]
     fn priority_from() {
         use super::Priority as APrio;

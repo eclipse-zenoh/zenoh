@@ -20,12 +20,12 @@ use std::str::FromStr;
 use std::thread::sleep;
 
 use async_std::task;
-use zenoh::config::ValidatedMap;
+use zenoh::config::{Config, ValidatedMap};
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::session::Session;
-use zenoh::{prelude::Config, time::Timestamp};
+use zenoh::time::Timestamp;
 use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
 

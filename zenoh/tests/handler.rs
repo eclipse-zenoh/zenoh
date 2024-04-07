@@ -1,3 +1,5 @@
+use zenoh_config::Config;
+
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
