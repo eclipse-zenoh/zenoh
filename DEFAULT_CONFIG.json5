@@ -7,13 +7,16 @@
   /// If not set, a random unsigned 128bit integer will be used.
   /// WARNING: this id must be unique in your zenoh network.
   // id: "1234567890abcdef",
+
   /// The node's mode (router, peer or client)
-  mode: "router",
+  mode: "peer",
+
   /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenohd and available in admin space @/router/<id>
   metadata: {
     name: "strawberry",
     location: "Penny Lane"
   },
+
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
   /// For TCP/UDP on Linux, it is possible additionally specify the interface to be connected to: 
@@ -21,22 +24,22 @@
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value or different values for router, peer and client.
-    timeout_ms: { router: -1, peer: -1, client: 0
-    },
+    timeout_ms: { router: -1, peer: -1, client: 0 },
 
     endpoints: [
       // "<proto>/<address>"
     ],
+
     /// Global connect configuration, 
     /// Accepts a single value or different values for router, peer and client.
     /// The configuration can also be specified for the separate endpoint
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#retry_period_init_ms=20000;retry_period_max_ms=10000"
+     
     /// exit from application, if timeout exceed
-    exit_on_failure: { router: false, peer: false, client: true
-    },
+    exit_on_failure: { router: false, peer: false, client: true },
     /// connect establishing retry configuration 
-    retry: {
+    retry: { 
       /// intial wait timeout until next connect try
       period_init_ms: 1000,
       /// maximum wait timeout until next connect try
@@ -45,6 +48,7 @@
       period_increase_factor: 2,
     },
   },
+
   /// Which endpoints to listen on. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
   /// peers, or client can use to establish a zenoh session.
@@ -58,15 +62,17 @@
     endpoints: [
       // "<proto>/<address>"
     ],
+
     /// Global listen configuration, 
     /// Accepts a single value or different values for router, peer and client.
     /// The configuration can also be specified for the separate endpoint
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#exit_on_failure=false;retry_period_max_ms=1000"
+    
     /// exit from application, if timeout exceed
     exit_on_failure: true,
     /// listen retry configuration 
-    retry: {
+    retry: { 
       /// intial wait timeout until next try
       period_init_ms: 1000,
       /// maximum wait timeout until next try
@@ -84,7 +90,7 @@
     /// The multicast scouting configuration.
     multicast: {
       /// Whether multicast scouting is enabled or not
-      enabled: false,
+      enabled: true,
       /// The socket which should be used for multicast scouting
       address: "224.0.0.224:7446",
       /// The network interface which should be used for multicast scouting
@@ -92,15 +98,14 @@
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
       /// Accepts a single value or different values for router, peer and client.
       /// Each value is bit-or-like combinations of "peer", "router" and "client".
-      autoconnect: { router: "", peer: "router|peer"
-      },
+      autoconnect: { router: "", peer: "router|peer" },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
-      listen: false,
+      listen: true,
     },
     /// The gossip scouting configuration.
     gossip: {
       /// Whether gossip scouting is enabled or not
-      enabled: false,
+      enabled: true,
       /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
       /// When false, gossip scouting informations are only propagated to the next hop.
       /// Activating multihop gossip implies more scouting traffic and a lower scalability.
@@ -110,23 +115,24 @@
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
       /// Accepts a single value or different values for router, peer and client.
       /// Each value is bit-or-like combinations of "peer", "router" and "client".
-      autoconnect: { router: "", peer: "router|peer"
-      },
+      autoconnect: { router: "", peer: "router|peer" },
     },
   },
+
   /// Configuration of data messages timestamps management.
   timestamping: {
     /// Whether data messages should be timestamped if not already.
     /// Accepts a single boolean value or different values for router, peer and client.
-    enabled: { router: true, peer: false, client: false
-    },
+    enabled: { router: true, peer: false, client: false },
     /// Whether data messages with timestamps in the future should be dropped or not.
     /// If set to false (default), messages with timestamps in the future are retimestamped.
     /// Timestamps are ignored if timestamping is disabled.
     drop_future_timestamp: false,
   },
+
   /// The default timeout to apply to queries in milliseconds.
   queries_default_timeout: 10000,
+
   /// The routing strategy to use and it's configuration.
   routing: {
     /// The routing strategy to use in routers and it's configuration.
@@ -143,6 +149,7 @@
       mode: "peer_to_peer",
     },
   },
+
   //  /// The declarations aggregation strategy.
   //  aggregation: {
   //      /// A list of key-expressions for which all included subscribers will be aggregated into.
@@ -154,6 +161,7 @@
   //        // key_expression
   //      ],
   //  },
+
   //  /// The downsampling declaration.
   //  downsampling: [
   //    {
@@ -167,10 +175,10 @@
   //      ],
   //    },
   //  ],
-  /// configure acl rules 
+ /// configure acl rules 
    // acl: {
     //   ///[true/false] acl will be activated only if this is set to true
-    //   "enabled": true,
+    //   "enabled": false,
     //   ///[deny/allow] default permission is deny (even if this is left empty or not specified)
     //   "default_permission": "allow",
     //   ///rule set for permissions allowing or denying access to key-expressions
@@ -181,25 +189,12 @@
     //         "put"
     //       ],
     //      "flow":["egress","ingress"],
-    //       "permission": "allow",
+    //       "permission": "deny",
     //       "key_expr": [
     //         "test/thr"
     //       ],
     //       "interface": [
     //         "lo0"
-    //       ]
-    //     },
-    //     {
-    //       "action": [
-    //         "declare_subscriber"
-    //       ],
-    //      "flow":["egress","ingress"],
-    //       "permission": "allow",
-    //       "interface": [
-    //         "lo0"
-    //       ],
-    //       "key_expr": [
-    //         "test/thr"
     //       ]
     //     },
     //  ]
@@ -365,8 +360,8 @@
         known_keys_file: null,
       },
     },
-  
   },
+
   /// Configure the Admin Space
   /// Unstable: this configuration part works as advertised, but may change in a future release
   adminspace: {
@@ -376,6 +371,7 @@
       write: false,
     },
   },
+
   ///
   /// Plugins configurations
   ///
@@ -503,6 +499,7 @@
   //      },
   //    },
   //  },
+
   // /// Plugin configuration example using `__config__` property
   // plugins: {
   //   rest: {
@@ -512,4 +509,5 @@
   //     __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
   //   }
   // },
+
 }
