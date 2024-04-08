@@ -20,6 +20,3 @@
 .vscode
 
 cargo-timing*.html
-
-# Remove test data
-testsfiles
