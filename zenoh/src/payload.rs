@@ -211,6 +211,20 @@ impl From<ZBuf> for Payload {
     }
 }
 
+impl Serialize<&ZBuf> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: &ZBuf) -> Self::Output {
+        Payload::new(t.clone())
+    }
+}
+
+impl From<&ZBuf> for Payload {
+    fn from(t: &ZBuf) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
 impl Deserialize<'_, ZBuf> for ZSerde {
     type Error = Infallible;
 
@@ -242,6 +256,20 @@ impl Serialize<Vec<u8>> for ZSerde {
 
 impl From<Vec<u8>> for Payload {
     fn from(t: Vec<u8>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&Vec<u8>> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: &Vec<u8>) -> Self::Output {
+        Payload::new(t.clone())
+    }
+}
+
+impl From<&Vec<u8>> for Payload {
+    fn from(t: &Vec<u8>) -> Self {
         ZSerde.serialize(t)
     }
 }
@@ -296,6 +324,20 @@ impl From<Cow<'_, [u8]>> for Payload {
     }
 }
 
+impl<'a> Serialize<&Cow<'a, [u8]>> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: &Cow<'a, [u8]>) -> Self::Output {
+        Payload::new(t.to_vec())
+    }
+}
+
+impl From<&Cow<'_, [u8]>> for Payload {
+    fn from(t: &Cow<'_, [u8]>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
 impl<'a> Deserialize<'a, Cow<'a, [u8]>> for ZSerde {
     type Error = Infallible;
 
@@ -321,6 +363,20 @@ impl Serialize<String> for ZSerde {
 
 impl From<String> for Payload {
     fn from(t: String) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&String> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, s: &String) -> Self::Output {
+        Payload::new(s.clone().into_bytes())
+    }
+}
+
+impl From<&String> for Payload {
+    fn from(t: &String) -> Self {
         ZSerde.serialize(t)
     }
 }
@@ -380,6 +436,20 @@ impl From<Cow<'_, str>> for Payload {
     }
 }
 
+impl<'a> Serialize<&Cow<'a, str>> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, s: &Cow<'a, str>) -> Self::Output {
+        Self.serialize(s.to_string())
+    }
+}
+
+impl From<&Cow<'_, str>> for Payload {
+    fn from(t: &Cow<'_, str>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
 impl<'a> Deserialize<'a, Cow<'a, str>> for ZSerde {
     type Error = FromUtf8Error;
 
@@ -433,20 +503,6 @@ macro_rules! impl_int {
 
         impl From<&$t> for Payload {
             fn from(t: &$t) -> Self {
-                ZSerde.serialize(t)
-            }
-        }
-
-        impl Serialize<&mut $t> for ZSerde {
-            type Output = Payload;
-
-            fn serialize(self, t: &mut $t) -> Self::Output {
-                ZSerde.serialize(*t)
-            }
-        }
-
-        impl From<&mut $t> for Payload {
-            fn from(t: &mut $t) -> Self {
                 ZSerde.serialize(t)
             }
         }
@@ -522,6 +578,20 @@ impl From<bool> for Payload {
     }
 }
 
+impl Serialize<&bool> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: &bool) -> Self::Output {
+        ZSerde.serialize(*t)
+    }
+}
+
+impl From<&bool> for Payload {
+    fn from(t: &bool) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
 impl Deserialize<'_, bool> for ZSerde {
     type Error = ZDeserializeError;
 
@@ -535,6 +605,14 @@ impl Deserialize<'_, bool> for ZSerde {
     }
 }
 
+impl TryFrom<Payload> for bool {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
 impl TryFrom<&Payload> for bool {
     type Error = ZDeserializeError;
 
@@ -545,6 +623,22 @@ impl TryFrom<&Payload> for bool {
 
 // - Zenoh advanced types encoders/decoders
 // JSON
+impl Serialize<serde_json::Value> for ZSerde {
+    type Output = Result<Payload, serde_json::Error>;
+
+    fn serialize(self, t: serde_json::Value) -> Self::Output {
+        ZSerde.serialize(&t)
+    }
+}
+
+impl TryFrom<serde_json::Value> for Payload {
+    type Error = serde_json::Error;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        ZSerde.serialize(&value)
+    }
+}
+
 impl Serialize<&serde_json::Value> for ZSerde {
     type Output = Result<Payload, serde_json::Error>;
 
@@ -563,27 +657,19 @@ impl TryFrom<&serde_json::Value> for Payload {
     }
 }
 
-impl Serialize<serde_json::Value> for ZSerde {
-    type Output = Result<Payload, serde_json::Error>;
-
-    fn serialize(self, t: serde_json::Value) -> Self::Output {
-        Self.serialize(&t)
-    }
-}
-
-impl TryFrom<serde_json::Value> for Payload {
-    type Error = serde_json::Error;
-
-    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
 impl Deserialize<'_, serde_json::Value> for ZSerde {
     type Error = serde_json::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_json::Value, Self::Error> {
         serde_json::from_reader(v.reader())
+    }
+}
+
+impl TryFrom<Payload> for serde_json::Value {
+    type Error = serde_json::Error;
+
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
     }
 }
 
@@ -596,6 +682,22 @@ impl TryFrom<&Payload> for serde_json::Value {
 }
 
 // Yaml
+impl Serialize<serde_yaml::Value> for ZSerde {
+    type Output = Result<Payload, serde_yaml::Error>;
+
+    fn serialize(self, t: serde_yaml::Value) -> Self::Output {
+        Self.serialize(&t)
+    }
+}
+
+impl TryFrom<serde_yaml::Value> for Payload {
+    type Error = serde_yaml::Error;
+
+    fn try_from(value: serde_yaml::Value) -> Result<Self, Self::Error> {
+        ZSerde.serialize(value)
+    }
+}
+
 impl Serialize<&serde_yaml::Value> for ZSerde {
     type Output = Result<Payload, serde_yaml::Error>;
 
@@ -614,27 +716,19 @@ impl TryFrom<&serde_yaml::Value> for Payload {
     }
 }
 
-impl Serialize<serde_yaml::Value> for ZSerde {
-    type Output = Result<Payload, serde_yaml::Error>;
-
-    fn serialize(self, t: serde_yaml::Value) -> Self::Output {
-        Self.serialize(&t)
-    }
-}
-
-impl TryFrom<serde_yaml::Value> for Payload {
-    type Error = serde_yaml::Error;
-
-    fn try_from(value: serde_yaml::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
 impl Deserialize<'_, serde_yaml::Value> for ZSerde {
     type Error = serde_yaml::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_yaml::Value, Self::Error> {
         serde_yaml::from_reader(v.reader())
+    }
+}
+
+impl TryFrom<Payload> for serde_yaml::Value {
+    type Error = serde_yaml::Error;
+
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
     }
 }
 
@@ -647,6 +741,22 @@ impl TryFrom<&Payload> for serde_yaml::Value {
 }
 
 // CBOR
+impl Serialize<serde_cbor::Value> for ZSerde {
+    type Output = Result<Payload, serde_cbor::Error>;
+
+    fn serialize(self, t: serde_cbor::Value) -> Self::Output {
+        Self.serialize(&t)
+    }
+}
+
+impl TryFrom<serde_cbor::Value> for Payload {
+    type Error = serde_cbor::Error;
+
+    fn try_from(value: serde_cbor::Value) -> Result<Self, Self::Error> {
+        ZSerde.serialize(value)
+    }
+}
+
 impl Serialize<&serde_cbor::Value> for ZSerde {
     type Output = Result<Payload, serde_cbor::Error>;
 
@@ -665,27 +775,19 @@ impl TryFrom<&serde_cbor::Value> for Payload {
     }
 }
 
-impl Serialize<serde_cbor::Value> for ZSerde {
-    type Output = Result<Payload, serde_cbor::Error>;
-
-    fn serialize(self, t: serde_cbor::Value) -> Self::Output {
-        Self.serialize(&t)
-    }
-}
-
-impl TryFrom<serde_cbor::Value> for Payload {
-    type Error = serde_cbor::Error;
-
-    fn try_from(value: serde_cbor::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
 impl Deserialize<'_, serde_cbor::Value> for ZSerde {
     type Error = serde_cbor::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_cbor::Value, Self::Error> {
         serde_cbor::from_reader(v.reader())
+    }
+}
+
+impl TryFrom<Payload> for serde_cbor::Value {
+    type Error = serde_cbor::Error;
+
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
     }
 }
 
@@ -698,6 +800,22 @@ impl TryFrom<&Payload> for serde_cbor::Value {
 }
 
 // Pickle
+impl Serialize<serde_pickle::Value> for ZSerde {
+    type Output = Result<Payload, serde_pickle::Error>;
+
+    fn serialize(self, t: serde_pickle::Value) -> Self::Output {
+        Self.serialize(&t)
+    }
+}
+
+impl TryFrom<serde_pickle::Value> for Payload {
+    type Error = serde_pickle::Error;
+
+    fn try_from(value: serde_pickle::Value) -> Result<Self, Self::Error> {
+        ZSerde.serialize(value)
+    }
+}
+
 impl Serialize<&serde_pickle::Value> for ZSerde {
     type Output = Result<Payload, serde_pickle::Error>;
 
@@ -720,27 +838,19 @@ impl TryFrom<&serde_pickle::Value> for Payload {
     }
 }
 
-impl Serialize<serde_pickle::Value> for ZSerde {
-    type Output = Result<Payload, serde_pickle::Error>;
-
-    fn serialize(self, t: serde_pickle::Value) -> Self::Output {
-        Self.serialize(&t)
-    }
-}
-
-impl TryFrom<serde_pickle::Value> for Payload {
-    type Error = serde_pickle::Error;
-
-    fn try_from(value: serde_pickle::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
 impl Deserialize<'_, serde_pickle::Value> for ZSerde {
     type Error = serde_pickle::Error;
 
     fn deserialize(self, v: &Payload) -> Result<serde_pickle::Value, Self::Error> {
         serde_pickle::value_from_reader(v.reader(), serde_pickle::DeOptions::default())
+    }
+}
+
+impl TryFrom<Payload> for serde_pickle::Value {
+    type Error = serde_pickle::Error;
+
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
     }
 }
 
@@ -761,6 +871,12 @@ impl Serialize<Arc<SharedMemoryBuf>> for ZSerde {
         Payload::new(t)
     }
 }
+#[cfg(feature = "shared-memory")]
+impl From<Arc<SharedMemoryBuf>> for Payload {
+    fn from(t: Arc<SharedMemoryBuf>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
 
 #[cfg(feature = "shared-memory")]
 impl Serialize<Box<SharedMemoryBuf>> for ZSerde {
@@ -773,11 +889,25 @@ impl Serialize<Box<SharedMemoryBuf>> for ZSerde {
 }
 
 #[cfg(feature = "shared-memory")]
+impl From<Box<SharedMemoryBuf>> for Payload {
+    fn from(t: Box<SharedMemoryBuf>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+#[cfg(feature = "shared-memory")]
 impl Serialize<SharedMemoryBuf> for ZSerde {
     type Output = Payload;
 
     fn serialize(self, t: SharedMemoryBuf) -> Self::Output {
         Payload::new(t)
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl From<SharedMemoryBuf> for Payload {
+    fn from(t: SharedMemoryBuf) -> Self {
+        ZSerde.serialize(t)
     }
 }
 
@@ -859,7 +989,7 @@ where
     }
 }
 
-// For convenience to always convert a Value the examples
+// For convenience to always convert a Value in the examples
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringOrBase64 {
     String(String),
@@ -1000,7 +1130,9 @@ mod tests {
 
         // Iterator
         let v: [usize; 5] = [0, 1, 2, 3, 4];
+        println!("Serialize:\t{:?}", v);
         let p = Payload::from_iter(v.iter());
+        println!("Deerialize:\t{:?}", p);
         for (i, t) in p.iter::<usize>().enumerate() {
             assert_eq!(i, t);
         }
@@ -1009,10 +1141,10 @@ mod tests {
         let mut hm: HashMap<usize, usize> = HashMap::new();
         hm.insert(0, 0);
         hm.insert(1, 1);
+        println!("Serialize:\t{:?}", hm);
         let p = Payload::from_iter(hm.iter());
-        // for (i, (k, v)) in p.iter::<(usize, usize)>().enumerate() {
-        //     assert_eq!(i, k);
-        //     assert_eq!(i, v);
-        // }
+        println!("Deerialize:\t{:?}", p);
+        let o: HashMap<usize, usize> = HashMap::from_iter(p.iter());
+        assert_eq!(hm, o);
     }
 }
