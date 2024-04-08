@@ -480,7 +480,6 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
-    /// use zenoh::Session;
     ///
     /// let session = Session::leak(zenoh::open(config::peer()).res().await.unwrap());
     /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
@@ -687,7 +686,6 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session

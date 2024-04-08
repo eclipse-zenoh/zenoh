@@ -26,16 +26,16 @@
 //! Examples:
 //!
 //! ```
-//!`use zenoh::prelude::*;
+//!use zenoh::prelude::*;
 //! ```
 //! ```
-//!`use zenoh::prelude::sync::*;
+//!use zenoh::prelude::sync::*;
 //! ```
 //! ```
-//!`use zenoh::prelude::r#async::*;
+//!use zenoh::prelude::r#async::*;
 //! ```
 
-// All API types and traits in flat namespace
+// Reexport API in flat namespace
 pub(crate) mod flat {
     pub use crate::buffers::*;
     pub use crate::config::*;
@@ -59,17 +59,44 @@ pub(crate) mod flat {
     pub use crate::value::*;
 }
 
+// Reexport API in hierarchical namespace
+pub(crate) mod mods {
+    pub use crate::buffers;
+    pub use crate::config;
+    pub use crate::core;
+    pub use crate::encoding;
+    pub use crate::handlers;
+    pub use crate::key_expr;
+    pub use crate::payload;
+    pub use crate::plugins;
+    pub use crate::publication;
+    pub use crate::query;
+    pub use crate::queryable;
+    pub use crate::sample;
+    pub use crate::scouting;
+    pub use crate::selector;
+    pub use crate::session;
+    #[cfg(feature = "shared-memory")]
+    pub use crate::shm;
+    pub use crate::subscriber;
+    pub use crate::time;
+    pub use crate::value;
+}
+
 pub use crate::core::AsyncResolve;
 pub use crate::core::SyncResolve;
 pub use flat::*;
+pub use mods::*;
 
 /// Prelude to import when using Zenoh's sync API.
 pub mod sync {
     pub use super::flat::*;
+    pub use super::mods::*;
     pub use crate::core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
 pub mod r#async {
     pub use super::flat::*;
+    pub use super::mods::*;
     pub use crate::core::AsyncResolve;
 }

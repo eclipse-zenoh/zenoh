@@ -105,7 +105,9 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     ]
 );
 
+// Reexport some functions directly to root `zenoh::`` namespace for convenience
 pub use crate::api::session::open;
+pub use crate::scouting::scout;
 
 pub mod prelude;
 

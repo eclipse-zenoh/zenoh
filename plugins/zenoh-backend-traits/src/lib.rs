@@ -30,10 +30,8 @@
 //! use std::sync::Arc;
 //! use async_trait::async_trait;
 //! use zenoh::prelude::r#async::*;
-//! use zenoh::time::Timestamp;
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
-//! use zenoh::Result as ZResult;
 //!
 //! #[no_mangle]
 //! pub fn create_volume(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {

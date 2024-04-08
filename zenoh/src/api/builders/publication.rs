@@ -57,8 +57,6 @@ pub struct PublicationBuilderDelete;
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
-/// use zenoh::publication::CongestionControl;
-/// use zenoh::sample::builder::{ValueBuilderTrait, QoSBuilderTrait};
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
@@ -236,8 +234,6 @@ impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBu
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
-/// use zenoh::publication::CongestionControl;
-/// use zenoh::sample::builder::QoSBuilderTrait;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session
