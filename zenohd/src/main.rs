@@ -30,6 +30,12 @@ use url::Url;
 #[cfg(feature = "loki")]
 const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
 
+#[cfg(feature = "loki")]
+const LOKI_API_KEY_VAR: &str = "LOKI_API_KEY";
+
+#[cfg(feature = "loki")]
+const LOKI_API_KEY_HEADER_VAR: &str = "LOKI_API_KEY_HEADER";
+
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
 lazy_static::lazy_static!(
@@ -384,15 +390,26 @@ fn init_logging() -> Result<()> {
         .with(fmt_layer);
 
     #[cfg(feature = "loki")]
-    if let Some(loki_url) = get_loki_endpoint() {
-        let (loki_layer, task) = tracing_loki::builder()
-            .label("service", "zenoh")?
-            .build_url(Url::parse(&loki_url)?)?;
+    match (
+        get_loki_endpoint(),
+        get_loki_apikey(),
+        get_loki_apikey_header(),
+    ) {
+        (Some(loki_url), Some(header), Some(apikey)) => {
+            let (loki_layer, task) = tracing_loki::builder()
+                .label("service", "zenoh")?
+                .http_header(header, apikey)?
+                .build_url(Url::parse(&loki_url)?)?;
 
-        tracing_sub.with(loki_layer).init();
-        tokio::spawn(task);
-        return Ok(());
-    }
+            tracing_sub.with(loki_layer).init();
+            tokio::spawn(task);
+            return Ok(());
+        }
+        _ => {
+            tracing::warn!("Missing one of the required header for Loki!")
+        }
+    };
+
     tracing_sub.init();
     Ok(())
 }
@@ -400,6 +417,16 @@ fn init_logging() -> Result<()> {
 #[cfg(feature = "loki")]
 pub fn get_loki_endpoint() -> Option<String> {
     std::env::var(LOKI_ENDPOINT_VAR).ok()
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_apikey() -> Option<String> {
+    std::env::var(LOKI_API_KEY_VAR).ok()
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_apikey_header() -> Option<String> {
+    std::env::var(LOKI_API_KEY_HEADER_VAR).ok()
 }
 
 #[test]
