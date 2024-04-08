@@ -89,11 +89,11 @@ pub mod flag {
 /// +-+-+-+---------+
 /// ~    id:z32     ~
 /// +---------------+
-/// |A|M|N|R|T|Q|S|K|  (*)
+/// |A|M|N|R|T|Q|S|K|  if Mod!=Final (*)
 /// +---------------+
-/// ~ key_scope:z16 ~  if R==1
+/// ~ key_scope:z16 ~  if Mod!=Final && R==1
 /// +---------------+
-/// ~  key_suffix   ~  if R==1 && N==1 -- <u8;z16>
+/// ~  key_suffix   ~  if Mod!=Final && R==1 && N==1 -- <u8;z16>
 /// +---------------+
 /// ~  [int_exts]   ~  if Z==1
 /// +---------------+

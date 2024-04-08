@@ -65,9 +65,11 @@ where
 
         self.write(&mut *writer, id)?;
 
-        self.write(&mut *writer, x.options())?;
-        if let Some(we) = wire_expr.as_ref() {
-            self.write(&mut *writer, we)?;
+        if *mode != InterestMode::Final {
+            self.write(&mut *writer, x.options())?;
+            if let Some(we) = wire_expr.as_ref() {
+                self.write(&mut *writer, we)?;
+            }
         }
 
         // Extensions
@@ -122,20 +124,23 @@ where
             _ => return Err(DidntRead),
         };
 
-        let options: u8 = self.codec.read(&mut *reader)?;
-        let options = InterestOptions::from(options);
-
+        let mut options = InterestOptions::empty();
         let mut wire_expr = None;
-        if options.restricted() {
-            let ccond = Zenoh080Condition::new(options.named());
-            let mut we: WireExpr<'static> = ccond.read(&mut *reader)?;
-            we.mapping = if options.mapping() {
-                Mapping::Sender
-            } else {
-                Mapping::Receiver
-            };
-            wire_expr = Some(we);
+        if mode != InterestMode::Final {
+            let options_byte: u8 = self.codec.read(&mut *reader)?;
+            options = InterestOptions::from(options_byte);
+            if options.restricted() {
+                let ccond = Zenoh080Condition::new(options.named());
+                let mut we: WireExpr<'static> = ccond.read(&mut *reader)?;
+                we.mapping = if options.mapping() {
+                    Mapping::Sender
+                } else {
+                    Mapping::Receiver
+                };
+                wire_expr = Some(we);
+            }
         }
+
         // Extensions
         let mut ext_qos = declare::ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
