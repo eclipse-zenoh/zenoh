@@ -14,7 +14,6 @@
 use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::{BacktrackableReader, DidntRead, HasReader, Reader},
-    ZSliceMut,
 };
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
@@ -220,49 +219,6 @@ impl ZSlice {
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
         crate::unsafe_slice!(self.buf.as_slice(), self.range())
-    }
-
-    /// Borrows ZSlice as mut performing reference sharing checks.
-    /// Will return None if ZSlice data is shared and thus cannot be safely mutably accessed.
-    #[inline]
-    #[must_use]
-    pub fn try_as_mut(&mut self) -> Option<ZSliceMut<'_>> {
-        if let Some(mutable) = Arc::get_mut(&mut self.buf) {
-            #[cfg(not(feature = "shared-memory"))]
-            return Some(ZSliceMut::new(
-                mutable.as_mut_slice(),
-                &mut self.start,
-                &mut self.end,
-            ));
-
-            #[cfg(feature = "shared-memory")]
-            if let Some(mut_slice) = mutable.as_mut_slice() {
-                return Some(ZSliceMut::new(mut_slice, &mut self.start, &mut self.end));
-            }
-        }
-        None
-    }
-
-    /// # Safety
-    /// Borrows ZSlice contents as mut without reference sharing checks.
-    /// This is safe if ZSlice data is not shared or it is used in a Sync way,
-    /// ex. as Atomics.
-    /// NOTE: as long as Arc's get_mut_unchecked method is unstable, we use
-    /// get_mut(...).unwrap() combination that may panic. We'll switch to
-    /// get_mut_unchecked once available.
-    #[inline]
-    #[must_use]
-    pub unsafe fn as_mut_unchecked(&mut self) -> ZSliceMut<'_> {
-        // todo: switch to Arc::get_mut_unchecked when it gets stable
-        return Arc::get_mut(&mut self.buf)
-            .map(|val_mut| {
-                ZSliceMut::new(
-                    as_mut_slice_featureless(val_mut),
-                    &mut self.start,
-                    &mut self.end,
-                )
-            })
-            .unwrap();
     }
 
     #[must_use]
