@@ -15,11 +15,20 @@ use clap::Parser;
 use futures::future;
 use git_version::git_version;
 use std::collections::HashSet;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
 use zenoh::plugins::PluginsManager;
 use zenoh::prelude::{EndPoint, WhatAmI};
 use zenoh::runtime::{AdminSpace, Runtime};
 use zenoh::Result;
+
+#[cfg(feature = "loki")]
+use url::Url;
+
+#[cfg(feature = "loki")]
+const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -111,8 +120,7 @@ fn main() {
         .build()
         .unwrap()
         .block_on(async {
-
-        zenoh_util::init_log();
+        init_logging().unwrap();
 
         tracing::info!("zenohd {}", *LONG_VERSION);
 
@@ -360,6 +368,38 @@ fn config_from_args(args: &Args) -> Config {
     }
     tracing::debug!("Config: {:?}", &config);
     config
+}
+
+fn init_logging() -> Result<()> {
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("z=info"));
+
+    let fmt_layer = tracing_subscriber::fmt::Layer::new()
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_level(true)
+        .with_target(true);
+
+    let tracing_sub = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer);
+
+    #[cfg(feature = "loki")]
+    if let Some(loki_url) = get_loki_endpoint() {
+        let (loki_layer, task) = tracing_loki::builder()
+            .label("service", "zenoh")?
+            .build_url(Url::parse(&loki_url)?)?;
+
+        tracing_sub.with(loki_layer).init();
+        tokio::spawn(task);
+        return Ok(());
+    }
+    tracing_sub.init();
+    Ok(())
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_endpoint() -> Option<String> {
+    std::env::var(LOKI_ENDPOINT_VAR).ok()
 }
 
 #[test]
