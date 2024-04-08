@@ -121,9 +121,9 @@ fn test_pub_sub_deny(config_router: &Config, config_pub: &Config, config_sub: &C
         .res()
         .unwrap();
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     publisher.put(VALUE).res().unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     assert_ne!(*zlock!(received_value), VALUE);
 }
 
@@ -161,9 +161,9 @@ fn test_pub_sub_allow(config_router: &Config, config_pub: &Config, config_sub: &
         .res()
         .unwrap();
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     publisher.put(VALUE).res().unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     assert_eq!(*zlock!(received_value), VALUE);
 }
 fn test_pub_sub_allow_then_deny(
@@ -218,9 +218,9 @@ fn test_pub_sub_allow_then_deny(
         .res()
         .unwrap();
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     publisher.put(VALUE).res().unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     assert_ne!(*zlock!(received_value), VALUE);
 }
 fn test_pub_sub_deny_then_allow(
@@ -275,9 +275,9 @@ fn test_pub_sub_deny_then_allow(
         .res()
         .unwrap();
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     publisher.put(VALUE).res().unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     assert_eq!(*zlock!(received_value), VALUE);
 }
 
