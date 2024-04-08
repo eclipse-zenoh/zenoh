@@ -44,7 +44,6 @@ pub(crate) mod flat {
     pub use crate::handlers::*;
     pub use crate::key_expr::*;
     pub use crate::payload::*;
-    pub use crate::plugins::*;
     pub use crate::publication::*;
     pub use crate::query::*;
     pub use crate::queryable::*;
@@ -68,7 +67,6 @@ pub(crate) mod mods {
     pub use crate::handlers;
     pub use crate::key_expr;
     pub use crate::payload;
-    pub use crate::plugins;
     pub use crate::publication;
     pub use crate::query;
     pub use crate::queryable;
