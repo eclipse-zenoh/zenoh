@@ -26,6 +26,7 @@ members = [
   "commons/zenoh-result",
   "commons/zenoh-shm",
   "commons/zenoh-sync",
+  "commons/zenoh-task",
   "commons/zenoh-util",
   "commons/zenoh-runtime",
   "examples",
@@ -51,7 +52,7 @@ members = [
   "zenoh-ext",
   "zenohd",
 ]
-exclude = ["ci/nostd-check"]
+exclude = ["ci/nostd-check", "ci/valgrind-check"]
 
 [workspace.package]
 rust-version = "1.66.1"
