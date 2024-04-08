@@ -647,7 +647,6 @@ impl Drop for CallbackQueryable<'_> {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
-/// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();

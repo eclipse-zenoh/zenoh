@@ -110,7 +110,6 @@ pub(crate) struct QueryState {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
-/// use zenoh::query::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let replies = session

@@ -584,7 +584,6 @@ where
 /// # async fn main() {
 /// # use std::convert::TryFrom;
 /// use zenoh::prelude::r#async::*;
-/// use zenoh::query::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let tokens = session
