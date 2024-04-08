@@ -19,6 +19,7 @@ use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::sample::QoS;
+#[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
 use crate::Id;
 use crate::SessionRef;

@@ -90,6 +90,7 @@ serde_yaml = { workspace = true }
 socket2 = { workspace = true }
 stop-token = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
+unwrap-infallible = { workspace = true }
 uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
