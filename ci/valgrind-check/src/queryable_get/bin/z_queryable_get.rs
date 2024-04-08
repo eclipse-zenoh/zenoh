@@ -19,7 +19,6 @@ use zenoh::prelude::r#async::*;
 #[tokio::main]
 async fn main() {
     let _z = zenoh_runtime::ZRuntimePoolGuard;
-    zenoh_util::init_log();
 
     let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();
