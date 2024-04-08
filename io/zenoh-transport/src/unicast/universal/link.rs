@@ -260,7 +260,7 @@ async fn rx_task(
                 let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 #[cfg(feature = "stats")]
                 {
-                    
+
                     transport.stats.inc_rx_bytes(2 + batch.len()); // Account for the batch len encoding (16 bits)
                 }
                 transport.read_messages(batch, &l)?;
