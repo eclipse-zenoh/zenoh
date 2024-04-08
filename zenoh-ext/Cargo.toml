@@ -49,6 +49,7 @@ zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
+zenoh-task = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true, features = ["derive"] }

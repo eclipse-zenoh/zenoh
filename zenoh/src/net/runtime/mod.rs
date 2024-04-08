@@ -29,7 +29,8 @@ pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -43,6 +44,7 @@ use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use zenoh_shm::reader::SharedMemoryReader;
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TaskController;
 use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -85,7 +87,17 @@ struct RuntimeState {
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
-    token: CancellationToken,
+    task_controller: TaskController,
+}
+
+pub struct WeakRuntime {
+    state: Weak<RuntimeState>,
+}
+
+impl WeakRuntime {
+    pub fn upgrade(&self) -> Option<Runtime> {
+        self.state.upgrade().map(|state| Runtime { state })
+    }
 }
 
 #[derive(Clone)]
@@ -133,7 +145,7 @@ impl Runtime {
         let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config)?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
-            runtime: std::sync::RwLock::new(None),
+            runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
         });
 
         let transport_manager = TransportManager::builder()
@@ -166,22 +178,33 @@ impl Runtime {
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
-                token: CancellationToken::new(),
+                task_controller: TaskController::default(),
             }),
         };
-        *handler.runtime.write().unwrap() = Some(runtime.clone());
+        *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
         let receiver = config.subscribe();
+        let token = runtime.get_cancellation_token();
         runtime.spawn({
             let runtime2 = runtime.clone();
             async move {
                 let mut stream = receiver.into_stream();
-                while let Some(event) = stream.next().await {
-                    if &*event == "connect/endpoints" {
-                        if let Err(e) = runtime2.update_peers().await {
-                            log::error!("Error updating peers: {}", e);
+                loop {
+                    tokio::select! {
+                        res = stream.next() => {
+                            match res {
+                                Some(event) => {
+                                    if &*event == "connect/endpoints" {
+                                        if let Err(e) = runtime2.update_peers().await {
+                                            log::error!("Error updating peers: {}", e);
+                                        }
+                                    }
+                                },
+                                None => { break; }
+                            }
                         }
+                        _ = token.cancelled() => { break; }
                     }
                 }
             }
@@ -202,8 +225,24 @@ impl Runtime {
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
-        self.state.token.cancel();
+        self.state
+            .task_controller
+            .terminate_all(Duration::from_secs(10));
         self.manager().close().await;
+        // clean up to break cyclic reference of self.state to itself
+        self.state.transport_handlers.write().unwrap().clear();
+        // TODO: the call below is needed to prevent intermittent leak
+        // due to not freed resource Arc, that apparently happens because
+        // the task responsible for resource clean up was aborted earlier than expected.
+        // This should be resolved by identfying correspodning task, and placing
+        // cancellation token manually inside it.
+        self.router()
+            .tables
+            .tables
+            .write()
+            .unwrap()
+            .root_res
+            .close();
         Ok(())
     }
 
@@ -215,18 +254,28 @@ impl Runtime {
         self.state.locators.read().unwrap().clone()
     }
 
+    /// Spawns a task within runtime.
+    /// Upon close runtime will block until this task completes
     pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let token = self.state.token.clone();
-        zenoh_runtime::ZRuntime::Net.spawn(async move {
-            tokio::select! {
-                _ = token.cancelled() => {}
-                _ = future => {}
-            }
-        })
+        self.state
+            .task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, future)
+    }
+
+    /// Spawns a task within runtime.
+    /// Upon runtime close the task will be automatically aborted.
+    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.state
+            .task_controller
+            .spawn_abortable_with_rt(zenoh_runtime::ZRuntime::Net, future)
     }
 
     pub(crate) fn router(&self) -> Arc<Router> {
@@ -248,10 +297,20 @@ impl Runtime {
     pub fn whatami(&self) -> WhatAmI {
         self.state.whatami
     }
+
+    pub fn downgrade(this: &Runtime) -> WeakRuntime {
+        WeakRuntime {
+            state: Arc::downgrade(&this.state),
+        }
+    }
+
+    pub fn get_cancellation_token(&self) -> CancellationToken {
+        self.state.task_controller.get_cancellation_token()
+    }
 }
 
 struct RuntimeTransportEventHandler {
-    runtime: std::sync::RwLock<Option<Runtime>>,
+    runtime: std::sync::RwLock<WeakRuntime>,
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
@@ -260,7 +319,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         peer: TransportPeer,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        match zread!(self.runtime).as_ref() {
+        match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
                     zread!(runtime.state.transport_handlers)
@@ -288,7 +347,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         &self,
         transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        match zread!(self.runtime).as_ref() {
+        match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
                 let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
                     zread!(runtime.state.transport_handlers)
