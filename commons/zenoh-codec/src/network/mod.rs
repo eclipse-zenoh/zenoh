@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod declare;
+mod interest;
 mod oam;
 mod push;
 mod request;
@@ -45,6 +46,7 @@ where
             NetworkBody::Request(b) => self.write(&mut *writer, b),
             NetworkBody::Response(b) => self.write(&mut *writer, b),
             NetworkBody::ResponseFinal(b) => self.write(&mut *writer, b),
+            NetworkBody::Interest(b) => self.write(&mut *writer, b),
             NetworkBody::Declare(b) => self.write(&mut *writer, b),
             NetworkBody::OAM(b) => self.write(&mut *writer, b),
         }
@@ -89,6 +91,7 @@ where
             id::REQUEST => NetworkBody::Request(self.read(&mut *reader)?),
             id::RESPONSE => NetworkBody::Response(self.read(&mut *reader)?),
             id::RESPONSE_FINAL => NetworkBody::ResponseFinal(self.read(&mut *reader)?),
+            id::INTEREST => NetworkBody::Interest(self.read(&mut *reader)?),
             id::DECLARE => NetworkBody::Declare(self.read(&mut *reader)?),
             id::OAM => NetworkBody::OAM(self.read(&mut *reader)?),
             _ => return Err(DidntRead),

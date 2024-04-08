@@ -71,7 +71,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
-            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr, DeclareMode,
+            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
         ext,
@@ -872,7 +872,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1085,7 +1085,7 @@ impl Session {
             // };
 
             primitives.send_declare(Declare {
-                mode: DeclareMode::Push,
+                interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1142,7 +1142,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1194,7 +1194,7 @@ impl Session {
                 distance: 0,
             };
             primitives.send_declare(Declare {
-                mode: DeclareMode::Push,
+                interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1216,7 +1216,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1252,7 +1252,7 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(Declare {
-            mode: DeclareMode::Push,
+            interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1277,7 +1277,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -1944,6 +1944,9 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
 }
 
 impl Primitives for Session {
+    fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
+        trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
+    }
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
@@ -2046,8 +2049,7 @@ impl Primitives for Session {
             }
             DeclareBody::DeclareToken(_) => todo!(),
             DeclareBody::UndeclareToken(_) => todo!(),
-            DeclareBody::DeclareInterest(_) => todo!(),
-            DeclareBody::DeclareFinal(_) => todo!(),
+            DeclareBody::DeclareFinal => todo!(),
         }
     }
 
