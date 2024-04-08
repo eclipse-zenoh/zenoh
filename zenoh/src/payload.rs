@@ -80,10 +80,11 @@ impl Payload {
     }
 
     /// Get a [`PayloadReader`] implementing [`std::io::Read`] trait.
-    pub fn iter<T>(&self) -> PayloadIterator<'_, T>
+    pub fn iter<'a, T>(&'a self) -> PayloadIterator<'a, T>
     where
         T: TryFrom<Payload>,
-        ZSerde: for<'b> Deserialize<'b, T, Error = ZDeserializeError>,
+        ZSerde: Deserialize<'a, T>,
+        <ZSerde as Deserialize<'a, T>>::Error: Debug,
     {
         PayloadIterator {
             reader: self.0.reader(),
@@ -144,7 +145,8 @@ where
 
 impl<'a, T> Iterator for PayloadIterator<'a, T>
 where
-    ZSerde: for<'b> Deserialize<'b, T, Error = ZDeserializeError>,
+    ZSerde: for<'b> Deserialize<'b, T>,
+    <ZSerde as Deserialize<'a, T>>::Error: Debug,
 {
     type Item = T;
 
@@ -161,6 +163,28 @@ where
     fn size_hint(&self) -> (usize, Option<usize>) {
         let remaining = self.reader.remaining();
         (remaining, Some(remaining))
+    }
+}
+
+impl<A> FromIterator<A> for Payload
+where
+    ZSerde: Serialize<A, Output = Payload>,
+{
+    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
+        let codec = Zenoh080::new();
+        let mut buffer: ZBuf = ZBuf::empty();
+        let mut writer = buffer.writer();
+        for t in iter {
+            let tpld = ZSerde.serialize(t);
+            // SAFETY: we are serializing slices on a ZBuf, so serialization will never
+            //         fail unless we run out of memory. In that case, Rust memory allocator
+            //         will panic before the serializer has any chance to fail.
+            unsafe {
+                codec.write(&mut writer, &tpld.0).unwrap_unchecked();
+            }
+        }
+
+        Payload::new(buffer)
     }
 }
 
@@ -786,6 +810,16 @@ where
     }
 }
 
+impl<A, B> From<(A, B)> for Payload
+where
+    A: Into<Payload>,
+    B: Into<Payload>,
+{
+    fn from(value: (A, B)) -> Self {
+        ZSerde.serialize(value)
+    }
+}
+
 impl<'a, A, B> Deserialize<'a, (A, B)> for ZSerde
 where
     A: TryFrom<Payload>,
@@ -811,31 +845,19 @@ where
     }
 }
 
-// Iterator
-// impl<I, T> Serialize<I> for ZSerde
-// where
-//     I: Iterator<Item = T>,
-//     T: Into<Payload>,
-// {
-//     type Output = Payload;
+impl<A, B> TryFrom<Payload> for (A, B)
+where
+    A: TryFrom<Payload>,
+    <A as TryFrom<Payload>>::Error: Debug,
+    B: TryFrom<Payload>,
+    <B as TryFrom<Payload>>::Error: Debug,
+{
+    type Error = ZError;
 
-//     fn serialize(self, iter: I) -> Self::Output {
-//         let codec = Zenoh080::new();
-//         let mut buffer: ZBuf = ZBuf::empty();
-//         let mut writer = buffer.writer();
-//         for t in iter {
-//             let tpld: Payload = t.into();
-//             // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-//             //         fail unless we run out of memory. In that case, Rust memory allocator
-//             //         will panic before the serializer has any chance to fail.
-//             unsafe {
-//                 codec.write(&mut writer, &tpld.0).unwrap_unchecked();
-//             }
-//         }
-
-//         Payload::new(buffer)
-//     }
-// }
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
 
 // For convenience to always convert a Value the examples
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -977,729 +999,20 @@ mod tests {
         serialize_deserialize!((String, String), (String::from("a"), String::from("b")));
 
         // Iterator
-        // let mut hm = Vec::new();
-        // hm.push(0);
-        // hm.push(1);
-        // Payload::serialize(hm.iter());
+        let v: [usize; 5] = [0, 1, 2, 3, 4];
+        let p = Payload::from_iter(v.iter());
+        for (i, t) in p.iter::<usize>().enumerate() {
+            assert_eq!(i, t);
+        }
 
-        // let mut hm = HashMap::new();
-        // hm.insert(0, 0);
-        // hm.insert(1, 1);
-        // Payload::serialize(hm.iter().map(|(k, v)| (k, v)));
-        // for (k, v) in sample.payload().iter::<(String, serde_json::Value)>() {}
+        use std::collections::HashMap;
+        let mut hm: HashMap<usize, usize> = HashMap::new();
+        hm.insert(0, 0);
+        hm.insert(1, 1);
+        let p = Payload::from_iter(hm.iter());
+        // for (i, (k, v)) in p.iter::<(usize, usize)>().enumerate() {
+        //     assert_eq!(i, k);
+        //     assert_eq!(i, v);
+        // }
     }
 }
-
-// macro_rules! impl_iterator_inner {
-//     ($iter:expr) => {{
-//         let codec = Zenoh080::new();
-//         let mut buffer: ZBuf = ZBuf::empty();
-//         let mut writer = buffer.writer();
-//         for t in $iter {
-//             let tpld = ZSerde.serialize(t);
-//             // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-//             //         fail unless we run out of memory. In that case, Rust memory allocator
-//             //         will panic before the serializer has any chance to fail.
-//             unsafe {
-//                 codec.write(&mut writer, &tpld.0).unwrap_unchecked();
-//             }
-//         }
-
-//         Payload::new(buffer)
-//     }};
-// }
-
-// impl<'a> Serialize<std::slice::Iter<'_, i32>> for ZSerde {
-//     type Output = Payload;
-
-//     fn serialize(self, iter: std::slice::Iter<'_, i32>) -> Self::Output {
-//         impl_iterator_inner!(iter)
-//     }
-// }
-
-// impl<'a> Serialize<std::slice::IterMut<'_, i32>> for ZSerde {
-//     type Output = Payload;
-
-//     fn serialize(self, iter: std::slice::IterMut<'_, i32>) -> Self::Output {
-//         impl_iterator_inner!(iter)
-//     }
-// }
-
-// impl Serialize<&mut dyn Iterator<Item = (&i32, &i32)>> for ZSerde {
-//     type Output = Payload;
-
-//     fn serialize(self, iter: &mut dyn Iterator<Item = (&i32, &i32)>) -> Self::Output {
-//         let codec = Zenoh080::new();
-//         let mut buffer: ZBuf = ZBuf::empty();
-//         let mut writer = buffer.writer();
-//         for t in iter {
-//             let tpld = ZSerde.serialize(t);
-//             // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-//             //         fail unless we run out of memory. In that case, Rust memory allocator
-//             //         will panic before the serializer has any chance to fail.
-//             unsafe {
-//                 codec.write(&mut writer, &tpld.0).unwrap_unchecked();
-//             }
-//         }
-
-//         Payload::new(buffer)
-//     }
-// }
-
-// impl<A, B> Serialize<(A, B)> for ZSerde
-// where
-//     ZSerde: Serialize<A, Output = Payload>,
-//     ZSerde: Serialize<B, Output = Payload>,
-// {
-//     type Output = Payload;
-
-//     fn serialize(self, t: (A, B)) -> Self::Output {
-//         let (a, b) = t;
-
-//         let codec = Zenoh080::new();
-//         let mut buffer: ZBuf = ZBuf::empty();
-//         let mut writer = buffer.writer();
-//         let apld = Payload::serialize::<A>(a);
-//         let bpld = Payload::serialize::<B>(b);
-
-//         // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-//         //         fail unless we run out of memory. In that case, Rust memory allocator
-//         //         will panic before the serializer has any chance to fail.
-//         unsafe {
-//             codec.write(&mut writer, &apld.0).unwrap_unchecked();
-//             codec.write(&mut writer, &bpld.0).unwrap_unchecked();
-//         }
-
-//         Payload::new(buffer)
-//     }
-// }
-
-// impl<'a, A, B> Deserialize<'a, (A, B)> for ZSerde
-// where
-//     A: TryFrom<Payload>,
-//     ZSerde: Deserialize<'a, A>,
-//     <ZSerde as Deserialize<'a, A>>::Error: Debug,
-//     B: TryFrom<Payload>,
-//     ZSerde: Deserialize<'a, B>,
-//     <ZSerde as Deserialize<'a, B>>::Error: Debug,
-// {
-//     type Error = ZError;
-
-//     fn deserialize(self, payload: &'a Payload) -> Result<(A, B), Self::Error> {
-//         let codec = Zenoh080::new();
-//         let mut reader = payload.0.reader();
-
-//         let abuf: ZBuf = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
-//         let apld = Payload::new(abuf);
-
-//         let bbuf: ZBuf = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
-//         let bpld = Payload::new(bbuf);
-
-//         let a = A::try_from(apld).map_err(|e| zerror!("{:?}", e))?;
-//         let b = B::try_from(bpld).map_err(|e| zerror!("{:?}", e))?;
-//         Ok((a, b))
-//     }
-// }
-
-// impl<T> Serialize<&mut dyn Iterator<Item = T>> for ZSerde
-// where
-//     ZSerde: Serialize<T, Output = Payload>,
-// {
-//     type Output = Payload;
-
-//     fn serialize(self, iter: &mut dyn Iterator<Item = T>) -> Self::Output {
-//         let codec = Zenoh080::new();
-//         let mut buffer: ZBuf = ZBuf::empty();
-//         let mut writer = buffer.writer();
-//         for t in iter {
-//             let tpld = ZSerde.serialize(t);
-//             // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-//             //         fail unless we run out of memory. In that case, Rust memory allocator
-//             //         will panic before the serializer has any chance to fail.
-//             unsafe {
-//                 codec.write(&mut writer, &tpld.0).unwrap_unchecked();
-//             }
-//         }
-
-//         Payload::new(buffer)
-//     }
-// }
-
-// Iterator
-// macro_rules! impl_iterator_serialize {
-//     ($a:ty) => {
-//         impl Serialize<&mut dyn Iterator<Item = $a>> for ZSerde
-//         {
-//             type Output = Payload;
-
-//             fn serialize(self, iter: &mut dyn Iterator<Item = $a>) -> Self::Output {
-//                 let codec = Zenoh080::new();
-//                 let mut buffer: ZBuf = ZBuf::empty();
-//                 let mut writer = buffer.writer();
-//                 for t in iter {
-//                     let tpld = ZSerde.serialize(t);
-//                     // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-//                     //         fail unless we run out of memory. In that case, Rust memory allocator
-//                     //         will panic before the serializer has any chance to fail.
-//                     unsafe {
-//                         codec.write(&mut writer, &tpld.0).unwrap_unchecked();
-//                     }
-//                 }
-
-//                 Payload::new(buffer)
-//             }
-//         }
-//     };
-// }
-
-// Tuples
-// macro_rules! impl_tuple_serialize {
-//     ($a:ty, $b:ty) => {
-//         impl Serialize<($a, $b)> for ZSerde
-//         {
-//             type Output = Payload;
-
-//             fn serialize(self, t: ($a, $b)) -> Self::Output {
-//                 let (a, b) = t;
-
-//                 let codec = Zenoh080::new();
-//                 let mut buffer: ZBuf = ZBuf::empty();
-//                 let mut writer = buffer.writer();
-//                 let apld = Payload::serialize::<$a>(a);
-//                 let bpld = Payload::serialize::<$b>(b);
-
-//                 // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-//                 //         fail unless we run out of memory. In that case, Rust memory allocator
-//                 //         will panic before the serializer has any chance to fail.
-//                 unsafe {
-//                     codec.write(&mut writer, &apld.0).unwrap_unchecked();
-//                     codec.write(&mut writer, &bpld.0).unwrap_unchecked();
-//                 }
-
-//                 Payload::new(buffer)
-//             }
-//         }
-//     }
-
-// }
-
-// macro_rules! impl_tuple_deserialize {
-//     ($a:ty, $b:ty) => {
-//         impl<'a> Deserialize<'a, ($a, $b)> for ZSerde {
-//             type Error = ZError;
-
-//             fn deserialize(self, payload: &'a Payload) -> Result<($a, $b), Self::Error> {
-//                 let codec = Zenoh080::new();
-//                 let mut reader = payload.0.reader();
-
-//                 let abuf: ZBuf = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
-//                 let apld = Payload::new(abuf);
-
-//                 let bbuf: ZBuf = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
-//                 let bpld = Payload::new(bbuf);
-
-//                 let a = apld.deserialize::<$a>().map_err(|e| zerror!("{:?}", e))?;
-//                 let b = bpld.deserialize::<$b>().map_err(|e| zerror!("{:?}", e))?;
-//                 Ok((a, b))
-//             }
-//         }
-//     };
-// }
-
-// impl_tuple_serialize!(u8, u8);
-// impl_tuple_deserialize!(u8, u8);
-// impl_tuple_serialize!(u8, u16);
-// impl_tuple_deserialize!(u8, u16);
-// impl_tuple_serialize!(u8, u32);
-// impl_tuple_deserialize!(u8, u32);
-// impl_tuple_serialize!(u8, u64);
-// impl_tuple_deserialize!(u8, u64);
-// impl_tuple_serialize!(u8, usize);
-// impl_tuple_deserialize!(u8, usize);
-// impl_tuple_serialize!(u8, i8);
-// impl_tuple_deserialize!(u8, i8);
-// impl_tuple_serialize!(u8, i16);
-// impl_tuple_deserialize!(u8, i16);
-// impl_tuple_serialize!(u8, i32);
-// impl_tuple_deserialize!(u8, i32);
-// impl_tuple_serialize!(u8, isize);
-// impl_tuple_deserialize!(u8, isize);
-// impl_tuple_serialize!(u8, f32);
-// impl_tuple_deserialize!(u8, f32);
-// impl_tuple_serialize!(u8, f64);
-// impl_tuple_deserialize!(u8, f64);
-// impl_tuple_serialize!(u8, bool);
-// impl_tuple_deserialize!(u8, bool);
-// impl_tuple_serialize!(u8, ZBuf);
-// impl_tuple_deserialize!(u8, ZBuf);
-// impl_tuple_serialize!(u8, Vec<u8>);
-// impl_tuple_deserialize!(u8, Vec<u8>);
-// impl_tuple_serialize!(u8, String);
-// impl_tuple_deserialize!(u8, String);
-// impl_tuple_serialize!(u8, &[u8]);
-// impl_tuple_serialize!(u16, u8);
-// impl_tuple_deserialize!(u16, u8);
-// impl_tuple_serialize!(u16, u16);
-// impl_tuple_deserialize!(u16, u16);
-// impl_tuple_serialize!(u16, u32);
-// impl_tuple_deserialize!(u16, u32);
-// impl_tuple_serialize!(u16, u64);
-// impl_tuple_deserialize!(u16, u64);
-// impl_tuple_serialize!(u16, usize);
-// impl_tuple_deserialize!(u16, usize);
-// impl_tuple_serialize!(u16, i8);
-// impl_tuple_deserialize!(u16, i8);
-// impl_tuple_serialize!(u16, i16);
-// impl_tuple_deserialize!(u16, i16);
-// impl_tuple_serialize!(u16, i32);
-// impl_tuple_deserialize!(u16, i32);
-// impl_tuple_serialize!(u16, isize);
-// impl_tuple_deserialize!(u16, isize);
-// impl_tuple_serialize!(u16, f32);
-// impl_tuple_deserialize!(u16, f32);
-// impl_tuple_serialize!(u16, f64);
-// impl_tuple_deserialize!(u16, f64);
-// impl_tuple_serialize!(u16, bool);
-// impl_tuple_deserialize!(u16, bool);
-// impl_tuple_serialize!(u16, ZBuf);
-// impl_tuple_deserialize!(u16, ZBuf);
-// impl_tuple_serialize!(u16, Vec<u8>);
-// impl_tuple_deserialize!(u16, Vec<u8>);
-// impl_tuple_serialize!(u16, String);
-// impl_tuple_deserialize!(u16, String);
-// impl_tuple_serialize!(u16, &[u8]);
-// impl_tuple_serialize!(u32, u8);
-// impl_tuple_deserialize!(u32, u8);
-// impl_tuple_serialize!(u32, u16);
-// impl_tuple_deserialize!(u32, u16);
-// impl_tuple_serialize!(u32, u32);
-// impl_tuple_deserialize!(u32, u32);
-// impl_tuple_serialize!(u32, u64);
-// impl_tuple_deserialize!(u32, u64);
-// impl_tuple_serialize!(u32, usize);
-// impl_tuple_deserialize!(u32, usize);
-// impl_tuple_serialize!(u32, i8);
-// impl_tuple_deserialize!(u32, i8);
-// impl_tuple_serialize!(u32, i16);
-// impl_tuple_deserialize!(u32, i16);
-// impl_tuple_serialize!(u32, i32);
-// impl_tuple_deserialize!(u32, i32);
-// impl_tuple_serialize!(u32, isize);
-// impl_tuple_deserialize!(u32, isize);
-// impl_tuple_serialize!(u32, f32);
-// impl_tuple_deserialize!(u32, f32);
-// impl_tuple_serialize!(u32, f64);
-// impl_tuple_deserialize!(u32, f64);
-// impl_tuple_serialize!(u32, bool);
-// impl_tuple_deserialize!(u32, bool);
-// impl_tuple_serialize!(u32, ZBuf);
-// impl_tuple_deserialize!(u32, ZBuf);
-// impl_tuple_serialize!(u32, Vec<u8>);
-// impl_tuple_deserialize!(u32, Vec<u8>);
-// impl_tuple_serialize!(u32, String);
-// impl_tuple_deserialize!(u32, String);
-// impl_tuple_serialize!(u32, &[u8]);
-// impl_tuple_serialize!(u64, u8);
-// impl_tuple_deserialize!(u64, u8);
-// impl_tuple_serialize!(u64, u16);
-// impl_tuple_deserialize!(u64, u16);
-// impl_tuple_serialize!(u64, u32);
-// impl_tuple_deserialize!(u64, u32);
-// impl_tuple_serialize!(u64, u64);
-// impl_tuple_deserialize!(u64, u64);
-// impl_tuple_serialize!(u64, usize);
-// impl_tuple_deserialize!(u64, usize);
-// impl_tuple_serialize!(u64, i8);
-// impl_tuple_deserialize!(u64, i8);
-// impl_tuple_serialize!(u64, i16);
-// impl_tuple_deserialize!(u64, i16);
-// impl_tuple_serialize!(u64, i32);
-// impl_tuple_deserialize!(u64, i32);
-// impl_tuple_serialize!(u64, isize);
-// impl_tuple_deserialize!(u64, isize);
-// impl_tuple_serialize!(u64, f32);
-// impl_tuple_deserialize!(u64, f32);
-// impl_tuple_serialize!(u64, f64);
-// impl_tuple_deserialize!(u64, f64);
-// impl_tuple_serialize!(u64, bool);
-// impl_tuple_deserialize!(u64, bool);
-// impl_tuple_serialize!(u64, ZBuf);
-// impl_tuple_deserialize!(u64, ZBuf);
-// impl_tuple_serialize!(u64, Vec<u8>);
-// impl_tuple_deserialize!(u64, Vec<u8>);
-// impl_tuple_serialize!(u64, String);
-// impl_tuple_deserialize!(u64, String);
-// impl_tuple_serialize!(u64, &[u8]);
-// impl_tuple_serialize!(usize, u8);
-// impl_tuple_deserialize!(usize, u8);
-// impl_tuple_serialize!(usize, u16);
-// impl_tuple_deserialize!(usize, u16);
-// impl_tuple_serialize!(usize, u32);
-// impl_tuple_deserialize!(usize, u32);
-// impl_tuple_serialize!(usize, u64);
-// impl_tuple_deserialize!(usize, u64);
-// impl_tuple_serialize!(usize, usize);
-// impl_tuple_deserialize!(usize, usize);
-// impl_tuple_serialize!(usize, i8);
-// impl_tuple_deserialize!(usize, i8);
-// impl_tuple_serialize!(usize, i16);
-// impl_tuple_deserialize!(usize, i16);
-// impl_tuple_serialize!(usize, i32);
-// impl_tuple_deserialize!(usize, i32);
-// impl_tuple_serialize!(usize, isize);
-// impl_tuple_deserialize!(usize, isize);
-// impl_tuple_serialize!(usize, f32);
-// impl_tuple_deserialize!(usize, f32);
-// impl_tuple_serialize!(usize, f64);
-// impl_tuple_deserialize!(usize, f64);
-// impl_tuple_serialize!(usize, bool);
-// impl_tuple_deserialize!(usize, bool);
-// impl_tuple_serialize!(usize, ZBuf);
-// impl_tuple_deserialize!(usize, ZBuf);
-// impl_tuple_serialize!(usize, Vec<u8>);
-// impl_tuple_deserialize!(usize, Vec<u8>);
-// impl_tuple_serialize!(usize, String);
-// impl_tuple_deserialize!(usize, String);
-// impl_tuple_serialize!(usize, &[u8]);
-// impl_tuple_serialize!(i8, u8);
-// impl_tuple_deserialize!(i8, u8);
-// impl_tuple_serialize!(i8, u16);
-// impl_tuple_deserialize!(i8, u16);
-// impl_tuple_serialize!(i8, u32);
-// impl_tuple_deserialize!(i8, u32);
-// impl_tuple_serialize!(i8, u64);
-// impl_tuple_deserialize!(i8, u64);
-// impl_tuple_serialize!(i8, usize);
-// impl_tuple_deserialize!(i8, usize);
-// impl_tuple_serialize!(i8, i8);
-// impl_tuple_deserialize!(i8, i8);
-// impl_tuple_serialize!(i8, i16);
-// impl_tuple_deserialize!(i8, i16);
-// impl_tuple_serialize!(i8, i32);
-// impl_tuple_deserialize!(i8, i32);
-// impl_tuple_serialize!(i8, isize);
-// impl_tuple_deserialize!(i8, isize);
-// impl_tuple_serialize!(i8, f32);
-// impl_tuple_deserialize!(i8, f32);
-// impl_tuple_serialize!(i8, f64);
-// impl_tuple_deserialize!(i8, f64);
-// impl_tuple_serialize!(i8, bool);
-// impl_tuple_deserialize!(i8, bool);
-// impl_tuple_serialize!(i8, ZBuf);
-// impl_tuple_deserialize!(i8, ZBuf);
-// impl_tuple_serialize!(i8, Vec<u8>);
-// impl_tuple_deserialize!(i8, Vec<u8>);
-// impl_tuple_serialize!(i8, String);
-// impl_tuple_deserialize!(i8, String);
-// impl_tuple_serialize!(i8, &[u8]);
-// impl_tuple_serialize!(i16, u8);
-// impl_tuple_deserialize!(i16, u8);
-// impl_tuple_serialize!(i16, u16);
-// impl_tuple_deserialize!(i16, u16);
-// impl_tuple_serialize!(i16, u32);
-// impl_tuple_deserialize!(i16, u32);
-// impl_tuple_serialize!(i16, u64);
-// impl_tuple_deserialize!(i16, u64);
-// impl_tuple_serialize!(i16, usize);
-// impl_tuple_deserialize!(i16, usize);
-// impl_tuple_serialize!(i16, i8);
-// impl_tuple_deserialize!(i16, i8);
-// impl_tuple_serialize!(i16, i16);
-// impl_tuple_deserialize!(i16, i16);
-// impl_tuple_serialize!(i16, i32);
-// impl_tuple_deserialize!(i16, i32);
-// impl_tuple_serialize!(i16, isize);
-// impl_tuple_deserialize!(i16, isize);
-// impl_tuple_serialize!(i16, f32);
-// impl_tuple_deserialize!(i16, f32);
-// impl_tuple_serialize!(i16, f64);
-// impl_tuple_deserialize!(i16, f64);
-// impl_tuple_serialize!(i16, bool);
-// impl_tuple_deserialize!(i16, bool);
-// impl_tuple_serialize!(i16, ZBuf);
-// impl_tuple_deserialize!(i16, ZBuf);
-// impl_tuple_serialize!(i16, Vec<u8>);
-// impl_tuple_deserialize!(i16, Vec<u8>);
-// impl_tuple_serialize!(i16, String);
-// impl_tuple_deserialize!(i16, String);
-// impl_tuple_serialize!(i16, &[u8]);
-// impl_tuple_serialize!(i32, u8);
-// impl_tuple_deserialize!(i32, u8);
-// impl_tuple_serialize!(i32, u16);
-// impl_tuple_deserialize!(i32, u16);
-// impl_tuple_serialize!(i32, u32);
-// impl_tuple_deserialize!(i32, u32);
-// impl_tuple_serialize!(i32, u64);
-// impl_tuple_deserialize!(i32, u64);
-// impl_tuple_serialize!(i32, usize);
-// impl_tuple_deserialize!(i32, usize);
-// impl_tuple_serialize!(i32, i8);
-// impl_tuple_deserialize!(i32, i8);
-// impl_tuple_serialize!(i32, i16);
-// impl_tuple_deserialize!(i32, i16);
-// impl_tuple_serialize!(i32, i32);
-// impl_tuple_deserialize!(i32, i32);
-// impl_tuple_serialize!(i32, isize);
-// impl_tuple_deserialize!(i32, isize);
-// impl_tuple_serialize!(i32, f32);
-// impl_tuple_deserialize!(i32, f32);
-// impl_tuple_serialize!(i32, f64);
-// impl_tuple_deserialize!(i32, f64);
-// impl_tuple_serialize!(i32, bool);
-// impl_tuple_deserialize!(i32, bool);
-// impl_tuple_serialize!(i32, ZBuf);
-// impl_tuple_deserialize!(i32, ZBuf);
-// impl_tuple_serialize!(i32, Vec<u8>);
-// impl_tuple_deserialize!(i32, Vec<u8>);
-// impl_tuple_serialize!(i32, String);
-// impl_tuple_deserialize!(i32, String);
-// impl_tuple_serialize!(i32, &[u8]);
-// impl_tuple_serialize!(isize, u8);
-// impl_tuple_deserialize!(isize, u8);
-// impl_tuple_serialize!(isize, u16);
-// impl_tuple_deserialize!(isize, u16);
-// impl_tuple_serialize!(isize, u32);
-// impl_tuple_deserialize!(isize, u32);
-// impl_tuple_serialize!(isize, u64);
-// impl_tuple_deserialize!(isize, u64);
-// impl_tuple_serialize!(isize, usize);
-// impl_tuple_deserialize!(isize, usize);
-// impl_tuple_serialize!(isize, i8);
-// impl_tuple_deserialize!(isize, i8);
-// impl_tuple_serialize!(isize, i16);
-// impl_tuple_deserialize!(isize, i16);
-// impl_tuple_serialize!(isize, i32);
-// impl_tuple_deserialize!(isize, i32);
-// impl_tuple_serialize!(isize, isize);
-// impl_tuple_deserialize!(isize, isize);
-// impl_tuple_serialize!(isize, f32);
-// impl_tuple_deserialize!(isize, f32);
-// impl_tuple_serialize!(isize, f64);
-// impl_tuple_deserialize!(isize, f64);
-// impl_tuple_serialize!(isize, bool);
-// impl_tuple_deserialize!(isize, bool);
-// impl_tuple_serialize!(isize, ZBuf);
-// impl_tuple_deserialize!(isize, ZBuf);
-// impl_tuple_serialize!(isize, Vec<u8>);
-// impl_tuple_deserialize!(isize, Vec<u8>);
-// impl_tuple_serialize!(isize, String);
-// impl_tuple_deserialize!(isize, String);
-// impl_tuple_serialize!(isize, &[u8]);
-// impl_tuple_serialize!(f32, u8);
-// impl_tuple_deserialize!(f32, u8);
-// impl_tuple_serialize!(f32, u16);
-// impl_tuple_deserialize!(f32, u16);
-// impl_tuple_serialize!(f32, u32);
-// impl_tuple_deserialize!(f32, u32);
-// impl_tuple_serialize!(f32, u64);
-// impl_tuple_deserialize!(f32, u64);
-// impl_tuple_serialize!(f32, usize);
-// impl_tuple_deserialize!(f32, usize);
-// impl_tuple_serialize!(f32, i8);
-// impl_tuple_deserialize!(f32, i8);
-// impl_tuple_serialize!(f32, i16);
-// impl_tuple_deserialize!(f32, i16);
-// impl_tuple_serialize!(f32, i32);
-// impl_tuple_deserialize!(f32, i32);
-// impl_tuple_serialize!(f32, isize);
-// impl_tuple_deserialize!(f32, isize);
-// impl_tuple_serialize!(f32, f32);
-// impl_tuple_deserialize!(f32, f32);
-// impl_tuple_serialize!(f32, f64);
-// impl_tuple_deserialize!(f32, f64);
-// impl_tuple_serialize!(f32, bool);
-// impl_tuple_deserialize!(f32, bool);
-// impl_tuple_serialize!(f32, ZBuf);
-// impl_tuple_deserialize!(f32, ZBuf);
-// impl_tuple_serialize!(f32, Vec<u8>);
-// impl_tuple_deserialize!(f32, Vec<u8>);
-// impl_tuple_serialize!(f32, String);
-// impl_tuple_deserialize!(f32, String);
-// impl_tuple_serialize!(f32, &[u8]);
-// impl_tuple_serialize!(f64, u8);
-// impl_tuple_deserialize!(f64, u8);
-// impl_tuple_serialize!(f64, u16);
-// impl_tuple_deserialize!(f64, u16);
-// impl_tuple_serialize!(f64, u32);
-// impl_tuple_deserialize!(f64, u32);
-// impl_tuple_serialize!(f64, u64);
-// impl_tuple_deserialize!(f64, u64);
-// impl_tuple_serialize!(f64, usize);
-// impl_tuple_deserialize!(f64, usize);
-// impl_tuple_serialize!(f64, i8);
-// impl_tuple_deserialize!(f64, i8);
-// impl_tuple_serialize!(f64, i16);
-// impl_tuple_deserialize!(f64, i16);
-// impl_tuple_serialize!(f64, i32);
-// impl_tuple_deserialize!(f64, i32);
-// impl_tuple_serialize!(f64, isize);
-// impl_tuple_deserialize!(f64, isize);
-// impl_tuple_serialize!(f64, f32);
-// impl_tuple_deserialize!(f64, f32);
-// impl_tuple_serialize!(f64, f64);
-// impl_tuple_deserialize!(f64, f64);
-// impl_tuple_serialize!(f64, bool);
-// impl_tuple_deserialize!(f64, bool);
-// impl_tuple_serialize!(f64, ZBuf);
-// impl_tuple_deserialize!(f64, ZBuf);
-// impl_tuple_serialize!(f64, Vec<u8>);
-// impl_tuple_deserialize!(f64, Vec<u8>);
-// impl_tuple_serialize!(f64, String);
-// impl_tuple_deserialize!(f64, String);
-// impl_tuple_serialize!(f64, &[u8]);
-// impl_tuple_serialize!(bool, u8);
-// impl_tuple_deserialize!(bool, u8);
-// impl_tuple_serialize!(bool, u16);
-// impl_tuple_deserialize!(bool, u16);
-// impl_tuple_serialize!(bool, u32);
-// impl_tuple_deserialize!(bool, u32);
-// impl_tuple_serialize!(bool, u64);
-// impl_tuple_deserialize!(bool, u64);
-// impl_tuple_serialize!(bool, usize);
-// impl_tuple_deserialize!(bool, usize);
-// impl_tuple_serialize!(bool, i8);
-// impl_tuple_deserialize!(bool, i8);
-// impl_tuple_serialize!(bool, i16);
-// impl_tuple_deserialize!(bool, i16);
-// impl_tuple_serialize!(bool, i32);
-// impl_tuple_deserialize!(bool, i32);
-// impl_tuple_serialize!(bool, isize);
-// impl_tuple_deserialize!(bool, isize);
-// impl_tuple_serialize!(bool, f32);
-// impl_tuple_deserialize!(bool, f32);
-// impl_tuple_serialize!(bool, f64);
-// impl_tuple_deserialize!(bool, f64);
-// impl_tuple_serialize!(bool, bool);
-// impl_tuple_deserialize!(bool, bool);
-// impl_tuple_serialize!(bool, ZBuf);
-// impl_tuple_deserialize!(bool, ZBuf);
-// impl_tuple_serialize!(bool, Vec<u8>);
-// impl_tuple_deserialize!(bool, Vec<u8>);
-// impl_tuple_serialize!(bool, String);
-// impl_tuple_deserialize!(bool, String);
-// impl_tuple_serialize!(bool, &[u8]);
-// impl_tuple_serialize!(ZBuf, u8);
-// impl_tuple_deserialize!(ZBuf, u8);
-// impl_tuple_serialize!(ZBuf, u16);
-// impl_tuple_deserialize!(ZBuf, u16);
-// impl_tuple_serialize!(ZBuf, u32);
-// impl_tuple_deserialize!(ZBuf, u32);
-// impl_tuple_serialize!(ZBuf, u64);
-// impl_tuple_deserialize!(ZBuf, u64);
-// impl_tuple_serialize!(ZBuf, usize);
-// impl_tuple_deserialize!(ZBuf, usize);
-// impl_tuple_serialize!(ZBuf, i8);
-// impl_tuple_deserialize!(ZBuf, i8);
-// impl_tuple_serialize!(ZBuf, i16);
-// impl_tuple_deserialize!(ZBuf, i16);
-// impl_tuple_serialize!(ZBuf, i32);
-// impl_tuple_deserialize!(ZBuf, i32);
-// impl_tuple_serialize!(ZBuf, isize);
-// impl_tuple_deserialize!(ZBuf, isize);
-// impl_tuple_serialize!(ZBuf, f32);
-// impl_tuple_deserialize!(ZBuf, f32);
-// impl_tuple_serialize!(ZBuf, f64);
-// impl_tuple_deserialize!(ZBuf, f64);
-// impl_tuple_serialize!(ZBuf, bool);
-// impl_tuple_deserialize!(ZBuf, bool);
-// impl_tuple_serialize!(ZBuf, ZBuf);
-// impl_tuple_deserialize!(ZBuf, ZBuf);
-// impl_tuple_serialize!(ZBuf, Vec<u8>);
-// impl_tuple_deserialize!(ZBuf, Vec<u8>);
-// impl_tuple_serialize!(ZBuf, String);
-// impl_tuple_deserialize!(ZBuf, String);
-// impl_tuple_serialize!(ZBuf, &[u8]);
-// impl_tuple_serialize!(Vec<u8>, u8);
-// impl_tuple_deserialize!(Vec<u8>, u8);
-// impl_tuple_serialize!(Vec<u8>, u16);
-// impl_tuple_deserialize!(Vec<u8>, u16);
-// impl_tuple_serialize!(Vec<u8>, u32);
-// impl_tuple_deserialize!(Vec<u8>, u32);
-// impl_tuple_serialize!(Vec<u8>, u64);
-// impl_tuple_deserialize!(Vec<u8>, u64);
-// impl_tuple_serialize!(Vec<u8>, usize);
-// impl_tuple_deserialize!(Vec<u8>, usize);
-// impl_tuple_serialize!(Vec<u8>, i8);
-// impl_tuple_deserialize!(Vec<u8>, i8);
-// impl_tuple_serialize!(Vec<u8>, i16);
-// impl_tuple_deserialize!(Vec<u8>, i16);
-// impl_tuple_serialize!(Vec<u8>, i32);
-// impl_tuple_deserialize!(Vec<u8>, i32);
-// impl_tuple_serialize!(Vec<u8>, isize);
-// impl_tuple_deserialize!(Vec<u8>, isize);
-// impl_tuple_serialize!(Vec<u8>, f32);
-// impl_tuple_deserialize!(Vec<u8>, f32);
-// impl_tuple_serialize!(Vec<u8>, f64);
-// impl_tuple_deserialize!(Vec<u8>, f64);
-// impl_tuple_serialize!(Vec<u8>, bool);
-// impl_tuple_deserialize!(Vec<u8>, bool);
-// impl_tuple_serialize!(Vec<u8>, ZBuf);
-// impl_tuple_deserialize!(Vec<u8>, ZBuf);
-// impl_tuple_serialize!(Vec<u8>, Vec<u8>);
-// impl_tuple_deserialize!(Vec<u8>, Vec<u8>);
-// impl_tuple_serialize!(Vec<u8>, String);
-// impl_tuple_deserialize!(Vec<u8>, String);
-// impl_tuple_serialize!(Vec<u8>, &[u8]);
-// impl_tuple_serialize!(String, u8);
-// impl_tuple_deserialize!(String, u8);
-// impl_tuple_serialize!(String, u16);
-// impl_tuple_deserialize!(String, u16);
-// impl_tuple_serialize!(String, u32);
-// impl_tuple_deserialize!(String, u32);
-// impl_tuple_serialize!(String, u64);
-// impl_tuple_deserialize!(String, u64);
-// impl_tuple_serialize!(String, usize);
-// impl_tuple_deserialize!(String, usize);
-// impl_tuple_serialize!(String, i8);
-// impl_tuple_deserialize!(String, i8);
-// impl_tuple_serialize!(String, i16);
-// impl_tuple_deserialize!(String, i16);
-// impl_tuple_serialize!(String, i32);
-// impl_tuple_deserialize!(String, i32);
-// impl_tuple_serialize!(String, isize);
-// impl_tuple_deserialize!(String, isize);
-// impl_tuple_serialize!(String, f32);
-// impl_tuple_deserialize!(String, f32);
-// impl_tuple_serialize!(String, f64);
-// impl_tuple_deserialize!(String, f64);
-// impl_tuple_serialize!(String, bool);
-// impl_tuple_deserialize!(String, bool);
-// impl_tuple_serialize!(String, ZBuf);
-// impl_tuple_deserialize!(String, ZBuf);
-// impl_tuple_serialize!(String, Vec<u8>);
-// impl_tuple_deserialize!(String, Vec<u8>);
-// impl_tuple_serialize!(String, String);
-// impl_tuple_deserialize!(String, String);
-// impl_tuple_serialize!(String, &[u8]);
-// impl_tuple_serialize!(&[u8], u8);
-// impl_tuple_serialize!(&[u8], u16);
-// impl_tuple_serialize!(&[u8], u32);
-// impl_tuple_serialize!(&[u8], u64);
-// impl_tuple_serialize!(&[u8], usize);
-// impl_tuple_serialize!(&[u8], i8);
-// impl_tuple_serialize!(&[u8], i16);
-// impl_tuple_serialize!(&[u8], i32);
-// impl_tuple_serialize!(&[u8], isize);
-// impl_tuple_serialize!(&[u8], f32);
-// impl_tuple_serialize!(&[u8], f64);
-// impl_tuple_serialize!(&[u8], bool);
-// impl_tuple_serialize!(&[u8], ZBuf);
-// impl_tuple_serialize!(&[u8], Vec<u8>);
-// impl_tuple_serialize!(&[u8], String);
-// impl_tuple_serialize!(&[u8], &[u8]);
-// impl_iterator_serialize!(u8);
-// impl_iterator_serialize!(u16);
-// impl_iterator_serialize!(u32);
-// impl_iterator_serialize!(u64);
-// impl_iterator_serialize!(usize);
-// impl_iterator_serialize!(i8);
-// impl_iterator_serialize!(i16);
-// impl_iterator_serialize!(i32);
-// impl_iterator_serialize!(isize);
-// impl_iterator_serialize!(f32);
-// impl_iterator_serialize!(f64);
-// impl_iterator_serialize!(bool);
-// impl_iterator_serialize!(ZBuf);
-// impl_iterator_serialize!(Vec<u8>);
-// impl_iterator_serialize!(String);
-// impl_iterator_serialize!(&[u8]);
