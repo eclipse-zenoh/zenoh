@@ -103,6 +103,16 @@ pub mod flag {
 /// - Mode 0b01: Current
 /// - Mode 0b10: Future
 /// - Mode 0b11: CurrentFuture
+///
+/// (*) - if K==1 then the interest refers to key expressions
+///     - if S==1 then the interest refers to subscribers
+///     - if Q==1 then the interest refers to queryables
+///     - if T==1 then the interest refers to tokens
+///     - if R==1 then the interest is restricted to the matching key expression, else it is for all key expressions.
+///     - if N==1 then the key expr has name/suffix. If R==0 then N should be set to 0.
+///     - if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver.
+///               If R==0 then M should be set to 0.
+///     - if A==1 then the replies SHOULD be aggregated
 
 /// The resolution of a RequestId
 pub type DeclareRequestId = u32;
