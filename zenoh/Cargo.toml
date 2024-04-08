@@ -76,6 +76,7 @@ flume = { workspace = true }
 form_urlencoded = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
+interfaces = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 ordered-float = { workspace = true }
@@ -107,7 +108,8 @@ zenoh-sync = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
-interfaces = { workspace = true }
+zenoh-task = { workspace = true }
+
 [build-dependencies]
 rustc_version = { workspace = true }
 
