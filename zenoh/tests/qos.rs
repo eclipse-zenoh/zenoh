@@ -12,11 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
-use zenoh::publication::CongestionControl;
-use zenoh::sample::QoSBuilderTrait;
-use zenoh::{publication::Priority, session::SessionDeclarations};
-use zenoh_core::ztimeout;
-use zenoh_core::AsyncResolve;
+use zenoh::internal::ztimeout;
+use zenoh::prelude::r#async::*;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

@@ -14,15 +14,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh::key_expr::KeyExpr;
-use zenoh::publication::CongestionControl;
-use zenoh::sample::{QoSBuilderTrait, SampleKind};
-use zenoh::session::{Session, SessionDeclarations};
-use zenoh::subscriber::Reliability;
-use zenoh::value::Value;
-use zenoh_config as config;
-use zenoh_core::ztimeout;
-use zenoh_core::AsyncResolve;
+use zenoh::internal::ztimeout;
+use zenoh::prelude::r#async::*;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

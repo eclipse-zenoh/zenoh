@@ -1,6 +1,3 @@
-use zenoh::{sample::ValueBuilderTrait, session::SessionDeclarations};
-use zenoh_config::Config;
-
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
@@ -14,12 +11,11 @@ use zenoh_config::Config;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{thread, time::Duration};
+use zenoh::prelude::sync::*;
+
 #[test]
 fn pubsub_with_ringbuffer() {
-    use std::{thread, time::Duration};
-    use zenoh::handlers::RingBuffer;
-    use zenoh_core::SyncResolve;
-
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let sub = zenoh
         .declare_subscriber("test/ringbuffer")
@@ -50,9 +46,6 @@ fn pubsub_with_ringbuffer() {
 
 #[test]
 fn query_with_ringbuffer() {
-    use zenoh::handlers::RingBuffer;
-    use zenoh_core::SyncResolve;
-
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let queryable = zenoh
         .declare_queryable("test/ringbuffer_query")

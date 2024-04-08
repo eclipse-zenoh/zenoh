@@ -14,10 +14,7 @@
 #[cfg(feature = "unstable")]
 #[test]
 fn pubsub() {
-    use zenoh::{sample::SampleBuilderTrait, session::SessionDeclarations};
-    use zenoh_config::Config;
-    use zenoh_core::SyncResolve;
-
+    use zenoh::prelude::sync::*;
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
         .declare_subscriber("test/attachment")
@@ -63,13 +60,7 @@ fn pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn queries() {
-    use zenoh::{
-        sample::{Attachment, SampleBuilderTrait, ValueBuilderTrait},
-        session::SessionDeclarations,
-    };
-    use zenoh_config::Config;
-    use zenoh_core::SyncResolve;
-
+    use zenoh::prelude::sync::*;
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
         .declare_queryable("test/attachment")

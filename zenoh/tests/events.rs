@@ -12,12 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
-use zenoh::query::Reply;
-use zenoh::sample::SampleKind;
-use zenoh::session::{Session, SessionDeclarations};
-use zenoh_config::peer;
-use zenoh_core::ztimeout;
-use zenoh_core::AsyncResolve;
+use zenoh::prelude::r#async::*;
+use zenoh::internal::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 

@@ -12,10 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::sync::{Arc, Mutex};
-use zenoh::session::SessionDeclarations;
-use zenoh_config::{Config, ValidatedMap};
-use zenoh_core::zlock;
-use zenoh_core::SyncResolve;
+use zenoh::internal::zlock;
+use zenoh::prelude::sync::*;
 
 struct IntervalCounter {
     first_tick: bool,

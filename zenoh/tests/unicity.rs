@@ -11,19 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use config::WhatAmI;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
-use zenoh::config::EndPoint;
-use zenoh::key_expr::KeyExpr;
-use zenoh::publication::CongestionControl;
-use zenoh::sample::QoSBuilderTrait;
-use zenoh::session::{Session, SessionDeclarations};
-use zenoh_config as config;
-use zenoh_core::ztimeout;
-use zenoh_core::AsyncResolve;
+use zenoh::internal::ztimeout;
+use zenoh::prelude::r#async::*;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

@@ -11,18 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
-use zenoh_config as config;
-use zenoh_core::ztimeout;
-use zenoh_core::AsyncResolve;
-
-const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(1);
-
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_liveliness() {
-    use zenoh::{sample::SampleKind, session::SessionDeclarations};
+    use {std::time::Duration, zenoh::internal::ztimeout, zenoh::prelude::*};
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
 
     let mut c1 = config::peer();
     c1.listen
