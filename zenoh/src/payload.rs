@@ -1000,6 +1000,29 @@ impl From<SharedMemoryBuf> for Payload {
     }
 }
 
+#[cfg(feature = "shared-memory")]
+impl Deserialize<'_, SharedMemoryBuf> for ZSerde {
+    type Error = ZDeserializeError;
+
+    fn deserialize(self, v: &Payload) -> Result<SharedMemoryBuf, Self::Error> {
+        for zs in v.0.zslices() {
+            if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
+                return Ok(shmb.clone());
+            }
+        }
+        Err(ZDeserializeError)
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl TryFrom<Payload> for SharedMemoryBuf {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
 // Tuple
 impl<A, B> Serialize<(A, B)> for ZSerde
 where

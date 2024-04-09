@@ -4612,6 +4612,7 @@ dependencies = [
  "zenoh",
  "zenoh-collections",
  "zenoh-ext",
+ "zenoh-shm",
 ]
 
 [[package]]
