@@ -100,6 +100,7 @@ path = "examples/z_sub.rs"
 [[example]]
 name = "z_sub_shm"
 path = "examples/z_sub_shm.rs"
+required-features = ["shared-memory"]
 
 [[example]]
 name = "z_pull"
