@@ -1224,9 +1224,9 @@ mod tests {
         hm.insert(0, 0);
         hm.insert(1, 1);
         println!("Serialize:\t{:?}", hm);
-        let p = Payload::from_iter(hm.iter());
+        let p = Payload::from_iter(hm.drain());
         println!("Deerialize:\t{:?}", p);
-        let o: HashMap<usize, usize> = HashMap::from_iter(p.iter());
+        let o = HashMap::from_iter(p.iter::<(usize, usize)>());
         assert_eq!(hm, o);
     }
 }
