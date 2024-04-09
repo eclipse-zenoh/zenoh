@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
+use zenoh::runtime::Runtime;
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -64,7 +65,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
 }
 
 async fn close_session(peer01: Session, peer02: Session) {
-    println!("[  ][01d] Closing peer02 session");
+    println!("[  ][01d] Closing peer01 session");
     ztimeout!(peer01.close().res_async()).unwrap();
     println!("[  ][02d] Closing peer02 session");
     ztimeout!(peer02.close().res_async()).unwrap();
@@ -197,4 +198,47 @@ async fn zenoh_session_multicast() {
         open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
     close_session(peer01, peer02).await;
+}
+
+
+async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
+    // Open the sessions
+    let mut config = config::peer();
+    config.listen.endpoints = endpoints
+        .iter()
+        .map(|e| e.parse().unwrap())
+        .collect::<Vec<_>>();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    println!("[  ][01a] Creating r1 session runtime: {:?}", endpoints);
+    let r1 = Runtime::new(config).await.unwrap();
+
+    let mut config = config::peer();
+    config.connect.endpoints = endpoints
+        .iter()
+        .map(|e| e.parse().unwrap())
+        .collect::<Vec<_>>();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    println!("[  ][02a] Creating r2 session runtime: {:?}", endpoints);
+    let r2 = Runtime::new(config).await.unwrap();
+
+    (r1, r2)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_2sessions_1runtime_init() {
+    let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.1:17449"]).await;
+    println!("[RI][02a] Creating peer01 session from runtime 1");
+    let peer01 = zenoh::init(r1.clone()).res_async().await.unwrap();
+    println!("[RI][02b] Creating peer02 session from runtime 2");
+    let peer02 = zenoh::init(r2.clone()).res_async().await.unwrap();
+    println!("[RI][02c] Creating peer01a session from runtime 1");
+    let peer01a = zenoh::init(r1.clone()).res_async().await.unwrap();
+    println!("[RI][03c] Closing peer01a session");
+    std::mem::drop(peer01a);
+    test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
+    close_session(peer01, peer02).await;
+    println!("[  ][01e] Closing r1 runtime");
+    ztimeout!(r1.close()).unwrap();
+    println!("[  ][02e] Closing r2 runtime");
+    ztimeout!(r2.close()).unwrap();
 }
