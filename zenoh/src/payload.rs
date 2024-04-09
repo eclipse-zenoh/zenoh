@@ -540,7 +540,7 @@ impl<'a> TryFrom<&'a Payload> for Cow<'a, str> {
 
 // - Integers impl
 macro_rules! impl_int {
-    ($t:ty, $encoding:expr) => {
+    ($t:ty) => {
         impl Serialize<$t> for ZSerde {
             type Output = Payload;
 
@@ -615,22 +615,22 @@ macro_rules! impl_int {
 }
 
 // Zenoh unsigned integers
-impl_int!(u8, ZSerde::ZENOH_UINT);
-impl_int!(u16, ZSerde::ZENOH_UINT);
-impl_int!(u32, ZSerde::ZENOH_UINT);
-impl_int!(u64, ZSerde::ZENOH_UINT);
-impl_int!(usize, ZSerde::ZENOH_UINT);
+impl_int!(u8);
+impl_int!(u16);
+impl_int!(u32);
+impl_int!(u64);
+impl_int!(usize);
 
 // Zenoh signed integers
-impl_int!(i8, ZSerde::ZENOH_INT);
-impl_int!(i16, ZSerde::ZENOH_INT);
-impl_int!(i32, ZSerde::ZENOH_INT);
-impl_int!(i64, ZSerde::ZENOH_INT);
-impl_int!(isize, ZSerde::ZENOH_INT);
+impl_int!(i8);
+impl_int!(i16);
+impl_int!(i32);
+impl_int!(i64);
+impl_int!(isize);
 
 // Zenoh floats
-impl_int!(f32, ZSerde::ZENOH_FLOAT);
-impl_int!(f64, ZSerde::ZENOH_FLOAT);
+impl_int!(f32);
+impl_int!(f64);
 
 // Zenoh bool
 impl Serialize<bool> for ZSerde {
@@ -1203,7 +1203,7 @@ mod tests {
         let v: [usize; 5] = [0, 1, 2, 3, 4];
         println!("Serialize:\t{:?}", v);
         let p = Payload::from_iter(v.iter());
-        println!("Deerialize:\t{:?}", p);
+        println!("Deserialize:\t{:?}", p);
         for (i, t) in p.iter::<usize>().enumerate() {
             assert_eq!(i, t);
         }
@@ -1211,7 +1211,7 @@ mod tests {
         let mut v = vec![[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
         println!("Serialize:\t{:?}", v);
         let p = Payload::from_iter(v.drain(..));
-        println!("Deerialize:\t{:?}", p);
+        println!("Deserialize:\t{:?}", p);
         let mut iter = p.iter::<[u8; 4]>();
         assert_eq!(iter.next().unwrap(), [0, 1, 2, 3]);
         assert_eq!(iter.next().unwrap(), [4, 5, 6, 7]);
@@ -1225,7 +1225,7 @@ mod tests {
         hm.insert(1, 1);
         println!("Serialize:\t{:?}", hm);
         let p = Payload::from_iter(hm.drain());
-        println!("Deerialize:\t{:?}", p);
+        println!("Deserialize:\t{:?}", p);
         let o = HashMap::from_iter(p.iter::<(usize, usize)>());
         assert_eq!(hm, o);
     }
