@@ -53,18 +53,24 @@ impl Payload {
         self.0.len()
     }
 
-    /// Get a [`PayloadReader`] implementing [`std::io::Read`] trait.
+    /// Get a [`PayloadReader`] implementing [`std::io::Read`] and [`std::io::Seek`] traits.
     pub fn reader(&self) -> PayloadReader<'_> {
         PayloadReader(self.0.reader())
     }
 }
 
-/// A reader that implements [`std::io::Read`] trait to read from a [`Payload`].
+/// A reader that implements [`std::io::Read`] and [`std::io::Seek`] traits to read from a [`Payload`].
 pub struct PayloadReader<'a>(ZBufReader<'a>);
 
 impl std::io::Read for PayloadReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.0.read(buf)
+    }
+}
+
+impl std::io::Seek for PayloadReader<'_> {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        self.0.seek(pos)
     }
 }
 
