@@ -22,7 +22,7 @@ use std::{
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
-    reader::{HasReader, Reader},
+    reader::HasReader,
     writer::HasWriter,
     ZBufReader, ZSlice,
 };
@@ -170,11 +170,6 @@ where
 
         let t = ZSerde.deserialize(&kpld).ok()?;
         Some(t)
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.reader.remaining();
-        (remaining, Some(remaining))
     }
 }
 

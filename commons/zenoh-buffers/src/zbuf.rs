@@ -21,6 +21,8 @@ use crate::{
 };
 use alloc::{sync::Arc, vec::Vec};
 use core::{cmp, iter, mem, num::NonZeroUsize, ops::RangeBounds, ptr};
+#[cfg(feature = "std")]
+use std::io;
 use zenoh_collections::SingleOrVec;
 
 fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
@@ -270,7 +272,7 @@ impl<'a> Reader for ZBufReader<'a> {
     }
 
     fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
-        let len = self.read(into)?;
+        let len = Reader::read(self, into)?;
         if len.get() == into.len() {
             Ok(())
         } else {
@@ -317,7 +319,7 @@ impl<'a> Reader for ZBufReader<'a> {
         match (slice.len() - self.cursor.byte).cmp(&len) {
             cmp::Ordering::Less => {
                 let mut buffer = crate::vec::uninit(len);
-                self.read_exact(&mut buffer)?;
+                Reader::read_exact(self, &mut buffer)?;
                 Ok(buffer.into())
             }
             cmp::Ordering::Equal => {
@@ -388,15 +390,55 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> std::io::Read for ZBufReader<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+impl<'a> io::Read for ZBufReader<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match <Self as Reader>::read(self, buf) {
             Ok(n) => Ok(n.get()),
-            Err(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
                 "UnexpectedEof",
             )),
         }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'a> io::Seek for ZBufReader<'a> {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        // Compute the index
+        let len = self.inner.len();
+        let index = match pos {
+            io::SeekFrom::Start(pos) => pos.try_into().unwrap_or(i64::MAX),
+            io::SeekFrom::End(pos) => {
+                pos + i64::try_from(len)
+                    .map_err(|e| io::Error::new(io::ErrorKind::UnexpectedEof, e))?
+            }
+            io::SeekFrom::Current(pos) => {
+                pos + i64::try_from(len - self.remaining())
+                    .map_err(|e| io::Error::new(io::ErrorKind::UnexpectedEof, e))?
+            }
+        };
+
+        let index = usize::try_from(index)
+            .map_err(|e| io::Error::new(io::ErrorKind::UnexpectedEof, e))?
+            .min(len);
+
+        // Seek the position
+        let mut left = index;
+        let mut pos = ZBufPos { slice: 0, byte: 0 };
+        while let Some(slice) = self.inner.slices.get(pos.slice) {
+            let len = slice.len();
+            if len >= left {
+                pos.byte = left;
+                self.cursor = pos;
+                return Ok(index as u64);
+            } else {
+                left -= len;
+            }
+            pos.slice += 1;
+        }
+
+        Err(io::ErrorKind::UnexpectedEof.into())
     }
 }
 
@@ -614,18 +656,18 @@ impl BacktrackableWriter for ZBufWriter<'_> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> std::io::Write for ZBufWriter<'a> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+impl<'a> io::Write for ZBufWriter<'a> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match <Self as Writer>::write(self, buf) {
             Ok(n) => Ok(n.get()),
-            Err(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
                 "UnexpectedEof",
             )),
         }
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }
@@ -667,5 +709,85 @@ mod tests {
         zbuf2.push_zslice(slice.subslice(6, 8).unwrap());
 
         assert_eq!(zbuf1, zbuf2);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn zbuf_seek() {
+        use crate::reader::HasReader;
+        use std::io::{Seek, SeekFrom};
+
+        use super::{ZBuf, ZSlice};
+
+        let slice: ZSlice = [0u8, 1, 2, 3, 4, 5, 6, 7].to_vec().into();
+
+        let mut zbuf = ZBuf::empty();
+        zbuf.push_zslice(slice.subslice(0, 1).unwrap());
+        zbuf.push_zslice(slice.subslice(1, 4).unwrap());
+        zbuf.push_zslice(slice.subslice(4, 8).unwrap());
+
+        let mut reader = zbuf.reader();
+
+        let index = reader.seek(SeekFrom::Start(0)).unwrap();
+        assert_eq!(index, 0);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Start(4)).unwrap();
+        assert_eq!(index, 4);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Start(8)).unwrap();
+        assert_eq!(index, 8);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Start(u64::MAX)).unwrap();
+        assert_eq!(index, 8);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::End(0)).unwrap();
+        assert_eq!(index, 8);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::End(-4)).unwrap();
+        assert_eq!(index, 4);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::End(-8)).unwrap();
+        assert_eq!(index, 0);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        reader.seek(SeekFrom::End(i64::MIN)).unwrap_err();
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Start(0)).unwrap();
+        assert_eq!(index, 0);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        reader.seek(SeekFrom::Current(-1)).unwrap_err();
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Current(2)).unwrap();
+        assert_eq!(index, 2);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Current(2)).unwrap();
+        assert_eq!(index, 4);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Current(-2)).unwrap();
+        assert_eq!(index, 2);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Current(-2)).unwrap();
+        assert_eq!(index, 0);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Current(i64::MAX)).unwrap();
+        assert_eq!(index, 8);
+        assert_eq!(index, reader.stream_position().unwrap());
+
+        let index = reader.seek(SeekFrom::Current(-1)).unwrap();
+        assert_eq!(index, 7);
+        assert_eq!(index, reader.stream_position().unwrap());
     }
 }
