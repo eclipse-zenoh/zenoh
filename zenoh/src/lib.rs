@@ -106,8 +106,8 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
 );
 
 // Expose some functions directly to root `zenoh::`` namespace for convenience
-pub use crate::api::session::open;
 pub use crate::api::scouting::scout;
+pub use crate::api::session::open;
 
 pub mod prelude;
 
@@ -127,7 +127,10 @@ pub mod core {
 /// reading and writing data.
 pub mod buffers {
     pub use zenoh_buffers::buffer::SplitBuffer;
-    pub use zenoh_buffers::{ZBuf, ZSlice};
+    pub use zenoh_buffers::reader::HasReader;
+    pub use zenoh_buffers::reader::Reader;
+    pub use zenoh_buffers::ZBufReader;
+    pub use zenoh_buffers::{ZBuf, ZSlice, ZSliceBuffer};
 }
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
@@ -251,6 +254,7 @@ pub mod subscriber {
 /// Publishing primitives
 pub mod publication {
     pub use crate::api::builders::publication::PublisherBuilder;
+    pub use crate::api::publication::MatchingListener;
     pub use crate::api::publication::Priority;
     pub use crate::api::publication::Publisher;
     #[zenoh_macros::unstable]
