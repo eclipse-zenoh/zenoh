@@ -14,6 +14,7 @@
 
 //! Payload primitives.
 use crate::buffers::ZBuf;
+use std::io::Read;
 use std::marker::PhantomData;
 use std::{
     borrow::Cow, convert::Infallible, fmt::Debug, ops::Deref, string::FromUtf8Error, sync::Arc,
@@ -79,6 +80,16 @@ impl Payload {
         PayloadReader(self.0.reader())
     }
 
+    /// Build a [`Payload`] from a [`Reader`]. This operation copies data from the reader.
+    pub fn from_reader<R>(mut reader: R) -> Result<Self, std::io::Error>
+    where
+        R: std::io::Read,
+    {
+        let mut buf: Vec<u8> = vec![];
+        reader.read_to_end(&mut buf)?;
+        Ok(Payload::new(buf))
+    }
+
     /// Get a [`PayloadReader`] implementing [`std::io::Read`] trait.
     pub fn iter<'a, T>(&'a self) -> PayloadIterator<'a, T>
     where
@@ -91,10 +102,7 @@ impl Payload {
             _t: PhantomData::<T>,
         }
     }
-}
 
-/// Provide some facilities specific to the Rust API to encode/decode a [`Value`] with an `Serialize`.
-impl Payload {
     /// Encode an object of type `T` as a [`Value`] using the [`ZSerde`].
     ///
     /// ```rust
@@ -125,6 +133,8 @@ impl Payload {
 }
 
 /// A reader that implements [`std::io::Read`] trait to read from a [`Payload`].
+#[repr(transparent)]
+#[derive(Debug)]
 pub struct PayloadReader<'a>(ZBufReader<'a>);
 
 impl std::io::Read for PayloadReader<'_> {
@@ -135,6 +145,8 @@ impl std::io::Read for PayloadReader<'_> {
 
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on values `T` in a [`Payload`].
 /// Note that [`Payload`] contains a serialized version of `T` and iterating over a [`Payload`] performs lazy deserialization.
+#[repr(transparent)]
+#[derive(Debug)]
 pub struct PayloadIterator<'a, T>
 where
     ZSerde: Deserialize<'a, T>,
@@ -242,6 +254,65 @@ impl From<Payload> for ZBuf {
 impl From<&Payload> for ZBuf {
     fn from(value: &Payload) -> Self {
         ZSerde.deserialize(value).unwrap_infallible()
+    }
+}
+
+// [u8; N]
+impl<const N: usize> Serialize<[u8; N]> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: [u8; N]) -> Self::Output {
+        Payload::new(t)
+    }
+}
+
+impl<const N: usize> From<[u8; N]> for Payload {
+    fn from(t: [u8; N]) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl<const N: usize> Serialize<&[u8; N]> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: &[u8; N]) -> Self::Output {
+        Payload::new(*t)
+    }
+}
+
+impl<const N: usize> From<&[u8; N]> for Payload {
+    fn from(t: &[u8; N]) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl<const N: usize> Deserialize<'_, [u8; N]> for ZSerde {
+    type Error = ZDeserializeError;
+
+    fn deserialize(self, v: &Payload) -> Result<[u8; N], Self::Error> {
+        if v.0.len() != N {
+            return Err(ZDeserializeError);
+        }
+        let mut dst = [0u8; N];
+        let mut reader = v.reader();
+        reader.read_exact(&mut dst).map_err(|_| ZDeserializeError)?;
+        Ok(dst)
+    }
+}
+
+impl<const N: usize> TryFrom<Payload> for [u8; N] {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl<const N: usize> TryFrom<&Payload> for [u8; N] {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: &Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
     }
 }
 
@@ -1136,6 +1207,17 @@ mod tests {
         for (i, t) in p.iter::<usize>().enumerate() {
             assert_eq!(i, t);
         }
+
+        let mut v = vec![[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
+        println!("Serialize:\t{:?}", v);
+        let p = Payload::from_iter(v.drain(..));
+        println!("Deerialize:\t{:?}", p);
+        let mut iter = p.iter::<[u8; 4]>();
+        assert_eq!(iter.next().unwrap(), [0, 1, 2, 3]);
+        assert_eq!(iter.next().unwrap(), [4, 5, 6, 7]);
+        assert_eq!(iter.next().unwrap(), [8, 9, 10, 11]);
+        assert_eq!(iter.next().unwrap(), [12, 13, 14, 15]);
+        assert!(iter.next().is_none());
 
         use std::collections::HashMap;
         let mut hm: HashMap<usize, usize> = HashMap::new();
