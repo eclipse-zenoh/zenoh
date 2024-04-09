@@ -14,9 +14,9 @@
 
 //! Payload primitives.
 use crate::buffers::ZBuf;
-use std::marker::PhantomData;
 use std::{
-    borrow::Cow, convert::Infallible, fmt::Debug, ops::Deref, string::FromUtf8Error, sync::Arc,
+    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref,
+    string::FromUtf8Error, sync::Arc,
 };
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::ZBufWriter;
@@ -57,7 +57,7 @@ impl Payload {
         Self(ZBuf::empty())
     }
 
-    /// Create a [`Payload`] from any type `T` that can implements [`Into<ZBuf>`].
+    /// Create a [`Payload`] from any type `T` that implements [`Into<ZBuf>`].
     pub fn new<T>(t: T) -> Self
     where
         T: Into<ZBuf>,
@@ -80,7 +80,7 @@ impl Payload {
         PayloadReader(self.0.reader())
     }
 
-    /// Build a [`Payload`] from a [`Reader`]. This operation copies data from the reader.
+    /// Build a [`Payload`] from a generic reader implementing [`std::io::Read`]. This operation copies data from the reader.
     pub fn from_reader<R>(mut reader: R) -> Result<Self, std::io::Error>
     where
         R: std::io::Read,
@@ -101,6 +101,11 @@ impl Payload {
             reader: self.0.reader(),
             _t: PhantomData::<T>,
         }
+    }
+
+    /// Get a [`PayloadWriter`] implementing [`std::io::Write`] trait.
+    pub fn writer(&mut self) -> PayloadWriter<'_> {
+        PayloadWriter(self.0.writer())
     }
 
     /// Encode an object of type `T` as a [`Value`] using the [`ZSerde`].
@@ -733,7 +738,7 @@ impl Serialize<&serde_json::Value> for ZSerde {
 
     fn serialize(self, t: &serde_json::Value) -> Self::Output {
         let mut payload = Payload::empty();
-        serde_json::to_writer(payload.0.writer(), t)?;
+        serde_json::to_writer(payload.writer(), t)?;
         Ok(payload)
     }
 }
