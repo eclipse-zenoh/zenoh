@@ -62,13 +62,13 @@ where
     fn read(self, reader: &mut R) -> Result<Encoding, Self::Error> {
         let zodec = Zenoh080Bounded::<u32>::new();
         let id: u32 = zodec.read(&mut *reader)?;
-        let (id, has_suffix) = (
+        let (id, has_schema) = (
             (id >> 1) as EncodingId,
             imsg::has_flag(id as u8, flag::S as u8),
         );
 
         let mut schema = None;
-        if has_suffix {
+        if has_schema {
             let zodec = Zenoh080Bounded::<u8>::new();
             schema = Some(zodec.read(&mut *reader)?);
         }
