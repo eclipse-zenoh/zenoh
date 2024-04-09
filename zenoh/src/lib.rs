@@ -305,6 +305,7 @@ pub mod scouting {
 pub mod liveliness {
     pub use crate::api::liveliness::Liveliness;
     pub use crate::api::liveliness::LivelinessSubscriberBuilder;
+    pub use crate::api::liveliness::LivelinessToken;
 }
 
 /// Timestamp support
