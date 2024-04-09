@@ -20,9 +20,9 @@ use super::{chunk::AllocatedChunk, zsliceshmmut::ZSliceShmMut};
 
 /// Allocation errors
 ///
-///     - **NeedDefragment**: defragmentation needed
-///     - **OutOfMemory**: the provider is out of memory
-///     - **Other**: other error
+/// NeedDefragment: defragmentation needed
+/// OutOfMemory: the provider is out of memory
+/// Other: other error
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZAllocError {
