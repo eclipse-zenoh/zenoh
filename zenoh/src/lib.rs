@@ -174,6 +174,7 @@ pub mod key_expr {
     pub use crate::api::key_expr::KeyExpr;
     pub use zenoh_keyexpr::keyexpr;
     pub use zenoh_keyexpr::OwnedKeyExpr;
+    pub use zenoh_keyexpr::SetIntersectionLevel;
     pub use zenoh_macros::{kedefine, keformat, kewrite};
     // keyexpr format macro support
     pub mod format {
