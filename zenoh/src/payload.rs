@@ -14,7 +14,6 @@
 
 //! Payload primitives.
 use crate::buffers::ZBuf;
-use std::io::Read;
 use std::marker::PhantomData;
 use std::{
     borrow::Cow, convert::Infallible, fmt::Debug, ops::Deref, string::FromUtf8Error, sync::Arc,
@@ -140,6 +139,12 @@ pub struct PayloadReader<'a>(ZBufReader<'a>);
 impl std::io::Read for PayloadReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         std::io::Read::read(&mut self.0, buf)
+    }
+}
+
+impl std::io::Seek for PayloadReader<'_> {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        std::io::Seek::seek(&mut self.0, pos)
     }
 }
 
@@ -285,6 +290,8 @@ impl<const N: usize> Deserialize<'_, [u8; N]> for ZSerde {
     type Error = ZDeserializeError;
 
     fn deserialize(self, v: &Payload) -> Result<[u8; N], Self::Error> {
+        use std::io::Read;
+
         if v.0.len() != N {
             return Err(ZDeserializeError);
         }
