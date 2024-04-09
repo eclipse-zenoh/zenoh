@@ -200,7 +200,6 @@ async fn zenoh_session_multicast() {
     close_session(peer01, peer02).await;
 }
 
-
 async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
     // Open the sessions
     let mut config = config::peer();
