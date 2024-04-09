@@ -13,6 +13,7 @@
 //
 use core::panic;
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     env,
@@ -25,88 +26,72 @@ use std::{
     time::Duration,
 };
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
-use zenoh_collections::Properties;
 use zenoh_result::ZResult as Result;
+use zenoh_runtime_derive::{ConfigureZRuntime, GenericRuntimeParam};
 
-const ZENOH_RUNTIME_THREADS_ENV: &str = "ZENOH_RUNTIME_THREADS";
+const ZENOH_RUNTIME_ENV: &str = "ZENOH_RUNTIME";
 
-#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
+trait DefaultParam<'a> {
+    fn param() -> RuntimeParam<'a>;
+}
+
+#[derive(Serialize, Deserialize, Debug, GenericRuntimeParam)]
+#[serde(deny_unknown_fields, default)]
+pub struct RuntimeParam<'a> {
+    pub worker_threads: usize,
+    pub max_blocking_threads: usize,
+    pub handover: &'a str,
+}
+
+impl<'a> Default for RuntimeParam<'a> {
+    fn default() -> Self {
+        Self {
+            worker_threads: 1,
+            max_blocking_threads: 50,
+            handover: "",
+        }
+    }
+}
+
+impl RuntimeParam<'_> {
+    pub fn build(&self, zrt: ZRuntime) -> Result<Runtime> {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(self.worker_threads)
+            .max_blocking_threads(self.max_blocking_threads)
+            .enable_io()
+            .enable_time()
+            .thread_name_fn(move || {
+                let id = ZRUNTIME_INDEX
+                    .get(&zrt)
+                    .unwrap()
+                    .fetch_add(1, Ordering::SeqCst);
+                format!("{}-{}", zrt, id)
+            })
+            .build()?;
+        Ok(rt)
+    }
+}
+
+#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug, ConfigureZRuntime)]
 pub enum ZRuntime {
+    #[alias(app)]
+    #[param(worker_threads = 1)]
     Application,
+    #[alias(acc)]
+    #[param(worker_threads = 1)]
     Acceptor,
+    #[alias(tx)]
+    #[param(worker_threads = 1)]
     TX,
+    #[alias(rx)]
+    #[param(worker_threads = 1)]
     RX,
+    #[alias(net)]
+    #[param(worker_threads = 1)]
     Net,
 }
 
 impl ZRuntime {
-    fn iter() -> impl Iterator<Item = ZRuntime> {
-        use ZRuntime::*;
-        [Application, Acceptor, TX, RX, Net].into_iter()
-    }
-
-    fn init(&self) -> Result<Runtime> {
-        let config = &ZRUNTIME_CONFIG;
-
-        let thread_name = format!("{self:?}");
-
-        use ZRuntime::*;
-        let rt = match self {
-            Application => tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(config.application_threads)
-                .enable_io()
-                .enable_time()
-                .thread_name_fn(move || {
-                    static ATOMIC_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
-                    let id = ATOMIC_THREAD_ID.fetch_add(1, Ordering::SeqCst);
-                    format!("{thread_name}-{}", id)
-                })
-                .build()?,
-            Acceptor => tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(config.acceptor_threads)
-                .enable_io()
-                .enable_time()
-                .thread_name_fn(move || {
-                    static ATOMIC_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
-                    let id = ATOMIC_THREAD_ID.fetch_add(1, Ordering::SeqCst);
-                    format!("{thread_name}-{}", id)
-                })
-                .build()?,
-            TX => tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(config.tx_threads)
-                .enable_io()
-                .enable_time()
-                .thread_name_fn(move || {
-                    static ATOMIC_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
-                    let id = ATOMIC_THREAD_ID.fetch_add(1, Ordering::SeqCst);
-                    format!("{thread_name}-{}", id)
-                })
-                .build()?,
-            RX => tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(config.rx_threads)
-                .enable_io()
-                .enable_time()
-                .thread_name_fn(move || {
-                    static ATOMIC_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
-                    let id = ATOMIC_THREAD_ID.fetch_add(1, Ordering::SeqCst);
-                    format!("{thread_name}-{}", id)
-                })
-                .build()?,
-            Net => tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(config.net_threads)
-                .enable_io()
-                .enable_time()
-                .thread_name_fn(move || {
-                    static ATOMIC_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
-                    let id = ATOMIC_THREAD_ID.fetch_add(1, Ordering::SeqCst);
-                    format!("{thread_name}-{}", id)
-                })
-                .build()?,
-        };
-
-        Ok(rt)
-    }
-
     pub fn block_in_place<F, R>(&self, f: F) -> R
     where
         F: Future<Output = R>,
@@ -128,8 +113,9 @@ impl Deref for ZRuntime {
 }
 
 lazy_static! {
-    pub static ref ZRUNTIME_CONFIG: ZRuntimeConfig = ZRuntimeConfig::from_env();
+    // pub static ref ZRUNTIME_CONFIG: ZRuntimeConfig = ZRuntimeConfig::from_env();
     pub static ref ZRUNTIME_POOL: ZRuntimePool = ZRuntimePool::new();
+    pub static ref ZRUNTIME_INDEX: HashMap<ZRuntime, AtomicUsize> = ZRuntime::iter().map(|zrt| (zrt, AtomicUsize::new(0))).collect();
 }
 
 pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<Runtime>>);
@@ -176,65 +162,6 @@ impl Drop for ZRuntimePoolGuard {
         unsafe {
             let ptr = &(*ZRUNTIME_POOL) as *const ZRuntimePool;
             std::mem::drop(ptr.read());
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct ZRuntimeConfig {
-    pub application_threads: usize,
-    pub acceptor_threads: usize,
-    pub tx_threads: usize,
-    pub rx_threads: usize,
-    pub net_threads: usize,
-}
-
-impl ZRuntimeConfig {
-    fn from_env() -> ZRuntimeConfig {
-        let mut c = Self::default();
-
-        if let Ok(s) = env::var(ZENOH_RUNTIME_THREADS_ENV) {
-            let ps = Properties::from(s);
-            if let Some(n) = ps.get("tx") {
-                if let Ok(n) = n.parse::<usize>() {
-                    c.tx_threads = n;
-                }
-            }
-            if let Some(n) = ps.get("rx") {
-                if let Ok(n) = n.parse::<usize>() {
-                    c.rx_threads = n;
-                }
-            }
-            if let Some(n) = ps.get("net") {
-                if let Ok(n) = n.parse::<usize>() {
-                    c.net_threads = n;
-                }
-            }
-            if let Some(n) = ps.get("acceptor") {
-                if let Ok(n) = n.parse::<usize>() {
-                    c.acceptor_threads = n;
-                }
-            }
-            if let Some(n) = ps.get("application") {
-                if let Ok(n) = n.parse::<usize>() {
-                    c.application_threads = n;
-                }
-            }
-        }
-
-        c
-    }
-}
-
-// WARN: at least two otherwise fail on the routing test
-impl Default for ZRuntimeConfig {
-    fn default() -> Self {
-        Self {
-            application_threads: 1,
-            acceptor_threads: 1,
-            tx_threads: 1,
-            rx_threads: 1,
-            net_threads: 1,
         }
     }
 }

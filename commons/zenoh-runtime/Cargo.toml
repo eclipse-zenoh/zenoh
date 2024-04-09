@@ -13,6 +13,9 @@ description = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ron = "0.8.1"
+serde = { workspace = true }
+zenoh_runtime_derive = { path = "zenoh-runtime-derive" }
 futures = { workspace = true }
 lazy_static = { workspace = true }
 zenoh-result = { workspace = true, features = ["std"] }
