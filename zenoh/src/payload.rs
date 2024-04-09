@@ -19,6 +19,7 @@ use std::{
     borrow::Cow, convert::Infallible, fmt::Debug, ops::Deref, string::FromUtf8Error, sync::Arc,
 };
 use unwrap_infallible::UnwrapInfallible;
+use zenoh_buffers::ZBufWriter;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
@@ -145,6 +146,21 @@ impl std::io::Read for PayloadReader<'_> {
 impl std::io::Seek for PayloadReader<'_> {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         std::io::Seek::seek(&mut self.0, pos)
+    }
+}
+
+/// A writer that implements [`std::io::Write`] trait to write into a [`Payload`].
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct PayloadWriter<'a>(ZBufWriter<'a>);
+
+impl std::io::Write for PayloadWriter<'_> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        std::io::Write::write(&mut self.0, buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
@@ -1205,7 +1221,7 @@ mod tests {
         let v: [usize; 5] = [0, 1, 2, 3, 4];
         println!("Serialize:\t{:?}", v);
         let p = Payload::from_iter(v.iter());
-        println!("Deserialize:\t{:?}", p);
+        println!("Deserialize:\t{:?}\n", p);
         for (i, t) in p.iter::<usize>().enumerate() {
             assert_eq!(i, t);
         }
@@ -1213,7 +1229,7 @@ mod tests {
         let mut v = vec![[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
         println!("Serialize:\t{:?}", v);
         let p = Payload::from_iter(v.drain(..));
-        println!("Deserialize:\t{:?}", p);
+        println!("Deserialize:\t{:?}\n", p);
         let mut iter = p.iter::<[u8; 4]>();
         assert_eq!(iter.next().unwrap(), [0, 1, 2, 3]);
         assert_eq!(iter.next().unwrap(), [4, 5, 6, 7]);
@@ -1226,8 +1242,8 @@ mod tests {
         hm.insert(0, 0);
         hm.insert(1, 1);
         println!("Serialize:\t{:?}", hm);
-        let p = Payload::from_iter(hm.drain());
-        println!("Deserialize:\t{:?}", p);
+        let p = Payload::from_iter(hm.clone().drain());
+        println!("Deserialize:\t{:?}\n", p);
         let o = HashMap::from_iter(p.iter::<(usize, usize)>());
         assert_eq!(hm, o);
     }
