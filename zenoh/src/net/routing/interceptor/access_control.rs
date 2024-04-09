@@ -26,7 +26,7 @@ use crate::net::routing::RoutingContext;
 use crate::KeyExpr;
 use std::any::Any;
 use std::sync::Arc;
-use zenoh_config::{AclConfig, Action, Flow, Permission, Subject, ZenohId};
+use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject, ZenohId};
 use zenoh_protocol::{
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
     zenoh::{PushBody, RequestBody},
@@ -154,38 +154,44 @@ impl InterceptorTrait for IngressAclEnforcer {
             })
             .or_else(|| ctx.full_expr())?;
 
-        if let NetworkBody::Push(Push {
-            payload: PushBody::Put(_),
-            ..
-        }) = &ctx.msg.body
-        {
-            if self.put(key_expr) == Permission::Deny {
-                return None;
+        match &ctx.msg.body {
+            NetworkBody::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => {
+                if self.action(Action::Put, "Put", key_expr) == Permission::Deny {
+                    return None;
+                }
             }
-        } else if let NetworkBody::Request(Request {
-            payload: RequestBody::Query(_),
-            ..
-        }) = &ctx.msg.body
-        {
-            if self.get(key_expr) == Permission::Deny {
-                return None;
+            NetworkBody::Request(Request {
+                payload: RequestBody::Query(_),
+                ..
+            }) => {
+                if self.action(Action::Get, "Get", key_expr) == Permission::Deny {
+                    return None;
+                }
             }
-        } else if let NetworkBody::Declare(Declare {
-            body: DeclareBody::DeclareSubscriber(_),
-            ..
-        }) = &ctx.msg.body
-        {
-            if self.declare_subscriber(key_expr) == Permission::Deny {
-                return None;
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareSubscriber(_),
+                ..
+            }) => {
+                if self.action(Action::DeclareSubscriber, "Declare Subscriber", key_expr)
+                    == Permission::Deny
+                {
+                    return None;
+                }
             }
-        } else if let NetworkBody::Declare(Declare {
-            body: DeclareBody::DeclareQueryable(_),
-            ..
-        }) = &ctx.msg.body
-        {
-            if self.declare_queryable(key_expr) == Permission::Deny {
-                return None;
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareQueryable(_),
+                ..
+            }) => {
+                if self.action(Action::DeclareQueryable, "Declare Queryable", key_expr)
+                    == Permission::Deny
+                {
+                    return None;
+                }
             }
+            _ => {}
         }
         Some(ctx)
     }
@@ -210,38 +216,44 @@ impl InterceptorTrait for EgressAclEnforcer {
             })
             .or_else(|| ctx.full_expr())?;
 
-        if let NetworkBody::Push(Push {
-            payload: PushBody::Put(_),
-            ..
-        }) = &ctx.msg.body
-        {
-            if self.put(key_expr) == Permission::Deny {
-                return None;
+        match &ctx.msg.body {
+            NetworkBody::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => {
+                if self.action(Action::Put, "Put", key_expr) == Permission::Deny {
+                    return None;
+                }
             }
-        } else if let NetworkBody::Request(Request {
-            payload: RequestBody::Query(_),
-            ..
-        }) = &ctx.msg.body
-        {
-            if self.get(key_expr) == Permission::Deny {
-                return None;
+            NetworkBody::Request(Request {
+                payload: RequestBody::Query(_),
+                ..
+            }) => {
+                if self.action(Action::Get, "Get", key_expr) == Permission::Deny {
+                    return None;
+                }
             }
-        } else if let NetworkBody::Declare(Declare {
-            body: DeclareBody::DeclareSubscriber(_),
-            ..
-        }) = &ctx.msg.body
-        {
-            if self.declare_subscriber(key_expr) == Permission::Deny {
-                return None;
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareSubscriber(_),
+                ..
+            }) => {
+                if self.action(Action::DeclareSubscriber, "Declare Subscriber", key_expr)
+                    == Permission::Deny
+                {
+                    return None;
+                }
             }
-        } else if let NetworkBody::Declare(Declare {
-            body: DeclareBody::DeclareQueryable(_),
-            ..
-        }) = &ctx.msg.body
-        {
-            if self.declare_queryable(key_expr) == Permission::Deny {
-                return None;
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareQueryable(_),
+                ..
+            }) => {
+                if self.action(Action::DeclareQueryable, "Declare Queryable", key_expr)
+                    == Permission::Deny
+                {
+                    return None;
+                }
             }
+            _ => {}
         }
         Some(ctx)
     }
@@ -250,20 +262,15 @@ pub trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
     fn interface_list(&self) -> Vec<i32>;
     fn zid(&self) -> ZenohId;
-    fn flow(&self) -> Flow;
+    fn flow(&self) -> InterceptorFlow;
 
-    fn put(&self, key_expr: &str) -> Permission {
+    fn action(&self, action: Action, log_msg: &str, key_expr: &str) -> Permission {
         let policy_enforcer = self.policy_enforcer();
         let interface_list = self.interface_list();
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission;
         for subject in &interface_list {
-            match policy_enforcer.policy_decision_point(
-                *subject,
-                self.flow(),
-                Action::Put,
-                key_expr,
-            ) {
+            match policy_enforcer.policy_decision_point(*subject, self.flow(), action, key_expr) {
                 Ok(Permission::Allow) => {
                     decision = Permission::Allow;
                     break;
@@ -280,120 +287,10 @@ pub trait AclActionMethods {
         }
 
         if decision == Permission::Deny {
-            log::debug!("[ACCESS LOG]: {} is unauthorized to Put", zid);
+            log::debug!("[ACCESS LOG]: {} is unauthorized to {}", zid, log_msg);
             return Permission::Deny;
         }
-        log::trace!("[ACCESS LOG]: {} is authorized access to Put", zid);
-        Permission::Allow
-    }
-
-    fn get(&self, key_expr: &str) -> Permission {
-        let policy_enforcer = self.policy_enforcer();
-        let interface_list = self.interface_list();
-        let zid = self.zid();
-        let mut decision = policy_enforcer.default_permission;
-        for subject in &interface_list {
-            match policy_enforcer.policy_decision_point(
-                *subject,
-                self.flow(),
-                Action::Get,
-                key_expr,
-            ) {
-                Ok(Permission::Allow) => {
-                    decision = Permission::Allow;
-                    break;
-                }
-                Ok(Permission::Deny) => {
-                    decision = Permission::Deny;
-                    continue;
-                }
-                Err(e) => {
-                    log::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
-                    return Permission::Deny;
-                }
-            }
-        }
-
-        if decision == Permission::Deny {
-            log::debug!("[ACCESS LOG]: {} is unauthorized to Query/Get", zid);
-            return Permission::Deny;
-        }
-        log::trace!("[ACCESS LOG]: {} is authorized access to Query/Get", zid);
-        Permission::Allow
-    }
-    fn declare_subscriber(&self, key_expr: &str) -> Permission {
-        let policy_enforcer = self.policy_enforcer();
-        let interface_list = self.interface_list();
-        let zid = self.zid();
-        let mut decision = policy_enforcer.default_permission;
-        for subject in &interface_list {
-            match policy_enforcer.policy_decision_point(
-                *subject,
-                self.flow(),
-                Action::DeclareSubscriber,
-                key_expr,
-            ) {
-                Ok(Permission::Allow) => {
-                    decision = Permission::Allow;
-                    break;
-                }
-                Ok(Permission::Deny) => {
-                    decision = Permission::Deny;
-                    continue;
-                }
-                Err(e) => {
-                    log::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
-                    return Permission::Deny;
-                }
-            }
-        }
-
-        if decision == Permission::Deny {
-            log::debug!("[ACCESS LOG]: {} is unauthorized to be a Subscriber", zid);
-            return Permission::Deny;
-        }
-        log::trace!(
-            "[ACCESS LOG]: {} is authorized access to be a Subscriber",
-            zid
-        );
-        Permission::Allow
-    }
-
-    fn declare_queryable(&self, key_expr: &str) -> Permission {
-        let policy_enforcer = self.policy_enforcer();
-        let interface_list = self.interface_list();
-        let zid = self.zid();
-        let mut decision = policy_enforcer.default_permission;
-        for subject in &interface_list {
-            match policy_enforcer.policy_decision_point(
-                *subject,
-                self.flow(),
-                Action::DeclareQueryable,
-                key_expr,
-            ) {
-                Ok(Permission::Allow) => {
-                    decision = Permission::Allow;
-                    break;
-                }
-                Ok(Permission::Deny) => {
-                    decision = Permission::Deny;
-                    continue;
-                }
-                Err(e) => {
-                    log::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
-                    return Permission::Deny;
-                }
-            }
-        }
-
-        if decision == Permission::Deny {
-            log::debug!("[ACCESS LOG]: {} is unauthorized to be a Queryable", zid);
-            return Permission::Deny;
-        }
-        log::trace!(
-            "[ACCESS LOG]: {} is authorized access to be a Queryable",
-            zid
-        );
+        log::trace!("[ACCESS LOG]: {} is authorized to {}", zid, log_msg);
         Permission::Allow
     }
 }
@@ -410,8 +307,8 @@ impl AclActionMethods for EgressAclEnforcer {
     fn zid(&self) -> ZenohId {
         self.zid
     }
-    fn flow(&self) -> Flow {
-        Flow::Egress
+    fn flow(&self) -> InterceptorFlow {
+        InterceptorFlow::Egress
     }
 }
 
@@ -427,7 +324,7 @@ impl AclActionMethods for IngressAclEnforcer {
     fn zid(&self) -> ZenohId {
         self.zid
     }
-    fn flow(&self) -> Flow {
-        Flow::Ingress
+    fn flow(&self) -> InterceptorFlow {
+        InterceptorFlow::Ingress
     }
 }

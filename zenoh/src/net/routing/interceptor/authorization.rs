@@ -19,7 +19,9 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use ahash::RandomState;
 use std::collections::HashMap;
-use zenoh_config::{AclConfig, AclConfigRules, Action, Flow, Permission, PolicyRule, Subject};
+use zenoh_config::{
+    AclConfig, AclConfigRules, Action, InterceptorFlow, Permission, PolicyRule, Subject,
+};
 use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
@@ -84,16 +86,16 @@ pub struct FlowPolicy {
 }
 
 impl FlowPolicy {
-    fn flow(&self, flow: Flow) -> &ActionPolicy {
+    fn flow(&self, flow: InterceptorFlow) -> &ActionPolicy {
         match flow {
-            Flow::Ingress => &self.ingress,
-            Flow::Egress => &self.egress,
+            InterceptorFlow::Ingress => &self.ingress,
+            InterceptorFlow::Egress => &self.egress,
         }
     }
-    fn flow_mut(&mut self, flow: Flow) -> &mut ActionPolicy {
+    fn flow_mut(&mut self, flow: InterceptorFlow) -> &mut ActionPolicy {
         match flow {
-            Flow::Ingress => &mut self.ingress,
-            Flow::Egress => &mut self.egress,
+            InterceptorFlow::Ingress => &mut self.ingress,
+            InterceptorFlow::Egress => &mut self.egress,
         }
     }
 }
@@ -175,10 +177,10 @@ impl PolicyEnforcer {
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
-            for subject in &config_rule.interface {
-                for flow in &config_rule.flow {
-                    for action in &config_rule.action {
-                        for key_expr in &config_rule.key_expr {
+            for subject in &config_rule.interfaces {
+                for flow in &config_rule.flows {
+                    for action in &config_rule.actions {
+                        for key_expr in &config_rule.key_exprs {
                             policy_rules.push(PolicyRule {
                                 subject: Subject::Interface(subject.clone()),
                                 key_expr: key_expr.clone(),
@@ -195,8 +197,10 @@ impl PolicyEnforcer {
         let mut counter = 1;
         //starting at 1 since 0 is the init value and should not match anything
         for rule in policy_rules.iter() {
-            subject_map.insert(rule.subject.clone(), counter);
-            counter += 1;
+            if !subject_map.contains_key(&rule.subject) {
+                subject_map.insert(rule.subject.clone(), counter);
+                counter += 1;
+            }
         }
         Ok(PolicyInformation {
             subject_map,
@@ -211,7 +215,7 @@ impl PolicyEnforcer {
     pub fn policy_decision_point(
         &self,
         subject: i32,
-        flow: Flow,
+        flow: InterceptorFlow,
         action: Action,
         key_expr: &str,
     ) -> ZResult<Permission> {

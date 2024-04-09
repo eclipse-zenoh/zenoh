@@ -101,10 +101,10 @@ pub struct DownsamplingItemConf {
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigRules {
-    pub interface: Vec<String>,
-    pub key_expr: Vec<String>,
-    pub action: Vec<Action>,
-    pub flow: Vec<DownsamplingFlow>,
+    pub interfaces: Vec<String>,
+    pub key_exprs: Vec<String>,
+    pub actions: Vec<Action>,
+    pub flows: Vec<InterceptorFlow>,
     pub permission: Permission,
 }
 
@@ -114,7 +114,7 @@ pub struct PolicyRule {
     pub key_expr: String,
     pub action: Action,
     pub permission: Permission,
-    pub flow: DownsamplingFlow,
+    pub flow: InterceptorFlow,
 }
 
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
@@ -140,7 +140,7 @@ pub enum Permission {
     Deny,
 }
 
-pub type Flow = DownsamplingFlow;
+pub type InterceptorFlow = DownsamplingFlow;
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,

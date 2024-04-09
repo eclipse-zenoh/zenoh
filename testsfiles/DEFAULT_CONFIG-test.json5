@@ -1,3 +1,47 @@
+// {
+//   mode: "router",
+//   listen: {
+//     endpoints: [
+//       "tcp/127.0.0.1:7447",
+//       "tcp/127.0.0.1:7448",
+//     ],
+//   },
+//   scouting: {
+//     multicast: {
+//       enabled: false,     
+//     },
+//     gossip: {
+//       enabled: false,      
+//     },
+//   },
+//   acl: {
+//       ///[true/false] acl will be activated only if this is set to true
+//       "enabled": true,
+//       ///[deny/allow] default permission is deny (even if this is left empty or not specified)
+//       "default_permission": "allow",
+//       ///rule set for permissions allowing or denying access to key-expressions
+//       "rules": 
+//       [
+//         {
+//           "action": [
+//             "put",
+//             "declare_subscriber",
+//           ],
+//          "flow":["egress","ingress"],
+//           "permission": "allow",
+//           "key_expr": [
+//             "test/thr"
+//           ],
+//           "interface": [
+//             "lo0"
+//           ]
+//         },
+//      ]
+//     },
+    
+// }
+
+
 /// This file attempts to list and document available configuration elements.
 /// For a more complete view of the configuration's structure, check out `zenoh/src/config.rs`'s `Config` structure.
 /// Note that the values here are correctly typed, but may not be sensible, so copying this file to change only the parts that matter to you is not good practice.
@@ -9,45 +53,16 @@
   // id: "1234567890abcdef",
 
   /// The node's mode (router, peer or client)
-  mode: "peer",
+  mode: "router",
 
   /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenohd and available in admin space @/router/<id>
-  metadata: {
-    name: "strawberry",
-    location: "Penny Lane"
-  },
+ 
 
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
   /// For TCP/UDP on Linux, it is possible additionally specify the interface to be connected to: 
   /// E.g. tcp/192.168.0.1:7447#iface=eth0, for connect only if the IP address is reachable via the interface eth0 
-  connect: {
-    /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
-    /// Accepts a single value or different values for router, peer and client.
-    timeout_ms: { router: -1, peer: -1, client: 0 },
-
-    endpoints: [
-      // "<proto>/<address>"
-    ],
-
-    /// Global connect configuration, 
-    /// Accepts a single value or different values for router, peer and client.
-    /// The configuration can also be specified for the separate endpoint
-    /// it will override the global one
-    /// E.g. tcp/192.168.0.1:7447#retry_period_init_ms=20000;retry_period_max_ms=10000"
-     
-    /// exit from application, if timeout exceed
-    exit_on_failure: { router: false, peer: false, client: true },
-    /// connect establishing retry configuration 
-    retry: { 
-      /// intial wait timeout until next connect try
-      period_init_ms: 1000,
-      /// maximum wait timeout until next connect try
-      period_max_ms: 4000,
-      /// increase factor for the next timeout until nexti connect try
-      period_increase_factor: 2,
-    },
-  },
+  
 
   /// Which endpoints to listen on. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
@@ -61,6 +76,8 @@
 
     endpoints: [
       // "<proto>/<address>"
+       "tcp/127.0.0.1:7447",
+      "tcp/127.0.0.1:7448",
     ],
 
     /// Global listen configuration, 
@@ -82,73 +99,16 @@
     },
   },
   /// Configure the scouting mechanisms and their behaviours
-  scouting: {
-    /// In client mode, the period dedicated to scouting for a router before failing
-    timeout: 3000,
-    /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
-    delay: 200,
-    /// The multicast scouting configuration.
+    scouting: {
     multicast: {
-      /// Whether multicast scouting is enabled or not
-      enabled: true,
-      /// The socket which should be used for multicast scouting
-      address: "224.0.0.224:7446",
-      /// The network interface which should be used for multicast scouting
-      interface: "auto", // If not set or set to "auto" the interface if picked automatically
-      /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-      /// Accepts a single value or different values for router, peer and client.
-      /// Each value is bit-or-like combinations of "peer", "router" and "client".
-      autoconnect: { router: "", peer: "router|peer" },
-      /// Whether or not to listen for scout messages on UDP multicast and reply to them.
-      listen: true,
+      enabled: false,     
     },
-    /// The gossip scouting configuration.
     gossip: {
-      /// Whether gossip scouting is enabled or not
-      enabled: true,
-      /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
-      /// When false, gossip scouting informations are only propagated to the next hop.
-      /// Activating multihop gossip implies more scouting traffic and a lower scalability.
-      /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
-      /// direct connectivity with each other.
-      multihop: false,
-      /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-      /// Accepts a single value or different values for router, peer and client.
-      /// Each value is bit-or-like combinations of "peer", "router" and "client".
-      autoconnect: { router: "", peer: "router|peer" },
+      enabled: false,      
     },
   },
 
-  /// Configuration of data messages timestamps management.
-  timestamping: {
-    /// Whether data messages should be timestamped if not already.
-    /// Accepts a single boolean value or different values for router, peer and client.
-    enabled: { router: true, peer: false, client: false },
-    /// Whether data messages with timestamps in the future should be dropped or not.
-    /// If set to false (default), messages with timestamps in the future are retimestamped.
-    /// Timestamps are ignored if timestamping is disabled.
-    drop_future_timestamp: false,
-  },
 
-  /// The default timeout to apply to queries in milliseconds.
-  queries_default_timeout: 10000,
-
-  /// The routing strategy to use and it's configuration.
-  routing: {
-    /// The routing strategy to use in routers and it's configuration.
-    router: {
-      /// When set to true a router will forward data between two peers
-      /// directly connected to it if it detects that those peers are not
-      /// connected to each other.
-      /// The failover brokering only works if gossip discovery is enabled.
-      peers_failover_brokering: true,
-    },
-    /// The routing strategy to use in peers and it's configuration.
-    peer: {
-      /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
-      mode: "peer_to_peer",
-    },
-  },
 
   //  /// The declarations aggregation strategy.
   //  aggregation: {
@@ -175,30 +135,32 @@
   //      ],
   //    },
   //  ],
-  //  /// configure acl rules 
-  //  acl: {
-  //   ///[true/false] acl will be activated only if this is set to true
-  //   "enabled": false,
-  //   ///[deny/allow] default permission is deny (even if this is left empty or not specified)
-  //   "default_permission": "deny",
-  //   ///rule set for permissions allowing or denying access to key-expressions
-  //   "rules": 
-  //   [
-  //     {
-  //       "actions": [
-  //         "put"
-  //       ],
-  //      "flows":["egress","ingress"],
-  //       "permission": "allow",
-  //       "key_exprs": [
-  //         "test/thr"
-  //       ],
-  //       "interfaces": [
-  //         "lo0"
-  //       ]
-  //     },
-  //  ]
-  //},
+ /// configure acl rules 
+   acl: {
+
+      ///[true/false] acl will be activated only if this is set to true
+      "enabled": true,
+      ///[deny/allow] default permission is deny (even if this is left empty or not specified)
+      "default_permission": "deny",
+      ///rule set for permissions allowing or denying access to key-expressions
+      "rules": 
+      [
+        {
+          "actions": [
+            "put",
+            "declare_subscriber"
+          ],
+         "flows":["egress","ingress"],
+          "permission": "allow",
+          "key_exprs": [
+            "test/thr"
+          ],
+          "interfaces": [
+            "lo0"
+          ]
+        },
+     ]
+    },
   /// Configure internal transport parameters
   transport: {
     unicast: {
