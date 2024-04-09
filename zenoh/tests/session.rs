@@ -225,7 +225,7 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_2sessions_1runtime_init() {
-    let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.1:17449"]).await;
+    let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.0.1:17449"]).await;
     println!("[RI][02a] Creating peer01 session from runtime 1");
     let peer01 = zenoh::init(r1.clone()).res_async().await.unwrap();
     println!("[RI][02b] Creating peer02 session from runtime 2");
