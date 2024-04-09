@@ -1005,7 +1005,9 @@ impl Deserialize<'_, SharedMemoryBuf> for ZSerde {
     type Error = ZDeserializeError;
 
     fn deserialize(self, v: &Payload) -> Result<SharedMemoryBuf, Self::Error> {
-        for zs in v.0.zslices() {
+        // A SharedMemoryBuf is expected to have only one slice
+        let mut zslices = v.0.zslices();
+        if let Some(zs) = zslices.next() {
             if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
                 return Ok(shmb.clone());
             }
