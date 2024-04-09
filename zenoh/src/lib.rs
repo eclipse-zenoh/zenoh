@@ -231,6 +231,7 @@ pub mod payload {
     pub use crate::api::payload::PayloadReader;
     pub use crate::api::payload::Serialize;
     pub use crate::api::payload::StringOrBase64;
+    pub use crate::api::payload::ZSerde;
 }
 
 /// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries

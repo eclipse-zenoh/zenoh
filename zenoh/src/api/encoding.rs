@@ -848,3 +848,6 @@ impl EncodingMapping for Box<SharedMemoryBuf> {
 impl EncodingMapping for SharedMemoryBuf {
     const ENCODING: Encoding = Encoding::ZENOH_BYTES;
 }
+
+pub struct EncodingBuilder(Encoding);
+
