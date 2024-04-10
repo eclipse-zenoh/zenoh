@@ -393,6 +393,7 @@ pub struct Session {
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
     pub(crate) alive: bool,
+    owns_runtime: bool,
     task_controller: TaskController,
 }
 
@@ -414,6 +415,7 @@ impl Session {
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
+                owns_runtime: false,
                 task_controller: TaskController::default(),
             };
 
@@ -522,8 +524,9 @@ impl Session {
         ResolveFuture::new(async move {
             trace!("close()");
             self.task_controller.terminate_all(Duration::from_secs(10));
-            self.runtime.close().await?;
-
+            if self.owns_runtime {
+                self.runtime.close().await?;
+            }
             let mut state = zwrite!(self.state);
             state.primitives.as_ref().unwrap().send_close();
             // clean up to break cyclic references from self.state to itself
@@ -810,6 +813,7 @@ impl Session {
             state: self.state.clone(),
             id: self.id,
             alive: false,
+            owns_runtime: self.owns_runtime,
             task_controller: self.task_controller.clone(),
         }
     }
@@ -822,13 +826,14 @@ impl Session {
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::init(config).await {
                 Ok(mut runtime) => {
-                    let session = Self::init(
+                    let mut session = Self::init(
                         runtime.clone(),
                         aggregated_subscribers,
                         aggregated_publishers,
                     )
                     .res_async()
                     .await;
+                    session.owns_runtime = true;
                     match runtime.start().await {
                         Ok(()) => {
                             // Workaround for the declare_and_shoot problem
