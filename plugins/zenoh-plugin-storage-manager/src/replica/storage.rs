@@ -567,16 +567,7 @@ impl StorageService {
                     }
                 }
                 Err(e) => {
-                    let err_message =
-                        format!("Storage '{}' raised an error on query: {}", self.name, e);
-                    log::warn!("{}", err_message);
-                    if let Err(e) = q.reply(Err(err_message.into())).res().await {
-                        log::warn!(
-                            "Storage '{}' raised an error replying a query: {}",
-                            self.name,
-                            e
-                        )
-                    }
+                    log::warn!("Storage '{}' raised an error on query: {e}", self.name);
                 }
             };
         }
