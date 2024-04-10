@@ -20,9 +20,9 @@ pub mod response;
 use core::fmt;
 
 pub use declare::{
-    Declare, DeclareBody, DeclareFinal, DeclareInterest, DeclareKeyExpr, DeclareMode,
-    DeclareQueryable, DeclareSubscriber, DeclareToken, UndeclareKeyExpr, UndeclareQueryable,
-    UndeclareSubscriber, UndeclareToken,
+    Declare, DeclareBody, DeclareInterest, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber,
+    DeclareToken, UndeclareInterest, UndeclareKeyExpr, UndeclareQueryable, UndeclareSubscriber,
+    UndeclareToken,
 };
 pub use oam::Oam;
 pub use push::Push;
@@ -51,8 +51,6 @@ pub enum Mapping {
 }
 
 impl Mapping {
-    pub const DEFAULT: Self = Self::Receiver;
-
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -111,29 +109,17 @@ impl NetworkMessage {
     }
 
     #[inline]
-    pub fn is_express(&self) -> bool {
-        match &self.body {
-            NetworkBody::Push(msg) => msg.ext_qos.is_express(),
-            NetworkBody::Request(msg) => msg.ext_qos.is_express(),
-            NetworkBody::Response(msg) => msg.ext_qos.is_express(),
-            NetworkBody::ResponseFinal(msg) => msg.ext_qos.is_express(),
-            NetworkBody::Declare(msg) => msg.ext_qos.is_express(),
-            NetworkBody::OAM(msg) => msg.ext_qos.is_express(),
-        }
-    }
-
-    #[inline]
     pub fn is_droppable(&self) -> bool {
         if !self.is_reliable() {
             return true;
         }
 
         let cc = match &self.body {
+            NetworkBody::Declare(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::Push(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::Request(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::Response(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::ResponseFinal(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBody::Declare(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::OAM(msg) => msg.ext_qos.get_congestion_control(),
         };
 
@@ -143,11 +129,11 @@ impl NetworkMessage {
     #[inline]
     pub fn priority(&self) -> Priority {
         match &self.body {
+            NetworkBody::Declare(msg) => msg.ext_qos.get_priority(),
             NetworkBody::Push(msg) => msg.ext_qos.get_priority(),
             NetworkBody::Request(msg) => msg.ext_qos.get_priority(),
             NetworkBody::Response(msg) => msg.ext_qos.get_priority(),
             NetworkBody::ResponseFinal(msg) => msg.ext_qos.get_priority(),
-            NetworkBody::Declare(msg) => msg.ext_qos.get_priority(),
             NetworkBody::OAM(msg) => msg.ext_qos.get_priority(),
         }
     }
@@ -212,7 +198,7 @@ impl From<ResponseFinal> for NetworkMessage {
 pub mod ext {
     use crate::{
         common::{imsg, ZExtZ64},
-        core::{CongestionControl, EntityId, Priority, ZenohId},
+        core::{CongestionControl, Priority, ZenohId},
     };
     use core::fmt;
 
@@ -239,16 +225,6 @@ pub mod ext {
         const P_MASK: u8 = 0b00000111;
         const D_FLAG: u8 = 0b00001000;
         const E_FLAG: u8 = 0b00010000;
-
-        pub const DEFAULT: Self = Self::new(Priority::DEFAULT, CongestionControl::DEFAULT, false);
-
-        pub const DECLARE: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
-        pub const PUSH: Self = Self::new(Priority::DEFAULT, CongestionControl::Drop, false);
-        pub const REQUEST: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
-        pub const RESPONSE: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
-        pub const RESPONSE_FINAL: Self =
-            Self::new(Priority::DEFAULT, CongestionControl::Block, false);
-        pub const OAM: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
 
         pub const fn new(
             priority: Priority,
@@ -306,11 +282,35 @@ pub mod ext {
             let inner: u8 = rng.gen();
             Self { inner }
         }
+
+        pub fn declare_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
+
+        pub fn push_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Drop, false)
+        }
+
+        pub fn request_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
+
+        pub fn response_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
+
+        pub fn response_final_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
+
+        pub fn oam_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
     }
 
     impl<const ID: u8> Default for QoSType<{ ID }> {
         fn default() -> Self {
-            Self::new(Priority::DEFAULT, CongestionControl::DEFAULT, false)
+            Self::new(Priority::default(), CongestionControl::default(), false)
         }
     }
 
@@ -378,9 +378,6 @@ pub mod ext {
     }
 
     impl<const ID: u8> NodeIdType<{ ID }> {
-        // node_id == 0 means the message has been generated by the node itself
-        pub const DEFAULT: Self = Self { node_id: 0 };
-
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
@@ -392,7 +389,8 @@ pub mod ext {
 
     impl<const ID: u8> Default for NodeIdType<{ ID }> {
         fn default() -> Self {
-            Self::DEFAULT
+            // node_id == 0 means the message has been generated by the node itself
+            Self { node_id: 0 }
         }
     }
 
@@ -419,19 +417,19 @@ pub mod ext {
     /// %      eid      %
     /// +---------------+
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct EntityGlobalIdType<const ID: u8> {
+    pub struct EntityIdType<const ID: u8> {
         pub zid: ZenohId,
-        pub eid: EntityId,
+        pub eid: u32,
     }
 
-    impl<const ID: u8> EntityGlobalIdType<{ ID }> {
+    impl<const ID: u8> EntityIdType<{ ID }> {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
             let zid = ZenohId::rand();
-            let eid: EntityId = rng.gen();
+            let eid: u32 = rng.gen();
             Self { zid, eid }
         }
     }

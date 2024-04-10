@@ -39,7 +39,6 @@ use crate::network::NetworkMessage;
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 pub type BatchSize = u16;
-pub type AtomicBatchSize = core::sync::atomic::AtomicU16;
 
 pub mod batch_size {
     use super::BatchSize;
@@ -85,18 +84,13 @@ pub enum TransportBodyLowLatency {
 
 pub type TransportSn = u32;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct PrioritySn {
     pub reliable: TransportSn,
     pub best_effort: TransportSn,
 }
 
 impl PrioritySn {
-    pub const DEFAULT: Self = Self {
-        reliable: TransportSn::MIN,
-        best_effort: TransportSn::MIN,
-    };
-
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -267,8 +261,7 @@ pub mod ext {
     }
 
     impl<const ID: u8> QoSType<{ ID }> {
-        const P_MASK: u8 = 0b00000111;
-        pub const DEFAULT: Self = Self::new(Priority::DEFAULT);
+        pub const P_MASK: u8 = 0b00000111;
 
         pub const fn new(priority: Priority) -> Self {
             Self {
@@ -292,7 +285,7 @@ pub mod ext {
 
     impl<const ID: u8> Default for QoSType<{ ID }> {
         fn default() -> Self {
-            Self::DEFAULT
+            Self::new(Priority::default())
         }
     }
 

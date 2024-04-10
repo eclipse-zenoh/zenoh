@@ -30,12 +30,9 @@ use std::{convert::TryFrom, net::SocketAddr};
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::{
-    core::{
-        endpoint::{self, Address},
-        Locator,
-    },
-    transport::BatchSize,
+use zenoh_protocol::core::{
+    endpoint::{self, Address},
+    Locator,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -48,7 +45,7 @@ pub use unicast::*;
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the TLS MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
-const TLS_MAX_MTU: BatchSize = BatchSize::MAX;
+const TLS_MAX_MTU: u16 = u16::MAX;
 pub const TLS_LOCATOR_PREFIX: &str = "tls";
 
 #[derive(Default, Clone, Copy)]
@@ -175,7 +172,7 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
 
 zconfigurable! {
     // Default MTU (TLS PDU) in bytes.
-    static ref TLS_DEFAULT_MTU: BatchSize = TLS_MAX_MTU;
+    static ref TLS_DEFAULT_MTU: u16 = TLS_MAX_MTU;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:

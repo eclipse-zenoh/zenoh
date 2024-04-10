@@ -53,7 +53,7 @@ pub use zenoh_keyexpr::*;
 pub use zenoh_macros::{kedefine, keformat, kewrite};
 use zenoh_protocol::{
     core::{key_expr::canon::Canonizable, ExprId, WireExpr},
-    network::{declare, DeclareBody, DeclareMode, Mapping, UndeclareKeyExpr},
+    network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
 
@@ -185,7 +185,7 @@ impl<'a> KeyExpr<'a> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    pub unsafe fn from_str_unchecked(s: &'a str) -> Self {
+    pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
         keyexpr::from_str_unchecked(s).into()
     }
 
@@ -664,10 +664,9 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(zenoh_protocol::network::Declare {
-            mode: DeclareMode::Push,
-            ext_qos: declare::ext::QoSType::DECLARE,
+            ext_qos: declare::ext::QoSType::declare_default(),
             ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+            ext_nodeid: declare::ext::NodeIdType::default(),
             body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),
         });
 

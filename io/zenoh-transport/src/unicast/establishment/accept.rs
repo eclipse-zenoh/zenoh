@@ -167,11 +167,9 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         // Check if the version is supported
         if init_syn.version != input.mine_version {
             let e = zerror!(
-                "Rejecting InitSyn on {} because of unsupported Zenoh protocol version (expected: {}, received: {}) from: {}",
+                "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
                 self.link,
-                input.mine_version,
-                init_syn.version,
-                init_syn.zid,
+                init_syn.zid
             );
             return Err((e.into(), Some(close::reason::INVALID)));
         }

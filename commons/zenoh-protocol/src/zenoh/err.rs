@@ -11,41 +11,43 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::ZExtUnknown, core::Encoding};
+use crate::common::ZExtUnknown;
 use alloc::vec::Vec;
-use zenoh_buffers::ZBuf;
+use uhlc::Timestamp;
 
 /// # Err message
 ///
 /// ```text
 /// Flags:
-/// - X: Reserved
-/// - E: Encoding       If E==1 then the encoding is present
+/// - T: Timestamp      If T==1 then the timestamp if present
+/// - I: Infrastructure If I==1 then the error is related to the infrastructure else to the user
 /// - Z: Extension      If Z==1 then at least one extension is present
 ///
 ///   7 6 5 4 3 2 1 0
 ///  +-+-+-+-+-+-+-+-+
-///  |Z|E|X|   ERR   |
+///  |Z|I|T|   ERR   |
 ///  +-+-+-+---------+
-///  ~   encoding    ~  if E==1
+///  %   code:z16    %
+///  +---------------+
+///  ~ ts: <u8;z16>  ~  if T==1
 ///  +---------------+
 ///  ~  [err_exts]   ~  if Z==1
 ///  +---------------+
-///  ~ pl: <u8;z32>  ~  -- Payload
-///  +---------------+
 /// ```
 pub mod flag {
-    // pub const X: u8 = 1 << 5; // 0x20 Reserved
-    pub const E: u8 = 1 << 6; // 0x40 Encoding      if E==1 then the encoding is present
+    pub const T: u8 = 1 << 5; // 0x20 Timestamp         if T==0 then the timestamp if present
+    pub const I: u8 = 1 << 6; // 0x40 Infrastructure    if I==1 then the error is related to the infrastructure else to the user
     pub const Z: u8 = 1 << 7; // 0x80 Extensions        if Z==1 then an extension will follow
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Err {
-    pub encoding: Encoding,
+    pub code: u16,
+    pub is_infrastructure: bool,
+    pub timestamp: Option<Timestamp>,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    pub ext_body: Option<ext::ErrBodyType>,
     pub ext_unknown: Vec<ZExtUnknown>,
-    pub payload: ZBuf,
 }
 
 pub mod ext {
@@ -55,31 +57,45 @@ pub mod ext {
     /// Used to carry additional information about the source of data
     pub type SourceInfo = zextzbuf!(0x1, false);
     pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
+
+    /// # ErrBody extension
+    /// Used to carry a body attached to the query
+    /// Shared Memory extension is automatically defined by ValueType extension if
+    /// #[cfg(feature = "shared-memory")] is defined.
+    pub type ErrBodyType = crate::zenoh::ext::ValueType<{ ZExtZBuf::<0x02>::id(false) }, 0x03>;
 }
 
 impl Err {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::iext;
+        use crate::{common::iext, core::ZenohId};
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        let encoding = Encoding::rand();
+        let code: u16 = rng.gen();
+        let is_infrastructure = rng.gen_bool(0.5);
+        let timestamp = rng.gen_bool(0.5).then_some({
+            let time = uhlc::NTP64(rng.gen());
+            let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
+            Timestamp::new(time, id)
+        });
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
+        let ext_body = rng.gen_bool(0.5).then_some(ext::ErrBodyType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(
-                iext::mid(ext::SourceInfo::ID) + 1,
+                iext::mid(ext::ErrBodyType::SID) + 1,
                 false,
             ));
         }
-        let payload = ZBuf::rand(rng.gen_range(0..=64));
 
         Self {
-            encoding,
+            code,
+            is_infrastructure,
+            timestamp,
             ext_sinfo,
+            ext_body,
             ext_unknown,
-            payload,
         }
     }
 }

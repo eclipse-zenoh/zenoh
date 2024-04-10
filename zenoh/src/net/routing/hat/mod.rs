@@ -31,10 +31,7 @@ use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
     core::WireExpr,
     network::{
-        declare::{
-            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
-            SubscriberId,
-        },
+        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
         Oam,
     },
 };
@@ -120,7 +117,6 @@ pub(crate) trait HatPubSubTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
@@ -129,10 +125,9 @@ pub(crate) trait HatPubSubTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: SubscriberId,
-        res: Option<Arc<Resource>>,
+        res: &mut Arc<Resource>,
         node_id: NodeId,
-    ) -> Option<Arc<Resource>>;
+    );
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>>;
 
@@ -152,19 +147,17 @@ pub(crate) trait HatQueriesTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: QueryableId,
         res: &mut Arc<Resource>,
-        qabl_info: &QueryableInfoType,
+        qabl_info: &QueryableInfo,
         node_id: NodeId,
     );
     fn undeclare_queryable(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: QueryableId,
-        res: Option<Arc<Resource>>,
+        res: &mut Arc<Resource>,
         node_id: NodeId,
-    ) -> Option<Arc<Resource>>;
+    );
 
     fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>>;
 

@@ -145,7 +145,7 @@ impl TransportMulticastInner {
         let priority = ext_qos.priority();
         let c = if self.is_qos() {
             &peer.priority_rx[priority as usize]
-        } else if priority == Priority::DEFAULT {
+        } else if priority == Priority::default() {
             &peer.priority_rx[0]
         } else {
             bail!(
@@ -181,7 +181,7 @@ impl TransportMulticastInner {
         let priority = ext_qos.priority();
         let c = if self.is_qos() {
             &peer.priority_rx[priority as usize]
-        } else if priority == Priority::DEFAULT {
+        } else if priority == Priority::default() {
             &peer.priority_rx[0]
         } else {
             bail!(

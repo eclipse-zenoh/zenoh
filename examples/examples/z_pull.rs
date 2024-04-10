@@ -13,7 +13,8 @@
 //
 use clap::Parser;
 use std::time::Duration;
-use zenoh::{config::Config, handlers::RingBuffer, prelude::r#async::*};
+use zenoh::config::Config;
+use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -21,69 +22,46 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, key_expr, size, interval) = parse_args();
+    let (config, key_expr) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring Subscriber on '{key_expr}'...");
+
     let subscriber = session
         .declare_subscriber(&key_expr)
-        .with(RingBuffer::new(size))
+        .pull_mode()
+        .callback(|sample| {
+            println!(
+                ">> [Subscriber] Received {} ('{}': '{}')",
+                sample.kind,
+                sample.key_expr.as_str(),
+                sample.value,
+            );
+        })
         .res()
         .await
         .unwrap();
 
-    println!(
-        "Pulling data every {:#?} seconds. Press CTRL-C to quit...",
-        interval
-    );
-    loop {
-        match subscriber.recv() {
-            Ok(Some(sample)) => {
-                let payload = sample
-                    .payload()
-                    .deserialize::<String>()
-                    .unwrap_or_else(|e| format!("{}", e));
-                println!(
-                    ">> [Subscriber] Pulled {} ('{}': '{}')",
-                    sample.kind(),
-                    sample.key_expr().as_str(),
-                    payload,
-                );
-            }
-            Ok(None) => {
-                println!(
-                    ">> [Subscriber] Pulled nothing... sleep for {:#?}",
-                    interval
-                );
-                tokio::time::sleep(interval).await;
-            }
-            Err(e) => {
-                println!(">> [Subscriber] Pull error: {e}");
-                return;
-            }
-        }
+    println!("Press CTRL-C to quit...");
+    for idx in 0..u32::MAX {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        println!("[{idx:4}] Pulling...");
+        subscriber.pull().res().await.unwrap();
     }
 }
 
-#[derive(clap::Parser, Clone, PartialEq, Debug)]
+#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct SubArgs {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The Key Expression to subscribe to.
     key: KeyExpr<'static>,
-    /// The size of the ringbuffer.
-    #[arg(long, default_value = "3")]
-    size: usize,
-    /// The interval for pulling the ringbuffer.
-    #[arg(long, default_value = "5.0")]
-    interval: f32,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, KeyExpr<'static>, usize, Duration) {
+fn parse_args() -> (Config, KeyExpr<'static>) {
     let args = SubArgs::parse();
-    let interval = Duration::from_secs_f32(args.interval);
-    (args.common.into(), args.key, args.size, interval)
+    (args.common.into(), args.key)
 }

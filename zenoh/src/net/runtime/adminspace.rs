@@ -12,15 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
-use crate::encoding::Encoding;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
 use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::SyncResolve;
+use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
-use crate::sample::builder::ValueBuilderTrait;
 use crate::value::Value;
 use log::{error, trace};
 use serde_json::json;
@@ -32,16 +29,13 @@ use std::sync::Mutex;
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
-use zenoh_protocol::network::declare::QueryableId;
+use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{
-        key_expr::{keyexpr, OwnedKeyExpr},
-        ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
-    },
+    core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
-        declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
-        ext, Declare, DeclareBody, DeclareMode, DeclareQueryable, DeclareSubscriber, Push, Request,
-        Response, ResponseFinal,
+        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
+        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
+        ResponseFinal,
     },
     zenoh::{PushBody, RequestBody},
 };
@@ -60,7 +54,6 @@ type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
 
 pub struct AdminSpace {
     zid: ZenohId,
-    queryable_id: QueryableId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
@@ -191,7 +184,6 @@ impl AdminSpace {
         });
         let admin = Arc::new(AdminSpace {
             zid: runtime.zid(),
-            queryable_id: runtime.next_id(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
@@ -277,27 +269,27 @@ impl AdminSpace {
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
-            mode: DeclareMode::Push,
-
-            ext_qos: ext::QoSType::DECLARE,
+            ext_qos: ext::QoSType::declare_default(),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::DEFAULT,
+            ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                id: runtime.next_id(),
+                id: 0, // @TODO use proper QueryableId (#703)
                 wire_expr: [&root_key, "/**"].concat().into(),
-                ext_info: QueryableInfoType::DEFAULT,
+                ext_info: QueryableInfo {
+                    complete: 0,
+                    distance: 0,
+                },
             }),
         });
 
         primitives.send_declare(Declare {
-            mode: DeclareMode::Push,
-            ext_qos: ext::QoSType::DECLARE,
+            ext_qos: ext::QoSType::declare_default(),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::DEFAULT,
+            ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: runtime.next_id(),
+                id: 0, // @TODO use proper SubscriberId (#703)
                 wire_expr: [&root_key, "/config/**"].concat().into(),
-                ext_info: SubscriberInfo::DEFAULT,
+                ext_info: SubscriberInfo::default(),
             }),
         });
     }
@@ -388,60 +380,57 @@ impl Primitives for AdminSpace {
 
     fn send_request(&self, msg: Request) {
         trace!("recv Request {:?}", msg);
-        match msg.payload {
-            RequestBody::Query(query) => {
-                let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
-                {
-                    let conf = self.context.runtime.state.config.lock();
-                    if !conf.adminspace.permissions().read {
-                        log::error!(
+        if let RequestBody::Query(query) = msg.payload {
+            let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
+            {
+                let conf = self.context.runtime.state.config.lock();
+                if !conf.adminspace.permissions().read {
+                    log::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
                         msg.wire_expr
                     );
-                        primitives.send_response_final(ResponseFinal {
-                            rid: msg.id,
-                            ext_qos: ext::QoSType::RESPONSE_FINAL,
-                            ext_tstamp: None,
-                        });
-                        return;
-                    }
+                    primitives.send_response_final(ResponseFinal {
+                        rid: msg.id,
+                        ext_qos: ext::QoSType::response_final_default(),
+                        ext_tstamp: None,
+                    });
+                    return;
                 }
+            }
 
-                let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
-                    Ok(key_expr) => key_expr.into_owned(),
-                    Err(e) => {
-                        log::error!("Unknown KeyExpr: {}", e);
-                        primitives.send_response_final(ResponseFinal {
-                            rid: msg.id,
-                            ext_qos: ext::QoSType::RESPONSE_FINAL,
-                            ext_tstamp: None,
-                        });
-                        return;
-                    }
-                };
+            let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
+                Ok(key_expr) => key_expr.into_owned(),
+                Err(e) => {
+                    log::error!("Unknown KeyExpr: {}", e);
+                    primitives.send_response_final(ResponseFinal {
+                        rid: msg.id,
+                        ext_qos: ext::QoSType::response_final_default(),
+                        ext_tstamp: None,
+                    });
+                    return;
+                }
+            };
 
-                let zid = self.zid;
-                let parameters = query.parameters.to_owned();
-                let query = Query {
-                    inner: Arc::new(QueryInner {
-                        key_expr: key_expr.clone(),
-                        parameters,
-                        value: query
-                            .ext_body
-                            .map(|b| Value::from(b.payload).encoding(b.encoding)),
-                        qid: msg.id,
-                        zid,
-                        primitives,
-                        #[cfg(feature = "unstable")]
-                        attachment: query.ext_attachment.map(Into::into),
-                    }),
-                    eid: self.queryable_id,
-                };
+            let zid = self.zid;
+            let parameters = query.parameters.to_owned();
+            let query = Query {
+                inner: Arc::new(QueryInner {
+                    key_expr: key_expr.clone(),
+                    parameters,
+                    value: query
+                        .ext_body
+                        .map(|b| Value::from(b.payload).encoding(b.encoding)),
+                    qid: msg.id,
+                    zid,
+                    primitives,
+                    #[cfg(feature = "unstable")]
+                    attachment: query.ext_attachment.map(Into::into),
+                }),
+            };
 
-                for (key, handler) in &self.handlers {
-                    if key_expr.intersects(key) {
-                        handler(&self.context, query.clone());
-                    }
+            for (key, handler) in &self.handlers {
+                if key_expr.intersects(key) {
+                    handler(&self.context, query.clone());
                 }
             }
         }
@@ -572,17 +561,13 @@ fn router_data(context: &AdminContext, query: Query) {
     }
 
     log::trace!("AdminSpace router_data: {:?}", json);
-    let payload = match Payload::try_from(json) {
-        Ok(p) => p,
-        Err(e) => {
-            log::error!("Error serializing AdminSpace reply: {:?}", e);
-            return;
-        }
-    };
     if let Err(e) = query
-        .reply(reply_key, payload)
-        .encoding(Encoding::APPLICATION_JSON)
-        .res_sync()
+        .reply(Ok(Sample::new(
+            reply_key,
+            Value::from(json.to_string().as_bytes().to_vec())
+                .encoding(KnownEncoding::AppJson.into()),
+        )))
+        .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -611,7 +596,13 @@ zenoh_build{{version="{}"}} 1
             .openmetrics_text(),
     );
 
-    if let Err(e) = query.reply(reply_key, metrics).res() {
+    if let Err(e) = query
+        .reply(Ok(Sample::new(
+            reply_key,
+            Value::from(metrics.as_bytes().to_vec()).encoding(KnownEncoding::TextPlain.into()),
+        )))
+        .res()
+    {
         log::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
@@ -624,7 +615,17 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
-        .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
+        .reply(Ok(Sample::new(
+            reply_key,
+            Value::from(
+                tables
+                    .hat_code
+                    .info(&tables, WhatAmI::Router)
+                    .as_bytes()
+                    .to_vec(),
+            )
+            .encoding(KnownEncoding::TextPlain.into()),
+        )))
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -639,7 +640,17 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
-        .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
+        .reply(Ok(Sample::new(
+            reply_key,
+            Value::from(
+                tables
+                    .hat_code
+                    .info(&tables, WhatAmI::Peer)
+                    .as_bytes()
+                    .to_vec(),
+            )
+            .encoding(KnownEncoding::TextPlain.into()),
+        )))
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
@@ -656,7 +667,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, Payload::empty()).res() {
+            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -673,7 +684,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, Payload::empty()).res() {
+            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -691,13 +702,8 @@ fn plugins_data(context: &AdminContext, query: Query) {
             log::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            match Payload::try_from(status) {
-                Ok(zbuf) => {
-                    if let Err(e) = query.reply(key, zbuf).res_sync() {
-                        log::error!("Error sending AdminSpace reply: {:?}", e);
-                    }
-                }
-                Err(e) => log::debug!("Admin query error: {}", e),
+            if let Err(e) = query.reply(Ok(Sample::new(key, Value::from(status)))).res() {
+                log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
     }
@@ -714,7 +720,13 @@ fn plugins_status(context: &AdminContext, query: Query) {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
-                        if let Err(e) = query.reply(key_expr, plugin.path()).res() {
+                        if let Err(e) = query
+                            .reply(Ok(Sample::new(
+                                key_expr,
+                                Value::from(plugin.path()).encoding(KnownEncoding::AppJson.into()),
+                            )))
+                            .res()
+                        {
                             log::error!("Error sending AdminSpace reply: {:?}", e);
                         }
                     }
@@ -736,13 +748,13 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match Payload::try_from(response.value) {
-                                Ok(zbuf) => {
-                                    if let Err(e) = query.reply(key_expr, zbuf).res_sync() {
-                                        log::error!("Error sending AdminSpace reply: {:?}", e);
-                                    }
-                                },
-                                Err(e) => log::debug!("Admin query error: {}", e),
+                            if let Err(e) = query.reply(Ok(Sample::new(
+                                key_expr,
+                                Value::from(response.value).encoding(KnownEncoding::AppJson.into()),
+                            )))
+                            .res()
+                            {
+                                log::error!("Error sending AdminSpace reply: {:?}", e);
                             }
                         } else {
                             log::error!("Error: plugin {} replied with an invalid key", plugin_key);

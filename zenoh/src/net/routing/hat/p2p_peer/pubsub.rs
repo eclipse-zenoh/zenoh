@@ -22,15 +22,13 @@ use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::{
     core::{Reliability, WhatAmI},
     network::declare::{
         common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareMode, DeclareSubscriber, UndeclareSubscriber,
+        DeclareSubscriber, Mode, UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -45,20 +43,18 @@ fn propagate_simple_subscription_to(
 ) {
     if (src_face.id != dst_face.id
         || (dst_face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)))
-        && !face_hat!(dst_face).local_subs.contains_key(res)
+        && !face_hat!(dst_face).local_subs.contains(res)
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
     {
-        let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-        face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
+        face_hat_mut!(dst_face).local_subs.insert(res.clone());
         let key_expr = Resource::decl_key(res, dst_face);
         dst_face.primitives.send_declare(RoutingContext::with_expr(
             Declare {
-                mode: DeclareMode::Push,
-                ext_qos: ext::QoSType::DECLARE,
+                ext_qos: ext::QoSType::declare_default(),
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
+                ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                    id,
+                    id: 0, // @TODO use proper SubscriberId (#703)
                     wire_expr: key_expr,
                     ext_info: *sub_info,
                 }),
@@ -87,19 +83,24 @@ fn propagate_simple_subscription(
 fn register_client_subscription(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    id: SubscriberId,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
 ) {
     // Register subscription
     {
         let res = get_mut_unchecked(res);
+        log::debug!("Register subscription {} for {}", res.expr(), face);
         match res.session_ctxs.get_mut(&face.id) {
-            Some(ctx) => {
-                if ctx.subs.is_none() {
+            Some(ctx) => match &ctx.subs {
+                Some(info) => {
+                    if Mode::Pull == info.mode {
+                        get_mut_unchecked(ctx).subs = Some(*sub_info);
+                    }
+                }
+                None => {
                     get_mut_unchecked(ctx).subs = Some(*sub_info);
                 }
-            }
+            },
             None => {
                 res.session_ctxs.insert(
                     face.id,
@@ -109,6 +110,7 @@ fn register_client_subscription(
                         remote_expr_id: None,
                         subs: Some(*sub_info),
                         qabl: None,
+                        last_values: HashMap::new(),
                         in_interceptor_cache: None,
                         e_interceptor_cache: None,
                     }),
@@ -116,19 +118,20 @@ fn register_client_subscription(
             }
         }
     }
-    face_hat_mut!(face).remote_subs.insert(id, res.clone());
+    face_hat_mut!(face).remote_subs.insert(res.clone());
 }
 
 fn declare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    id: SubscriberId,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
 ) {
-    register_client_subscription(tables, face, id, res, sub_info);
+    register_client_subscription(tables, face, res, sub_info);
+    let mut propa_sub_info = *sub_info;
+    propa_sub_info.mode = Mode::Push;
 
-    propagate_simple_subscription(tables, res, sub_info, face);
+    propagate_simple_subscription(tables, res, &propa_sub_info, face);
     // This introduced a buffer overflow on windows
     // TODO: Let's deactivate this on windows until Fixed
     #[cfg(not(windows))]
@@ -137,12 +140,11 @@ fn declare_client_subscription(
             .primitives
             .send_declare(RoutingContext::with_expr(
                 Declare {
-                    mode: DeclareMode::Push,
-                    ext_qos: ext::QoSType::DECLARE,
+                    ext_qos: ext::QoSType::declare_default(),
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         wire_expr: res.expr().into(),
                         ext_info: *sub_info,
                     }),
@@ -168,20 +170,21 @@ fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 
 fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
     for face in tables.faces.values_mut() {
-        if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+        if face_hat!(face).local_subs.contains(res) {
+            let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    mode: DeclareMode::Push,
-                    ext_qos: ext::QoSType::DECLARE,
+                    ext_qos: ext::QoSType::declare_default(),
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id,
-                        ext_wire_expr: WireExprType::null(),
+                        id: 0, // @TODO use proper SubscriberId (#703)
+                        ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
                 res.expr(),
             ));
+            face_hat_mut!(face).local_subs.remove(res);
         }
     }
 }
@@ -191,34 +194,36 @@ pub(super) fn undeclare_client_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
-    if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
-        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-            get_mut_unchecked(ctx).subs = None;
-        }
+    log::debug!("Unregister client subscription {} for {}", res.expr(), face);
+    if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        get_mut_unchecked(ctx).subs = None;
+    }
+    face_hat_mut!(face).remote_subs.remove(res);
 
-        let mut client_subs = client_subs(res);
-        if client_subs.is_empty() {
-            propagate_forget_simple_subscription(tables, res);
-        }
-        if client_subs.len() == 1 {
-            let face = &mut client_subs[0];
-            if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
-                if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            mode: DeclareMode::Push,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr(),
-                    ));
-                }
-            }
+    let mut client_subs = client_subs(res);
+    if client_subs.is_empty() {
+        propagate_forget_simple_subscription(tables, res);
+    }
+    if client_subs.len() == 1 {
+        let face = &mut client_subs[0];
+        if face_hat!(face).local_subs.contains(res)
+            && !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS))
+        {
+            let wire_expr = Resource::get_best_key(res, "", face.id);
+            face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        id: 0, // @TODO use proper SubscriberId (#703)
+                        ext_wire_expr: WireExprType { wire_expr },
+                    }),
+                },
+                res.expr(),
+            ));
+
+            face_hat_mut!(face).local_subs.remove(res);
         }
     }
 }
@@ -226,19 +231,15 @@ pub(super) fn undeclare_client_subscription(
 fn forget_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    id: SubscriberId,
-) -> Option<Arc<Resource>> {
-    if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
-        undeclare_client_subscription(tables, face, &mut res);
-        Some(res)
-    } else {
-        None
-    }
+    res: &mut Arc<Resource>,
+) {
+    undeclare_client_subscription(tables, face, res);
 }
 
 pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
+        mode: Mode::Push,
     };
     for src_face in tables
         .faces
@@ -246,7 +247,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        for sub in face_hat!(src_face).remote_subs.values() {
+        for sub in &face_hat!(src_face).remote_subs {
             propagate_simple_subscription_to(tables, face, sub, &sub_info, &mut src_face.clone());
         }
     }
@@ -257,29 +258,27 @@ impl HatPubSubTrait for HatCode {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         _node_id: NodeId,
     ) {
-        declare_client_subscription(tables, face, id, res, sub_info);
+        declare_client_subscription(tables, face, res, sub_info);
     }
 
     fn undeclare_subscription(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: SubscriberId,
-        _res: Option<Arc<Resource>>,
+        res: &mut Arc<Resource>,
         _node_id: NodeId,
-    ) -> Option<Arc<Resource>> {
-        forget_client_subscription(tables, face, id)
+    ) {
+        forget_client_subscription(tables, face, res);
     }
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
         let mut subs = HashSet::new();
         for src_face in tables.faces.values() {
-            for sub in face_hat!(src_face).remote_subs.values() {
+            for sub in &face_hat!(src_face).remote_subs {
                 subs.insert(sub.clone());
             }
         }
@@ -322,19 +321,20 @@ impl HatPubSubTrait for HatCode {
             let mres = mres.upgrade().unwrap();
 
             for (sid, context) in &mres.session_ctxs {
-                if context.subs.is_some()
-                    && match tables.whatami {
+                if let Some(subinfo) = &context.subs {
+                    if match tables.whatami {
                         WhatAmI::Router => context.face.whatami != WhatAmI::Router,
                         _ => {
                             source_type == WhatAmI::Client
                                 || context.face.whatami == WhatAmI::Client
                         }
+                    } && subinfo.mode == Mode::Push
+                    {
+                        route.entry(*sid).or_insert_with(|| {
+                            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                            (context.face.clone(), key_expr.to_owned(), NodeId::default())
+                        });
                     }
-                {
-                    route.entry(*sid).or_insert_with(|| {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                        (context.face.clone(), key_expr.to_owned(), NodeId::default())
-                    });
                 }
             }
         }

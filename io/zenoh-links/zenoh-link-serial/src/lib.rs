@@ -25,11 +25,10 @@ pub use unicast::*;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::core::{endpoint::Address, EndPoint, Locator};
-use zenoh_protocol::transport::BatchSize;
 use zenoh_result::ZResult;
 
 // Maximum MTU (Serial PDU) in bytes.
-const SERIAL_MAX_MTU: BatchSize = z_serial::MAX_MTU as BatchSize;
+const SERIAL_MAX_MTU: u16 = z_serial::MAX_MTU as u16;
 
 const DEFAULT_BAUDRATE: u32 = 9_600;
 
@@ -37,11 +36,11 @@ const DEFAULT_EXCLUSIVE: bool = true;
 
 pub const SERIAL_LOCATOR_PREFIX: &str = "serial";
 
-const SERIAL_MTU_LIMIT: BatchSize = SERIAL_MAX_MTU;
+const SERIAL_MTU_LIMIT: u16 = SERIAL_MAX_MTU;
 
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
-    static ref SERIAL_DEFAULT_MTU: BatchSize = SERIAL_MTU_LIMIT;
+    static ref SERIAL_DEFAULT_MTU: u16 = SERIAL_MTU_LIMIT;
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref SERIAL_ACCEPT_THROTTLE_TIME: u64 = 100_000;

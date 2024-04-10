@@ -41,6 +41,7 @@ shared-memory = [
     "zenoh-shm",
     "zenoh-protocol/shared-memory"
 ]
+complete_n = ["zenoh-protocol/complete_n"]
 
 [dependencies]
 log = { workspace = true, optional = true }

@@ -107,7 +107,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         let sub1 = ztimeout!(s01
             .declare_subscriber(key_expr)
             .callback(move |sample| {
-                assert_eq!(sample.payload().len(), size);
+                assert_eq!(sample.value.payload.len(), size);
                 c_msgs1.fetch_add(1, Ordering::Relaxed);
             })
             .res_async())
@@ -119,7 +119,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         let sub2 = ztimeout!(s02
             .declare_subscriber(key_expr)
             .callback(move |sample| {
-                assert_eq!(sample.payload().len(), size);
+                assert_eq!(sample.value.payload.len(), size);
                 c_msgs2.fetch_add(1, Ordering::Relaxed);
             })
             .res_async())
@@ -173,7 +173,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
 }
 
 async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
-    let key_expr = KeyExpr::new("test/unicity").unwrap();
+    let key_expr = "test/unicity";
     let msg_count = 1;
     let msgs1 = Arc::new(AtomicUsize::new(0));
     let msgs2 = Arc::new(AtomicUsize::new(0));
@@ -184,20 +184,16 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
         // Queryable to data
         println!("[QR][01c] Queryable on s01 session");
-        let cke = key_expr.clone();
         let c_msgs1 = msgs1.clone();
         let qbl1 = ztimeout!(s01
-            .declare_queryable(cke.clone())
+            .declare_queryable(key_expr)
             .callback(move |sample| {
                 c_msgs1.fetch_add(1, Ordering::Relaxed);
-                tokio::task::block_in_place({
-                    let cke2 = cke.clone();
-                    move || {
-                        Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(cke2.clone(), vec![0u8; size]).res_async())
-                                .unwrap()
-                        });
-                    }
+                let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
+                tokio::task::block_in_place(move || {
+                    Handle::current().block_on(async move {
+                        ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                    });
                 });
             })
             .res_async())
@@ -205,20 +201,16 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
         // Queryable to data
         println!("[QR][02c] Queryable on s02 session");
-        let cke = key_expr.clone();
         let c_msgs2 = msgs2.clone();
         let qbl2 = ztimeout!(s02
-            .declare_queryable(cke.clone())
+            .declare_queryable(key_expr)
             .callback(move |sample| {
                 c_msgs2.fetch_add(1, Ordering::Relaxed);
-                tokio::task::block_in_place({
-                    let cke2 = cke.clone();
-                    move || {
-                        Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(cke2.clone(), vec![0u8; size]).res_async())
-                                .unwrap()
-                        });
-                    }
+                let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
+                tokio::task::block_in_place(move || {
+                    Handle::current().block_on(async move {
+                        ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                    });
                 });
             })
             .res_async())
@@ -229,12 +221,11 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
         // Get data
         println!("[QR][03c] Getting on s03 session. {msg_count} msgs.");
-        let cke = key_expr.clone();
         let mut cnt = 0;
         for _ in 0..msg_count {
-            let rs = ztimeout!(s03.get(cke.clone()).res_async()).unwrap();
+            let rs = ztimeout!(s03.get(key_expr).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.sample.unwrap().payload().len(), size);
+                assert_eq!(s.sample.unwrap().value.payload.len(), size);
                 cnt += 1;
             }
         }

@@ -48,13 +48,13 @@ where
 
         // Header
         let mut header = id::RESPONSE;
-        let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8)
+        let mut n_exts = ((ext_qos != &ext::QoSType::default()) as u8)
             + (ext_tstamp.is_some() as u8)
             + (ext_respid.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if wire_expr.mapping != Mapping::DEFAULT {
+        if wire_expr.mapping != Mapping::default() {
             header |= flag::M;
         }
         if wire_expr.has_suffix() {
@@ -67,7 +67,7 @@ where
         self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if ext_qos != &ext::QoSType::DEFAULT {
+        if ext_qos != &ext::QoSType::default() {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
@@ -123,7 +123,7 @@ where
         };
 
         // Extensions
-        let mut ext_qos = ext::QoSType::DEFAULT;
+        let mut ext_qos = ext::QoSType::default();
         let mut ext_tstamp = None;
         let mut ext_respid = None;
 
@@ -183,7 +183,8 @@ where
 
         // Header
         let mut header = id::RESPONSE_FINAL;
-        let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8) + (ext_tstamp.is_some() as u8);
+        let mut n_exts =
+            ((ext_qos != &ext::QoSType::default()) as u8) + (ext_tstamp.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -193,7 +194,7 @@ where
         self.write(&mut *writer, rid)?;
 
         // Extensions
-        if ext_qos != &ext::QoSType::DEFAULT {
+        if ext_qos != &ext::QoSType::default() {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
@@ -235,7 +236,7 @@ where
         let rid: RequestId = bodec.read(&mut *reader)?;
 
         // Extensions
-        let mut ext_qos = ext::QoSType::DEFAULT;
+        let mut ext_qos = ext::QoSType::default();
         let mut ext_tstamp = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
