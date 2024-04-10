@@ -67,7 +67,7 @@ pub(crate) fn acl_interceptor_factories(
             ),
         }
     } else {
-        log::warn!("[ACCESS LOG]: Access Control is disabled in config!");
+        log::info!("[ACCESS LOG]: Access Control is disabled in config!");
     }
 
     Ok(res)
@@ -101,18 +101,25 @@ impl InterceptorFactoryTrait for AclEnforcer {
                         return (None, None);
                     }
                 }
-                (
-                    Some(Box::new(IngressAclEnforcer {
-                        policy_enforcer: self.enforcer.clone(),
-                        interface_list: interface_list.clone(),
-                        zid,
-                    })),
-                    Some(Box::new(EgressAclEnforcer {
-                        policy_enforcer: self.enforcer.clone(),
-                        interface_list,
-                        zid,
-                    })),
-                )
+                let ingress_interceptor = Box::new(IngressAclEnforcer {
+                    policy_enforcer: self.enforcer.clone(),
+                    interface_list: interface_list.clone(),
+                    zid,
+                });
+                let egress_interceptor = Box::new(EgressAclEnforcer {
+                    policy_enforcer: self.enforcer.clone(),
+                    interface_list: interface_list.clone(),
+                    zid,
+                });
+                match (
+                    self.enforcer.interface_enabled.ingress,
+                    self.enforcer.interface_enabled.egress,
+                ) {
+                    (true, true) => (Some(ingress_interceptor), Some(egress_interceptor)),
+                    (true, false) => (Some(ingress_interceptor), None),
+                    (false, true) => (None, Some(egress_interceptor)),
+                    (false, false) => (None, None),
+                }
             }
             Err(e) => {
                 log::error!("[ACCESS LOG]: Failed to get zid with error :{}", e);

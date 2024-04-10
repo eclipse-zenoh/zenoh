@@ -100,11 +100,18 @@ impl FlowPolicy {
     }
 }
 
+#[derive(Default, Debug)]
+pub struct InterfaceEnabled {
+    pub ingress: bool,
+    pub egress: bool,
+}
+
 pub struct PolicyEnforcer {
     pub(crate) acl_enabled: bool,
     pub(crate) default_permission: Permission,
     pub(crate) subject_map: SubjectMap,
     pub(crate) policy_map: PolicyMap,
+    pub(crate) interface_enabled: InterfaceEnabled,
 }
 
 #[derive(Debug, Clone)]
@@ -120,6 +127,7 @@ impl PolicyEnforcer {
             default_permission: Permission::Deny,
             subject_map: SubjectMap::default(),
             policy_map: PolicyMap::default(),
+            interface_enabled: InterfaceEnabled::default(),
         }
     }
 
@@ -135,6 +143,12 @@ impl PolicyEnforcer {
                     log::warn!("[ACCESS LOG]: ACL ruleset in config file is empty!!!");
                     self.policy_map = PolicyMap::default();
                     self.subject_map = SubjectMap::default();
+                    if self.default_permission == Permission::Deny {
+                        self.interface_enabled = InterfaceEnabled {
+                            ingress: true,
+                            egress: true,
+                        };
+                    }
                 } else {
                     let policy_information = self.policy_information_point(rules)?;
                     let subject_map = policy_information.subject_map;
@@ -142,19 +156,29 @@ impl PolicyEnforcer {
 
                     for rule in policy_information.policy_rules {
                         if let Some(index) = subject_map.get(&rule.subject) {
-                            if let Some(single_policy) = main_policy.get_mut(index) {
-                                single_policy
-                                    .flow_mut(rule.flow)
-                                    .action_mut(rule.action)
-                                    .permission_mut(rule.permission)
-                                    .insert(keyexpr::new(&rule.key_expr)?, true);
+                            let single_policy = main_policy
+                                .entry(*index)
+                                .or_insert_with(PolicyForSubject::default);
+                            single_policy
+                                .flow_mut(rule.flow)
+                                .action_mut(rule.action)
+                                .permission_mut(rule.permission)
+                                .insert(keyexpr::new(&rule.key_expr)?, true);
+
+                            if self.default_permission == Permission::Deny {
+                                self.interface_enabled = InterfaceEnabled {
+                                    ingress: true,
+                                    egress: true,
+                                };
                             } else {
-                                let mut pfs = PolicyForSubject::default();
-                                pfs.flow_mut(rule.flow)
-                                    .action_mut(rule.action)
-                                    .permission_mut(rule.permission)
-                                    .insert(keyexpr::new(&rule.key_expr)?, true);
-                                main_policy.insert(*index, pfs);
+                                match rule.flow {
+                                    InterceptorFlow::Ingress => {
+                                        self.interface_enabled.ingress = true;
+                                    }
+                                    InterceptorFlow::Egress => {
+                                        self.interface_enabled.egress = true;
+                                    }
+                                }
                             }
                         };
                     }

@@ -53,7 +53,6 @@ fn test_pub_sub_deny() {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    //let mut config_router = config_router.clone();
     config_router
         .insert_json5(
             "acl",
@@ -133,7 +132,6 @@ fn test_pub_sub_allow() {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    //let mut config_router = config_router.clone();
     config_router
         .insert_json5(
             "acl",

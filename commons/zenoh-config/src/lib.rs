@@ -75,7 +75,7 @@ pub type SecretValue = Secret<SecretString>;
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-pub enum DownsamplingFlow {
+pub enum InterceptorFlow {
     Egress,
     Ingress,
 }
@@ -97,7 +97,7 @@ pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied.
     pub rules: Vec<DownsamplingRuleConf>,
     /// Downsampling flow direction: egress, ingress
-    pub flow: DownsamplingFlow,
+    pub flow: InterceptorFlow,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
@@ -141,7 +141,6 @@ pub enum Permission {
     Deny,
 }
 
-pub type InterceptorFlow = DownsamplingFlow;
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
