@@ -118,10 +118,22 @@ lazy_static! {
     pub static ref ZRUNTIME_INDEX: HashMap<ZRuntime, AtomicUsize> = ZRuntime::iter().map(|zrt| (zrt, AtomicUsize::new(0))).collect();
 }
 
+// To drop the used data mannually since Rust does not drop static variables.
+pub extern "C" fn cleanup() {
+    unsafe {
+        std::mem::drop((ZRUNTIME_POOL.deref() as *const ZRuntimePool).read());
+        std::mem::drop((ZRUNTIME_INDEX.deref() as *const HashMap<ZRuntime, AtomicUsize>).read());
+    }
+}
+
 pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<Runtime>>);
 
 impl ZRuntimePool {
     fn new() -> Self {
+        // Register a callback to clean the used static variables.
+        unsafe {
+            libc::atexit(cleanup);
+        }
         Self(ZRuntime::iter().map(|zrt| (zrt, OnceLock::new())).collect())
     }
 
@@ -148,20 +160,6 @@ impl Drop for ZRuntimePool {
 
         for hd in handles {
             let _ = hd.join();
-        }
-    }
-}
-
-/// In order to prevent valgrind reporting memory leaks,
-/// we use this guard to force drop ZRUNTIME_POOL since Rust does not drop static variables.
-#[doc(hidden)]
-pub struct ZRuntimePoolGuard;
-
-impl Drop for ZRuntimePoolGuard {
-    fn drop(&mut self) {
-        unsafe {
-            let ptr = &(*ZRUNTIME_POOL) as *const ZRuntimePool;
-            std::mem::drop(ptr.read());
         }
     }
 }
