@@ -17,7 +17,7 @@ use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
-    ZSlice,
+    ZSlice, ZSliceBuffer,
 };
 use alloc::{sync::Arc, vec::Vec};
 use core::{cmp, iter, mem, num::NonZeroUsize, ops::RangeBounds, ptr};
@@ -57,6 +57,21 @@ impl ZBuf {
     pub fn push_zslice(&mut self, zslice: ZSlice) {
         if !zslice.is_empty() {
             self.slices.push(zslice);
+        }
+    }
+
+    pub fn to_zslice(&self) -> ZSlice {
+        let mut slices = self.zslices();
+        match self.slices.len() {
+            0 => ZSlice::empty(),
+            // SAFETY: it's safe to use unwrap_unchecked() beacuse we are explicitly checking the length is 1.
+            1 => unsafe { slices.next().unwrap_unchecked().clone() },
+            _ => slices
+                .fold(Vec::new(), |mut acc, it| {
+                    acc.extend(it.as_slice());
+                    acc
+                })
+                .into(),
         }
     }
 
@@ -201,15 +216,31 @@ impl PartialEq for ZBuf {
 }
 
 // From impls
+impl From<ZSlice> for ZBuf {
+    fn from(t: ZSlice) -> Self {
+        let mut zbuf = ZBuf::empty();
+        zbuf.push_zslice(t);
+        zbuf
+    }
+}
+
+impl<T> From<Arc<T>> for ZBuf
+where
+    T: ZSliceBuffer + 'static,
+{
+    fn from(t: Arc<T>) -> Self {
+        let zslice: ZSlice = t.into();
+        Self::from(zslice)
+    }
+}
+
 impl<T> From<T> for ZBuf
 where
-    T: Into<ZSlice>,
+    T: ZSliceBuffer + 'static,
 {
     fn from(t: T) -> Self {
-        let mut zbuf = ZBuf::empty();
         let zslice: ZSlice = t.into();
-        zbuf.push_zslice(zslice);
-        zbuf
+        Self::from(zslice)
     }
 }
 

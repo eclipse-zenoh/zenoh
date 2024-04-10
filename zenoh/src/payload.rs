@@ -91,11 +91,11 @@ impl Payload {
     }
 
     /// Get a [`PayloadReader`] implementing [`std::io::Read`] trait.
-    pub fn iter<'a, T>(&'a self) -> PayloadIterator<'a, T>
+    pub fn iter<T>(&self) -> PayloadIterator<'_, T>
     where
-        T: TryFrom<Payload>,
-        ZSerde: Deserialize<'a, T>,
-        <ZSerde as Deserialize<'a, T>>::Error: Debug,
+        T: for<'b> TryFrom<&'b Payload>,
+        for<'b> ZSerde: Deserialize<'b, T>,
+        for<'b> <ZSerde as Deserialize<'b, T>>::Error: Debug,
     {
         PayloadIterator {
             reader: self.0.reader(),
@@ -126,14 +126,23 @@ impl Payload {
     }
 
     /// Decode an object of type `T` from a [`Value`] using the [`ZSerde`].
-    /// See [encode](Value::encode) for an example.
     pub fn deserialize<'a, T>(&'a self) -> ZResult<T>
     where
         ZSerde: Deserialize<'a, T>,
         <ZSerde as Deserialize<'a, T>>::Error: Debug,
     {
-        let t: T = ZSerde.deserialize(self).map_err(|e| zerror!("{:?}", e))?;
-        Ok(t)
+        ZSerde
+            .deserialize(self)
+            .map_err(|e| zerror!("{:?}", e).into())
+    }
+
+    /// Decode an object of type `T` from a [`Value`] using the [`ZSerde`].
+    pub fn into<'a, T>(&'a self) -> T
+    where
+        ZSerde: Deserialize<'a, T, Error = Infallible>,
+        <ZSerde as Deserialize<'a, T>>::Error: Debug,
+    {
+        ZSerde.deserialize(self).unwrap_infallible()
     }
 }
 
@@ -181,10 +190,10 @@ where
     _t: PhantomData<T>,
 }
 
-impl<'a, T> Iterator for PayloadIterator<'a, T>
+impl<T> Iterator for PayloadIterator<'_, T>
 where
-    ZSerde: for<'b> Deserialize<'b, T>,
-    <ZSerde as Deserialize<'a, T>>::Error: Debug,
+    for<'a> ZSerde: Deserialize<'a, T>,
+    for<'a> <ZSerde as Deserialize<'a, T>>::Error: Debug,
 {
     type Item = T;
 
@@ -273,6 +282,55 @@ impl From<Payload> for ZBuf {
 }
 
 impl From<&Payload> for ZBuf {
+    fn from(value: &Payload) -> Self {
+        ZSerde.deserialize(value).unwrap_infallible()
+    }
+}
+
+// ZSlice
+impl Serialize<ZSlice> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: ZSlice) -> Self::Output {
+        Payload::new(t)
+    }
+}
+
+impl From<ZSlice> for Payload {
+    fn from(t: ZSlice) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&ZSlice> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: &ZSlice) -> Self::Output {
+        Payload::new(t.clone())
+    }
+}
+
+impl From<&ZSlice> for Payload {
+    fn from(t: &ZSlice) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Deserialize<'_, ZSlice> for ZSerde {
+    type Error = Infallible;
+
+    fn deserialize(self, v: &Payload) -> Result<ZSlice, Self::Error> {
+        Ok(v.0.to_zslice())
+    }
+}
+
+impl From<Payload> for ZSlice {
+    fn from(value: Payload) -> Self {
+        ZBuf::from(value).to_zslice()
+    }
+}
+
+impl From<&Payload> for ZSlice {
     fn from(value: &Payload) -> Self {
         ZSerde.deserialize(value).unwrap_infallible()
     }
@@ -515,7 +573,6 @@ impl From<&str> for Payload {
     }
 }
 
-// Cow<str>
 impl<'a> Serialize<Cow<'a, str>> for ZSerde {
     type Output = Payload;
 
@@ -1069,16 +1126,16 @@ where
     }
 }
 
-impl<'a, A, B> Deserialize<'a, (A, B)> for ZSerde
+impl<A, B> Deserialize<'_, (A, B)> for ZSerde
 where
-    A: TryFrom<Payload>,
-    <A as TryFrom<Payload>>::Error: Debug,
-    B: TryFrom<Payload>,
-    <B as TryFrom<Payload>>::Error: Debug,
+    for<'a> A: TryFrom<&'a Payload>,
+    for<'a> <A as TryFrom<&'a Payload>>::Error: Debug,
+    for<'b> B: TryFrom<&'b Payload>,
+    for<'b> <B as TryFrom<&'b Payload>>::Error: Debug,
 {
     type Error = ZError;
 
-    fn deserialize(self, payload: &'a Payload) -> Result<(A, B), Self::Error> {
+    fn deserialize(self, payload: &Payload) -> Result<(A, B), Self::Error> {
         let codec = Zenoh080::new();
         let mut reader = payload.0.reader();
 
@@ -1088,23 +1145,37 @@ where
         let bbuf: ZBuf = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
         let bpld = Payload::new(bbuf);
 
-        let a = A::try_from(apld).map_err(|e| zerror!("{:?}", e))?;
-        let b = B::try_from(bpld).map_err(|e| zerror!("{:?}", e))?;
+        let a = A::try_from(&apld).map_err(|e| zerror!("{:?}", e))?;
+        let b = B::try_from(&bpld).map_err(|e| zerror!("{:?}", e))?;
         Ok((a, b))
     }
 }
 
 impl<A, B> TryFrom<Payload> for (A, B)
 where
-    A: TryFrom<Payload>,
-    <A as TryFrom<Payload>>::Error: Debug,
-    B: TryFrom<Payload>,
-    <B as TryFrom<Payload>>::Error: Debug,
+    A: for<'a> TryFrom<&'a Payload>,
+    for<'a> <A as TryFrom<&'a Payload>>::Error: Debug,
+    for<'b> B: TryFrom<&'b Payload>,
+    for<'b> <B as TryFrom<&'b Payload>>::Error: Debug,
 {
     type Error = ZError;
 
     fn try_from(value: Payload) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
+    }
+}
+
+impl<A, B> TryFrom<&Payload> for (A, B)
+where
+    for<'a> A: TryFrom<&'a Payload>,
+    for<'a> <A as TryFrom<&'a Payload>>::Error: Debug,
+    for<'b> B: TryFrom<&'b Payload>,
+    for<'b> <B as TryFrom<&'b Payload>>::Error: Debug,
+{
+    type Error = ZError;
+
+    fn try_from(value: &Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
     }
 }
 
@@ -1142,12 +1213,9 @@ impl std::fmt::Display for StringOrBase64 {
 impl From<&Payload> for StringOrBase64 {
     fn from(v: &Payload) -> Self {
         use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
-        match v.deserialize::<Cow<str>>() {
-            Ok(s) => StringOrBase64::String(s.into_owned()),
-            Err(_) => {
-                let cow: Cow<'_, [u8]> = Cow::from(v);
-                StringOrBase64::Base64(b64_std_engine.encode(cow))
-            }
+        match v.deserialize::<String>() {
+            Ok(s) => StringOrBase64::String(s),
+            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.into::<Vec<u8>>())),
         }
     }
 }
@@ -1157,7 +1225,7 @@ mod tests {
     fn serializer() {
         use super::Payload;
         use rand::Rng;
-        use zenoh_buffers::ZBuf;
+        use zenoh_buffers::{ZBuf, ZSlice};
 
         const NUM: usize = 1_000;
 
@@ -1275,6 +1343,52 @@ mod tests {
         let p = Payload::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
         let o = HashMap::from_iter(p.iter::<(usize, usize)>());
+        assert_eq!(hm, o);
+
+        let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
+        hm.insert(0, vec![0u8; 8]);
+        hm.insert(1, vec![1u8; 16]);
+        println!("Serialize:\t{:?}", hm);
+        let p = Payload::from_iter(hm.clone().drain());
+        println!("Deserialize:\t{:?}\n", p);
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        assert_eq!(hm, o);
+
+        let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
+        hm.insert(0, vec![0u8; 8]);
+        hm.insert(1, vec![1u8; 16]);
+        println!("Serialize:\t{:?}", hm);
+        let p = Payload::from_iter(hm.clone().drain());
+        println!("Deserialize:\t{:?}\n", p);
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        assert_eq!(hm, o);
+
+        let mut hm: HashMap<usize, ZSlice> = HashMap::new();
+        hm.insert(0, ZSlice::from(vec![0u8; 8]));
+        hm.insert(1, ZSlice::from(vec![1u8; 16]));
+        println!("Serialize:\t{:?}", hm);
+        let p = Payload::from_iter(hm.clone().drain());
+        println!("Deserialize:\t{:?}\n", p);
+        let o = HashMap::from_iter(p.iter::<(usize, ZSlice)>());
+        assert_eq!(hm, o);
+
+        let mut hm: HashMap<usize, ZBuf> = HashMap::new();
+        hm.insert(0, ZBuf::from(vec![0u8; 8]));
+        hm.insert(1, ZBuf::from(vec![1u8; 16]));
+        println!("Serialize:\t{:?}", hm);
+        let p = Payload::from_iter(hm.clone().drain());
+        println!("Deserialize:\t{:?}\n", p);
+        let o = HashMap::from_iter(p.iter::<(usize, ZBuf)>());
+        assert_eq!(hm, o);
+
+        use std::borrow::Cow;
+        let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
+        hm.insert(0, vec![0u8; 8]);
+        hm.insert(1, vec![1u8; 16]);
+        println!("Serialize:\t{:?}", hm);
+        let p = Payload::from_iter(hm.clone().iter().map(|(k, v)| (k, Cow::from(v))));
+        println!("Deserialize:\t{:?}\n", p);
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
         assert_eq!(hm, o);
     }
 }
