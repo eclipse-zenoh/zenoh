@@ -18,12 +18,15 @@ use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-use crate::sample::{QoSBuilder, SourceInfo};
+use crate::sample::builder::SampleBuilder;
+use crate::sample::QoSBuilder;
+#[cfg(feature = "unstable")]
+use crate::sample::SourceInfo;
 use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
-use crate::{query::ReplyKeyExpr, sample::builder::SampleBuilder, sample::Attachment};
+use crate::{query::ReplyKeyExpr, sample::Attachment};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
@@ -155,7 +158,9 @@ impl Query {
                 encoding: Encoding::default(),
             },
             timestamp: None,
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -193,7 +198,9 @@ impl Query {
             qos: response::ext::QoSType::RESPONSE.into(),
             kind: ReplyBuilderDelete,
             timestamp: None,
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -298,6 +305,7 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     #[cfg(feature = "unstable")]
     fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {

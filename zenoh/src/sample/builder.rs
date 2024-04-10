@@ -163,6 +163,7 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {

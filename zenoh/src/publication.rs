@@ -157,6 +157,7 @@ impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     }
 }
 
+#[zenoh_macros::unstable]
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {

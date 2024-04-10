@@ -61,6 +61,8 @@ use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::declare::SubscriberId;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::network::ext;
 use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::zenoh::reply::ReplyBody;
@@ -77,7 +79,6 @@ use zenoh_protocol::{
             subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr, DeclareMode,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
-        ext,
         request::{self, ext::TargetType, Request},
         Mapping, Push, Response, ResponseFinal,
     },
@@ -1687,7 +1688,10 @@ impl Session {
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
                     consolidation,
                     parameters: selector.parameters().to_string(),
+                    #[cfg(feature = "unstable")]
                     ext_sinfo: source.into(),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
