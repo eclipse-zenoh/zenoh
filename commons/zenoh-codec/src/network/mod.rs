@@ -26,8 +26,8 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
-    core::{Reliability, ZenohId},
-    network::{ext::EntityIdType, *},
+    core::{EntityId, Reliability, ZenohId},
+    network::{ext::EntityGlobalIdType, *},
 };
 
 // NetworkMessage
@@ -58,7 +58,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<NetworkMessage, Self::Error> {
-        let codec = Zenoh080Reliability::new(Reliability::default());
+        let codec = Zenoh080Reliability::new(Reliability::DEFAULT);
         codec.read(reader)
     }
 }
@@ -218,21 +218,21 @@ where
 }
 
 // Extension: EntityId
-impl<const ID: u8> LCodec<&ext::EntityIdType<{ ID }>> for Zenoh080 {
-    fn w_len(self, x: &ext::EntityIdType<{ ID }>) -> usize {
-        let EntityIdType { zid, eid } = x;
+impl<const ID: u8> LCodec<&ext::EntityGlobalIdType<{ ID }>> for Zenoh080 {
+    fn w_len(self, x: &ext::EntityGlobalIdType<{ ID }>) -> usize {
+        let EntityGlobalIdType { zid, eid } = x;
 
         1 + self.w_len(zid) + self.w_len(*eid)
     }
 }
 
-impl<W, const ID: u8> WCodec<(&ext::EntityIdType<{ ID }>, bool), &mut W> for Zenoh080
+impl<W, const ID: u8> WCodec<(&ext::EntityGlobalIdType<{ ID }>, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ext::EntityIdType<{ ID }>, bool)) -> Self::Output {
+    fn write(self, writer: &mut W, x: (&ext::EntityGlobalIdType<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
         let header: ZExtZBufHeader<{ ID }> = ZExtZBufHeader::new(self.w_len(x));
         self.write(&mut *writer, (&header, more))?;
@@ -248,13 +248,13 @@ where
     }
 }
 
-impl<R, const ID: u8> RCodec<(ext::EntityIdType<{ ID }>, bool), &mut R> for Zenoh080Header
+impl<R, const ID: u8> RCodec<(ext::EntityGlobalIdType<{ ID }>, bool), &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ext::EntityIdType<{ ID }>, bool), Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ext::EntityGlobalIdType<{ ID }>, bool), Self::Error> {
         let (_, more): (ZExtZBufHeader<{ ID }>, bool) = self.read(&mut *reader)?;
 
         let flags: u8 = self.codec.read(&mut *reader)?;
@@ -263,8 +263,8 @@ where
         let lodec = Zenoh080Length::new(length);
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
-        let eid: u32 = self.codec.read(&mut *reader)?;
+        let eid: EntityId = self.codec.read(&mut *reader)?;
 
-        Ok((ext::EntityIdType { zid, eid }, more))
+        Ok((ext::EntityGlobalIdType { zid, eid }, more))
     }
 }

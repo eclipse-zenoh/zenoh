@@ -289,11 +289,11 @@ async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUn
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(*p, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
+                ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
                     payload: vec![0u8; *ms].into(),
                     timestamp: None,
-                    encoding: Encoding::default(),
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,

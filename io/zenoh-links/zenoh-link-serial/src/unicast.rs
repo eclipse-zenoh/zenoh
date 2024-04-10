@@ -30,6 +30,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{zerror, ZResult};
 
 use z_serial::ZSerial;
@@ -177,7 +178,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *SERIAL_DEFAULT_MTU
     }
 

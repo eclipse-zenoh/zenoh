@@ -13,26 +13,28 @@
 //
 
 //! Subscribing primitives.
-use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
+use crate::key_expr::KeyExpr;
 use crate::prelude::Locality;
-use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
+use crate::sample::Sample;
+use crate::Id;
 use crate::Undeclarable;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
 use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_protocol::network::declare::{subscriber::ext::SubscriberInfo, Mode};
-
-/// The subscription mode.
-pub use zenoh_protocol::core::SubMode;
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::EntityGlobalId;
+use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
 
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
+    pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,
@@ -66,7 +68,7 @@ impl fmt::Debug for SubscriberState {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()) })
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -77,94 +79,6 @@ pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) alive: bool,
-}
-
-/// A [`PullMode`] subscriber that provides data through a callback.
-///
-/// CallbackPullSubscribers only provide data when explicitely pulled by the
-/// application with the [`pull`](CallbackPullSubscriber::pull) function.
-/// CallbackPullSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
-/// the [`callback`](SubscriberBuilder::callback) function
-/// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
-/// of the resulting builder.
-///
-/// Subscribers are automatically undeclared when dropped.
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let subscriber = session
-///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
-///     .pull_mode()
-///     .res()
-///     .await
-///     .unwrap();
-/// subscriber.pull();
-/// # }
-/// ```
-pub(crate) struct PullSubscriberInner<'a> {
-    inner: SubscriberInner<'a>,
-}
-
-impl<'a> PullSubscriberInner<'a> {
-    /// Pull available data for a [`CallbackPullSubscriber`].
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::subscriber::SubMode;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
-    ///     .pull_mode()
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// subscriber.pull();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
-        self.inner.session.pull(&self.inner.state.key_expr)
-    }
-
-    /// Close a [`CallbackPullSubscriber`](CallbackPullSubscriber).
-    ///
-    /// `CallbackPullSubscribers` are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the `CallbackPullSubscriber` asynchronously.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .callback(data_handler)
-    ///     .pull_mode()
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        Undeclarable::undeclare_inner(self.inner, ())
-    }
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -253,40 +167,6 @@ impl Drop for SubscriberInner<'_> {
     }
 }
 
-/// The mode for pull subscribers.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
-pub struct PullMode;
-
-impl From<PullMode> for SubMode {
-    fn from(_: PullMode) -> Self {
-        SubMode::Pull
-    }
-}
-
-impl From<PullMode> for Mode {
-    fn from(_: PullMode) -> Self {
-        Mode::Pull
-    }
-}
-
-/// The mode for push subscribers.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
-pub struct PushMode;
-
-impl From<PushMode> for SubMode {
-    fn from(_: PushMode) -> Self {
-        SubMode::Push
-    }
-}
-
-impl From<PushMode> for Mode {
-    fn from(_: PushMode) -> Self {
-        Mode::Push
-    }
-}
-
 /// A builder for initializing a [`FlumeSubscriber`].
 ///
 /// # Examples
@@ -299,7 +179,6 @@ impl From<PushMode> for Mode {
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .best_effort()
-///     .pull_mode()
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -307,7 +186,7 @@ impl From<PushMode> for Mode {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
+pub struct SubscriberBuilder<'a, 'b, Handler> {
     #[cfg(feature = "unstable")]
     pub session: SessionRef<'a>,
     #[cfg(not(feature = "unstable"))]
@@ -324,11 +203,6 @@ pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     pub(crate) reliability: Reliability,
 
     #[cfg(feature = "unstable")]
-    pub mode: Mode,
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) mode: Mode,
-
-    #[cfg(feature = "unstable")]
     pub origin: Locality,
     #[cfg(not(feature = "unstable"))]
     pub(crate) origin: Locality,
@@ -339,7 +213,7 @@ pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     pub(crate) handler: Handler,
 }
 
-impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
+impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this subscription with a callback.
     ///
     /// # Examples
@@ -351,14 +225,14 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
     ///     .res()
     ///     .await
     ///     .unwrap();
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Mode, Callback>
+    pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Callback>
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
@@ -366,7 +240,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             session,
             key_expr,
             reliability,
-            mode,
+
             origin,
             handler: _,
         } = self;
@@ -374,7 +248,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             session,
             key_expr,
             reliability,
-            mode,
+
             origin,
             handler: callback,
         }
@@ -405,14 +279,14 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> SubscriberBuilder<'a, 'b, Mode, impl Fn(Sample) + Send + Sync + 'static>
+    ) -> SubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -428,20 +302,19 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {}", sample.key_expr, sample.value);
+    ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
     /// }
     /// # }
     /// ```
     #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Mode, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
+        Handler: crate::prelude::IntoHandler<'static, Sample>,
     {
         let SubscriberBuilder {
             session,
             key_expr,
             reliability,
-            mode,
             origin,
             handler: _,
         } = self;
@@ -449,13 +322,13 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             session,
             key_expr,
             reliability,
-            mode,
             origin,
             handler,
         }
     }
 }
-impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
+
+impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
@@ -485,68 +358,26 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         self.origin = origin;
         self
     }
-
-    /// Change the subscription mode to Pull.
-    #[inline]
-    pub fn pull_mode(self) -> SubscriberBuilder<'a, 'b, PullMode, Handler> {
-        let SubscriberBuilder {
-            session,
-            key_expr,
-            reliability,
-            mode: _,
-            origin,
-            handler,
-        } = self;
-        SubscriberBuilder {
-            session,
-            key_expr,
-            reliability,
-            mode: PullMode,
-            origin,
-            handler,
-        }
-    }
-
-    /// Change the subscription mode to Push.
-    #[inline]
-    pub fn push_mode(self) -> SubscriberBuilder<'a, 'b, PushMode, Handler> {
-        let SubscriberBuilder {
-            session,
-            key_expr,
-            reliability,
-            mode: _,
-            origin,
-            handler,
-        } = self;
-        SubscriberBuilder {
-            session,
-            key_expr,
-            reliability,
-            mode: PushMode,
-            origin,
-            handler,
-        }
-    }
 }
 
 // Push mode
-impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<Subscriber<'a, Handler::Receiver>>;
+    type To = ZResult<Subscriber<'a, Handler::Handler>>;
 }
 
-impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         session
             .declare_subscriber_inner(
                 &key_expr,
@@ -555,7 +386,6 @@ where
                 callback,
                 &SubscriberInfo {
                     reliability: self.reliability,
-                    mode: self.mode.into(),
                 },
             )
             .map(|sub_state| Subscriber {
@@ -569,10 +399,10 @@ where
     }
 }
 
-impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Sample> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 
@@ -581,61 +411,7 @@ where
     }
 }
 
-// Pull mode
-impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, PullMode, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
-{
-    type To = ZResult<PullSubscriber<'a, Handler::Receiver>>;
-}
-
-impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
-{
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        let key_expr = self.key_expr?;
-        let session = self.session;
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
-        session
-            .declare_subscriber_inner(
-                &key_expr,
-                &None,
-                self.origin,
-                callback,
-                &SubscriberInfo {
-                    reliability: self.reliability,
-                    mode: self.mode.into(),
-                },
-            )
-            .map(|sub_state| PullSubscriber {
-                subscriber: PullSubscriberInner {
-                    inner: SubscriberInner {
-                        session,
-                        state: sub_state,
-                        alive: true,
-                    },
-                },
-                receiver,
-            })
-    }
-}
-
-impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
-{
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
-    }
-}
-
-/// A subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+/// A subscriber that provides data through a [`Handler`](crate::prelude::IntoHandler).
 ///
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
@@ -658,7 +434,7 @@ where
 ///     .await
 ///     .unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
-///     println!("Received: {} {}", sample.key_expr, sample.value);
+///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
 /// }
 /// # }
 /// ```
@@ -669,84 +445,8 @@ pub struct Subscriber<'a, Receiver> {
     pub receiver: Receiver,
 }
 
-/// A [`PullMode`] subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
-///
-/// PullSubscribers only provide data when explicitely pulled by the
-/// application with the [`pull`](PullSubscriber::pull) function.
-/// PullSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
-/// the [`with`](SubscriberBuilder::with) function
-/// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
-/// of the resulting builder.
-///
-/// Subscribers are automatically undeclared when dropped.
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let subscriber = session
-///     .declare_subscriber("key/expression")
-///     .with(flume::bounded(32))
-///     .pull_mode()
-///     .res()
-///     .await
-///     .unwrap();
-/// subscriber.pull();
-/// # }
-/// ```
-#[non_exhaustive]
-pub struct PullSubscriber<'a, Receiver> {
-    pub(crate) subscriber: PullSubscriberInner<'a>,
-    pub receiver: Receiver,
-}
-
-impl<'a, Receiver> Deref for PullSubscriber<'a, Receiver> {
-    type Target = Receiver;
-    fn deref(&self) -> &Self::Target {
-        &self.receiver
-    }
-}
-
-impl<'a, Receiver> DerefMut for PullSubscriber<'a, Receiver> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.receiver
-    }
-}
-
-impl<'a, Receiver> PullSubscriber<'a, Receiver> {
-    /// Pull available data for a [`PullSubscriber`].
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::subscriber::SubMode;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .with(flume::bounded(32))
-    ///     .pull_mode()
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// subscriber.pull();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
-        self.subscriber.pull()
-    }
-
-    /// Close a [`PullSubscriber`].
-    ///
-    /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the Subscriber asynchronously.
+impl<'a, Receiver> Subscriber<'a, Receiver> {
+    /// Returns the [`EntityGlobalId`] of this Subscriber.
     ///
     /// # Examples
     /// ```
@@ -756,20 +456,20 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .pull_mode()
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
+    /// let subscriber_id = subscriber.id();
     /// # }
     /// ```
-    #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        self.subscriber.undeclare()
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.subscriber.session.zid(),
+            eid: self.subscriber.state.id,
+        }
     }
-}
 
-impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.subscriber.state.key_expr

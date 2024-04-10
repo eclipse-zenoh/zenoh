@@ -25,6 +25,7 @@ use zenoh_link_commons::{
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 use super::{
@@ -145,7 +146,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *TCP_DEFAULT_MTU
     }
 

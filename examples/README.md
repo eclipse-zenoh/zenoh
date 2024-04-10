@@ -79,8 +79,8 @@
 
 ### z_pull
 
-   Declares a key expression and a pull subscriber.
-   On each pull, the pull subscriber will be notified of the last `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
+   Declares a key expression and a pull subscriber.  
+   On each pull, the pull subscriber will be notified of the last N `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
 
 
    Typical usage:
@@ -89,7 +89,7 @@
    ```
    or
    ```bash
-   z_pull -k 'demo/**'
+      z_pull -k demo/** --size 3
    ```
 
 ### z_get

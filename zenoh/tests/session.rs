@@ -88,7 +88,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         let sub = ztimeout!(peer01
             .declare_subscriber(key_expr)
             .callback(move |sample| {
-                assert_eq!(sample.value.payload.len(), size);
+                assert_eq!(sample.payload().len(), size);
                 c_msgs.fetch_add(1, Ordering::Relaxed);
             })
             .res_async())
@@ -146,13 +146,39 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         let c_msgs = msgs.clone();
         let qbl = ztimeout!(peer01
             .declare_queryable(key_expr)
-            .callback(move |sample| {
+            .callback(move |query| {
                 c_msgs.fetch_add(1, Ordering::Relaxed);
-                let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current()
-                        .block_on(async { ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap() })
-                });
+                match query.parameters() {
+                    "ok_put" => {
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                ztimeout!(query
+                                    .reply(
+                                        KeyExpr::try_from(key_expr).unwrap(),
+                                        vec![0u8; size].to_vec()
+                                    )
+                                    .res_async())
+                                .unwrap()
+                            })
+                        });
+                    }
+                    "ok_del" => {
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                ztimeout!(query.reply_del(key_expr).res_async()).unwrap()
+                            })
+                        });
+                    }
+                    "err" => {
+                        let rep = Value::from(vec![0u8; size]);
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                ztimeout!(query.reply_err(rep).res_async()).unwrap()
+                            })
+                        });
+                    }
+                    _ => panic!("Unknown query parameter"),
+                }
             })
             .res_async())
         .unwrap();
@@ -161,16 +187,54 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         tokio::time::sleep(SLEEP).await;
 
         // Get data
-        println!("[QR][02c] Getting on peer02 session. {msg_count} msgs.");
+        println!("[QR][02c] Getting Ok(Put) on peer02 session. {msg_count} msgs.");
         let mut cnt = 0;
         for _ in 0..msg_count {
-            let rs = ztimeout!(peer02.get(key_expr).res_async()).unwrap();
+            let selector = format!("{}?ok_put", key_expr);
+            let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.sample.unwrap().value.payload.len(), size);
+                let s = s.sample.unwrap();
+                assert_eq!(s.kind(), SampleKind::Put);
+                assert_eq!(s.payload().len(), size);
                 cnt += 1;
             }
         }
         println!("[QR][02c] Got on peer02 session. {cnt}/{msg_count} msgs.");
+        assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
+        assert_eq!(cnt, msg_count);
+
+        msgs.store(0, Ordering::Relaxed);
+
+        println!("[QR][03c] Getting Ok(Delete) on peer02 session. {msg_count} msgs.");
+        let mut cnt = 0;
+        for _ in 0..msg_count {
+            let selector = format!("{}?ok_del", key_expr);
+            let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
+            while let Ok(s) = ztimeout!(rs.recv_async()) {
+                let s = s.sample.unwrap();
+                assert_eq!(s.kind(), SampleKind::Delete);
+                assert_eq!(s.payload().len(), 0);
+                cnt += 1;
+            }
+        }
+        println!("[QR][03c] Got on peer02 session. {cnt}/{msg_count} msgs.");
+        assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
+        assert_eq!(cnt, msg_count);
+
+        msgs.store(0, Ordering::Relaxed);
+
+        println!("[QR][04c] Getting Err() on peer02 session. {msg_count} msgs.");
+        let mut cnt = 0;
+        for _ in 0..msg_count {
+            let selector = format!("{}?err", key_expr);
+            let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
+            while let Ok(s) = ztimeout!(rs.recv_async()) {
+                let e = s.sample.unwrap_err();
+                assert_eq!(e.payload.len(), size);
+                cnt += 1;
+            }
+        }
+        println!("[QR][04c] Got on peer02 session. {cnt}/{msg_count} msgs.");
         assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
         assert_eq!(cnt, msg_count);
 
@@ -185,6 +249,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_unicast() {
     let _ = env_logger::try_init();
+
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_qryrep(&peer01, &peer02, Reliability::Reliable).await;
@@ -194,6 +259,7 @@ async fn zenoh_session_unicast() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_multicast() {
     let _ = env_logger::try_init();
+
     let (peer01, peer02) =
         open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;

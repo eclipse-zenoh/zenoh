@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
@@ -38,8 +37,14 @@ async fn main() {
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
-            Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr.as_str(),),
-            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+            Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr().as_str(),),
+            Err(err) => {
+                let payload = err
+                    .payload
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
+                println!(">> Received (ERROR: '{}')", payload);
+            }
         }
     }
 }

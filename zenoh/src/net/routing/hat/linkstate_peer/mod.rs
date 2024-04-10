@@ -36,9 +36,7 @@ use crate::{
         routing::{
             dispatcher::face::Face,
             hat::TREES_COMPUTATION_DELAY_MS,
-            router::{
-                compute_data_routes, compute_matching_pulls, compute_query_routes, RoutesIndexes,
-            },
+            router::{compute_data_routes, compute_query_routes, RoutesIndexes},
         },
     },
     runtime::Runtime,
@@ -46,13 +44,17 @@ use crate::{
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{atomic::AtomicU32, Arc},
     time::Duration,
 };
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
-    network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE, Oam},
+    network::{
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+        oam::id::OAM_LINKSTATE,
+        Oam,
+    },
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
@@ -136,7 +138,6 @@ impl HatTables {
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        log::trace!("Schedule computations");
         if self.peers_trees_task.is_none() {
             let task = TerminatableTask::spawn(
                 zenoh_runtime::ZRuntime::Net,
@@ -262,7 +263,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for mut res in face
+        for (_id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -290,7 +291,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for mut res in face
+        for (_, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -323,11 +324,7 @@ impl HatBaseTrait for HatCode {
         let rtables = zread!(tables.tables);
         for _match in subs_matches.drain(..) {
             let mut expr = RoutingExpr::new(&_match, "");
-            matches_data_routes.push((
-                _match.clone(),
-                compute_data_routes(&rtables, &mut expr),
-                compute_matching_pulls(&rtables, &mut expr),
-            ));
+            matches_data_routes.push((_match.clone(), compute_data_routes(&rtables, &mut expr)));
         }
         for _match in qabls_matches.drain(..) {
             matches_query_routes.push((_match.clone(), compute_query_routes(&rtables, &_match)));
@@ -335,13 +332,10 @@ impl HatBaseTrait for HatCode {
         drop(rtables);
 
         let mut wtables = zwrite!(tables.tables);
-        for (mut res, data_routes, matching_pulls) in matches_data_routes {
+        for (mut res, data_routes) in matches_data_routes {
             get_mut_unchecked(&mut res)
                 .context_mut()
                 .update_data_routes(data_routes);
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .update_matching_pulls(matching_pulls);
             Resource::clean(&mut res);
         }
         for (mut res, query_routes) in matches_query_routes {
@@ -470,7 +464,7 @@ impl HatBaseTrait for HatCode {
 struct HatContext {
     router_subs: HashSet<ZenohId>,
     peer_subs: HashSet<ZenohId>,
-    peer_qabls: HashMap<ZenohId, QueryableInfo>,
+    peer_qabls: HashMap<ZenohId, QueryableInfoType>,
 }
 
 impl HatContext {
@@ -485,20 +479,22 @@ impl HatContext {
 
 struct HatFace {
     link_id: usize,
-    local_subs: HashSet<Arc<Resource>>,
-    remote_subs: HashSet<Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
-    remote_qabls: HashSet<Arc<Resource>>,
+    next_id: AtomicU32, // @TODO: manage rollover and uniqueness
+    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    remote_subs: HashMap<SubscriberId, Arc<Resource>>,
+    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
+    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
 
 impl HatFace {
     fn new() -> Self {
         Self {
             link_id: 0,
-            local_subs: HashSet::new(),
-            remote_subs: HashSet::new(),
+            next_id: AtomicU32::new(0),
+            local_subs: HashMap::new(),
+            remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),
-            remote_qabls: HashSet::new(),
+            remote_qabls: HashMap::new(),
         }
     }
 }

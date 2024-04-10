@@ -37,14 +37,14 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        match sample.kind {
+        match sample.kind() {
             SampleKind::Put => println!(
                 ">> [LivelinessSubscriber] New alive token ('{}')",
-                sample.key_expr.as_str()
+                sample.key_expr().as_str()
             ),
             SampleKind::Delete => println!(
                 ">> [LivelinessSubscriber] Dropped token ('{}')",
-                sample.key_expr.as_str()
+                sample.key_expr().as_str()
             ),
         }
     }

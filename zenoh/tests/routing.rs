@@ -11,18 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    str::FromStr,
-    sync::{atomic::AtomicUsize, atomic::Ordering, Arc},
-    time::Duration,
-};
+use std::str::FromStr;
+use std::sync::atomic::Ordering;
+use std::sync::{atomic::AtomicUsize, Arc};
+use std::time::Duration;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh::{
-    config::{Config, ModeDependentValue},
-    prelude::r#async::*,
-    value::Value,
-    Result,
-};
+use zenoh::config::{Config, ModeDependentValue};
+use zenoh::prelude::r#async::*;
+use zenoh::Result;
 use zenoh_core::ztimeout;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
 use zenoh_result::bail;
@@ -61,7 +57,7 @@ impl Task {
                         _  = token.cancelled() => break,
                         res = sub.recv_async() => {
                             if let Ok(sample) = res {
-                                let recv_size = sample.value.payload.len();
+                                let recv_size = sample.payload().len();
                                 if recv_size != *expected_size {
                                     bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                                 }
@@ -79,15 +75,13 @@ impl Task {
 
             // The Pub task keeps putting messages until all checkpoints are finished.
             Self::Pub(ke, payload_size) => {
-                let value: Value = vec![0u8; *payload_size].into();
-                // while remaining_checkpoints.load(Ordering::Relaxed) > 0 {
                 loop {
                     tokio::select! {
                         _  = token.cancelled() => break,
 
                         // WARN: this won't yield after a timeout since the put is a blocking call
                         res = tokio::time::timeout(std::time::Duration::from_secs(1), session
-                            .put(ke, value.clone())
+                            .put(ke, vec![0u8; *payload_size])
                             .congestion_control(CongestionControl::Block)
                             .res()) => {
                             let _ = res?;
@@ -108,7 +102,7 @@ impl Task {
                             while let Ok(reply) = replies.recv_async().await {
                                 match reply.sample {
                                     Ok(sample) => {
-                                        let recv_size = sample.value.payload.len();
+                                        let recv_size = sample.payload().len();
                                         if recv_size != *expected_size {
                                             bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                                         }
@@ -116,7 +110,7 @@ impl Task {
 
                                     Err(err) => {
                                         log::warn!(
-                                            "Sample got from {} failed to unwrap! Error: {}.",
+                                            "Sample got from {} failed to unwrap! Error: {:?}.",
                                             ke,
                                             err
                                         );
@@ -134,13 +128,13 @@ impl Task {
             // The Queryable task keeps replying to requested messages until all checkpoints are finished.
             Self::Queryable(ke, payload_size) => {
                 let queryable = session.declare_queryable(ke).res_async().await?;
-                let sample = Sample::try_from(ke.clone(), vec![0u8; *payload_size])?;
+                let payload = vec![0u8; *payload_size];
 
                 loop {
                     tokio::select! {
                         _  = token.cancelled() => break,
                         query = queryable.recv_async() => {
-                            query?.reply(Ok(sample.clone())).res_async().await?;
+                            query?.reply(ke.to_owned(), payload.clone()).res_async().await?;
                         },
                     }
                 }

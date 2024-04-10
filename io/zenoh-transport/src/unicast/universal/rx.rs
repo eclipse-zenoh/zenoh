@@ -77,7 +77,7 @@ impl TransportUnicastUniversal {
         let priority = ext_qos.priority();
         let c = if self.is_qos() {
             &self.priority_rx[priority as usize]
-        } else if priority == Priority::default() {
+        } else if priority == Priority::DEFAULT {
             &self.priority_rx[0]
         } else {
             bail!(
@@ -120,7 +120,7 @@ impl TransportUnicastUniversal {
 
         let c = if self.is_qos() {
             &self.priority_rx[qos.priority() as usize]
-        } else if qos.priority() == Priority::default() {
+        } else if qos.priority() == Priority::DEFAULT {
             &self.priority_rx[0]
         } else {
             bail!(

@@ -14,27 +14,30 @@
 
 //! Queryable primitives.
 
+use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::query::ReplyKeyExpr;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
-use crate::sample::DataInfo;
+use crate::sample::builder::SampleBuilder;
+use crate::sample::QoSBuilder;
+#[cfg(feature = "unstable")]
+use crate::sample::SourceInfo;
+use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
-
+#[cfg(feature = "unstable")]
+use crate::{query::ReplyKeyExpr, sample::Attachment};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
+use uhlc::Timestamp;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::core::WireExpr;
-use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
-use zenoh_protocol::zenoh::ext::ValueType;
-use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
-use zenoh_protocol::zenoh::{self, ResponseBody};
+use zenoh_protocol::{
+    core::{EntityId, WireExpr},
+    network::{response, Mapping, RequestId, Response, ResponseFinal},
+    zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
+};
 use zenoh_result::ZResult;
 
 pub(crate) struct QueryInner {
@@ -56,7 +59,7 @@ impl Drop for QueryInner {
     fn drop(&mut self) {
         self.primitives.send_response_final(ResponseFinal {
             rid: self.qid,
-            ext_qos: response::ext::QoSType::response_final_default(),
+            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
             ext_tstamp: None,
         });
     }
@@ -66,6 +69,7 @@ impl Drop for QueryInner {
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
+    pub(crate) eid: EntityId,
 }
 
 impl Query {
@@ -96,9 +100,37 @@ impl Query {
         self.inner.value.as_ref()
     }
 
+    /// This Query's payload.
+    #[inline(always)]
+    pub fn payload(&self) -> Option<&Payload> {
+        self.inner.value.as_ref().map(|v| &v.payload)
+    }
+
+    /// This Query's encoding.
+    #[inline(always)]
+    pub fn encoding(&self) -> Option<&Encoding> {
+        self.inner.value.as_ref().map(|v| &v.encoding)
+    }
+
     #[zenoh_macros::unstable]
     pub fn attachment(&self) -> Option<&Attachment> {
         self.inner.attachment.as_ref()
+    }
+
+    /// Sends a reply in the form of [`Sample`] to this Query.
+    ///
+    /// By default, queries only accept replies whose key expression intersects with the query's.
+    /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
+    /// replying on a disjoint key expression will result in an error when resolving the reply.
+    /// This api is for internal use only.
+    #[inline(always)]
+    #[cfg(feature = "unstable")]
+    #[doc(hidden)]
+    pub fn reply_sample(&self, sample: Sample) -> ReplySample<'_> {
+        ReplySample {
+            query: self,
+            sample,
+        }
     }
 
     /// Sends a reply to this Query.
@@ -107,10 +139,69 @@ impl Query {
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
-    pub fn reply(&self, result: Result<Sample, Value>) -> ReplyBuilder<'_> {
+    pub fn reply<'b, TryIntoKeyExpr, IntoPayload>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+        payload: IntoPayload,
+    ) -> ReplyPutBuilder<'_, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+        IntoPayload: Into<Payload>,
+    {
         ReplyBuilder {
             query: self,
-            result,
+            key_expr: key_expr.try_into().map_err(Into::into),
+            qos: response::ext::QoSType::RESPONSE.into(),
+            kind: ReplyBuilderPut {
+                payload: payload.into(),
+                encoding: Encoding::default(),
+            },
+            timestamp: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
+        }
+    }
+
+    /// Sends a error reply to this Query.
+    ///
+    #[inline(always)]
+    pub fn reply_err<IntoValue>(&self, value: IntoValue) -> ReplyErrBuilder<'_>
+    where
+        IntoValue: Into<Value>,
+    {
+        ReplyErrBuilder {
+            query: self,
+            value: value.into(),
+        }
+    }
+
+    /// Sends a delete reply to this Query.
+    ///
+    /// By default, queries only accept replies whose key expression intersects with the query's.
+    /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
+    /// replying on a disjoint key expression will result in an error when resolving the reply.
+    #[inline(always)]
+    pub fn reply_del<'b, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> ReplyDeleteBuilder<'_, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        ReplyBuilder {
+            query: self,
+            key_expr: key_expr.try_into().map_err(Into::into),
+            qos: response::ext::QoSType::RESPONSE.into(),
+            kind: ReplyBuilderDelete,
+            timestamp: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
         }
     }
 
@@ -153,142 +244,300 @@ impl fmt::Display for Query {
     }
 }
 
-/// A builder returned by [`Query::reply()`](Query::reply).
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[derive(Debug)]
-pub struct ReplyBuilder<'a> {
+pub struct ReplySample<'a> {
     query: &'a Query,
-    result: Result<Sample, Value>,
+    sample: Sample,
 }
 
-impl<'a> ReplyBuilder<'a> {
-    #[allow(clippy::result_large_err)]
-    #[zenoh_macros::unstable]
-    pub fn with_attachment(mut self, attachment: Attachment) -> Result<Self, (Self, Attachment)> {
-        match &mut self.result {
-            Ok(sample) => {
-                sample.attachment = Some(attachment);
-                Ok(self)
-            }
-            Err(_) => Err((self, attachment)),
-        }
-    }
-}
-
-impl<'a> Resolvable for ReplyBuilder<'a> {
+impl Resolvable for ReplySample<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for ReplyBuilder<'_> {
+impl SyncResolve for ReplySample<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        match self.result {
-            Ok(sample) => {
-                if !self.query._accepts_any_replies().unwrap_or(false)
-                    && !self.query.key_expr().intersects(&sample.key_expr)
-                {
-                    bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr())
-                }
-                let Sample {
-                    key_expr,
-                    value: Value { payload, encoding },
-                    kind,
-                    timestamp,
-                    qos,
-                    #[cfg(feature = "unstable")]
-                    source_info,
-                    #[cfg(feature = "unstable")]
-                    attachment,
-                } = sample;
-                #[allow(unused_mut)]
-                let mut data_info = DataInfo {
-                    kind,
-                    encoding: Some(encoding),
-                    timestamp,
-                    qos,
-                    source_id: None,
-                    source_sn: None,
-                };
-                #[allow(unused_mut)]
-                let mut ext_attachment = None;
-                #[cfg(feature = "unstable")]
-                {
-                    data_info.source_id = source_info.source_id;
-                    data_info.source_sn = source_info.source_sn;
-                    if let Some(attachment) = attachment {
-                        ext_attachment = Some(attachment.into());
-                    }
-                }
-                self.query.inner.primitives.send_response(Response {
-                    rid: self.query.inner.qid,
-                    wire_expr: WireExpr {
-                        scope: 0,
-                        suffix: std::borrow::Cow::Owned(key_expr.into()),
-                        mapping: Mapping::Sender,
-                    },
-                    payload: ResponseBody::Reply(zenoh::Reply {
-                        timestamp: data_info.timestamp,
-                        encoding: data_info.encoding.unwrap_or_default(),
-                        ext_sinfo: if data_info.source_id.is_some() || data_info.source_sn.is_some()
-                        {
-                            Some(zenoh::reply::ext::SourceInfoType {
-                                zid: data_info.source_id.unwrap_or_default(),
-                                eid: 0, // @TODO use proper EntityId (#703)
-                                sn: data_info.source_sn.unwrap_or_default() as u32,
-                            })
-                        } else {
-                            None
-                        },
-                        ext_consolidation: ConsolidationType::default(),
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_attachment,
-                        ext_unknown: vec![],
-                        payload,
-                    }),
-                    ext_qos: response::ext::QoSType::response_default(),
-                    ext_tstamp: None,
-                    ext_respid: Some(response::ext::ResponderIdType {
-                        zid: self.query.inner.zid,
-                        eid: 0, // @TODO use proper EntityId (#703)
-                    }),
-                });
-                Ok(())
-            }
-            Err(payload) => {
-                self.query.inner.primitives.send_response(Response {
-                    rid: self.query.inner.qid,
-                    wire_expr: WireExpr {
-                        scope: 0,
-                        suffix: std::borrow::Cow::Owned(self.query.key_expr().as_str().to_owned()),
-                        mapping: Mapping::Sender,
-                    },
-                    payload: ResponseBody::Err(zenoh::Err {
-                        timestamp: None,
-                        is_infrastructure: false,
-                        ext_sinfo: None,
-                        ext_unknown: vec![],
-                        ext_body: Some(ValueType {
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            payload: payload.payload,
-                            encoding: payload.encoding,
-                        }),
-                        code: 0, // TODO
-                    }),
-                    ext_qos: response::ext::QoSType::response_default(),
-                    ext_tstamp: None,
-                    ext_respid: Some(response::ext::ResponderIdType {
-                        zid: self.query.inner.zid,
-                        eid: 0, // @TODO use proper EntityId (#703)
-                    }),
-                });
-                Ok(())
-            }
+        self.query._reply_sample(self.sample)
+    }
+}
+
+impl AsyncResolve for ReplySample<'_> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+#[derive(Debug)]
+pub struct ReplyBuilderPut {
+    payload: super::Payload,
+    encoding: super::Encoding,
+}
+#[derive(Debug)]
+pub struct ReplyBuilderDelete;
+
+/// A builder returned by [`Query::reply()`](Query::reply) and [`Query::reply_del()`](Query::reply_del)
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
+pub struct ReplyBuilder<'a, 'b, T> {
+    query: &'a Query,
+    key_expr: ZResult<KeyExpr<'b>>,
+    kind: T,
+    timestamp: Option<Timestamp>,
+    qos: QoSBuilder,
+
+    #[cfg(feature = "unstable")]
+    source_info: SourceInfo,
+
+    #[cfg(feature = "unstable")]
+    attachment: Option<Attachment>,
+}
+
+pub type ReplyPutBuilder<'a, 'b> = ReplyBuilder<'a, 'b, ReplyBuilderPut>;
+
+pub type ReplyDeleteBuilder<'a, 'b> = ReplyBuilder<'a, 'b, ReplyBuilderDelete>;
+
+impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
+    fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            ..self
         }
     }
 }
 
-impl<'a> AsyncResolve for ReplyBuilder<'a> {
+#[cfg(feature = "unstable")]
+impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
+    #[cfg(feature = "unstable")]
+    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
+        Self {
+            attachment: attachment.into(),
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            source_info,
+            ..self
+        }
+    }
+}
+
+impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
+        let qos = self.qos.congestion_control(congestion_control);
+        Self { qos, ..self }
+    }
+
+    fn priority(self, priority: Priority) -> Self {
+        let qos = self.qos.priority(priority);
+        Self { qos, ..self }
+    }
+
+    fn express(self, is_express: bool) -> Self {
+        let qos = self.qos.express(is_express);
+        Self { qos, ..self }
+    }
+}
+
+impl ValueBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            kind: ReplyBuilderPut {
+                encoding: encoding.into(),
+                ..self.kind
+            },
+            ..self
+        }
+    }
+
+    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+        Self {
+            kind: ReplyBuilderPut {
+                payload: payload.into(),
+                ..self.kind
+            },
+            ..self
+        }
+    }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let Value { payload, encoding } = value.into();
+        Self {
+            kind: ReplyBuilderPut { payload, encoding },
+            ..self
+        }
+    }
+}
+
+impl<T> Resolvable for ReplyBuilder<'_, '_, T> {
+    type To = ZResult<()>;
+}
+
+impl SyncResolve for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        let key_expr = self.key_expr?.into_owned();
+        let sample = SampleBuilder::put(key_expr, self.kind.payload)
+            .encoding(self.kind.encoding)
+            .timestamp(self.timestamp)
+            .qos(self.qos.into());
+        #[cfg(feature = "unstable")]
+        let sample = sample.source_info(self.source_info);
+        #[cfg(feature = "unstable")]
+        let sample = sample.attachment(self.attachment);
+        self.query._reply_sample(sample.into())
+    }
+}
+
+impl SyncResolve for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        let key_expr = self.key_expr?.into_owned();
+        let sample = SampleBuilder::delete(key_expr)
+            .timestamp(self.timestamp)
+            .qos(self.qos.into());
+        #[cfg(feature = "unstable")]
+        let sample = sample.source_info(self.source_info);
+        #[cfg(feature = "unstable")]
+        let sample = sample.attachment(self.attachment);
+        self.query._reply_sample(sample.into())
+    }
+}
+
+impl Query {
+    fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
+        if !self._accepts_any_replies().unwrap_or(false)
+            && !self.key_expr().intersects(&sample.key_expr)
+        {
+            bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
+        }
+        #[cfg(not(feature = "unstable"))]
+        let ext_sinfo = None;
+        #[cfg(feature = "unstable")]
+        let ext_sinfo = sample.source_info.into();
+        self.inner.primitives.send_response(Response {
+            rid: self.inner.qid,
+            wire_expr: WireExpr {
+                scope: 0,
+                suffix: std::borrow::Cow::Owned(sample.key_expr.into()),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Reply(zenoh::Reply {
+                consolidation: zenoh::Consolidation::DEFAULT,
+                ext_unknown: vec![],
+                payload: match sample.kind {
+                    SampleKind::Put => ReplyBody::Put(Put {
+                        timestamp: sample.timestamp,
+                        encoding: sample.encoding.into(),
+                        ext_sinfo,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        #[cfg(feature = "unstable")]
+                        ext_attachment: sample.attachment.map(|a| a.into()),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_attachment: None,
+                        ext_unknown: vec![],
+                        payload: sample.payload.into(),
+                    }),
+                    SampleKind::Delete => ReplyBody::Del(Del {
+                        timestamp: sample.timestamp,
+                        ext_sinfo,
+                        #[cfg(feature = "unstable")]
+                        ext_attachment: sample.attachment.map(|a| a.into()),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_attachment: None,
+                        ext_unknown: vec![],
+                    }),
+                },
+            }),
+            ext_qos: sample.qos.into(),
+            ext_tstamp: None,
+            ext_respid: Some(response::ext::ResponderIdType {
+                zid: self.inner.zid,
+                eid: self.eid,
+            }),
+        });
+        Ok(())
+    }
+}
+
+impl AsyncResolve for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl AsyncResolve for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+/// A builder returned by [`Query::reply_err()`](Query::reply_err).
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
+pub struct ReplyErrBuilder<'a> {
+    query: &'a Query,
+    value: Value,
+}
+
+impl ValueBuilderTrait for ReplyErrBuilder<'_> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            value: self.value.encoding(encoding),
+            ..self
+        }
+    }
+
+    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+        Self {
+            value: self.value.payload(payload),
+            ..self
+        }
+    }
+
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        Self {
+            value: value.into(),
+            ..self
+        }
+    }
+}
+
+impl<'a> Resolvable for ReplyErrBuilder<'a> {
+    type To = ZResult<()>;
+}
+
+impl SyncResolve for ReplyErrBuilder<'_> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        self.query.inner.primitives.send_response(Response {
+            rid: self.query.inner.qid,
+            wire_expr: WireExpr {
+                scope: 0,
+                suffix: std::borrow::Cow::Owned(self.query.key_expr().as_str().to_owned()),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Err(zenoh::Err {
+                encoding: self.value.encoding.into(),
+                ext_sinfo: None,
+                ext_unknown: vec![],
+                payload: self.value.payload.into(),
+            }),
+            ext_qos: response::ext::QoSType::RESPONSE,
+            ext_tstamp: None,
+            ext_respid: Some(response::ext::ResponderIdType {
+                zid: self.query.inner.zid,
+                eid: self.query.eid,
+            }),
+        });
+        Ok(())
+    }
+}
+
+impl<'a> AsyncResolve for ReplyErrBuilder<'a> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -334,7 +583,7 @@ impl fmt::Debug for QueryableState {
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap()))
+///     query.reply(KeyExpr::try_from("key/expression").unwrap(), "value")
 ///         .res()
 ///         .await
 ///         .unwrap();
@@ -495,7 +744,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -518,7 +767,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
+        Handler: crate::prelude::IntoHandler<'static, Query>,
     {
         let QueryableBuilder {
             session,
@@ -554,7 +803,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
     }
 }
 
-/// A queryable that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+/// A queryable that provides data through a [`Handler`](crate::prelude::IntoHandler).
 ///
 /// Queryables can be created from a zenoh [`Session`]
 /// with the [`declare_queryable`](crate::Session::declare_queryable) function
@@ -578,7 +827,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///     .unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap()))
+///     query.reply(KeyExpr::try_from("key/expression").unwrap(), "value")
 ///         .res()
 ///         .await
 ///         .unwrap();
@@ -593,6 +842,30 @@ pub struct Queryable<'a, Receiver> {
 }
 
 impl<'a, Receiver> Queryable<'a, Receiver> {
+    /// Returns the [`EntityGlobalId`] of this Queryable.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let queryable_id = queryable.id();
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.queryable.session.zid(),
+            eid: self.queryable.state.id,
+        }
+    }
+
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
@@ -615,20 +888,20 @@ impl<Receiver> Deref for Queryable<'_, Receiver> {
 
 impl<'a, Handler> Resolvable for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Query> + Send,
+    Handler::Handler: Send,
 {
-    type To = ZResult<Queryable<'a, Handler::Receiver>>;
+    type To = ZResult<Queryable<'a, Handler::Handler>>;
 }
 
 impl<'a, Handler> SyncResolve for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Query> + Send,
+    Handler::Handler: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let session = self.session;
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        let (callback, receiver) = self.handler.into_handler();
         session
             .declare_queryable_inner(
                 &self.key_expr?.to_wire(&session),
@@ -649,8 +922,8 @@ where
 
 impl<'a, Handler> AsyncResolve for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
-    Handler::Receiver: Send,
+    Handler: IntoHandler<'static, Query> + Send,
+    Handler::Handler: Send,
 {
     type Future = Ready<Self::To>;
 

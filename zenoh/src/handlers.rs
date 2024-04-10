@@ -15,36 +15,42 @@
 //! Callback handler trait.
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 
+use std::sync::{Arc, Mutex, Weak};
+use zenoh_collections::RingBuffer as RingBufferInner;
+use zenoh_result::ZResult;
+
 /// An alias for `Arc<T>`.
 pub type Dyn<T> = std::sync::Arc<T>;
+
 /// An immutable callback function.
 pub type Callback<'a, T> = Dyn<dyn Fn(T) + Send + Sync + 'a>;
 
-/// A type that can be converted into a [`Callback`]-receiver pair.
+/// A type that can be converted into a [`Callback`]-handler pair.
 ///
 /// When Zenoh functions accept types that implement these, it intends to use the [`Callback`] as just that,
-/// while granting you access to the receiver through the returned value via [`std::ops::Deref`] and [`std::ops::DerefMut`].
+/// while granting you access to the handler through the returned value via [`std::ops::Deref`] and [`std::ops::DerefMut`].
 ///
 /// Any closure that accepts `T` can be converted into a pair of itself and `()`.
-pub trait IntoCallbackReceiverPair<'a, T> {
-    type Receiver;
-    fn into_cb_receiver_pair(self) -> (Callback<'a, T>, Self::Receiver);
+pub trait IntoHandler<'a, T> {
+    type Handler;
+
+    fn into_handler(self) -> (Callback<'a, T>, Self::Handler);
 }
-impl<'a, T, F> IntoCallbackReceiverPair<'a, T> for F
+
+impl<'a, T, F> IntoHandler<'a, T> for F
 where
     F: Fn(T) + Send + Sync + 'a,
 {
-    type Receiver = ();
-    fn into_cb_receiver_pair(self) -> (Callback<'a, T>, Self::Receiver) {
+    type Handler = ();
+    fn into_handler(self) -> (Callback<'a, T>, Self::Handler) {
         (Dyn::from(self), ())
     }
 }
-impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
-    for (flume::Sender<T>, flume::Receiver<T>)
-{
-    type Receiver = flume::Receiver<T>;
 
-    fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
+impl<T: Send + 'static> IntoHandler<'static, T> for (flume::Sender<T>, flume::Receiver<T>) {
+    type Handler = flume::Receiver<T>;
+
+    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
         let (sender, receiver) = self;
         (
             Dyn::new(move |t| {
@@ -56,24 +62,78 @@ impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
         )
     }
 }
+
+/// The default handler in Zenoh is a FIFO queue.
 pub struct DefaultHandler;
-impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T> for DefaultHandler {
-    type Receiver = flume::Receiver<T>;
-    fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
-        flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE).into_cb_receiver_pair()
+
+impl<T: Send + 'static> IntoHandler<'static, T> for DefaultHandler {
+    type Handler = flume::Receiver<T>;
+
+    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+        flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE).into_handler()
     }
 }
-impl<T: Send + Sync + 'static> IntoCallbackReceiverPair<'static, T>
+
+impl<T: Send + Sync + 'static> IntoHandler<'static, T>
     for (std::sync::mpsc::SyncSender<T>, std::sync::mpsc::Receiver<T>)
 {
-    type Receiver = std::sync::mpsc::Receiver<T>;
-    fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
+    type Handler = std::sync::mpsc::Receiver<T>;
+
+    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
         let (sender, receiver) = self;
         (
             Dyn::new(move |t| {
                 if let Err(e) = sender.send(t) {
                     log::error!("{}", e)
                 }
+            }),
+            receiver,
+        )
+    }
+}
+
+/// Ring buffer with a limited queue size, which allows users to keep the last N data.
+pub struct RingBuffer<T> {
+    ring: Arc<Mutex<RingBufferInner<T>>>,
+}
+
+impl<T> RingBuffer<T> {
+    /// Initialize the RingBuffer with the capacity size.
+    pub fn new(capacity: usize) -> Self {
+        RingBuffer {
+            ring: Arc::new(Mutex::new(RingBufferInner::new(capacity))),
+        }
+    }
+}
+
+pub struct RingBufferHandler<T> {
+    ring: Weak<Mutex<RingBufferInner<T>>>,
+}
+
+impl<T> RingBufferHandler<T> {
+    pub fn recv(&self) -> ZResult<Option<T>> {
+        let Some(ring) = self.ring.upgrade() else {
+            bail!("The ringbuffer has been deleted.");
+        };
+        let mut guard = ring.lock().map_err(|e| zerror!("{}", e))?;
+        Ok(guard.pull())
+    }
+}
+
+impl<T: Send + 'static> IntoHandler<'static, T> for RingBuffer<T> {
+    type Handler = RingBufferHandler<T>;
+
+    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+        let receiver = RingBufferHandler {
+            ring: Arc::downgrade(&self.ring),
+        };
+        (
+            Dyn::new(move |t| match self.ring.lock() {
+                Ok(mut g) => {
+                    // Eventually drop the oldest element.
+                    g.push_force(t);
+                }
+                Err(e) => log::error!("{}", e),
             }),
             receiver,
         )
@@ -96,7 +156,7 @@ pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
 ///   - `callback` will never be called once `drop` has started.
 ///   - `drop` will only be called **once**, and **after every** `callback` has ended.
 ///   - The two previous guarantees imply that `call` and `drop` are never called concurrently.
-pub struct CallbackPair<Callback, DropFn>
+pub struct CallbackDrop<Callback, DropFn>
 where
     DropFn: FnMut() + Send + Sync + 'static,
 {
@@ -104,7 +164,7 @@ where
     pub drop: DropFn,
 }
 
-impl<Callback, DropFn> Drop for CallbackPair<Callback, DropFn>
+impl<Callback, DropFn> Drop for CallbackDrop<Callback, DropFn>
 where
     DropFn: FnMut() + Send + Sync + 'static,
 {
@@ -113,14 +173,14 @@ where
     }
 }
 
-impl<'a, OnEvent, Event, DropFn> IntoCallbackReceiverPair<'a, Event>
-    for CallbackPair<OnEvent, DropFn>
+impl<'a, OnEvent, Event, DropFn> IntoHandler<'a, Event> for CallbackDrop<OnEvent, DropFn>
 where
     OnEvent: Fn(Event) + Send + Sync + 'a,
     DropFn: FnMut() + Send + Sync + 'static,
 {
-    type Receiver = ();
-    fn into_cb_receiver_pair(self) -> (Callback<'a, Event>, Self::Receiver) {
+    type Handler = ();
+
+    fn into_handler(self) -> (Callback<'a, Event>, Self::Handler) {
         (Dyn::from(move |evt| (self.callback)(evt)), ())
     }
 }

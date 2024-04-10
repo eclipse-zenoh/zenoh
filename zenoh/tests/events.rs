@@ -58,15 +58,15 @@ async fn zenoh_events() {
 
     let sample = ztimeout!(sub1.recv_async());
     assert!(sample.is_ok());
-    let key_expr = sample.as_ref().unwrap().key_expr.as_str();
+    let key_expr = sample.as_ref().unwrap().key_expr().as_str();
     assert!(key_expr.eq(&format!("@/session/{zid}/transport/unicast/{zid2}")));
-    assert!(sample.as_ref().unwrap().kind == SampleKind::Put);
+    assert!(sample.as_ref().unwrap().kind() == SampleKind::Put);
 
     let sample = ztimeout!(sub2.recv_async());
     assert!(sample.is_ok());
-    let key_expr = sample.as_ref().unwrap().key_expr.as_str();
+    let key_expr = sample.as_ref().unwrap().key_expr().as_str();
     assert!(key_expr.starts_with(&format!("@/session/{zid}/transport/unicast/{zid2}/link/")));
-    assert!(sample.as_ref().unwrap().kind == SampleKind::Put);
+    assert!(sample.as_ref().unwrap().kind() == SampleKind::Put);
 
     let replies: Vec<Reply> = ztimeout!(session
         .get(format!("@/session/{zid}/transport/unicast/*"))
@@ -76,7 +76,7 @@ async fn zenoh_events() {
     .collect();
     assert!(replies.len() == 1);
     assert!(replies[0].sample.is_ok());
-    let key_expr = replies[0].sample.as_ref().unwrap().key_expr.as_str();
+    let key_expr = replies[0].sample.as_ref().unwrap().key_expr().as_str();
     assert!(key_expr.eq(&format!("@/session/{zid}/transport/unicast/{zid2}")));
 
     let replies: Vec<Reply> = ztimeout!(session
@@ -87,22 +87,22 @@ async fn zenoh_events() {
     .collect();
     assert!(replies.len() == 1);
     assert!(replies[0].sample.is_ok());
-    let key_expr = replies[0].sample.as_ref().unwrap().key_expr.as_str();
+    let key_expr = replies[0].sample.as_ref().unwrap().key_expr().as_str();
     assert!(key_expr.starts_with(&format!("@/session/{zid}/transport/unicast/{zid2}/link/")));
 
     close_session(session2).await;
 
     let sample = ztimeout!(sub1.recv_async());
     assert!(sample.is_ok());
-    let key_expr = sample.as_ref().unwrap().key_expr.as_str();
+    let key_expr = sample.as_ref().unwrap().key_expr().as_str();
     assert!(key_expr.eq(&format!("@/session/{zid}/transport/unicast/{zid2}")));
-    assert!(sample.as_ref().unwrap().kind == SampleKind::Delete);
+    assert!(sample.as_ref().unwrap().kind() == SampleKind::Delete);
 
     let sample = ztimeout!(sub2.recv_async());
     assert!(sample.is_ok());
-    let key_expr = sample.as_ref().unwrap().key_expr.as_str();
+    let key_expr = sample.as_ref().unwrap().key_expr().as_str();
     assert!(key_expr.starts_with(&format!("@/session/{zid}/transport/unicast/{zid2}/link/")));
-    assert!(sample.as_ref().unwrap().kind == SampleKind::Delete);
+    assert!(sample.as_ref().unwrap().kind() == SampleKind::Delete);
 
     sub2.undeclare().res().await.unwrap();
     sub1.undeclare().res().await.unwrap();

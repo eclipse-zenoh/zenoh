@@ -32,6 +32,7 @@ use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{zerror, ZResult};
 
 use super::{get_unix_path_as_string, UNIXSOCKSTREAM_DEFAULT_MTU, UNIXSOCKSTREAM_LOCATOR_PREFIX};
@@ -119,7 +120,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *UNIXSOCKSTREAM_DEFAULT_MTU
     }
 

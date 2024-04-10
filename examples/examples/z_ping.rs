@@ -22,7 +22,7 @@ fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, warmup, size, n) = parse_args();
+    let (config, warmup, size, n, express) = parse_args();
     let session = zenoh::open(config).res().unwrap();
 
     // The key expression to publish data on
@@ -35,10 +35,11 @@ fn main() {
     let publisher = session
         .declare_publisher(key_expr_ping)
         .congestion_control(CongestionControl::Block)
+        .express(express)
         .res()
         .unwrap();
 
-    let data: Value = (0usize..size)
+    let data: Payload = (0usize..size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();
@@ -78,6 +79,9 @@ fn main() {
 
 #[derive(Parser)]
 struct Args {
+    /// express for sending data
+    #[arg(long, default_value = "false")]
+    no_express: bool,
     #[arg(short, long, default_value = "1")]
     /// The number of seconds to warm up (float)
     warmup: f64,
@@ -90,12 +94,13 @@ struct Args {
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, Duration, usize, usize) {
+fn parse_args() -> (Config, Duration, usize, usize, bool) {
     let args = Args::parse();
     (
         args.common.into(),
         Duration::from_secs_f64(args.warmup),
         args.payload_size,
         args.samples,
+        !args.no_express,
     )
 }

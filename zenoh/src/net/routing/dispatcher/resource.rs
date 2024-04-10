@@ -21,16 +21,13 @@ use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-#[cfg(feature = "complete_n")]
-use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::RequestId;
-use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
         declare::{
-            ext, queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, Declare,
-            DeclareBody, DeclareKeyExpr,
+            ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
+            DeclareBody, DeclareKeyExpr, DeclareMode,
         },
         Mapping,
     },
@@ -41,9 +38,6 @@ pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
-#[cfg(feature = "complete_n")]
-pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
-#[cfg(not(feature = "complete_n"))]
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
@@ -51,15 +45,13 @@ pub(crate) struct QueryTargetQabl {
     pub(crate) distance: f64,
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
-pub(crate) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(crate) struct SessionContext {
     pub(crate) face: Arc<FaceState>,
     pub(crate) local_expr_id: Option<ExprId>,
     pub(crate) remote_expr_id: Option<ExprId>,
     pub(crate) subs: Option<SubscriberInfo>,
-    pub(crate) qabl: Option<QueryableInfo>,
-    pub(crate) last_values: HashMap<String, PushBody>,
+    pub(crate) qabl: Option<QueryableInfoType>,
     pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
     pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
 }
@@ -121,7 +113,6 @@ impl QueryRoutes {
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) matching_pulls: Option<Arc<PullCaches>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) valid_data_routes: bool,
     pub(crate) data_routes: DataRoutes,
@@ -133,7 +124,6 @@ impl ResourceContext {
     fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
         ResourceContext {
             matches: Vec::new(),
-            matching_pulls: None,
             hat,
             valid_data_routes: false,
             data_routes: DataRoutes::default(),
@@ -158,14 +148,6 @@ impl ResourceContext {
 
     pub(crate) fn disable_query_routes(&mut self) {
         self.valid_query_routes = false;
-    }
-
-    pub(crate) fn update_matching_pulls(&mut self, pulls: Arc<PullCaches>) {
-        self.matching_pulls = Some(pulls);
-    }
-
-    pub(crate) fn disable_matching_pulls(&mut self) {
-        self.matching_pulls = None;
     }
 }
 
@@ -458,7 +440,6 @@ impl Resource {
                             remote_expr_id: None,
                             subs: None,
                             qabl: None,
-                            last_values: HashMap::new(),
                             in_interceptor_cache: None,
                             e_interceptor_cache: None,
                         })
@@ -484,9 +465,10 @@ impl Resource {
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            ext_qos: ext::QoSType::declare_default(),
+                            mode: DeclareMode::Push,
+                            ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                                 id: expr_id,
                                 wire_expr: nonwild_prefix.expr().into(),
@@ -680,7 +662,11 @@ pub fn register_expr(
                 let mut fullexpr = prefix.expr();
                 fullexpr.push_str(expr.suffix.as_ref());
                 if res.expr() != fullexpr {
-                    log::error!("Resource {} remapped. Remapping unsupported!", expr_id);
+                    log::error!(
+                        "{} Resource {} remapped. Remapping unsupported!",
+                        face,
+                        expr_id
+                    );
                 }
             }
             None => {
@@ -717,7 +703,6 @@ pub fn register_expr(
                             remote_expr_id: Some(expr_id),
                             subs: None,
                             qabl: None,
-                            last_values: HashMap::new(),
                             in_interceptor_cache: None,
                             e_interceptor_cache: None,
                         })
@@ -731,7 +716,11 @@ pub fn register_expr(
                 drop(wtables);
             }
         },
-        None => log::error!("Declare resource with unknown scope {}!", expr.scope),
+        None => log::error!(
+            "{} Declare resource with unknown scope {}!",
+            face,
+            expr.scope
+        ),
     }
 }
 
@@ -739,7 +728,7 @@ pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: 
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
-        None => log::error!("Undeclare unknown resource!"),
+        None => log::error!("{} Undeclare unknown resource!", face),
     }
     drop(wtables);
 }

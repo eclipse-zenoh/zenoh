@@ -53,7 +53,7 @@
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
 //!     let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
-//!         println!("Received: {}", sample);
+//!         println!("Received: {:?}", sample);
 //!     };
 //! }
 //! ```
@@ -79,9 +79,11 @@ extern crate zenoh_core;
 #[macro_use]
 extern crate zenoh_result;
 
+pub(crate) type Id = u32;
+
 use git_version::git_version;
 use handlers::DefaultHandler;
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
@@ -104,7 +106,6 @@ pub const FEATURES: &str = concat_enabled_features!(
     features = [
         "auth_pubkey",
         "auth_usrpwd",
-        "complete_n",
         "shared-memory",
         "stats",
         "transport_multilink",
@@ -133,10 +134,12 @@ pub use net::runtime;
 pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
+pub(crate) mod encoding;
 pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
+pub mod payload;
 pub mod plugins;
 pub mod prelude;
 pub mod publication;
@@ -166,23 +169,6 @@ pub mod time {
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         Timestamp::new(now.into(), TimestampId::try_from([1]).unwrap())
-    }
-}
-
-/// A map of key/value (String,String) properties.
-pub mod properties {
-    use super::prelude::Value;
-    pub use zenoh_collections::Properties;
-
-    /// Convert a set of [`Properties`] into a [`Value`].
-    /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`
-    /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
-    pub fn properties_to_json_value(props: &Properties) -> Value {
-        let json_map = props
-            .iter()
-            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-            .collect::<serde_json::map::Map<String, serde_json::Value>>();
-        serde_json::Value::Object(json_map).into()
     }
 }
 

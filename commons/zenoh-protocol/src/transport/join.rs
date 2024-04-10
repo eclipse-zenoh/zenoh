@@ -141,7 +141,7 @@ impl Join {
         let whatami = WhatAmI::rand();
         let zid = ZenohId::default();
         let resolution = Resolution::rand();
-        let batch_size: u16 = rng.gen();
+        let batch_size: BatchSize = rng.gen();
         let lease = if rng.gen_bool(0.5) {
             Duration::from_secs(rng.gen())
         } else {

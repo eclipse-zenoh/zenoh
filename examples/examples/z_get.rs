@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
@@ -29,23 +28,34 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Sending Query '{selector}'...");
-    let replies = match value {
-        Some(value) => session.get(&selector).with_value(value),
-        None => session.get(&selector),
-    }
-    .target(target)
-    .timeout(timeout)
-    .res()
-    .await
-    .unwrap();
+    let replies = session
+        .get(&selector)
+        .value(value)
+        .target(target)
+        .timeout(timeout)
+        .res()
+        .await
+        .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
-            Ok(sample) => println!(
-                ">> Received ('{}': '{}')",
-                sample.key_expr.as_str(),
-                sample.value,
-            ),
-            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+            Ok(sample) => {
+                let payload = sample
+                    .payload()
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
+                println!(
+                    ">> Received ('{}': '{}')",
+                    sample.key_expr().as_str(),
+                    payload,
+                );
+            }
+            Err(err) => {
+                let payload = err
+                    .payload
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
+                println!(">> Received (ERROR: '{}')", payload);
+            }
         }
     }
 }

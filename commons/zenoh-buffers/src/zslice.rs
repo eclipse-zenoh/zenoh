@@ -92,21 +92,42 @@ pub struct ZSlice {
 }
 
 impl ZSlice {
+    #[deprecated(note = "use `new` instead")]
     pub fn make(
         buf: Arc<dyn ZSliceBuffer>,
         start: usize,
         end: usize,
     ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
+        Self::new(buf, start, end)
+    }
+
+    pub fn new(
+        buf: Arc<dyn ZSliceBuffer>,
+        start: usize,
+        end: usize,
+    ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
         if start <= end && end <= buf.as_slice().len() {
-            Ok(ZSlice {
-                buf,
-                start,
-                end,
-                #[cfg(feature = "shared-memory")]
-                kind: ZSliceKind::Raw,
-            })
+            // unsafe: this operation is safe because we just checked the slice boundaries
+            Ok(unsafe { ZSlice::new_unchecked(buf, start, end) })
         } else {
             Err(buf)
+        }
+    }
+
+    pub fn empty() -> Self {
+        unsafe { ZSlice::new_unchecked(Arc::new([]), 0, 0) }
+    }
+
+    /// # Safety
+    /// This function does not verify wether the `start` and `end` indexes are within the buffer boundaries.
+    /// If a [`ZSlice`] is built via this constructor, a later access may panic if `start` and `end` indexes are out-of-bound.
+    pub unsafe fn new_unchecked(buf: Arc<dyn ZSliceBuffer>, start: usize, end: usize) -> Self {
+        ZSlice {
+            buf,
+            start,
+            end,
+            #[cfg(feature = "shared-memory")]
+            kind: ZSliceKind::Raw,
         }
     }
 

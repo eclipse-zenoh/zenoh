@@ -54,14 +54,14 @@ async fn zenoh_liveliness() {
         .res_async())
     .unwrap();
     let sample = ztimeout!(replies.recv_async()).unwrap().sample.unwrap();
-    assert!(sample.kind == SampleKind::Put);
-    assert!(sample.key_expr.as_str() == "zenoh_liveliness_test");
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == "zenoh_liveliness_test");
 
     assert!(ztimeout!(replies.recv_async()).is_err());
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
-    assert!(sample.kind == SampleKind::Put);
-    assert!(sample.key_expr.as_str() == "zenoh_liveliness_test");
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == "zenoh_liveliness_test");
 
     drop(token);
 
