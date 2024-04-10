@@ -50,8 +50,8 @@ use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
     sync::{atomic::AtomicU32, Arc},
+    time::Duration,
 };
-use tokio::task::JoinHandle;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -63,6 +63,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
 mod network;
@@ -123,9 +124,22 @@ struct HatTables {
     routers_net: Option<Network>,
     peers_net: Option<Network>,
     shared_nodes: Vec<ZenohId>,
-    routers_trees_task: Option<JoinHandle<()>>,
-    peers_trees_task: Option<JoinHandle<()>>,
+    routers_trees_task: Option<TerminatableTask>,
+    peers_trees_task: Option<TerminatableTask>,
     router_peers_failover_brokering: bool,
+}
+
+impl Drop for HatTables {
+    fn drop(&mut self) {
+        if self.peers_trees_task.is_some() {
+            let task = self.peers_trees_task.take().unwrap();
+            task.terminate(Duration::from_secs(10));
+        }
+        if self.routers_trees_task.is_some() {
+            let task = self.routers_trees_task.take().unwrap();
+            task.terminate(Duration::from_secs(10));
+        }
+    }
 }
 
 impl HatTables {
@@ -243,26 +257,28 @@ impl HatTables {
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
         {
-            let task = Some(zenoh_runtime::ZRuntime::Net.spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(
-                    *TREES_COMPUTATION_DELAY_MS,
-                ))
-                .await;
-                let mut tables = zwrite!(tables_ref.tables);
+            let task = TerminatableTask::spawn(
+                zenoh_runtime::ZRuntime::Net,
+                async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        *TREES_COMPUTATION_DELAY_MS,
+                    ))
+                    .await;
+                    let mut tables = zwrite!(tables_ref.tables);
 
-                log::trace!("Compute trees");
-                let new_childs = match net_type {
-                    WhatAmI::Router => hat_mut!(tables)
-                        .routers_net
-                        .as_mut()
-                        .unwrap()
-                        .compute_trees(),
-                    _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
-                };
+                    log::trace!("Compute trees");
+                    let new_childs = match net_type {
+                        WhatAmI::Router => hat_mut!(tables)
+                            .routers_net
+                            .as_mut()
+                            .unwrap()
+                            .compute_trees(),
+                        _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
+                    };
 
-                log::trace!("Compute routes");
-                pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
-                queries::queries_tree_change(&mut tables, &new_childs, net_type);
+                    log::trace!("Compute routes");
+                    pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
+                    queries::queries_tree_change(&mut tables, &new_childs, net_type);
 
                 match net_type {
                     WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
@@ -270,8 +286,8 @@ impl HatTables {
                 };
             }));
             match net_type {
-                WhatAmI::Router => self.routers_trees_task = task,
-                _ => self.peers_trees_task = task,
+                WhatAmI::Router => self.routers_trees_task = Some(task),
+                _ => self.peers_trees_task = Some(task),
             };
         }
     }

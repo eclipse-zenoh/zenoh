@@ -11,16 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use flume::{bounded, Sender};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
+use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::SessionRef;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_result::{bail, ZResult};
+use zenoh_task::TerminatableTask;
 use zenoh_util::core::ResolveFuture;
 
 /// The builder of PublicationCache, allowing to configure it.
@@ -110,7 +111,7 @@ impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
 pub struct PublicationCache<'a> {
     local_sub: FlumeSubscriber<'a>,
     _queryable: Queryable<'a, flume::Receiver<Query>>,
-    _stoptx: Sender<bool>,
+    task: TerminatableTask,
 }
 
 impl<'a> PublicationCache<'a> {
@@ -183,21 +184,21 @@ impl<'a> PublicationCache<'a> {
                                 sample.key_expr().clone()
                             };
 
-                            if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
-                                if queue.len() >= history {
-                                    queue.pop_front();
+                                if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
+                                    if queue.len() >= history {
+                                        queue.pop_front();
+                                    }
+                                    queue.push_back(sample);
+                                } else if cache.len() >= limit {
+                                    log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
+                                    pub_key_expr);
+                                } else {
+                                    let mut queue: VecDeque<Sample> = VecDeque::new();
+                                    queue.push_back(sample);
+                                    cache.insert(queryable_key_expr.into(), queue);
                                 }
-                                queue.push_back(sample);
-                            } else if cache.len() >= limit {
-                                log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
-                                pub_key_expr);
-                            } else {
-                                let mut queue: VecDeque<Sample> = VecDeque::new();
-                                queue.push_back(sample);
-                                cache.insert(queryable_key_expr.into(), queue);
                             }
-                        }
-                    },
+                        },
 
                     // on query, reply with cache content
                     query = quer_recv.recv_async() => {
@@ -237,13 +238,14 @@ impl<'a> PublicationCache<'a> {
                     // When stoptx is dropped, stop the task
                     _ = stoprx.recv_async() => return
                 }
-            }
-        });
+            },
+            token,
+        );
 
         Ok(PublicationCache {
             local_sub,
             _queryable: queryable,
-            _stoptx: stoptx,
+            task,
         })
     }
 
@@ -254,11 +256,11 @@ impl<'a> PublicationCache<'a> {
             let PublicationCache {
                 _queryable,
                 local_sub,
-                _stoptx,
+                task,
             } = self;
             _queryable.undeclare().res_async().await?;
             local_sub.undeclare().res_async().await?;
-            drop(_stoptx);
+            task.terminate(Duration::from_secs(10));
             Ok(())
         })
     }

@@ -13,6 +13,7 @@ description = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+futures = { workspace = true }
 lazy_static = { workspace = true }
 zenoh-result = { workspace = true, features = ["std"] }
 zenoh-collections = { workspace = true, features = ["std"] }

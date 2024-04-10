@@ -4496,6 +4496,7 @@ dependencies = [
  "zenoh-runtime",
  "zenoh-shm",
  "zenoh-sync",
+ "zenoh-task",
  "zenoh-transport",
  "zenoh-util",
 ]
@@ -4628,6 +4629,7 @@ dependencies = [
  "zenoh-result",
  "zenoh-runtime",
  "zenoh-sync",
+ "zenoh-task",
  "zenoh-util",
 ]
 
@@ -5010,6 +5012,7 @@ dependencies = [
 name = "zenoh-runtime"
 version = "0.11.0-dev"
 dependencies = [
+ "futures",
  "lazy_static",
  "tokio",
  "zenoh-collections",
@@ -5038,6 +5041,18 @@ dependencies = [
  "zenoh-collections",
  "zenoh-core",
  "zenoh-result",
+ "zenoh-runtime",
+]
+
+[[package]]
+name = "zenoh-task"
+version = "0.11.0-dev"
+dependencies = [
+ "futures",
+ "log",
+ "tokio",
+ "tokio-util",
+ "zenoh-core",
  "zenoh-runtime",
 ]
 
@@ -5072,6 +5087,7 @@ dependencies = [
  "zenoh-runtime",
  "zenoh-shm",
  "zenoh-sync",
+ "zenoh-task",
  "zenoh-util",
 ]
 
