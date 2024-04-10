@@ -11,16 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use flume::{bounded, Sender};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
+use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::SessionRef;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_result::{bail, ZResult};
+use zenoh_task::TerminatableTask;
 use zenoh_util::core::ResolveFuture;
 
 /// The builder of PublicationCache, allowing to configure it.
@@ -110,7 +111,7 @@ impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
 pub struct PublicationCache<'a> {
     local_sub: FlumeSubscriber<'a>,
     _queryable: Queryable<'a, flume::Receiver<Query>>,
-    _stoptx: Sender<bool>,
+    task: TerminatableTask,
 }
 
 impl<'a> PublicationCache<'a> {
@@ -166,58 +167,46 @@ impl<'a> PublicationCache<'a> {
         let history = conf.history;
 
         // TODO(yuyuan): use CancellationToken to manage it
-        let (stoptx, stoprx) = bounded::<bool>(1);
-        zenoh_runtime::ZRuntime::TX.spawn(async move {
-            let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
-                HashMap::with_capacity(resources_limit.unwrap_or(32));
-            let limit = resources_limit.unwrap_or(usize::MAX);
+        let token = TerminatableTask::create_cancellation_token();
+        let token2 = token.clone();
+        let task = TerminatableTask::spawn(
+            zenoh_runtime::ZRuntime::Application,
+            async move {
+                let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
+                    HashMap::with_capacity(resources_limit.unwrap_or(32));
+                let limit = resources_limit.unwrap_or(usize::MAX);
+                loop {
+                    tokio::select! {
+                        // on publication received by the local subscriber, store it
+                        sample = sub_recv.recv_async() => {
+                            if let Ok(sample) = sample {
+                                let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
+                                    prefix.join(&sample.key_expr).unwrap().into()
+                                } else {
+                                    sample.key_expr.clone()
+                                };
 
-            loop {
-                tokio::select! {
-                    // on publication received by the local subscriber, store it
-                    sample = sub_recv.recv_async() => {
-                        if let Ok(sample) = sample {
-                            let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
-                                prefix.join(sample.key_expr()).unwrap().into()
-                            } else {
-                                sample.key_expr().clone()
-                            };
-
-                            if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
-                                if queue.len() >= history {
-                                    queue.pop_front();
-                                }
-                                queue.push_back(sample);
-                            } else if cache.len() >= limit {
-                                log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
-                                pub_key_expr);
-                            } else {
-                                let mut queue: VecDeque<Sample> = VecDeque::new();
-                                queue.push_back(sample);
-                                cache.insert(queryable_key_expr.into(), queue);
-                            }
-                        }
-                    },
-
-                    // on query, reply with cache content
-                    query = quer_recv.recv_async() => {
-                        if let Ok(query) = query {
-                            if !query.selector().key_expr.as_str().contains('*') {
-                                if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
-                                    for sample in queue {
-                                        if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
-                                            if !time_range.contains(timestamp.get_time().to_system_time()){
-                                                continue;
-                                            }
-                                        }
-                                        if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
-                                            log::warn!("Error replying to query: {}", e);
-                                        }
+                                if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
+                                    if queue.len() >= history {
+                                        queue.pop_front();
                                     }
+                                    queue.push_back(sample);
+                                } else if cache.len() >= limit {
+                                    log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
+                                    pub_key_expr);
+                                } else {
+                                    let mut queue: VecDeque<Sample> = VecDeque::new();
+                                    queue.push_back(sample);
+                                    cache.insert(queryable_key_expr.into(), queue);
                                 }
-                            } else {
-                                for (key_expr, queue) in cache.iter() {
-                                    if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
+                            }
+                        },
+
+                        // on query, reply with cach content
+                        query = quer_recv.recv_async() => {
+                            if let Ok(query) = query {
+                                if !query.selector().key_expr.as_str().contains('*') {
+                                    if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
                                         for sample in queue {
                                             if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
                                                 if !time_range.contains(timestamp.get_time().to_system_time()){
@@ -229,21 +218,35 @@ impl<'a> PublicationCache<'a> {
                                             }
                                         }
                                     }
+                                } else {
+                                    for (key_expr, queue) in cache.iter() {
+                                        if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
+                                            for sample in queue {
+                                                if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
+                                                    if !time_range.contains(timestamp.get_time().to_system_time()){
+                                                        continue;
+                                                    }
+                                                }
+                                                if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
+                                                    log::warn!("Error replying to query: {}", e);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    },
-
-                    // When stoptx is dropped, stop the task
-                    _ = stoprx.recv_async() => return
+                        },
+                        _ = token2.cancelled() => return
+                    }
                 }
-            }
-        });
+            },
+            token,
+        );
 
         Ok(PublicationCache {
             local_sub,
             _queryable: queryable,
-            _stoptx: stoptx,
+            task,
         })
     }
 
@@ -254,11 +257,11 @@ impl<'a> PublicationCache<'a> {
             let PublicationCache {
                 _queryable,
                 local_sub,
-                _stoptx,
+                task,
             } = self;
             _queryable.undeclare().res_async().await?;
             local_sub.undeclare().res_async().await?;
-            drop(_stoptx);
+            task.terminate(Duration::from_secs(10));
             Ok(())
         })
     }

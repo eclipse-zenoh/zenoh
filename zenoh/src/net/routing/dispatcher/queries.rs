@@ -20,6 +20,8 @@ use crate::net::routing::RoutingContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
@@ -266,7 +268,10 @@ fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> Requ
     let outface_mut = get_mut_unchecked(outface);
     outface_mut.next_qid += 1;
     let qid = outface_mut.next_qid;
-    outface_mut.pending_queries.insert(qid, query);
+    outface_mut.pending_queries.insert(
+        qid,
+        (query, outface_mut.task_controller.get_cancellation_token()),
+    );
     qid
 }
 
@@ -339,6 +344,31 @@ struct QueryCleanup {
     qid: RequestId,
 }
 
+impl QueryCleanup {
+    pub fn spawn_query_clean_up_task(
+        face: &Arc<FaceState>,
+        tables_ref: &Arc<TablesLock>,
+        qid: u32,
+        timeout: Duration,
+    ) {
+        let mut cleanup = QueryCleanup {
+            tables: tables_ref.clone(),
+            face: Arc::downgrade(face),
+            qid,
+        };
+        if let Some((_, cancellation_token)) = face.pending_queries.get(&qid) {
+            let c_cancellation_token = cancellation_token.clone();
+            face.task_controller
+                .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(timeout) => { cleanup.run().await }
+                        _ = c_cancellation_token.cancelled() => {}
+                    }
+                });
+        }
+    }
+}
+
 #[async_trait]
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
@@ -351,7 +381,7 @@ impl Timed for QueryCleanup {
                 drop(tables_lock);
                 log::warn!(
                     "Didn't receive final reply {}:{} from {}: Timeout!",
-                    query.src_face,
+                    query.0.src_face,
                     self.qid,
                     face
                 );
@@ -574,15 +604,7 @@ pub fn route_query(
                         ));
                 } else {
                     for ((outface, key_expr, context), qid) in route.values() {
-                        let mut cleanup = QueryCleanup {
-                            tables: tables_ref.clone(),
-                            face: Arc::downgrade(outface),
-                            qid: *qid,
-                        };
-                        zenoh_runtime::ZRuntime::Net.spawn(async move {
-                            tokio::time::sleep(timeout).await;
-                            cleanup.run().await
-                        });
+                        QueryCleanup::spawn_query_clean_up_task(outface, tables_ref, *qid, timeout);
                         #[cfg(feature = "stats")]
                         if !admin {
                             inc_req_stats!(outface, tx, user, body)
@@ -662,7 +684,7 @@ pub(crate) fn route_send_response(
     }
 
     match face.pending_queries.get(&qid) {
-        Some(query) => {
+        Some((query, _)) => {
             drop(queries_lock);
 
             #[cfg(feature = "stats")]
@@ -708,7 +730,7 @@ pub(crate) fn route_send_response_final(
             drop(queries_lock);
             log::debug!(
                 "Received final reply {}:{} from {}",
-                query.src_face,
+                query.0.src_face,
                 qid,
                 face
             );
@@ -731,7 +753,9 @@ pub(crate) fn finalize_pending_queries(tables_ref: &TablesLock, face: &mut Arc<F
     drop(queries_lock);
 }
 
-pub(crate) fn finalize_pending_query(query: Arc<Query>) {
+pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
+    let (query, cancellation_token) = query;
+    cancellation_token.cancel();
     if let Some(query) = Arc::into_inner(query) {
         log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
         query
