@@ -109,7 +109,7 @@ impl Payload {
         PayloadWriter(self.0.writer())
     }
 
-    /// Encode an object of type `T` as a [`Value`] using the [`ZSerde`].
+    /// Serialize an object of type `T` as a [`Value`] using the [`ZSerde`].
     ///
     /// ```rust
     /// use zenoh::payload::Payload;
@@ -126,7 +126,7 @@ impl Payload {
         ZSerde.serialize(t)
     }
 
-    /// Decode an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
     pub fn deserialize<'a, T>(&'a self) -> ZResult<T>
     where
         ZSerde: Deserialize<'a, T>,
@@ -137,7 +137,7 @@ impl Payload {
             .map_err(|e| zerror!("{:?}", e).into())
     }
 
-    /// Decode an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Infallibly deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
     pub fn into<'a, T>(&'a self) -> T
     where
         ZSerde: Deserialize<'a, T, Error = Infallible>,
