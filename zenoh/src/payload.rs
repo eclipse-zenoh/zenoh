@@ -91,6 +91,11 @@ impl Payload {
         Ok(Payload::new(buf))
     }
 
+    /// Get a [`PayloadWriter`] implementing [`std::io::Write`] trait.
+    pub fn writer(&mut self) -> PayloadWriter<'_> {
+        PayloadWriter(self.0.writer())
+    }
+
     /// Get a [`PayloadReader`] implementing [`std::io::Read`] trait.
     pub fn iter<T>(&self) -> PayloadIterator<'_, T>
     where
@@ -102,11 +107,6 @@ impl Payload {
             reader: self.0.reader(),
             _t: PhantomData::<T>,
         }
-    }
-
-    /// Get a [`PayloadWriter`] implementing [`std::io::Write`] trait.
-    pub fn writer(&mut self) -> PayloadWriter<'_> {
-        PayloadWriter(self.0.writer())
     }
 
     /// Serialize an object of type `T` as a [`Value`] using the [`ZSerde`].
@@ -1418,6 +1418,15 @@ mod tests {
         let p = Payload::from_iter(hm.clone().iter().map(|(k, v)| (k, Cow::from(v))));
         println!("Deserialize:\t{:?}\n", p);
         let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        assert_eq!(hm, o);
+
+        let mut hm: HashMap<String, String> = HashMap::new();
+        hm.insert(String::from("0"), String::from("a"));
+        hm.insert(String::from("1"), String::from("b"));
+        println!("Serialize:\t{:?}", hm);
+        let p = Payload::from_iter(hm.iter());
+        println!("Deserialize:\t{:?}\n", p);
+        let o = HashMap::from_iter(p.iter::<(String, String)>());
         assert_eq!(hm, o);
     }
 }
