@@ -13,6 +13,11 @@ fn test_acl() {
         .listen
         .set_endpoints(vec!["tcp/localhost:7447".parse().unwrap()])
         .unwrap();
+    config_router
+        .scouting
+        .multicast
+        .set_enabled(Some(false))
+        .unwrap();
 
     let mut config_sub = Config::default();
     config_sub.set_mode(Some(WhatAmI::Client)).unwrap();
@@ -52,6 +57,7 @@ fn test_acl() {
 }
 
 fn test_pub_sub_deny(config_router: &Config, config_pub: &Config, config_sub: &Config) {
+    println!("test_pub_sub_deny");
     let mut config_router = config_router.clone();
     config_router
         .insert_json5(
@@ -90,6 +96,8 @@ fn test_pub_sub_deny(config_router: &Config, config_pub: &Config, config_sub: &C
 }
 
 fn test_pub_sub_allow(config_router: &Config, config_pub: &Config, config_sub: &Config) {
+    println!("test_pub_sub_allow");
+
     let mut config_router = config_router.clone();
     config_router
         .insert_json5(
@@ -131,6 +139,8 @@ fn test_pub_sub_allow(config_router: &Config, config_pub: &Config, config_sub: &
 }
 
 fn test_pub_sub_allow_then_deny(config_router: &Config, config_pub: &Config, config_sub: &Config) {
+    println!("test_pub_sub_allow_then_deny");
+
     let mut config_router = config_router.clone();
     config_router
         .insert_json5(
@@ -184,6 +194,8 @@ fn test_pub_sub_allow_then_deny(config_router: &Config, config_pub: &Config, con
 }
 
 fn test_pub_sub_deny_then_allow(config_router: &Config, config_pub: &Config, config_sub: &Config) {
+    println!("test_pub_sub_deny_then_allow");
+
     let mut config_router = config_router.clone();
     config_router
         .insert_json5(
@@ -238,6 +250,8 @@ fn test_pub_sub_deny_then_allow(config_router: &Config, config_pub: &Config, con
 }
 
 fn test_get_queryable_deny(config_router: &Config, config_qbl: &Config, config_get: &Config) {
+    println!("test_get_queryable_deny");
+
     let mut config_router = config_router.clone();
 
     config_router
@@ -284,6 +298,8 @@ fn test_get_queryable_deny(config_router: &Config, config_qbl: &Config, config_g
 }
 
 fn test_get_queryable_allow(config_router: &Config, config_qbl: &Config, config_get: &Config) {
+    println!("test_get_queryable_allow");
+
     let mut config_router = config_router.clone();
 
     config_router
@@ -333,6 +349,8 @@ fn test_get_queryable_allow_then_deny(
     config_qbl: &Config,
     config_get: &Config,
 ) {
+    println!("test_get_queryable_allow_then_deny");
+
     let mut config_router = config_router.clone();
     config_router
         .insert_json5(
@@ -395,6 +413,8 @@ fn test_get_queryable_deny_then_allow(
     config_qbl: &Config,
     config_get: &Config,
 ) {
+    println!("test_get_queryable_deny_then_allow");
+
     let mut config_router = config_router.clone();
     config_router
         .insert_json5(
@@ -409,7 +429,7 @@ fn test_get_queryable_deny_then_allow(
               "flows": ["egress","ingress"],
               "actions": [
                 "get",
-                "declare_queryable"              ],
+                "declare_queryable"],
               "key_exprs": [
                 "test/demo"
               ],
