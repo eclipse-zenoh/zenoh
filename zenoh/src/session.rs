@@ -60,14 +60,7 @@ use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 #[cfg(feature = "unstable")]
-use zenoh_protocol::network::declare::SubscriberId;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::ext;
-use zenoh_protocol::network::AtomicRequestId;
-use zenoh_protocol::network::RequestId;
-use zenoh_protocol::zenoh::reply::ReplyBody;
-use zenoh_protocol::zenoh::Del;
-use zenoh_protocol::zenoh::Put;
+use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -80,11 +73,12 @@ use zenoh_protocol::{
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
         request::{self, ext::TargetType, Request},
-        Mapping, Push, Response, ResponseFinal,
+        AtomicRequestId, Mapping, Push, RequestId, Response, ResponseFinal,
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
-        PushBody, RequestBody, ResponseBody,
+        reply::ReplyBody,
+        Del, PushBody, Put, RequestBody, ResponseBody,
     },
 };
 use zenoh_result::ZResult;

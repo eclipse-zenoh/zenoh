@@ -27,7 +27,7 @@ readme = "README.md"
 publish = false
 
 [features]
-shared-memory = ["zenoh/shared-memory"]
+shared-memory = ["zenoh-shm","zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
 transport_unixpipe = ["zenoh/transport_unixpipe"]
 
@@ -52,6 +52,7 @@ log = { workspace = true }
 zenoh = { workspace = true }
 zenoh-collections = { workspace = true }
 zenoh-ext = { workspace = true }
+zenoh-shm = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
@@ -95,6 +96,11 @@ required-features = ["shared-memory"]
 [[example]]
 name = "z_sub"
 path = "examples/z_sub.rs"
+
+[[example]]
+name = "z_sub_shm"
+path = "examples/z_sub_shm.rs"
+required-features = ["shared-memory"]
 
 [[example]]
 name = "z_pull"
