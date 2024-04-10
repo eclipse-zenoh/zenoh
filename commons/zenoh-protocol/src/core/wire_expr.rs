@@ -71,10 +71,6 @@ impl<'a> WireExpr<'a> {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.scope == 0 && self.suffix.as_ref().is_empty()
-    }
-
     pub fn as_str(&'a self) -> &'a str {
         if self.scope == 0 {
             self.suffix.as_ref()
@@ -261,7 +257,7 @@ impl WireExpr<'_> {
         WireExpr {
             scope,
             suffix: suffix.into(),
-            mapping: Mapping::DEFAULT,
+            mapping: Mapping::default(),
         }
     }
 }

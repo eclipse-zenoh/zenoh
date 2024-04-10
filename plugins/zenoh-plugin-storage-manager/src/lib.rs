@@ -239,10 +239,14 @@ impl StorageRuntimeInner {
             volume_id,
             backend.name()
         );
+        let in_interceptor = backend.instance().incoming_data_interceptor();
+        let out_interceptor = backend.instance().outgoing_data_interceptor();
         let stopper = async_std::task::block_on(create_and_start_storage(
             admin_key,
             storage.clone(),
             backend.instance(),
+            in_interceptor,
+            out_interceptor,
             self.session.clone(),
         ))?;
         self.storages

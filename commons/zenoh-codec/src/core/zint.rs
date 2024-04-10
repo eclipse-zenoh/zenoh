@@ -17,42 +17,41 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 
-const VLE_LEN_MAX: usize = vle_len(u64::MAX);
-
-const fn vle_len(x: u64) -> usize {
-    const B1: u64 = u64::MAX << 7;
-    const B2: u64 = u64::MAX << (7 * 2);
-    const B3: u64 = u64::MAX << (7 * 3);
-    const B4: u64 = u64::MAX << (7 * 4);
-    const B5: u64 = u64::MAX << (7 * 5);
-    const B6: u64 = u64::MAX << (7 * 6);
-    const B7: u64 = u64::MAX << (7 * 7);
-    const B8: u64 = u64::MAX << (7 * 8);
-
-    if (x & B1) == 0 {
-        1
-    } else if (x & B2) == 0 {
-        2
-    } else if (x & B3) == 0 {
-        3
-    } else if (x & B4) == 0 {
-        4
-    } else if (x & B5) == 0 {
-        5
-    } else if (x & B6) == 0 {
-        6
-    } else if (x & B7) == 0 {
-        7
-    } else if (x & B8) == 0 {
-        8
-    } else {
-        9
-    }
-}
+const VLE_LEN: usize = 10;
 
 impl LCodec<u64> for Zenoh080 {
     fn w_len(self, x: u64) -> usize {
-        vle_len(x)
+        const B1: u64 = u64::MAX << 7;
+        const B2: u64 = u64::MAX << (7 * 2);
+        const B3: u64 = u64::MAX << (7 * 3);
+        const B4: u64 = u64::MAX << (7 * 4);
+        const B5: u64 = u64::MAX << (7 * 5);
+        const B6: u64 = u64::MAX << (7 * 6);
+        const B7: u64 = u64::MAX << (7 * 7);
+        const B8: u64 = u64::MAX << (7 * 8);
+        const B9: u64 = u64::MAX << (7 * 9);
+
+        if (x & B1) == 0 {
+            1
+        } else if (x & B2) == 0 {
+            2
+        } else if (x & B3) == 0 {
+            3
+        } else if (x & B4) == 0 {
+            4
+        } else if (x & B5) == 0 {
+            5
+        } else if (x & B6) == 0 {
+            6
+        } else if (x & B7) == 0 {
+            7
+        } else if (x & B8) == 0 {
+            8
+        } else if (x & B9) == 0 {
+            9
+        } else {
+            10
+        }
     }
 }
 
@@ -111,33 +110,17 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, mut x: u64) -> Self::Output {
-        writer.with_slot(VLE_LEN_MAX, move |buffer| {
+        writer.with_slot(VLE_LEN, move |buffer| {
             let mut len = 0;
-            while (x & !0x7f_u64) != 0 {
-                // SAFETY: buffer is guaranteed to be VLE_LEN long where VLE_LEN is
-                //         the maximum number of bytes a VLE can take once encoded.
-                //         I.e.: x is shifted 7 bits to the right every iteration,
-                //         the loop is at most VLE_LEN iterations.
-                unsafe {
-                    *buffer.get_unchecked_mut(len) = (x as u8) | 0x80_u8;
-                }
+            let mut b = x as u8;
+            while x > 0x7f {
+                buffer[len] = b | 0x80;
                 len += 1;
                 x >>= 7;
+                b = x as u8;
             }
-            // In case len == VLE_LEN then all the bits have already been written in the latest iteration.
-            // Else we haven't written all the necessary bytes yet.
-            if len != VLE_LEN_MAX {
-                // SAFETY: buffer is guaranteed to be VLE_LEN long where VLE_LEN is
-                //         the maximum number of bytes a VLE can take once encoded.
-                //         I.e.: x is shifted 7 bits to the right every iteration,
-                //         the loop is at most VLE_LEN iterations.
-                unsafe {
-                    *buffer.get_unchecked_mut(len) = x as u8;
-                }
-                len += 1;
-            }
-            // The number of written bytes
-            len
+            buffer[len] = b;
+            len + 1
         })?;
         Ok(())
     }
@@ -154,14 +137,19 @@ where
 
         let mut v = 0;
         let mut i = 0;
-        // 7 * VLE_LEN is beyond the maximum number of shift bits
-        while (b & 0x80_u8) != 0 && i != 7 * (VLE_LEN_MAX - 1) {
-            v |= ((b & 0x7f_u8) as u64) << i;
-            b = reader.read_u8()?;
+        let mut k = VLE_LEN;
+        while b > 0x7f && k > 0 {
+            v |= ((b & 0x7f) as u64) << i;
             i += 7;
+            b = reader.read_u8()?;
+            k -= 1;
         }
-        v |= (b as u64) << i;
-        Ok(v)
+        if k > 0 {
+            v |= ((b & 0x7f) as u64) << i;
+            Ok(v)
+        } else {
+            Err(DidntRead)
+        }
     }
 }
 

@@ -27,10 +27,8 @@ use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol::{
-    core::{endpoint::Address, EndPoint, Locator},
-    transport::BatchSize,
-};
+use zenoh_protocol::core::endpoint::Address;
+use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{VSOCK_ACCEPT_THROTTLE_TIME, VSOCK_DEFAULT_MTU, VSOCK_LOCATOR_PREFIX};
@@ -172,7 +170,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> BatchSize {
+    fn get_mtu(&self) -> u16 {
         *VSOCK_DEFAULT_MTU
     }
 

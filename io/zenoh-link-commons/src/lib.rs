@@ -32,7 +32,6 @@ pub use multicast::*;
 use serde::Serialize;
 pub use unicast::*;
 use zenoh_protocol::core::Locator;
-use zenoh_protocol::transport::BatchSize;
 use zenoh_result::ZResult;
 
 /*************************************/
@@ -46,7 +45,7 @@ pub struct Link {
     pub src: Locator,
     pub dst: Locator,
     pub group: Option<Locator>,
-    pub mtu: BatchSize,
+    pub mtu: u16,
     pub is_reliable: bool,
     pub is_streamed: bool,
     pub interfaces: Vec<String>,

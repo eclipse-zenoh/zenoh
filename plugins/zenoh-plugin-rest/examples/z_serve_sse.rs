@@ -49,7 +49,11 @@ async fn main() {
         let receiver = queryable.receiver.clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
-                request.reply(key, HTML).res().await.unwrap();
+                request
+                    .reply(Ok(Sample::new(key, HTML)))
+                    .res()
+                    .await
+                    .unwrap();
             }
         }
     });
@@ -71,7 +75,11 @@ async fn main() {
 
     println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{key}");
     loop {
-        publisher.put(value).res().await.unwrap();
+        publisher
+            .put(Value::from(value).encoding(KnownEncoding::TextPlain.into()))
+            .res()
+            .await
+            .unwrap();
         async_std::task::sleep(Duration::from_secs(1)).await;
     }
 }

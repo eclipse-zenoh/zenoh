@@ -74,11 +74,11 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         wire_expr: "test".into(),
         ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
         ext_tstamp: None,
-        ext_nodeid: NodeIdType::DEFAULT,
+        ext_nodeid: NodeIdType::default(),
         payload: Put {
             payload: vec![0u8; msg_size].into(),
             timestamp: None,
-            encoding: Encoding::empty(),
+            encoding: Encoding::default(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -138,11 +138,11 @@ async fn transport_unicast_defragmentation_tcp_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::DEFAULT,
+            priority: Priority::default(),
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::DEFAULT,
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -171,11 +171,11 @@ async fn transport_unicast_defragmentation_ws_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::DEFAULT,
+            priority: Priority::default(),
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::DEFAULT,
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -206,11 +206,11 @@ async fn transport_unicast_defragmentation_unixpipe_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::DEFAULT,
+            priority: Priority::default(),
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::DEFAULT,
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {

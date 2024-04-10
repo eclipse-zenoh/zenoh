@@ -48,7 +48,7 @@ where
         if *more {
             header |= flag::M;
         }
-        if ext_qos != &ext::QoSType::DEFAULT {
+        if ext_qos != &ext::QoSType::default() {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -57,7 +57,7 @@ where
         self.write(&mut *writer, sn)?;
 
         // Extensions
-        if ext_qos != &ext::QoSType::DEFAULT {
+        if ext_qos != &ext::QoSType::default() {
             self.write(&mut *writer, (*ext_qos, false))?;
         }
 
@@ -97,7 +97,7 @@ where
         let sn: TransportSn = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut ext_qos = ext::QoSType::DEFAULT;
+        let mut ext_qos = ext::QoSType::default();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {

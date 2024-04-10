@@ -199,7 +199,6 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
-                    m.id,
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
@@ -210,7 +209,6 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
-                    m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
                 );
@@ -220,7 +218,6 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
-                    m.id,
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
@@ -231,7 +228,6 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
-                    m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
                 );
@@ -239,7 +235,8 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::DeclareInterest(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::DeclareFinal(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::FinalInterest(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::UndeclareInterest(_m) => todo!(),
         }
         drop(ctrl_lock);
     }
@@ -270,6 +267,12 @@ impl Primitives for Face {
                     msg.payload,
                     msg.ext_nodeid.node_id,
                 );
+            }
+            RequestBody::Pull(_) => {
+                pull_data(&self.tables.tables, &self.state.clone(), msg.wire_expr);
+            }
+            _ => {
+                log::error!("Unsupported request");
             }
         }
     }

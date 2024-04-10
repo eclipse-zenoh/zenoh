@@ -38,25 +38,20 @@ async fn main() {
     while let Ok(query) = queryable.recv_async().await {
         match query.value() {
             None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-            Some(value) => {
-                let payload = value
-                    .payload
-                    .deserialize::<String>()
-                    .unwrap_or_else(|e| format!("{}", e));
-                println!(
-                    ">> [Queryable ] Received Query '{}' with payload '{}'",
-                    query.selector(),
-                    payload
-                )
-            }
+            Some(value) => println!(
+                ">> [Queryable ] Received Query '{}' with value '{}'",
+                query.selector(),
+                value
+            ),
         }
         println!(
             ">> [Queryable ] Responding ('{}': '{}')",
             key_expr.as_str(),
             value,
         );
+        let reply = Ok(Sample::new(key_expr.clone(), value.clone()));
         query
-            .reply(key_expr.clone(), value.clone())
+            .reply(reply)
             .res()
             .await
             .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));

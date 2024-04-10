@@ -16,6 +16,7 @@ use alloc::{
     boxed::Box,
     format,
     string::{String, ToString},
+    vec::Vec,
 };
 use core::{
     convert::{From, TryFrom, TryInto},
@@ -41,8 +42,8 @@ pub use wire_expr::*;
 
 mod cowstr;
 pub use cowstr::CowStr;
-pub mod encoding;
-pub use encoding::{Encoding, EncodingId};
+mod encoding;
+pub use encoding::{Encoding, KnownEncoding};
 
 pub mod locator;
 pub use locator::*;
@@ -52,6 +53,43 @@ pub use endpoint::*;
 
 pub mod resolution;
 pub use resolution::*;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Property {
+    pub key: u64,
+    pub value: Vec<u8>,
+}
+
+/// The kind of a `Sample`.
+#[repr(u8)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub enum SampleKind {
+    /// if the `Sample` was issued by a `put` operation.
+    #[default]
+    Put = 0,
+    /// if the `Sample` was issued by a `delete` operation.
+    Delete = 1,
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl TryFrom<u64> for SampleKind {
+    type Error = u64;
+    fn try_from(kind: u64) -> Result<Self, u64> {
+        match kind {
+            0 => Ok(SampleKind::Put),
+            1 => Ok(SampleKind::Delete),
+            _ => Err(kind),
+        }
+    }
+}
 
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -261,27 +299,6 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
-/// The unique id of a zenoh entity inside it's parent [`Session`].
-pub type EntityId = u32;
-
-/// The global unique id of a zenoh entity.
-#[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
-pub struct EntityGlobalId {
-    pub zid: ZenohId,
-    pub eid: EntityId,
-}
-
-impl EntityGlobalId {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
-        Self {
-            zid: ZenohId::rand(),
-            eid: rand::thread_rng().gen(),
-        }
-    }
-}
-
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Priority {
@@ -297,8 +314,6 @@ pub enum Priority {
 }
 
 impl Priority {
-    /// Default
-    pub const DEFAULT: Self = Self::Data;
     /// The lowest Priority
     pub const MIN: Self = Self::Background;
     /// The highest Priority
@@ -339,8 +354,6 @@ pub enum Reliability {
 }
 
 impl Reliability {
-    pub const DEFAULT: Self = Self::BestEffort;
-
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -361,13 +374,6 @@ pub struct Channel {
     pub reliability: Reliability,
 }
 
-impl Channel {
-    pub const DEFAULT: Self = Self {
-        priority: Priority::DEFAULT,
-        reliability: Reliability::DEFAULT,
-    };
-}
-
 /// The kind of congestion control.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
@@ -377,6 +383,51 @@ pub enum CongestionControl {
     Block = 1,
 }
 
-impl CongestionControl {
-    pub const DEFAULT: Self = Self::Drop;
+/// The subscription mode.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SubMode {
+    #[default]
+    Push = 0,
+    Pull = 1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SubInfo {
+    pub reliability: Reliability,
+    pub mode: SubMode,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct QueryableInfo {
+    pub complete: u64, // Default 0: incomplete
+    pub distance: u64, // Default 0: no distance
+}
+
+/// The kind of consolidation.
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ConsolidationMode {
+    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
+    None,
+    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
+    /// has already been sent with the same key.
+    ///
+    /// This optimizes latency while potentially reducing bandwidth.
+    ///
+    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
+    /// been observed with the same key.
+    Monotonic,
+    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
+    Latest,
+}
+
+/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum QueryTarget {
+    #[default]
+    BestMatching,
+    All,
+    AllComplete,
+    #[cfg(feature = "complete_n")]
+    Complete(u64),
 }

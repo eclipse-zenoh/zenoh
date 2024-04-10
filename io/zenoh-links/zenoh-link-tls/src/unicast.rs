@@ -42,8 +42,8 @@ use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
 };
+use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_protocol::{core::endpoint::Config, transport::BatchSize};
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
 pub struct LinkUnicastTls {
@@ -180,7 +180,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> BatchSize {
+    fn get_mtu(&self) -> u16 {
         *TLS_DEFAULT_MTU
     }
 

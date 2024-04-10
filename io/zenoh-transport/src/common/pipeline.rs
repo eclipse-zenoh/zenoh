@@ -22,7 +22,7 @@ use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use std::{
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU16, Ordering},
     time::Instant,
 };
 use zenoh_buffers::{
@@ -40,7 +40,7 @@ use zenoh_protocol::{
     transport::{
         fragment::FragmentHeader,
         frame::{self, FrameHeader},
-        AtomicBatchSize, BatchSize, TransportMessage,
+        BatchSize, TransportMessage,
     },
 };
 
@@ -75,7 +75,7 @@ impl StageInRefill {
 struct StageInOut {
     n_out_w: Sender<()>,
     s_out_w: RingBufferWriter<WBatch, RBLEN>,
-    bytes: Arc<AtomicBatchSize>,
+    bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
 }
 
@@ -178,18 +178,12 @@ impl StageIn {
         }
 
         macro_rules! zretok {
-            ($batch:expr, $msg:expr) => {{
-                if $msg.is_express() {
-                    // Move out existing batch
-                    self.s_out.move_batch($batch);
-                    return true;
-                } else {
-                    let bytes = $batch.len();
-                    *c_guard = Some($batch);
-                    drop(c_guard);
-                    self.s_out.notify(bytes);
-                    return true;
-                }
+            ($batch:expr) => {{
+                let bytes = $batch.len();
+                *c_guard = Some($batch);
+                drop(c_guard);
+                self.s_out.notify(bytes);
+                return true;
             }};
         }
 
@@ -197,7 +191,7 @@ impl StageIn {
         let mut batch = zgetbatch_rets!(false, {});
         // Attempt the serialization on the current batch
         let e = match batch.encode(&*msg) {
-            Ok(_) => zretok!(batch, msg),
+            Ok(_) => zretok!(batch),
             Err(e) => e,
         };
 
@@ -217,7 +211,7 @@ impl StageIn {
         if let BatchError::NewFrame = e {
             // Attempt a serialization with a new frame
             if batch.encode((&*msg, &frame)).is_ok() {
-                zretok!(batch, msg);
+                zretok!(batch);
             }
         }
 
@@ -229,7 +223,7 @@ impl StageIn {
 
         // Attempt a second serialization on fully empty batch
         if batch.encode((&*msg, &frame)).is_ok() {
-            zretok!(batch, msg);
+            zretok!(batch);
         }
 
         // The second serialization attempt has failed. This means that the message is
@@ -355,12 +349,12 @@ enum Pull {
 struct Backoff {
     retry_time: NanoSeconds,
     last_bytes: BatchSize,
-    bytes: Arc<AtomicBatchSize>,
+    bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
 }
 
 impl Backoff {
-    fn new(bytes: Arc<AtomicBatchSize>, backoff: Arc<AtomicBool>) -> Self {
+    fn new(bytes: Arc<AtomicU16>, backoff: Arc<AtomicBool>) -> Self {
         Self {
             retry_time: 0,
             last_bytes: 0,
@@ -522,7 +516,7 @@ impl TransmissionPipeline {
         let mut stage_in = vec![];
         let mut stage_out = vec![];
 
-        let default_queue_size = [config.queue_size[Priority::DEFAULT as usize]];
+        let default_queue_size = [config.queue_size[Priority::default() as usize]];
         let size_iter = if priority.len() == 1 {
             default_queue_size.iter()
         } else {
@@ -552,7 +546,7 @@ impl TransmissionPipeline {
             // This is a SPSC ring buffer
             let (s_out_w, s_out_r) = RingBuffer::<WBatch, RBLEN>::init();
             let current = Arc::new(Mutex::new(None));
-            let bytes = Arc::new(AtomicBatchSize::new(0));
+            let bytes = Arc::new(AtomicU16::new(0));
             let backoff = Arc::new(AtomicBool::new(false));
 
             stage_in.push(Mutex::new(StageIn {
@@ -613,7 +607,7 @@ impl TransmissionPipelineProducer {
             let priority = msg.priority();
             (priority as usize, priority)
         } else {
-            (0, Priority::DEFAULT)
+            (0, Priority::default())
         };
         // If message is droppable, compute a deadline after which the sample could be dropped
         let deadline_before_drop = if msg.is_droppable() {
@@ -781,10 +775,10 @@ mod tests {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
+                ext_nodeid: ext::NodeIdType::default(),
                 payload: PushBody::Put(Put {
                     timestamp: None,
-                    encoding: Encoding::empty(),
+                    encoding: Encoding::default(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -909,10 +903,10 @@ mod tests {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
+                ext_nodeid: ext::NodeIdType::default(),
                 payload: PushBody::Put(Put {
                     timestamp: None,
-                    encoding: Encoding::empty(),
+                    encoding: Encoding::default(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -1026,10 +1020,10 @@ mod tests {
                             false,
                         ),
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        ext_nodeid: ext::NodeIdType::default(),
                         payload: PushBody::Put(Put {
                             timestamp: None,
-                            encoding: Encoding::empty(),
+                            encoding: Encoding::default(),
                             ext_sinfo: None,
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,

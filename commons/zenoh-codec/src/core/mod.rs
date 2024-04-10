@@ -13,6 +13,7 @@
 //
 mod encoding;
 mod locator;
+mod property;
 #[cfg(feature = "shared-memory")]
 mod shm;
 mod timestamp;
