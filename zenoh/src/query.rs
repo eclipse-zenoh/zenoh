@@ -133,6 +133,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) source_info: SourceInfo,
 }
 
+#[zenoh_macros::unstable]
 impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -430,6 +431,7 @@ where
                 self.value,
                 #[cfg(feature = "unstable")]
                 self.attachment,
+                #[cfg(feature = "unstable")]
                 self.source_info,
                 callback,
             )

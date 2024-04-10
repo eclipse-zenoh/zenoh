@@ -22,9 +22,9 @@ use crate::Priority;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
+use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::network::declare::ext::QoSType;
-use zenoh_protocol::{core::CongestionControl, zenoh};
 
 pub mod builder;
 
@@ -178,12 +178,12 @@ impl SourceInfo {
 }
 
 #[zenoh_macros::unstable]
-impl From<SourceInfo> for Option<zenoh::put::ext::SourceInfoType> {
-    fn from(source_info: SourceInfo) -> Option<zenoh::put::ext::SourceInfoType> {
+impl From<SourceInfo> for Option<zenoh_protocol::zenoh::put::ext::SourceInfoType> {
+    fn from(source_info: SourceInfo) -> Option<zenoh_protocol::zenoh::put::ext::SourceInfoType> {
         if source_info.is_empty() {
             None
         } else {
-            Some(zenoh::put::ext::SourceInfoType {
+            Some(zenoh_protocol::zenoh::put::ext::SourceInfoType {
                 id: source_info.source_id.unwrap_or_default(),
                 sn: source_info.source_sn.unwrap_or_default() as u32,
             })

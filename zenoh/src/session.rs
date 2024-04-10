@@ -1682,7 +1682,10 @@ impl Session {
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
                     consolidation,
                     parameters: selector.parameters().to_string(),
+                    #[cfg(feature = "unstable")]
                     ext_sinfo: source.into(),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
