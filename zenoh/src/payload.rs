@@ -1092,15 +1092,9 @@ impl TryFrom<Payload> for SharedMemoryBuf {
 }
 
 // Tuple
-impl<A, B> Serialize<(A, B)> for ZSerde
-where
-    A: Into<Payload>,
-    B: Into<Payload>,
-{
-    type Output = Payload;
-
-    fn serialize(self, t: (A, B)) -> Self::Output {
-        let (a, b) = t;
+macro_rules! impl_tuple {
+    ($t:expr) => {{
+        let (a, b) = $t;
 
         let codec = Zenoh080::new();
         let mut buffer: ZBuf = ZBuf::empty();
@@ -1117,6 +1111,29 @@ where
         }
 
         Payload::new(buffer)
+    }};
+}
+impl<A, B> Serialize<(A, B)> for ZSerde
+where
+    A: Into<Payload>,
+    B: Into<Payload>,
+{
+    type Output = Payload;
+
+    fn serialize(self, t: (A, B)) -> Self::Output {
+        impl_tuple!(t)
+    }
+}
+
+impl<A, B> Serialize<&(A, B)> for ZSerde
+where
+    for<'a> &'a A: Into<Payload>,
+    for<'b> &'b B: Into<Payload>,
+{
+    type Output = Payload;
+
+    fn serialize(self, t: &(A, B)) -> Self::Output {
+        impl_tuple!(t)
     }
 }
 
