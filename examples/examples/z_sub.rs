@@ -32,19 +32,16 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring Subscriber on '{}'...", &key_expr);
+
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        let payload = sample
-            .payload()
-            .deserialize::<String>()
-            .unwrap_or_else(|e| format!("{}", e));
         println!(
             ">> [Subscriber] Received {} ('{}': '{}')",
-            sample.kind(),
-            sample.key_expr().as_str(),
-            payload
+            sample.kind,
+            sample.key_expr.as_str(),
+            sample.value
         );
     }
 }

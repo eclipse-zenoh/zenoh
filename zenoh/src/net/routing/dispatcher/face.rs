@@ -20,13 +20,15 @@ use crate::KeyExpr;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
+use tokio_util::sync::CancellationToken;
 use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
     network::{Mapping, Push, Request, RequestId, Response, ResponseFinal},
 };
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
@@ -41,10 +43,11 @@ pub struct FaceState {
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
-    pub(crate) pending_queries: HashMap<RequestId, Arc<Query>>,
+    pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) task_controller: TaskController,
 }
 
 impl FaceState {
@@ -73,6 +76,7 @@ impl FaceState {
             mcast_group,
             in_interceptors,
             hat,
+            task_controller: TaskController::default(),
         })
     }
 
@@ -151,9 +155,33 @@ impl fmt::Display for FaceState {
 }
 
 #[derive(Clone)]
+pub struct WeakFace {
+    pub(crate) tables: Weak<TablesLock>,
+    pub(crate) state: Weak<FaceState>,
+}
+
+impl WeakFace {
+    pub fn upgrade(&self) -> Option<Face> {
+        Some(Face {
+            tables: self.tables.upgrade()?,
+            state: self.state.upgrade()?,
+        })
+    }
+}
+
+#[derive(Clone)]
 pub struct Face {
     pub(crate) tables: Arc<TablesLock>,
     pub(crate) state: Arc<FaceState>,
+}
+
+impl Face {
+    pub fn downgrade(&self) -> WeakFace {
+        WeakFace {
+            tables: Arc::downgrade(&self.tables),
+            state: Arc::downgrade(&self.state),
+        }
+    }
 }
 
 impl Primitives for Face {
@@ -171,7 +199,6 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
-                    m.id,
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
@@ -182,7 +209,6 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
-                    m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
                 );
@@ -192,7 +218,6 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
-                    m.id,
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
@@ -203,7 +228,6 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
-                    m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
                 );
@@ -211,7 +235,8 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::DeclareInterest(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::DeclareFinal(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::FinalInterest(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::UndeclareInterest(_m) => todo!(),
         }
         drop(ctrl_lock);
     }
@@ -242,6 +267,12 @@ impl Primitives for Face {
                     msg.payload,
                     msg.ext_nodeid.node_id,
                 );
+            }
+            RequestBody::Pull(_) => {
+                pull_data(&self.tables.tables, &self.state.clone(), msg.wire_expr);
+            }
+            _ => {
+                log::error!("Unsupported request");
             }
         }
     }

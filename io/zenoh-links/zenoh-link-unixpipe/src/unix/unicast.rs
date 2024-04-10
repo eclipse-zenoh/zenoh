@@ -30,10 +30,10 @@ use std::sync::Arc;
 use tokio::fs::remove_file;
 use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use zenoh_core::{zasyncread, zasyncwrite};
+use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, SyncResolve};
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_protocol::transport::BatchSize;
 use zenoh_runtime::ZRuntime;
 
 use unix_named_pipe::{create, open_write};
@@ -46,7 +46,7 @@ use zenoh_result::{bail, ZResult};
 
 use super::FILE_ACCESS_MASK;
 
-const LINUX_PIPE_MAX_MTU: BatchSize = BatchSize::MAX;
+const LINUX_PIPE_MAX_MTU: u16 = 65_535;
 const LINUX_PIPE_DEDICATE_TRIES: usize = 100;
 
 static PIPE_INVITATION: &[u8] = &[0xDE, 0xAD, 0xBE, 0xEF];
@@ -286,6 +286,7 @@ async fn handle_incoming_connections(
 struct UnicastPipeListener {
     uplink_locator: Locator,
     token: CancellationToken,
+    handle: JoinHandle<()>,
 }
 impl UnicastPipeListener {
     async fn listen(endpoint: EndPoint, manager: Arc<NewLinkChannelSender>) -> ZResult<Self> {
@@ -301,7 +302,7 @@ impl UnicastPipeListener {
 
         // WARN: The spawn_blocking is mandatory verified by the ping/pong test
         // create listening task
-        tokio::task::spawn_blocking(move || {
+        let handle = tokio::task::spawn_blocking(move || {
             ZRuntime::Acceptor.block_on(async move {
                 loop {
                     tokio::select! {
@@ -323,11 +324,13 @@ impl UnicastPipeListener {
         Ok(Self {
             uplink_locator: local,
             token,
+            handle,
         })
     }
 
     fn stop_listening(self) {
         self.token.cancel();
+        let _ = ResolveFuture::new(self.handle).res_sync();
     }
 }
 
@@ -499,7 +502,7 @@ impl LinkUnicastTrait for UnicastPipe {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> BatchSize {
+    fn get_mtu(&self) -> u16 {
         LINUX_PIPE_MAX_MTU
     }
 

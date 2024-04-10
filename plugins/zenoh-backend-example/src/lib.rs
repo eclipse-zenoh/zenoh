@@ -13,8 +13,11 @@
 //
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use std::collections::{hash_map::Entry, HashMap};
-use zenoh::{prelude::OwnedKeyExpr, time::Timestamp, value::Value};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
+use zenoh::{prelude::OwnedKeyExpr, sample::Sample, time::Timestamp, value::Value};
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
@@ -67,6 +70,12 @@ impl Volume for ExampleBackend {
     }
     async fn create_storage(&self, _props: StorageConfig) -> ZResult<Box<dyn Storage>> {
         Ok(Box::<ExampleStorage>::default())
+    }
+    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
+        None
+    }
+    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
+        None
     }
 }
 

@@ -42,8 +42,8 @@ use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
 };
+use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_protocol::{core::endpoint::Config, transport::BatchSize};
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
 pub struct LinkUnicastTls {
@@ -180,7 +180,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> BatchSize {
+    fn get_mtu(&self) -> u16 {
         *TLS_DEFAULT_MTU
     }
 
@@ -204,8 +204,8 @@ impl Drop for LinkUnicastTls {
     fn drop(&mut self) {
         // Close the underlying TCP stream
         let (tcp_stream, _) = self.get_sock_mut().get_mut();
-        let _ =
-            zenoh_runtime::ZRuntime::TX.block_in_place(async move { tcp_stream.shutdown().await });
+        let _ = zenoh_runtime::ZRuntime::Acceptor
+            .block_in_place(async move { tcp_stream.shutdown().await });
     }
 }
 

@@ -19,10 +19,7 @@ use core::{
     ops::Deref,
 };
 use std::net::SocketAddr;
-use zenoh_protocol::{
-    core::{EndPoint, Locator},
-    transport::BatchSize,
-};
+use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::ZResult;
 
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
@@ -44,7 +41,7 @@ pub struct LinkUnicast(pub Arc<dyn LinkUnicastTrait>);
 
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
-    fn get_mtu(&self) -> BatchSize;
+    fn get_mtu(&self) -> u16;
     fn get_src(&self) -> &Locator;
     fn get_dst(&self) -> &Locator;
     fn is_reliable(&self) -> bool;

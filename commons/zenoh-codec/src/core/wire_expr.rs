@@ -65,7 +65,7 @@ where
         Ok(WireExpr {
             scope,
             suffix: suffix.into(),
-            mapping: Mapping::DEFAULT,
+            mapping: Mapping::default(),
         })
     }
 }

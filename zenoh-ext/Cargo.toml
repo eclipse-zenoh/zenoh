@@ -37,10 +37,7 @@ env_logger = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
-phf = { workspace = true }
 serde = { workspace = true, features = ["default"] }
-serde_cbor = { workspace = true }
-serde_json = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"], default-features = false }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
@@ -48,6 +45,7 @@ zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
+zenoh-task = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true, features = ["derive"] }

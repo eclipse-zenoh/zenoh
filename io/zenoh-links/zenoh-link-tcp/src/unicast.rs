@@ -25,7 +25,6 @@ use zenoh_link_commons::{
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 use super::{
@@ -146,7 +145,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> BatchSize {
+    fn get_mtu(&self) -> u16 {
         *TCP_DEFAULT_MTU
     }
 
@@ -172,7 +171,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
 // impl Drop for LinkUnicastTcp {
 //     fn drop(&mut self) {
 //         // Close the underlying TCP socket
-//         zenoh_runtime::ZRuntime::TX.block_in_place(async {
+//         zenoh_runtime::ZRuntime::Acceptor.block_in_place(async {
 //             let _ = self.get_mut_socket().shutdown().await;
 //         });
 //     }

@@ -40,7 +40,9 @@ use crate::{
         routing::{
             dispatcher::face::Face,
             hat::TREES_COMPUTATION_DELAY_MS,
-            router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+            router::{
+                compute_data_routes, compute_matching_pulls, compute_query_routes, RoutesIndexes,
+            },
         },
     },
     runtime::Runtime,
@@ -49,20 +51,17 @@ use std::{
     any::Any,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
-    sync::{atomic::AtomicU32, Arc},
+    sync::Arc,
+    time::Duration,
 };
-use tokio::task::JoinHandle;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
-    network::{
-        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
-        oam::id::OAM_LINKSTATE,
-        Oam,
-    },
+    network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE, Oam},
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
 mod network;
@@ -123,9 +122,22 @@ struct HatTables {
     routers_net: Option<Network>,
     peers_net: Option<Network>,
     shared_nodes: Vec<ZenohId>,
-    routers_trees_task: Option<JoinHandle<()>>,
-    peers_trees_task: Option<JoinHandle<()>>,
+    routers_trees_task: Option<TerminatableTask>,
+    peers_trees_task: Option<TerminatableTask>,
     router_peers_failover_brokering: bool,
+}
+
+impl Drop for HatTables {
+    fn drop(&mut self) {
+        if self.peers_trees_task.is_some() {
+            let task = self.peers_trees_task.take().unwrap();
+            task.terminate(Duration::from_secs(10));
+        }
+        if self.routers_trees_task.is_some() {
+            let task = self.routers_trees_task.take().unwrap();
+            task.terminate(Duration::from_secs(10));
+        }
+    }
 }
 
 impl HatTables {
@@ -234,44 +246,51 @@ impl HatTables {
                 .as_ref()
                 .map(|net| {
                     let links = net.get_links(peer1);
+                    log::debug!("failover_brokering {} {} ({:?})", peer1, peer2, links);
                     HatTables::failover_brokering_to(links, peer2)
                 })
                 .unwrap_or(false)
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>, net_type: WhatAmI) {
+        log::trace!("Schedule computations");
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
         {
-            let task = Some(zenoh_runtime::ZRuntime::Net.spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(
-                    *TREES_COMPUTATION_DELAY_MS,
-                ))
-                .await;
-                let mut tables = zwrite!(tables_ref.tables);
+            let task = TerminatableTask::spawn(
+                zenoh_runtime::ZRuntime::Net,
+                async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        *TREES_COMPUTATION_DELAY_MS,
+                    ))
+                    .await;
+                    let mut tables = zwrite!(tables_ref.tables);
 
-                log::trace!("Compute trees");
-                let new_childs = match net_type {
-                    WhatAmI::Router => hat_mut!(tables)
-                        .routers_net
-                        .as_mut()
-                        .unwrap()
-                        .compute_trees(),
-                    _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
-                };
+                    log::trace!("Compute trees");
+                    let new_childs = match net_type {
+                        WhatAmI::Router => hat_mut!(tables)
+                            .routers_net
+                            .as_mut()
+                            .unwrap()
+                            .compute_trees(),
+                        _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
+                    };
 
-                log::trace!("Compute routes");
-                pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
-                queries::queries_tree_change(&mut tables, &new_childs, net_type);
+                    log::trace!("Compute routes");
+                    pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
+                    queries::queries_tree_change(&mut tables, &new_childs, net_type);
 
-                match net_type {
-                    WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
-                    _ => hat_mut!(tables).peers_trees_task = None,
-                };
-            }));
+                    log::trace!("Computations completed");
+                    match net_type {
+                        WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
+                        _ => hat_mut!(tables).peers_trees_task = None,
+                    };
+                },
+                TerminatableTask::create_cancellation_token(),
+            );
             match net_type {
-                WhatAmI::Router => self.routers_trees_task = task,
-                _ => self.peers_trees_task = task,
+                WhatAmI::Router => self.routers_trees_task = Some(task),
+                _ => self.peers_trees_task = Some(task),
             };
         }
     }
@@ -417,7 +436,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for (_id, mut res) in face
+        for mut res in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -445,7 +464,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for (_, mut res) in face
+        for mut res in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -478,7 +497,11 @@ impl HatBaseTrait for HatCode {
         let rtables = zread!(tables.tables);
         for _match in subs_matches.drain(..) {
             let mut expr = RoutingExpr::new(&_match, "");
-            matches_data_routes.push((_match.clone(), compute_data_routes(&rtables, &mut expr)));
+            matches_data_routes.push((
+                _match.clone(),
+                compute_data_routes(&rtables, &mut expr),
+                compute_matching_pulls(&rtables, &mut expr),
+            ));
         }
         for _match in qabls_matches.drain(..) {
             matches_query_routes.push((_match.clone(), compute_query_routes(&rtables, &_match)));
@@ -486,10 +509,13 @@ impl HatBaseTrait for HatCode {
         drop(rtables);
 
         let mut wtables = zwrite!(tables.tables);
-        for (mut res, data_routes) in matches_data_routes {
+        for (mut res, data_routes, matching_pulls) in matches_data_routes {
             get_mut_unchecked(&mut res)
                 .context_mut()
                 .update_data_routes(data_routes);
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_matching_pulls(matching_pulls);
             Resource::clean(&mut res);
         }
         for (mut res, query_routes) in matches_query_routes {
@@ -748,8 +774,8 @@ impl HatBaseTrait for HatCode {
 struct HatContext {
     router_subs: HashSet<ZenohId>,
     peer_subs: HashSet<ZenohId>,
-    router_qabls: HashMap<ZenohId, QueryableInfoType>,
-    peer_qabls: HashMap<ZenohId, QueryableInfoType>,
+    router_qabls: HashMap<ZenohId, QueryableInfo>,
+    peer_qabls: HashMap<ZenohId, QueryableInfo>,
 }
 
 impl HatContext {
@@ -765,22 +791,20 @@ impl HatContext {
 
 struct HatFace {
     link_id: usize,
-    next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
-    remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
-    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    local_subs: HashSet<Arc<Resource>>,
+    remote_subs: HashSet<Arc<Resource>>,
+    local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
+    remote_qabls: HashSet<Arc<Resource>>,
 }
 
 impl HatFace {
     fn new() -> Self {
         Self {
             link_id: 0,
-            next_id: AtomicU32::new(0),
-            local_subs: HashMap::new(),
-            remote_subs: HashMap::new(),
+            local_subs: HashSet::new(),
+            remote_subs: HashSet::new(),
             local_qabls: HashMap::new(),
-            remote_qabls: HashMap::new(),
+            remote_qabls: HashSet::new(),
         }
     }
 }

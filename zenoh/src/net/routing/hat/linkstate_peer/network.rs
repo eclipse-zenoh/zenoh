@@ -15,6 +15,7 @@ use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
 use crate::net::routing::dispatcher::tables::NodeId;
 use crate::net::runtime::Runtime;
+use crate::runtime::WeakRuntime;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{VisitMap, Visitable};
 use std::convert::TryInto;
@@ -115,7 +116,7 @@ pub(super) struct Network {
     pub(super) trees: Vec<Tree>,
     pub(super) distances: Vec<f64>,
     pub(super) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
-    pub(super) runtime: Runtime,
+    pub(super) runtime: WeakRuntime,
 }
 
 impl Network {
@@ -155,7 +156,7 @@ impl Network {
             }],
             distances: vec![0.0],
             graph,
-            runtime,
+            runtime: Runtime::downgrade(&runtime),
         }
     }
 
@@ -247,7 +248,7 @@ impl Network {
             whatami: self.graph[idx].whatami,
             locators: if details.locators {
                 if idx == self.idx {
-                    Some(self.runtime.get_locators())
+                    Some(self.runtime.upgrade().unwrap().get_locators())
                 } else {
                     self.graph[idx].locators.clone()
                 }
@@ -269,7 +270,7 @@ impl Network {
         Ok(NetworkBody::OAM(Oam {
             id: OAM_LINKSTATE,
             body: ZExtBody::ZBuf(buf),
-            ext_qos: oam::ext::QoSType::OAM,
+            ext_qos: oam::ext::QoSType::oam_default(),
             ext_tstamp: None,
         })
         .into())
@@ -336,6 +337,7 @@ impl Network {
 
     pub(super) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohId) -> Changes {
         log::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
+        let strong_runtime = self.runtime.upgrade().unwrap();
 
         let graph = &self.graph;
         let links = &mut self.links;
@@ -487,13 +489,15 @@ impl Network {
                         if !self.autoconnect.is_empty() {
                             // Connect discovered peers
                             if zenoh_runtime::ZRuntime::Net
-                                .block_in_place(self.runtime.manager().get_transport_unicast(&zid))
+                                .block_in_place(
+                                    strong_runtime.manager().get_transport_unicast(&zid),
+                                )
                                 .is_none()
                                 && self.autoconnect.matches(whatami)
                             {
                                 if let Some(locators) = locators {
-                                    let runtime = self.runtime.clone();
-                                    self.runtime.spawn(async move {
+                                    let runtime = strong_runtime.clone();
+                                    strong_runtime.spawn(async move {
                                         // random backoff
                                         tokio::time::sleep(std::time::Duration::from_millis(
                                             rand::random::<u64>() % 100,
@@ -607,15 +611,15 @@ impl Network {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
                     if zenoh_runtime::ZRuntime::Net
-                        .block_in_place(self.runtime.manager().get_transport_unicast(&node.zid))
+                        .block_in_place(strong_runtime.manager().get_transport_unicast(&node.zid))
                         .is_none()
                         && self.autoconnect.matches(whatami)
                     {
                         if let Some(locators) = &node.locators {
-                            let runtime = self.runtime.clone();
+                            let runtime = strong_runtime.clone();
                             let zid = node.zid;
                             let locators = locators.clone();
-                            self.runtime.spawn(async move {
+                            strong_runtime.spawn(async move {
                                 // random backoff
                                 tokio::time::sleep(std::time::Duration::from_millis(
                                     rand::random::<u64>() % 100,

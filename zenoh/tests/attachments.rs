@@ -1,16 +1,3 @@
-//
-// Copyright (c) 2024 ZettaScale Technology
-//
-// This program and the accompanying materials are made available under the
-// terms of the Eclipse Public License 2.0 which is available at
-// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-// which is available at https://www.apache.org/licenses/LICENSE-2.0.
-//
-// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
-//
-// Contributors:
-//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
 #[cfg(feature = "unstable")]
 #[test]
 fn pubsub() {
@@ -20,8 +7,11 @@ fn pubsub() {
     let _sub = zenoh
         .declare_subscriber("test/attachment")
         .callback(|sample| {
-            println!("{}", sample.payload().deserialize::<String>().unwrap());
-            for (k, v) in sample.attachment().unwrap() {
+            println!(
+                "{}",
+                std::str::from_utf8(&sample.payload.contiguous()).unwrap()
+            );
+            for (k, v) in &sample.attachment.unwrap() {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
             }
         })
@@ -38,22 +28,22 @@ fn pubsub() {
         }
         zenoh
             .put("test/attachment", "put")
-            .attachment(Some(
+            .with_attachment(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            ))
+            )
             .res()
             .unwrap();
         publisher
             .put("publisher")
-            .attachment(Some(
+            .with_attachment(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            ))
+            )
             .res()
             .unwrap();
     }
@@ -61,7 +51,7 @@ fn pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn queries() {
-    use zenoh::{prelude::sync::*, sample::builder::SampleBuilderTrait, sample::Attachment};
+    use zenoh::{prelude::sync::*, sample::Attachment};
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
@@ -69,10 +59,13 @@ fn queries() {
         .callback(|query| {
             println!(
                 "{}",
-                query
-                    .value()
-                    .map(|q| q.payload.deserialize::<String>().unwrap())
-                    .unwrap_or_default()
+                std::str::from_utf8(
+                    &query
+                        .value()
+                        .map(|q| q.payload.contiguous())
+                        .unwrap_or_default()
+                )
+                .unwrap()
             );
             let mut attachment = Attachment::new();
             for (k, v) in query.attachment().unwrap() {
@@ -80,11 +73,11 @@ fn queries() {
                 attachment.insert(&k, &k);
             }
             query
-                .reply(
+                .reply(Ok(Sample::new(
                     query.key_expr().clone(),
-                    query.value().unwrap().payload.clone(),
+                    query.value().unwrap().clone(),
                 )
-                .attachment(attachment)
+                .with_attachment(attachment)))
                 .res()
                 .unwrap();
         })
@@ -100,13 +93,13 @@ fn queries() {
         }
         let get = zenoh
             .get("test/attachment")
-            .payload("query")
-            .attachment(Some(
+            .with_value("query")
+            .with_attachment(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            ))
+            )
             .res()
             .unwrap();
         while let Ok(reply) = get.recv() {

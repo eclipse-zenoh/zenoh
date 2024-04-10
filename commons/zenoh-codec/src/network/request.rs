@@ -43,6 +43,8 @@ where
             ext::TargetType::BestMatching => 0,
             ext::TargetType::All => 1,
             ext::TargetType::AllComplete => 2,
+            #[cfg(feature = "complete_n")]
+            ext::TargetType::Complete(n) => 3 + *n,
         };
         let ext = ext::Target::new(v);
         self.write(&mut *writer, (&ext, more))
@@ -61,6 +63,9 @@ where
             0 => ext::TargetType::BestMatching,
             1 => ext::TargetType::All,
             2 => ext::TargetType::AllComplete,
+            #[cfg(feature = "complete_n")]
+            n => ext::TargetType::Complete(n - 3),
+            #[cfg(not(feature = "complete_n"))]
             _ => return Err(DidntRead),
         };
         Ok((rt, more))
@@ -88,16 +93,16 @@ where
 
         // Header
         let mut header = id::REQUEST;
-        let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8)
+        let mut n_exts = ((ext_qos != &ext::QoSType::default()) as u8)
             + (ext_tstamp.is_some() as u8)
-            + ((ext_target != &ext::TargetType::DEFAULT) as u8)
+            + ((ext_target != &ext::TargetType::default()) as u8)
             + (ext_budget.is_some() as u8)
             + (ext_timeout.is_some() as u8)
-            + ((ext_nodeid != &ext::NodeIdType::DEFAULT) as u8);
+            + ((ext_nodeid != &ext::NodeIdType::default()) as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if wire_expr.mapping != Mapping::DEFAULT {
+        if wire_expr.mapping != Mapping::default() {
             header |= flag::M;
         }
         if wire_expr.has_suffix() {
@@ -110,7 +115,7 @@ where
         self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if ext_qos != &ext::QoSType::DEFAULT {
+        if ext_qos != &ext::QoSType::default() {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
@@ -118,7 +123,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if ext_target != &ext::TargetType::DEFAULT {
+        if ext_target != &ext::TargetType::default() {
             n_exts -= 1;
             self.write(&mut *writer, (ext_target, n_exts != 0))?;
         }
@@ -132,7 +137,7 @@ where
             let e = ext::Timeout::new(to.as_millis() as u64);
             self.write(&mut *writer, (&e, n_exts != 0))?;
         }
-        if ext_nodeid != &ext::NodeIdType::DEFAULT {
+        if ext_nodeid != &ext::NodeIdType::default() {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
@@ -180,10 +185,10 @@ where
         };
 
         // Extensions
-        let mut ext_qos = ext::QoSType::DEFAULT;
+        let mut ext_qos = ext::QoSType::default();
         let mut ext_tstamp = None;
-        let mut ext_nodeid = ext::NodeIdType::DEFAULT;
-        let mut ext_target = ext::TargetType::DEFAULT;
+        let mut ext_nodeid = ext::NodeIdType::default();
+        let mut ext_target = ext::TargetType::default();
         let mut ext_limit = None;
         let mut ext_timeout = None;
 

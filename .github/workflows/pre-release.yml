@@ -35,10 +35,8 @@ jobs:
       - name: Clone this repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        run: |
-          rustup show
-          rustup component add rustfmt clippy
+      - name: Install rustup components
+        run: rustup component add rustfmt clippy
 
       - name: Code format check
         run: cargo fmt --check
@@ -62,11 +60,8 @@ jobs:
       - name: Clone this repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        run: rustup show
-
       - name: Install nextest
-        run: cargo install --locked cargo-nextest
+        run: cargo +stable install --locked cargo-nextest
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
@@ -83,7 +78,7 @@ jobs:
           ASYNC_STD_THREAD_COUNT: 4
 
   doc:
-    name: Doc generation
+    name: Generate documentation
     needs: checks
     runs-on: ubuntu-latest
     steps:
@@ -94,7 +89,7 @@ jobs:
       - name: Install Rust toolchain nightly for docs gen
         run: rustup toolchain install nightly
 
-      - name: generate doc
+      - name: Run rustdoc using Nightly Rust and Zenoh unstable
         # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
         run: >
           cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features unstable -j3

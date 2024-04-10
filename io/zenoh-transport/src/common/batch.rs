@@ -460,7 +460,7 @@ impl RBatch {
         let mut into = (buff)();
         let n = lz4_flex::block::decompress_into(payload, into.as_mut_slice())
             .map_err(|_| zerror!("Decompression error"))?;
-        let zslice = ZSlice::new(Arc::new(into), 0, n)
+        let zslice = ZSlice::make(Arc::new(into), 0, n)
             .map_err(|_| zerror!("Invalid decompression buffer length"))?;
         Ok(zslice)
     }
@@ -574,12 +574,12 @@ mod tests {
         let tmsg: TransportMessage = KeepAlive.into();
         let nmsg: NetworkMessage = Push {
             wire_expr: WireExpr::empty(),
-            ext_qos: ext::QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
+            ext_qos: ext::QoSType::new(Priority::default(), CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::DEFAULT,
+            ext_nodeid: ext::NodeIdType::default(),
             payload: PushBody::Put(Put {
                 timestamp: None,
-                encoding: Encoding::empty(),
+                encoding: Encoding::default(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
@@ -601,7 +601,7 @@ mod tests {
         let mut frame = FrameHeader {
             reliability: Reliability::Reliable,
             sn: 0,
-            ext_qos: frame::ext::QoSType::DEFAULT,
+            ext_qos: frame::ext::QoSType::default(),
         };
 
         // Serialize with a frame
