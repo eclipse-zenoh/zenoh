@@ -1225,6 +1225,7 @@ mod tests {
     fn serializer() {
         use super::Payload;
         use rand::Rng;
+        use std::borrow::Cow;
         use zenoh_buffers::{ZBuf, ZSlice};
 
         const NUM: usize = 1_000;
@@ -1302,9 +1303,20 @@ mod tests {
         serialize_deserialize!(String, "");
         serialize_deserialize!(String, String::from("abcdefghijklmnopqrstuvwxyz"));
 
+        // Cow<str>
+        serialize_deserialize!(Cow<str>, Cow::from(""));
+        serialize_deserialize!(
+            Cow<str>,
+            Cow::from(String::from("abcdefghijklmnopqrstuvwxyz"))
+        );
+
         // Vec
         serialize_deserialize!(Vec<u8>, vec![0u8; 0]);
         serialize_deserialize!(Vec<u8>, vec![0u8; 64]);
+
+        // Cow<[u8]>
+        serialize_deserialize!(Cow<[u8]>, Cow::from(vec![0u8; 0]));
+        serialize_deserialize!(Cow<[u8]>, Cow::from(vec![0u8; 64]));
 
         // ZBuf
         serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 0]));
@@ -1381,7 +1393,6 @@ mod tests {
         let o = HashMap::from_iter(p.iter::<(usize, ZBuf)>());
         assert_eq!(hm, o);
 
-        use std::borrow::Cow;
         let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
         hm.insert(0, vec![0u8; 8]);
         hm.insert(1, vec![1u8; 16]);
