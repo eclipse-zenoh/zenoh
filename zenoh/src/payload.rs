@@ -14,6 +14,7 @@
 
 //! Payload primitives.
 use crate::buffers::ZBuf;
+use std::str::Utf8Error;
 use std::{
     borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref,
     string::FromUtf8Error, sync::Arc,
@@ -494,7 +495,7 @@ impl<'a> Deserialize<'a, Cow<'a, [u8]>> for ZSerde {
     type Error = Infallible;
 
     fn deserialize(self, v: &'a Payload) -> Result<Cow<'a, [u8]>, Self::Error> {
-        Ok(Cow::from(v))
+        Ok(v.0.contiguous())
     }
 }
 
@@ -602,16 +603,19 @@ impl From<&Cow<'_, str>> for Payload {
 }
 
 impl<'a> Deserialize<'a, Cow<'a, str>> for ZSerde {
-    type Error = FromUtf8Error;
+    type Error = Utf8Error;
 
-    fn deserialize(self, v: &Payload) -> Result<Cow<'a, str>, Self::Error> {
-        let v: String = Self.deserialize(v)?;
-        Ok(Cow::Owned(v))
+    fn deserialize(self, v: &'a Payload) -> Result<Cow<'a, str>, Self::Error> {
+        let v: Cow<[u8]> = Self.deserialize(v).unwrap_infallible();
+        let _ = core::str::from_utf8(v.as_ref())?;
+        // SAFETY: &str is &[u8] with the guarantee that every char is UTF-8
+        //         As implemented internally https://doc.rust-lang.org/std/str/fn.from_utf8_unchecked.html.
+        Ok(unsafe { core::mem::transmute(v) })
     }
 }
 
 impl<'a> TryFrom<&'a Payload> for Cow<'a, str> {
-    type Error = FromUtf8Error;
+    type Error = Utf8Error;
 
     fn try_from(value: &'a Payload) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -1301,14 +1305,11 @@ mod tests {
 
         // String
         serialize_deserialize!(String, "");
-        serialize_deserialize!(String, String::from("abcdefghijklmnopqrstuvwxyz"));
+        serialize_deserialize!(String, String::from("abcdef"));
 
         // Cow<str>
         serialize_deserialize!(Cow<str>, Cow::from(""));
-        serialize_deserialize!(
-            Cow<str>,
-            Cow::from(String::from("abcdefghijklmnopqrstuvwxyz"))
-        );
+        serialize_deserialize!(Cow<str>, Cow::from(String::from("abcdef")));
 
         // Vec
         serialize_deserialize!(Vec<u8>, vec![0u8; 0]);
