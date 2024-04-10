@@ -366,12 +366,12 @@ impl<'a> BacktrackableReader for ZBufReader<'a> {
 
 impl<'a> AdvanceableReader for ZBufReader<'a> {
     fn skip(&mut self, offset: usize) -> Result<(), DidntRead> {
-        let mut remianing_offset = offset;
-        while remianing_offset > 0 {
+        let mut remaining_offset = offset;
+        while remaining_offset > 0 {
             if let Some(s) = self.inner.slices.get(self.cursor.slice) {
                 let remains_in_current_slice = s.len() - self.cursor.byte;
-                let advance = min(remianing_offset, remains_in_current_slice);
-                remianing_offset -= advance;
+                let advance = min(remaining_offset, remains_in_current_slice);
+                remaining_offset -= advance;
                 self.cursor.byte += advance;
                 if self.cursor.byte == s.len() {
                     self.cursor.slice += 1;
@@ -385,10 +385,10 @@ impl<'a> AdvanceableReader for ZBufReader<'a> {
     }
 
     fn backtrack(&mut self, offset: usize) -> Result<(), DidntRead> {
-        let mut remianing_offset = offset;
-        while remianing_offset > 0 {
-            let backtrack = min(remianing_offset, self.cursor.byte);
-            remianing_offset -= backtrack;
+        let mut remaining_offset = offset;
+        while remaining_offset > 0 {
+            let backtrack = min(remaining_offset, self.cursor.byte);
+            remaining_offset -= backtrack;
             self.cursor.byte -= backtrack;
             if self.cursor.byte == 0 {
                 if self.cursor.slice == 0 {
@@ -398,7 +398,7 @@ impl<'a> AdvanceableReader for ZBufReader<'a> {
                 self.cursor.byte = self.inner.slices.get(self.cursor.slice).unwrap().len();
             }
         }
-        if remianing_offset == 0 {
+        if remaining_offset == 0 {
             Ok(())
         } else {
             Err(DidntRead)
