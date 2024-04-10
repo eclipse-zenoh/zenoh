@@ -103,7 +103,6 @@ hmac = { version = "0.12.1", features = ["std"] }
 home = "0.5.4"
 http-types = "2.12.0"
 humantime = "2.1.0"
-interfaces = "0.0.9"
 json5 = "0.4.1"
 jsonschema = { version = "0.17.1", default-features = false }
 keyed-set = "0.4.4"
