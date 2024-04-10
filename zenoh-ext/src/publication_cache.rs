@@ -181,9 +181,9 @@ impl<'a> PublicationCache<'a> {
                         sample = sub_recv.recv_async() => {
                             if let Ok(sample) = sample {
                                 let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
-                                    prefix.join(&sample.key_expr).unwrap().into()
+                                    prefix.join(&sample.key_expr()).unwrap().into()
                                 } else {
-                                    sample.key_expr.clone()
+                                    sample.key_expr().clone()
                                 };
 
                                 if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
