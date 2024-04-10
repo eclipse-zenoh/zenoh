@@ -15,6 +15,7 @@ use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
+use zenoh_shm::SharedMemoryBuf;
 
 #[tokio::main]
 async fn main() {
@@ -36,16 +37,17 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        let payload = sample
-            .payload()
-            .deserialize::<String>()
-            .unwrap_or_else(|e| format!("{}", e));
-        println!(
-            ">> [Subscriber] Received {} ('{}': '{}')",
-            sample.kind(),
-            sample.key_expr().as_str(),
-            payload
-        );
+        match sample.payload().deserialize::<SharedMemoryBuf>() {
+            Ok(payload) => println!(
+                ">> [Subscriber] Received {} ('{}': '{:02x?}')",
+                sample.kind(),
+                sample.key_expr().as_str(),
+                payload.as_slice()
+            ),
+            Err(e) => {
+                println!(">> [Subscriber] Not a SharedMemoryBuf: {:?}", e);
+            }
+        }
     }
 }
 
