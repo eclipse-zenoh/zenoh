@@ -428,10 +428,7 @@ impl<'a> io::Read for ZBufReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match <Self as Reader>::read(self, buf) {
             Ok(n) => Ok(n.get()),
-            Err(_) => Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "UnexpectedEof",
-            )),
+            Err(_) => Ok(0),
         }
     }
 }
