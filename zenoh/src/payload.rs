@@ -858,7 +858,7 @@ impl Serialize<&serde_yaml::Value> for ZSerde {
 
     fn serialize(self, t: &serde_yaml::Value) -> Self::Output {
         let mut payload = Payload::empty();
-        serde_yaml::to_writer(payload.0.writer(), t)?;
+        serde_yaml::to_writer(payload.writer(), t)?;
         Ok(payload)
     }
 }
