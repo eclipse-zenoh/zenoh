@@ -144,7 +144,7 @@ impl StorageRuntimeInner {
             bail!("Cannot start storage manager, 'timestamping' is disabled in the configuration");
         }
 
-        // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
+        // After this moment result should be only Ok. Failure of loading of one volume or storage should not affect others.
 
         let mut new_self = StorageRuntimeInner {
             name,
@@ -339,7 +339,7 @@ impl RunningPluginTrait for StorageRuntime {
     ) -> ZResult<Vec<Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
-        // TODO: to be removed when "__version__" is implemented in admoin space
+        // TODO: to be removed when "__version__" is implemented in admin space
         with_extended_string(&mut key, &["/version"], |key| {
             if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                 responses.push(Response::new(

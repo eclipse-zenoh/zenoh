@@ -248,25 +248,24 @@ impl StorageService {
                 // there might be the case that the actual update was outdated due to a wild card
                 // update, but not stored yet in the storage. get the relevant wild
                 // card entry and use that value and timestamp to update the storage
-                let sample_to_store: Sample = if let Some(update) =
-                    self.ovderriding_wild_update(&k, sample_timestamp).await
-                {
-                    match update.kind {
-                        SampleKind::Put => {
-                            SampleBuilder::put(k.clone(), update.data.value.payload().clone())
-                                .encoding(update.data.value.encoding().clone())
+                let sample_to_store: Sample =
+                    if let Some(update) = self.overriding_wild_update(&k, sample_timestamp).await {
+                        match update.kind {
+                            SampleKind::Put => {
+                                SampleBuilder::put(k.clone(), update.data.value.payload().clone())
+                                    .encoding(update.data.value.encoding().clone())
+                                    .timestamp(update.data.timestamp)
+                                    .into()
+                            }
+                            SampleKind::Delete => SampleBuilder::delete(k.clone())
                                 .timestamp(update.data.timestamp)
-                                .into()
+                                .into(),
                         }
-                        SampleKind::Delete => SampleBuilder::delete(k.clone())
-                            .timestamp(update.data.timestamp)
-                            .into(),
-                    }
-                } else {
-                    SampleBuilder::from(sample.clone())
-                        .keyexpr(k.clone())
-                        .into()
-                };
+                    } else {
+                        SampleBuilder::from(sample.clone())
+                            .keyexpr(k.clone())
+                            .into()
+                    };
 
                 // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample
                 // generated should have a Timestamp and, in theory, this check is
@@ -366,7 +365,7 @@ impl StorageService {
         let mut tombstones = self.tombstones.write().await;
         tombstones.insert(key_expr, timestamp);
         if self.capability.persistence.eq(&Persistence::Durable) {
-            // flush to disk to makeit durable
+            // flush to disk to make it durable
             let mut serialized_data = HashMap::new();
             for (k, ts) in tombstones.key_value_pairs() {
                 serialized_data.insert(k, *ts);
@@ -396,7 +395,7 @@ impl StorageService {
             },
         );
         if self.capability.persistence.eq(&Persistence::Durable) {
-            // flush to disk to makeit durable
+            // flush to disk to make it durable
             let mut serialized_data = HashMap::new();
             for (k, update) in wildcards.key_value_pairs() {
                 serialized_data.insert(k, serialize_update(update));
@@ -417,7 +416,7 @@ impl StorageService {
         weight.is_some() && weight.unwrap() > timestamp
     }
 
-    async fn ovderriding_wild_update(
+    async fn overriding_wild_update(
         &self,
         key_expr: &OwnedKeyExpr,
         timestamp: &Timestamp,
