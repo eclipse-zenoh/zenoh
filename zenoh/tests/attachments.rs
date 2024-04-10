@@ -38,22 +38,22 @@ fn pubsub() {
         }
         zenoh
             .put("test/attachment", "put")
-            .with_attachment(
+            .attachment(Some(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            )
+            ))
             .res()
             .unwrap();
         publisher
             .put("publisher")
-            .with_attachment(
+            .attachment(Some(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            )
+            ))
             .res()
             .unwrap();
     }
@@ -61,7 +61,7 @@ fn pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn queries() {
-    use zenoh::{prelude::sync::*, sample::Attachment};
+    use zenoh::{prelude::sync::*, sample::builder::SampleBuilderTrait, sample::Attachment};
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
@@ -84,7 +84,7 @@ fn queries() {
                     query.key_expr().clone(),
                     query.value().unwrap().payload.clone(),
                 )
-                .with_attachment(attachment)
+                .attachment(attachment)
                 .res()
                 .unwrap();
         })
@@ -100,13 +100,13 @@ fn queries() {
         }
         let get = zenoh
             .get("test/attachment")
-            .with_value("query")
-            .with_attachment(
+            .payload("query")
+            .attachment(Some(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
                     .collect(),
-            )
+            ))
             .res()
             .unwrap();
         while let Ok(reply) = get.recv() {

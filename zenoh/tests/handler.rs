@@ -57,12 +57,12 @@ fn query_with_ringbuffer() {
 
     let _reply1 = zenoh
         .get("test/ringbuffer_query")
-        .with_value("query1")
+        .payload("query1")
         .res()
         .unwrap();
     let _reply2 = zenoh
         .get("test/ringbuffer_query")
-        .with_value("query2")
+        .payload("query2")
         .res()
         .unwrap();
 

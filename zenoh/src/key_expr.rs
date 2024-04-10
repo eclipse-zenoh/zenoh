@@ -185,7 +185,7 @@ impl<'a> KeyExpr<'a> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
+    pub unsafe fn from_str_unchecked(s: &'a str) -> Self {
         keyexpr::from_str_unchecked(s).into()
     }
 
