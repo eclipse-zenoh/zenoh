@@ -46,7 +46,7 @@ impl IntervalCounter {
 }
 
 fn downsampling_by_keyexpr_impl(egress: bool) {
-    zenoh_util::init_log();
+    zenoh_util::init_log_from_env();
 
     use zenoh::prelude::sync::*;
 
@@ -163,7 +163,7 @@ fn downsampling_by_keyexpr() {
 
 #[cfg(unix)]
 fn downsampling_by_interface_impl(egress: bool) {
-    zenoh_util::init_log();
+    zenoh_util::init_log_from_env();
 
     use zenoh::prelude::sync::*;
 
@@ -265,7 +265,7 @@ fn downsampling_by_interface() {
 #[test]
 #[should_panic(expected = "unknown variant `down`")]
 fn downsampling_config_error_wrong_strategy() {
-    zenoh_util::init_log();
+    zenoh_util::init_log_from_env();
 
     use zenoh::prelude::sync::*;
 

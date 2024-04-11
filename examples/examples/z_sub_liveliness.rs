@@ -19,7 +19,7 @@ use zenoh_examples::CommonArgs;
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh_util::init_log();
+    zenoh_util::init_log_from_env();
 
     let (config, key_expr) = parse_args();
 

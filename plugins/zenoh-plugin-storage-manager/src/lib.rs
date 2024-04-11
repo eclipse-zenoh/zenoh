@@ -66,7 +66,7 @@ impl Plugin for StoragesPlugin {
     type Instance = zenoh::plugins::RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
-        zenoh_util::init_log();
+        zenoh_util::init_log_from_env();
         tracing::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
         let config =
             { PluginConfig::try_from((name, runtime.config().lock().plugin(name).unwrap())) }?;
@@ -99,7 +99,7 @@ impl StorageRuntimeInner {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::init_log();
+        zenoh_util::init_log_from_env();
         let PluginConfig {
             name,
             backend_search_dirs,

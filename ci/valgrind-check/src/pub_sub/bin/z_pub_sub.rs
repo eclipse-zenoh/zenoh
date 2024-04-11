@@ -14,9 +14,12 @@
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-
+use zenoh_util::init_log_from_env;
 #[tokio::main]
 async fn main() {
+
+    init_log_from_env();
+
     let _z = zenoh_runtime::ZRuntimePoolGuard;
 
     let pub_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();

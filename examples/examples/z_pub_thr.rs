@@ -20,7 +20,7 @@ use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    zenoh_util::init_log();
+    zenoh_util::init_log_from_env();
     let args = Args::parse();
 
     let mut prio = Priority::default();

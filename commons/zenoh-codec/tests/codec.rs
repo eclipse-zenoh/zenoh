@@ -342,7 +342,7 @@ fn codec_shm_info() {
 // Common
 #[test]
 fn codec_extension() {
-    zenoh_util::init_log();
+    zenoh_util::init_log_from_env();
 
     macro_rules! run_extension_single {
         ($ext:ty, $buff:expr) => {

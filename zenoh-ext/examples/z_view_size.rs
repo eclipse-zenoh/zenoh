@@ -20,7 +20,7 @@ use zenoh_ext::group::*;
 
 #[tokio::main]
 async fn main() {
-    zenoh_util::init_log();
+    zenoh_util::init_log_from_env();
 
     let (config, group_name, id, size, timeout) = parse_args();
 
