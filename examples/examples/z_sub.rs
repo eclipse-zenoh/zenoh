@@ -40,12 +40,19 @@ async fn main() {
             .payload()
             .deserialize::<String>()
             .unwrap_or_else(|e| format!("{}", e));
-        println!(
+        print!(
             ">> [Subscriber] Received {} ('{}': '{}')",
             sample.kind(),
             sample.key_expr().as_str(),
             payload
         );
+        if let Some(att) = sample.attachment() {
+            let att = att
+                .deserialize::<String>()
+                .unwrap_or_else(|e| format!("{}", e));
+            print!(" ({})", att);
+        }
+        println!();
     }
 }
 

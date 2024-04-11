@@ -14,8 +14,9 @@
 
 use std::marker::PhantomData;
 
+use crate::payload::OptionPayload;
 #[cfg(feature = "unstable")]
-use crate::sample::{Attachment, SourceInfo};
+use crate::sample::SourceInfo;
 use crate::sample::{QoS, QoSBuilder};
 use crate::Encoding;
 use crate::KeyExpr;
@@ -51,7 +52,7 @@ pub trait SampleBuilderTrait {
     fn source_info(self, source_info: SourceInfo) -> Self;
     /// Attach user-provided data in key-value format
     #[zenoh_macros::unstable]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self;
+    fn attachment<T: Into<OptionPayload>>(self, attachment: T) -> Self;
 }
 
 pub trait ValueBuilderTrait {
@@ -177,7 +178,8 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
     }
 
     #[zenoh_macros::unstable]
-    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
+    fn attachment<U: Into<OptionPayload>>(self, attachment: U) -> Self {
+        let attachment: OptionPayload = attachment.into();
         Self {
             sample: Sample {
                 attachment: attachment.into(),

@@ -14,6 +14,7 @@
 
 //! Query primitives.
 use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::payload::OptionPayload;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
@@ -144,7 +145,8 @@ impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
     }
 
     #[cfg(feature = "unstable")]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self {
+    fn attachment<T: Into<OptionPayload>>(self, attachment: T) -> Self {
+        let attachment: OptionPayload = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
