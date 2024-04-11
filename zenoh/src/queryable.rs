@@ -17,6 +17,7 @@
 use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
+use crate::payload::OptionPayload;
 use crate::prelude::*;
 use crate::sample::builder::SampleBuilder;
 use crate::sample::QoSBuilder;
@@ -308,7 +309,8 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 #[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     #[cfg(feature = "unstable")]
-    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
+    fn attachment<U: Into<OptionPayload>>(self, attachment: U) -> Self {
+        let attachment: OptionPayload = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self

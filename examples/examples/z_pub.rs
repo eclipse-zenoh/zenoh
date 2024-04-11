@@ -35,16 +35,12 @@ async fn main() {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {value}");
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
-        let mut put = publisher.put(buf);
-        if let Some(attachment) = &attachment {
-            put = put.attachment(Some(
-                attachment
-                    .split('&')
-                    .map(|pair| split_once(pair, '='))
-                    .collect(),
-            ))
-        }
-        put.res().await.unwrap();
+        publisher
+            .put(buf)
+            .attachment(&attachment)
+            .res()
+            .await
+            .unwrap();
     }
 }
 
@@ -63,17 +59,6 @@ struct Args {
     attach: Option<String>,
     #[command(flatten)]
     common: CommonArgs,
-}
-
-fn split_once(s: &str, c: char) -> (&[u8], &[u8]) {
-    let s_bytes = s.as_bytes();
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s_bytes.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s_bytes, &[]),
-    }
 }
 
 fn parse_args() -> (Config, KeyExpr<'static>, String, Option<String>) {

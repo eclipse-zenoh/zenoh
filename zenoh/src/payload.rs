@@ -231,6 +231,50 @@ where
     }
 }
 
+/// Wrapper type for API ergonomicity to allow any type `T` to be converted into `Option<Payload>` where `T` implements `Into<Payload>`.
+#[repr(transparent)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OptionPayload(Option<Payload>);
+
+impl<T> From<T> for OptionPayload
+where
+    T: Into<Payload>,
+{
+    fn from(value: T) -> Self {
+        Self(Some(value.into()))
+    }
+}
+
+impl<T> From<Option<T>> for OptionPayload
+where
+    T: Into<Payload>,
+{
+    fn from(mut value: Option<T>) -> Self {
+        match value.take() {
+            Some(v) => Self(Some(v.into())),
+            None => Self(None),
+        }
+    }
+}
+
+impl<T> From<&Option<T>> for OptionPayload
+where
+    for<'a> &'a T: Into<Payload>,
+{
+    fn from(value: &Option<T>) -> Self {
+        match value.as_ref() {
+            Some(v) => Self(Some(v.into())),
+            None => Self(None),
+        }
+    }
+}
+
+impl From<OptionPayload> for Option<Payload> {
+    fn from(value: OptionPayload) -> Self {
+        value.0
+    }
+}
+
 /// The default serializer for Zenoh payload. It supports primitives types, such as: vec<u8>, int, uint, float, string, bool.
 /// It also supports common Rust serde values.
 #[derive(Clone, Copy, Debug)]

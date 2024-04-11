@@ -14,6 +14,7 @@
 
 //! Publishing primitives.
 use crate::net::primitives::Primitives;
+use crate::payload::OptionPayload;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
@@ -167,7 +168,8 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
         }
     }
     #[cfg(feature = "unstable")]
-    fn attachment<TA: Into<Option<Attachment>>>(self, attachment: TA) -> Self {
+    fn attachment<TA: Into<OptionPayload>>(self, attachment: TA) -> Self {
+        let attachment: OptionPayload = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
