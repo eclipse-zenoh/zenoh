@@ -156,9 +156,7 @@ impl PolicyEnforcer {
 
                     for rule in policy_information.policy_rules {
                         if let Some(index) = subject_map.get(&rule.subject) {
-                            let single_policy = main_policy
-                                .entry(*index)
-                                .or_insert_with(PolicyForSubject::default);
+                            let single_policy = main_policy.entry(*index).or_default();
                             single_policy
                                 .flow_mut(rule.flow)
                                 .action_mut(rule.action)
