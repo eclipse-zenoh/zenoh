@@ -51,8 +51,6 @@ use zenoh_config::{unwrap_or_default, Config, Notifier};
 use zenoh_core::{
     zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, SyncResolve,
 };
-use zenoh_config::unwrap_or_default;
-use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
@@ -80,16 +78,12 @@ use zenoh_task::TaskController;
 use zenoh_util::core::AsyncResolve;
 
 #[cfg(feature = "unstable")]
-use {
-    super::{
+use super::{
         liveliness::{Liveliness, LivelinessTokenState},
         publication::Publisher,
         publication::{MatchingListenerState, MatchingStatus},
         sample::{Attachment, SourceInfo},
-    },
-    zenoh_protocol::network::declare::SubscriberId,
-    zenoh_protocol::network::ext,
-};
+    };
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;

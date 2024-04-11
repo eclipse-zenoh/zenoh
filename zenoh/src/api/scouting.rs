@@ -13,7 +13,6 @@
 //
 use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
-use futures::StreamExt;
 use std::time::Duration;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
 use tokio::net::UdpSocket;

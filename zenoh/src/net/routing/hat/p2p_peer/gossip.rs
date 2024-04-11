@@ -14,7 +14,7 @@
 use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
 use crate::net::runtime::Runtime;
-use crate::runtime::WeakRuntime;
+use crate::net::runtime::WeakRuntime;
 use petgraph::graph::NodeIndex;
 use std::convert::TryInto;
 use vec_map::VecMap;

@@ -15,7 +15,7 @@ use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
 use crate::net::routing::dispatcher::tables::NodeId;
 use crate::net::runtime::Runtime;
-use crate::runtime::WeakRuntime;
+use crate::net::runtime::WeakRuntime;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{VisitMap, Visitable};
 use std::convert::TryInto;

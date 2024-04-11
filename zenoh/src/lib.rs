@@ -223,6 +223,7 @@ pub mod value {
 /// Encoding support
 pub mod encoding {
     pub use crate::api::encoding::Encoding;
+    pub use crate::api::encoding::EncodingBuilder;
 }
 
 /// Payload primitives
@@ -256,6 +257,7 @@ pub mod subscriber {
 /// Publishing primitives
 pub mod publication {
     pub use crate::api::builders::publication::PublisherBuilder;
+    #[zenoh_macros::unstable]
     pub use crate::api::publication::MatchingListener;
     pub use crate::api::publication::Priority;
     pub use crate::api::publication::Publisher;
@@ -349,6 +351,7 @@ pub mod internal {
     pub use zenoh_util::core::ResolveFuture;
     pub use zenoh_util::LibLoader;
     pub use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
+    pub use zenoh_task::TerminatableTask;
 }
 
 #[cfg(feature = "shared-memory")]

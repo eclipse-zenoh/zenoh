@@ -17,7 +17,7 @@ use std::future::Ready;
 use std::time::Duration;
 use zenoh::core::Error;
 use zenoh::core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh::internal::ResolveFuture;
+use zenoh::internal::{ResolveFuture, TerminatableTask};
 use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
 use zenoh::queryable::{Query, Queryable};
 use zenoh::runtime::ZRuntime;
@@ -173,7 +173,7 @@ impl<'a> PublicationCache<'a> {
         let token = TerminatableTask::create_cancellation_token();
         let token2 = token.clone();
         let task = TerminatableTask::spawn(
-            zenoh_runtime::ZRuntime::Application,
+            ZRuntime::Application,
             async move {
                 let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                     HashMap::with_capacity(resources_limit.unwrap_or(32));
