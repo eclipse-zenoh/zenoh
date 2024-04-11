@@ -215,7 +215,7 @@ impl TransportLinkMulticastRx {
             .link
             .read(unsafe { as_mut_slice_featureless(&mut into) })
             .await?;
-        let buffer = ZSlice::make(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
+        let buffer = ZSlice::new(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
         let mut batch = RBatch::new(self.inner.config.batch, buffer);
         batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
         Ok((batch, locator.into_owned()))
@@ -495,7 +495,7 @@ async fn tx_task(
                     .collect::<Vec<PrioritySn>>();
                 let (next_sn, ext_qos) = if next_sns.len() == Priority::NUM {
                     let tmp: [PrioritySn; Priority::NUM] = next_sns.try_into().unwrap();
-                    (PrioritySn::default(), Some(Box::new(tmp)))
+                    (PrioritySn::DEFAULT, Some(Box::new(tmp)))
                 } else {
                     (next_sns[0], None)
                 };

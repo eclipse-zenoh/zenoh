@@ -22,6 +22,7 @@ mod tests {
     use zenoh::shm::provider::shared_memory_provider::{
         BlockOn, GarbageCollect, SharedMemoryProviderBuilder,
     };
+    use zenoh_buffers::ZSlice;
     use zenoh_core::ztimeout;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -99,7 +100,7 @@ mod tests {
             let _sub = ztimeout!(peer01
                 .declare_subscriber(&key_expr)
                 .callback(move |sample| {
-                    assert_eq!(sample.value.payload.len(), size);
+                    assert_eq!(sample.payload().len(), size);
                     c_msgs.fetch_add(1, Ordering::Relaxed);
                 })
                 .res_async())
@@ -139,7 +140,7 @@ mod tests {
 
                 // Publish this message
                 ztimeout!(peer02
-                    .put(&key_expr, sbuf)
+                    .put(&key_expr, ZSlice::from(sbuf)) // todo:
                     .congestion_control(CongestionControl::Block)
                     .res_async())
                 .unwrap();

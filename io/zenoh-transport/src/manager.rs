@@ -97,7 +97,7 @@ pub struct TransportManagerConfig {
     pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub resolution: Resolution,
-    pub batch_size: u16,
+    pub batch_size: BatchSize,
     pub wait_before_drop: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
@@ -126,7 +126,7 @@ pub struct TransportManagerBuilder {
     zid: ZenohId,
     whatami: WhatAmI,
     resolution: Resolution,
-    batch_size: u16,
+    batch_size: BatchSize,
     wait_before_drop: Duration,
     queue_size: QueueSizeConf,
     queue_backoff: Duration,
@@ -163,7 +163,7 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn batch_size(mut self, batch_size: u16) -> Self {
+    pub fn batch_size(mut self, batch_size: BatchSize) -> Self {
         self.batch_size = batch_size;
         self
     }

@@ -113,12 +113,13 @@ log = "0.4.17"
 lockfree = "0.5"
 lz4_flex = "0.11"
 nix = { version = "0.27", features = ["fs"] }
-num_cpus = "1.15.0"
+num_cpus = "1.16.0"
 num-traits = { version = "0.2.17", default-features = false }
 ordered-float = "4.1.1"
 panic-message = "0.3.0"
 paste = "1.0.12"
 petgraph = "0.6.3"
+phf = { version = "0.11.2", features = ["macros"] }
 pnet = "0.34"
 pnet_datalink = "0.34"
 proc-macro2 = "1.0.51"
@@ -141,7 +142,9 @@ secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
 serde = { version = "1.0.154", default-features = false, features = [
   "derive",
 ] } # Default features are disabled due to usage in no_std crates
-serde_json = "1.0.94"
+serde_cbor = "0.11.2"
+serde_json = "1.0.114"
+serde-pickle = "1.1.1"
 serde_yaml = "0.9.19"
 # todo: stabby will release crate version with build fix soon
 stabby = { git = "https://github.com/ZettaScaleLabs/stabby.git" }
@@ -162,6 +165,7 @@ thread-priority = "0.15"
 console-subscriber = "0.2"
 typenum = "1.16.0"
 uhlc = { version = "0.7.0", default-features = false } # Default features are disabled due to usage in no_std crates
+unwrap-infallible = "0.1.5"
 unzip-n = "0.1.2"
 url = "2.3.1"
 urlencoding = "2.1.2"

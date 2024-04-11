@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use zenoh::buffers::ZSlice;
 use zenoh::prelude::r#async::*;
 use zenoh::shm::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
 use zenoh::shm::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
@@ -131,5 +132,5 @@ async fn run() -> Result<()> {
     let publisher = session.declare_publisher("my/key/expr").res_async().await?;
 
     // Publish SHM buffer
-    publisher.put(sbuf).res_async().await
+    publisher.put(ZSlice::from(sbuf)).res_async().await // todo:
 }

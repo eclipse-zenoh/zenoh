@@ -235,7 +235,7 @@ impl TransportLinkUnicastRx {
 
         // log::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
 
-        let buffer = ZSlice::make(Arc::new(into), 0, end)
+        let buffer = ZSlice::new(Arc::new(into), 0, end)
             .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
         let mut batch = RBatch::new(self.batch, buffer);
         batch

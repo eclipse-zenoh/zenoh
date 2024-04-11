@@ -43,7 +43,6 @@ shared-memory = [
     "zenoh-protocol/shared-memory",
     "zenoh-buffers/shared-memory"
 ]
-complete_n = ["zenoh-protocol/complete_n"]
 
 [dependencies]
 log = { workspace = true, optional = true }

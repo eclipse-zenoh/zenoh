@@ -21,7 +21,7 @@ fn main() {
     // initiate logging
     env_logger::init();
 
-    let mut config = parse_args();
+    let (mut config, express) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_ping_shm` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
@@ -39,12 +39,13 @@ fn main() {
     let publisher = session
         .declare_publisher(key_expr_pong)
         .congestion_control(CongestionControl::Block)
+        .express(express)
         .res()
         .unwrap();
 
     let _sub = session
         .declare_subscriber(key_expr_ping)
-        .callback(move |sample| publisher.put(sample.value).res().unwrap())
+        .callback(move |sample| publisher.put(sample.payload().clone()).res().unwrap())
         .res()
         .unwrap();
     std::thread::park();
@@ -52,11 +53,14 @@ fn main() {
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct Args {
+    /// express for sending data
+    #[arg(long, default_value = "false")]
+    no_express: bool,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> Config {
+fn parse_args() -> (Config, bool) {
     let args = Args::parse();
-    args.common.into()
+    (args.common.into(), !args.no_express)
 }

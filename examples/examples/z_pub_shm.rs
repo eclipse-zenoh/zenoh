@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
+use zenoh::buffers::ZSlice;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::shm::protocol_implementations::posix::{
@@ -104,7 +105,7 @@ async fn main() -> Result<(), zenoh::Error> {
             path,
             String::from_utf8_lossy(&sbuf[0..slice_len])
         );
-        publisher.put(sbuf).res().await?;
+        publisher.put(ZSlice::from(sbuf)).res().await?; // todo:
     }
 
     Ok(())

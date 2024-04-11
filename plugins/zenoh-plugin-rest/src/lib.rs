@@ -18,18 +18,20 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_std::prelude::FutureExt;
-use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
+use base64::Engine;
 use futures::StreamExt;
 use http_types::Method;
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
+use zenoh::payload::StringOrBase64;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
-use zenoh::properties::Properties;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
@@ -46,57 +48,59 @@ lazy_static::lazy_static! {
 }
 const RAW_KEY: &str = "_raw";
 
-fn value_to_json(value: Value) -> String {
-    // @TODO: transcode to JSON when implemented in Value
-    match &value.encoding {
-        p if p.starts_with(KnownEncoding::TextPlain)
-            || p.starts_with(KnownEncoding::AppXWwwFormUrlencoded) =>
-        {
-            // convert to Json string for special characters escaping
-            serde_json::json!(value.to_string()).to_string()
-        }
-        p if p.starts_with(KnownEncoding::AppProperties) => {
-            // convert to Json string for special characters escaping
-            serde_json::json!(*Properties::from(value.to_string())).to_string()
-        }
-        p if p.starts_with(KnownEncoding::AppJson)
-            || p.starts_with(KnownEncoding::AppInteger)
-            || p.starts_with(KnownEncoding::AppFloat) =>
-        {
-            value.to_string()
-        }
-        _ => {
-            format!(r#""{}""#, b64_std_engine.encode(value.payload.contiguous()))
+#[derive(Serialize, Deserialize)]
+struct JSONSample {
+    key: String,
+    value: serde_json::Value,
+    encoding: String,
+    time: Option<String>,
+}
+
+pub fn base64_encode(data: &[u8]) -> String {
+    use base64::engine::general_purpose;
+    general_purpose::STANDARD.encode(data)
+}
+
+fn payload_to_json(payload: &Payload, encoding: &Encoding) -> serde_json::Value {
+    match payload.is_empty() {
+        // If the value is empty return a JSON null
+        true => serde_json::Value::Null,
+        // if it is not check the encoding
+        false => {
+            match encoding {
+                // If it is a JSON try to deserialize as json, if it fails fallback to base64
+                &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
+                    payload
+                        .deserialize::<serde_json::Value>()
+                        .unwrap_or_else(|_| {
+                            serde_json::Value::String(StringOrBase64::from(payload).into_string())
+                        })
+                }
+                // otherwise convert to JSON string
+                _ => serde_json::Value::String(StringOrBase64::from(payload).into_string()),
+            }
         }
     }
 }
 
-fn sample_to_json(sample: Sample) -> String {
-    let encoding = sample.value.encoding.to_string();
-    format!(
-        r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-        sample.key_expr.as_str(),
-        value_to_json(sample.value),
-        encoding,
-        if let Some(ts) = sample.timestamp {
-            ts.to_string()
-        } else {
-            "None".to_string()
-        }
-    )
+fn sample_to_json(sample: &Sample) -> JSONSample {
+    JSONSample {
+        key: sample.key_expr().as_str().to_string(),
+        value: payload_to_json(sample.payload(), sample.encoding()),
+        encoding: sample.encoding().to_string(),
+        time: sample.timestamp().map(|ts| ts.to_string()),
+    }
 }
 
-fn result_to_json(sample: Result<Sample, Value>) -> String {
+fn result_to_json(sample: Result<Sample, Value>) -> JSONSample {
     match sample {
-        Ok(sample) => sample_to_json(sample),
-        Err(err) => {
-            let encoding = err.encoding.to_string();
-            format!(
-                r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
-                value_to_json(err),
-                encoding,
-            )
-        }
+        Ok(sample) => sample_to_json(&sample),
+        Err(err) => JSONSample {
+            key: "ERROR".into(),
+            value: payload_to_json(&err.payload, &err.encoding),
+            encoding: err.encoding.to_string(),
+            time: None,
+        },
     }
 }
 
@@ -104,10 +108,10 @@ async fn to_json(results: flume::Receiver<Reply>) -> String {
     let values = results
         .stream()
         .filter_map(move |reply| async move { Some(result_to_json(reply.sample)) })
-        .collect::<Vec<String>>()
-        .await
-        .join(",\n");
-    format!("[\n{values}\n]\n")
+        .collect::<Vec<JSONSample>>()
+        .await;
+
+    serde_json::to_string(&values).unwrap_or("[]".into())
 }
 
 async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
@@ -121,8 +125,11 @@ async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.key_expr.as_str(),
-        String::from_utf8_lossy(&sample.payload.contiguous())
+        sample.key_expr().as_str(),
+        sample
+            .payload()
+            .deserialize::<Cow<str>>()
+            .unwrap_or_default()
     )
 }
 
@@ -132,7 +139,7 @@ fn result_to_html(sample: Result<Sample, Value>) -> String {
         Err(err) => {
             format!(
                 "<dt>ERROR</dt>\n<dd>{}</dd>\n",
-                String::from_utf8_lossy(&err.payload.contiguous())
+                err.payload.deserialize::<Cow<str>>().unwrap_or_default()
             )
         }
     }
@@ -157,13 +164,16 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
         Ok(reply) => match reply.sample {
             Ok(sample) => response(
                 StatusCode::Ok,
-                sample.value.encoding.to_string().as_ref(),
-                String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
+                Cow::from(sample.encoding()).as_ref(),
+                &sample
+                    .payload()
+                    .deserialize::<Cow<str>>()
+                    .unwrap_or_default(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
-                value.encoding.to_string().as_ref(),
-                String::from_utf8_lossy(&value.payload.contiguous()).as_ref(),
+                Cow::from(&value.encoding).as_ref(),
+                &value.payload.deserialize::<Cow<str>>().unwrap_or_default(),
             ),
         },
         Err(_) => response(StatusCode::Ok, "", ""),
@@ -342,8 +352,11 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
+                        let json_sample =
+                            serde_json::to_string(&sample_to_json(&sample)).unwrap_or("{}".into());
+
                         match sender
-                            .send(&sample.kind.to_string(), sample_to_json(sample), None)
+                            .send(&sample.kind().to_string(), json_sample, None)
                             .timeout(std::time::Duration::new(10, 0))
                             .await
                         {
@@ -404,9 +417,9 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| m.to_string().into())
+                .map(|m| Encoding::from(m.to_string()))
                 .unwrap_or_default();
-            query = query.with_value(Value::from(body).encoding(encoding));
+            query = query.payload(body).encoding(encoding);
         }
         match query.res().await {
             Ok(receiver) => {
@@ -441,21 +454,19 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                     ))
                 }
             };
+
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| m.to_string().into())
+                .map(|m| Encoding::from(m.to_string()))
                 .unwrap_or_default();
 
             // @TODO: Define the right congestion control value
-            match req
-                .state()
-                .0
-                .put(&key_expr, bytes)
-                .encoding(encoding)
-                .kind(method_to_kind(req.method()))
-                .res()
-                .await
-            {
+            let session = &req.state().0;
+            let res = match method_to_kind(req.method()) {
+                SampleKind::Put => session.put(&key_expr, bytes).encoding(encoding).res().await,
+                SampleKind::Delete => session.delete(&key_expr).res().await,
+            };
+            match res {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
                 Err(e) => Ok(response(
                     StatusCode::InternalServerError,

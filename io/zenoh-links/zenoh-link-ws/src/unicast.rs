@@ -34,6 +34,7 @@ use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{get_ws_addr, get_ws_url, TCP_ACCEPT_THROTTLE_TIME, WS_DEFAULT_MTU, WS_LOCATOR_PREFIX};
@@ -200,7 +201,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *WS_DEFAULT_MTU
     }
 

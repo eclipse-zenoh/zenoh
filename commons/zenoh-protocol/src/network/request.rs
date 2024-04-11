@@ -66,7 +66,6 @@ pub struct Request {
 pub mod ext {
     use crate::{
         common::{ZExtZ64, ZExtZBuf},
-        core::QueryTarget,
         zextz64, zextzbuf,
     };
     use core::{num::NonZeroU32, time::Duration};
@@ -88,9 +87,17 @@ pub mod ext {
     /// +---------------+
     ///
     /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-    pub type TargetType = QueryTarget;
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    pub enum TargetType {
+        #[default]
+        BestMatching,
+        All,
+        AllComplete,
+    }
 
     impl TargetType {
+        pub const DEFAULT: Self = Self::BestMatching;
+
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::prelude::*;
@@ -100,8 +107,6 @@ pub mod ext {
                 TargetType::All,
                 TargetType::AllComplete,
                 TargetType::BestMatching,
-                #[cfg(feature = "complete_n")]
-                TargetType::Complete(rng.gen()),
             ]
             .choose(&mut rng)
             .unwrap()

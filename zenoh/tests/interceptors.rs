@@ -1,3 +1,16 @@
+//
+// Copyright (c) 2024 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use std::sync::{Arc, Mutex};
 use zenoh_core::zlock;
 
@@ -92,9 +105,9 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .callback(move |sample| {
             let mut count = zlock!(total_count_clone);
             *count += 1;
-            if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r100" {
+            if sample.key_expr().as_str() == "test/downsamples_by_keyexp/r100" {
                 zlock!(counter_r100).tick();
-            } else if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r50" {
+            } else if sample.key_expr().as_str() == "test/downsamples_by_keyexp/r50" {
                 zlock!(counter_r50).tick();
             }
         })
@@ -208,7 +221,7 @@ fn downsampling_by_interface_impl(egress: bool) {
         .callback(move |sample| {
             let mut count = zlock!(total_count_clone);
             *count += 1;
-            if sample.key_expr.as_str() == "test/downsamples_by_interface/r100" {
+            if sample.key_expr().as_str() == "test/downsamples_by_interface/r100" {
                 zlock!(counter_r100).tick();
             }
         })

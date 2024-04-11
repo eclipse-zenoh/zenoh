@@ -101,7 +101,8 @@ pub mod buffer {
             let mut slices = self.slices();
             match slices.len() {
                 0 => Cow::Borrowed(b""),
-                1 => Cow::Borrowed(slices.next().unwrap()),
+                // SAFETY: it's safe to use unwrap_unchecked() beacuse we are explicitly checking the length is 1.
+                1 => Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() }),
                 _ => Cow::Owned(slices.fold(Vec::new(), |mut acc, it| {
                     acc.extend(it);
                     acc
@@ -196,6 +197,18 @@ pub mod reader {
 
         fn mark(&mut self) -> Self::Mark;
         fn rewind(&mut self, mark: Self::Mark) -> bool;
+    }
+
+    pub trait AdvanceableReader: Reader {
+        fn skip(&mut self, offset: usize) -> Result<(), DidntRead>;
+        fn backtrack(&mut self, offset: usize) -> Result<(), DidntRead>;
+        fn advance(&mut self, offset: isize) -> Result<(), DidntRead> {
+            if offset > 0 {
+                self.skip(offset as usize)
+            } else {
+                self.backtrack((-offset) as usize)
+            }
+        }
     }
 
     #[derive(Debug, Clone, Copy)]

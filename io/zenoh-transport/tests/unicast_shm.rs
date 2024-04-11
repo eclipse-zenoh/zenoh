@@ -260,13 +260,13 @@ mod tests {
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
-                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
+                ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
-                    payload: sbuf.into(),
+                    payload: zenoh_buffers::ZSlice::from(sbuf).into(), // todo:
                     timestamp: None,
-                    encoding: Encoding::default(),
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     ext_shm: None,
                     ext_attachment: None,
@@ -304,13 +304,13 @@ mod tests {
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
-                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
+                ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
-                    payload: sbuf.into(),
+                    payload: zenoh_buffers::ZSlice::from(sbuf).into(), // todo:
                     timestamp: None,
-                    encoding: Encoding::default(),
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     ext_shm: None,
                     ext_attachment: None,

@@ -18,7 +18,7 @@ use zenoh_core::zerror;
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{
-        err::{ext::ErrBodyType, Err},
+        err::Err,
         ext::ShmType,
         query::{ext::QueryBodyType, Query},
         PushBody, Put, Reply, RequestBody, ResponseBody,
@@ -71,14 +71,10 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
         },
         NetworkBody::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_partner(partner_shm_cfg),
-            RequestBody::Put(b) => b.map_to_partner(partner_shm_cfg),
-            RequestBody::Del(_) | RequestBody::Pull(_) => Ok(()),
         },
         NetworkBody::Response(Response { payload, .. }) => match payload {
             ResponseBody::Reply(b) => b.map_to_partner(partner_shm_cfg),
-            ResponseBody::Put(b) => b.map_to_partner(partner_shm_cfg),
             ResponseBody::Err(b) => b.map_to_partner(partner_shm_cfg),
-            ResponseBody::Ack(_) => Ok(()),
         },
         NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(()),
     }
@@ -92,14 +88,10 @@ pub fn map_zmsg_to_shmbuf(msg: &mut NetworkMessage, shmr: &SharedMemoryReader) -
         },
         NetworkBody::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_shmbuf(shmr),
-            RequestBody::Put(b) => b.map_to_shmbuf(shmr),
-            RequestBody::Del(_) | RequestBody::Pull(_) => Ok(()),
         },
         NetworkBody::Response(Response { payload, .. }) => match payload {
-            ResponseBody::Put(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
-            ResponseBody::Ack(_) => Ok(()),
         },
         NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(()),
     }
@@ -219,6 +211,36 @@ impl MapShm for Reply {
         &mut self,
         partner_shm_cfg: &Option<ShmCfg>,
     ) -> ZResult<()> {
+        match &mut self.payload {
+            PushBody::Put(put) => {
+                let Put {
+                    payload, ext_shm, ..
+                } = put;
+                map_to_partner!(payload, ext_shm, partner_shm_cfg)
+            }
+            PushBody::Del(_) => Ok(()),
+        }
+    }
+
+    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<()> {
+        match &mut self.payload {
+            PushBody::Put(put) => {
+                let Put {
+                    payload, ext_shm, ..
+                } = put;
+                map_zbuf_to_shmbuf!(payload, ext_shm, shmr)
+            }
+            PushBody::Del(_) => Ok(()),
+        }
+    }
+}
+
+// Impl - Err
+impl MapShm for Err {
+    fn map_to_partner<ShmCfg: PartnerShmConfig>(
+        &mut self,
+        partner_shm_cfg: &Option<ShmCfg>,
+    ) -> ZResult<()> {
         let Self {
             payload, ext_shm, ..
         } = self;
@@ -230,40 +252,6 @@ impl MapShm for Reply {
             payload, ext_shm, ..
         } = self;
         map_zbuf_to_shmbuf!(payload, ext_shm, shmr)
-    }
-}
-
-// Impl - Err
-impl MapShm for Err {
-    fn map_to_partner<ShmCfg: PartnerShmConfig>(
-        &mut self,
-        partner_shm_cfg: &Option<ShmCfg>,
-    ) -> ZResult<()> {
-        if let Self {
-            ext_body: Some(ErrBodyType {
-                payload, ext_shm, ..
-            }),
-            ..
-        } = self
-        {
-            map_to_partner!(payload, ext_shm, partner_shm_cfg)
-        } else {
-            Ok(())
-        }
-    }
-
-    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<()> {
-        if let Self {
-            ext_body: Some(ErrBodyType {
-                payload, ext_shm, ..
-            }),
-            ..
-        } = self
-        {
-            map_zbuf_to_shmbuf!(payload, ext_shm, shmr)
-        } else {
-            Ok(())
-        }
     }
 }
 

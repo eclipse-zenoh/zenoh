@@ -11,23 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(not(feature = "shared-memory"))]
-use crate::Zenoh080Bounded;
-#[cfg(feature = "shared-memory")]
-use crate::Zenoh080Sliced;
 use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    ZBuf,
 };
 use zenoh_protocol::{
-    common::{iext, imsg},
-    core::Encoding,
+    common::imsg,
     zenoh::{
         id,
-        reply::{ext, flag, Reply},
+        query::Consolidation,
+        reply::{flag, Reply, ReplyBody},
     },
 };
 
@@ -39,81 +34,35 @@ where
 
     fn write(self, writer: &mut W, x: &Reply) -> Self::Output {
         let Reply {
-            timestamp,
-            encoding,
-            ext_sinfo,
-            ext_consolidation,
-            #[cfg(feature = "shared-memory")]
-            ext_shm,
-            ext_attachment,
+            consolidation,
             ext_unknown,
             payload,
         } = x;
 
         // Header
         let mut header = id::REPLY;
-        if timestamp.is_some() {
-            header |= flag::T;
+        if consolidation != &Consolidation::DEFAULT {
+            header |= flag::C;
         }
-        if encoding != &Encoding::default() {
-            header |= flag::E;
-        }
-        let mut n_exts = (ext_sinfo.is_some()) as u8
-            + ((ext_consolidation != &ext::ConsolidationType::default()) as u8)
-            + (ext_attachment.is_some()) as u8
-            + (ext_unknown.len() as u8);
-        #[cfg(feature = "shared-memory")]
-        {
-            n_exts += ext_shm.is_some() as u8;
-        }
+        let mut n_exts = ext_unknown.len() as u8;
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        if let Some(ts) = timestamp.as_ref() {
-            self.write(&mut *writer, ts)?;
-        }
-        if encoding != &Encoding::default() {
-            self.write(&mut *writer, encoding)?;
+        if consolidation != &Consolidation::DEFAULT {
+            self.write(&mut *writer, *consolidation)?;
         }
 
         // Extensions
-        if let Some(sinfo) = ext_sinfo.as_ref() {
-            n_exts -= 1;
-            self.write(&mut *writer, (sinfo, n_exts != 0))?;
-        }
-        if ext_consolidation != &ext::ConsolidationType::default() {
-            n_exts -= 1;
-            self.write(&mut *writer, (*ext_consolidation, n_exts != 0))?;
-        }
-        #[cfg(feature = "shared-memory")]
-        if let Some(eshm) = ext_shm.as_ref() {
-            n_exts -= 1;
-            self.write(&mut *writer, (eshm, n_exts != 0))?;
-        }
-        if let Some(att) = ext_attachment.as_ref() {
-            n_exts -= 1;
-            self.write(&mut *writer, (att, n_exts != 0))?;
-        }
         for u in ext_unknown.iter() {
             n_exts -= 1;
             self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
         // Payload
-        #[cfg(feature = "shared-memory")]
-        {
-            let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
-            codec.write(&mut *writer, payload)?;
-        }
-
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            let bodec = Zenoh080Bounded::<u32>::new();
-            bodec.write(&mut *writer, payload)?;
-        }
+        self.write(&mut *writer, payload)?;
 
         Ok(())
     }
@@ -144,81 +93,27 @@ where
         }
 
         // Body
-        let mut timestamp: Option<uhlc::Timestamp> = None;
-        if imsg::has_flag(self.header, flag::T) {
-            timestamp = Some(self.codec.read(&mut *reader)?);
-        }
-
-        let mut encoding = Encoding::default();
-        if imsg::has_flag(self.header, flag::E) {
-            encoding = self.codec.read(&mut *reader)?;
+        let mut consolidation = Consolidation::DEFAULT;
+        if imsg::has_flag(self.header, flag::C) {
+            consolidation = self.codec.read(&mut *reader)?;
         }
 
         // Extensions
-        let mut ext_sinfo: Option<ext::SourceInfoType> = None;
-        let mut ext_consolidation = ext::ConsolidationType::default();
-        #[cfg(feature = "shared-memory")]
-        let mut ext_shm: Option<ext::ShmType> = None;
-        let mut ext_attachment: Option<ext::AttachmentType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
-            let eodec = Zenoh080Header::new(ext);
-            match iext::eid(ext) {
-                ext::SourceInfo::ID => {
-                    let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
-                    ext_sinfo = Some(s);
-                    has_ext = ext;
-                }
-                ext::Consolidation::ID => {
-                    let (c, ext): (ext::ConsolidationType, bool) = eodec.read(&mut *reader)?;
-                    ext_consolidation = c;
-                    has_ext = ext;
-                }
-                #[cfg(feature = "shared-memory")]
-                ext::Shm::ID => {
-                    let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
-                    ext_shm = Some(s);
-                    has_ext = ext;
-                }
-                ext::Attachment::ID => {
-                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
-                    ext_attachment = Some(a);
-                    has_ext = ext;
-                }
-                _ => {
-                    let (u, ext) = extension::read(reader, "Reply", ext)?;
-                    ext_unknown.push(u);
-                    has_ext = ext;
-                }
-            }
+            let (u, ext) = extension::read(reader, "Reply", ext)?;
+            ext_unknown.push(u);
+            has_ext = ext;
         }
 
         // Payload
-        let payload: ZBuf = {
-            #[cfg(feature = "shared-memory")]
-            {
-                let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
-                codec.read(&mut *reader)?
-            }
-
-            #[cfg(not(feature = "shared-memory"))]
-            {
-                let bodec = Zenoh080Bounded::<u32>::new();
-                bodec.read(&mut *reader)?
-            }
-        };
+        let payload: ReplyBody = self.codec.read(&mut *reader)?;
 
         Ok(Reply {
-            timestamp,
-            encoding,
-            ext_sinfo,
-            ext_consolidation,
-            #[cfg(feature = "shared-memory")]
-            ext_shm,
-            ext_attachment,
+            consolidation,
             ext_unknown,
             payload,
         })
