@@ -14,11 +14,11 @@
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh_util::init_log_from_env;
+use zenoh_util::init_log;
 #[tokio::main]
 async fn main() {
 
-    init_log_from_env();
+    init_log();
 
     let _z = zenoh_runtime::ZRuntimePoolGuard;
 
