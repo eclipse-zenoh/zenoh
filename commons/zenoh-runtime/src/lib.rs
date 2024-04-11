@@ -154,12 +154,9 @@ impl Drop for ZRuntimePool {
         let handles: Vec<_> = self
             .0
             .drain()
-            .map(|(name, mut rt)| {
-                std::thread::spawn(move || {
-                    rt.take()
-                        .unwrap_or_else(|| panic!("ZRuntime {name:?} failed to shutdown."))
-                        .shutdown_timeout(Duration::from_secs(1))
-                })
+            .filter_map(|(_name, mut rt)| {
+                rt.take()
+                    .map(|r| std::thread::spawn(move || r.shutdown_timeout(Duration::from_secs(1))))
             })
             .collect();
 
