@@ -13,7 +13,7 @@
 //
 use core::panic;
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{
     collections::HashMap,
     env,
@@ -32,33 +32,33 @@ use zenoh_runtime_derive::{ConfigureZRuntime, GenericRuntimeParam};
 
 const ZENOH_RUNTIME_ENV: &str = "ZENOH_RUNTIME";
 
-trait DefaultParam<'a> {
-    fn param() -> RuntimeParam<'a>;
+trait DefaultParam {
+    fn param() -> RuntimeParam;
 }
 
-#[derive(Serialize, Deserialize, Debug, GenericRuntimeParam)]
+#[derive(Deserialize, Debug, GenericRuntimeParam)]
 #[serde(deny_unknown_fields, default)]
-pub struct RuntimeParam<'a> {
+pub struct RuntimeParam {
     pub worker_threads: usize,
     pub max_blocking_threads: usize,
-    pub handover: &'a str,
+    pub handover: Option<ZRuntime>,
 }
 
-impl<'a> Default for RuntimeParam<'a> {
+impl Default for RuntimeParam {
     fn default() -> Self {
         Self {
             worker_threads: 1,
             max_blocking_threads: 50,
-            handover: "",
+            handover: None,
         }
     }
 }
 
 pub trait RuntimeParamTrait {
-    fn param(&self) -> &RuntimeParam<'_>;
+    fn param(&self) -> &RuntimeParam;
 }
 
-impl RuntimeParam<'_> {
+impl RuntimeParam {
     pub fn build(&self, zrt: ZRuntime) -> Result<Runtime> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(self.worker_threads)
@@ -77,21 +77,21 @@ impl RuntimeParam<'_> {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug, ConfigureZRuntime)]
+#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug, ConfigureZRuntime, Deserialize)]
 pub enum ZRuntime {
-    #[alias(app)]
+    #[serde(rename = "app")]
     #[param(worker_threads = 1)]
     Application,
-    #[alias(acc)]
+    #[serde(rename = "acc")]
     #[param(worker_threads = 1)]
     Acceptor,
-    #[alias(tx)]
+    #[serde(rename = "tx")]
     #[param(worker_threads = 1)]
     TX,
-    #[alias(rx)]
+    #[serde(rename = "rx")]
     #[param(worker_threads = 1)]
     RX,
-    #[alias(net)]
+    #[serde(rename = "net")]
     #[param(worker_threads = 1)]
     Net,
 }
@@ -155,8 +155,15 @@ impl ZRuntimePool {
     }
 
     pub fn get(&self, zrt: &ZRuntime) -> &Handle {
+        // Although the ZRuntime is called to use `zrt`, it may be handover to another one
+        // specified via the environmental variable.
+        let zrt = match zrt.param().handover {
+            Some(handover) => handover,
+            None => *zrt,
+        };
+
         self.0
-            .get(zrt)
+            .get(&zrt)
             .expect("The hashmap should contains {zrt} after initialization")
             .get_or_init(|| zrt.init().expect("Failed to init {zrt}"))
             .handle()
