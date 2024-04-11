@@ -80,19 +80,23 @@ impl RuntimeParam {
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug, ConfigureZRuntime, Deserialize)]
 pub enum ZRuntime {
     #[serde(rename = "app")]
-    #[param(worker_threads = 1)]
+    #[param(worker_threads = 1, max_blocking_threads = 1)]
     Application,
+
     #[serde(rename = "acc")]
-    #[param(worker_threads = 1)]
+    #[param(worker_threads = 1, handover = Some(ZRuntime::Application))]
     Acceptor,
+
     #[serde(rename = "tx")]
-    #[param(worker_threads = 1)]
+    #[param(worker_threads = 1, max_blocking_threads = 1)]
     TX,
+
     #[serde(rename = "rx")]
-    #[param(worker_threads = 1)]
+    #[param(worker_threads = 1, handover = Some(ZRuntime::Application))]
     RX,
+
     #[serde(rename = "net")]
-    #[param(worker_threads = 1)]
+    #[param(worker_threads = 1, handover = Some(ZRuntime::Application))]
     Net,
 }
 
