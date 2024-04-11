@@ -145,7 +145,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
 impl Drop for LinkUnicastUnixSocketStream {
     fn drop(&mut self) {
         // Close the underlying UnixSocketStream socket
-        let _ = zenoh_runtime::ZRuntime::TX
+        let _ = zenoh_runtime::ZRuntime::Acceptor
             .block_in_place(async move { self.get_mut_socket().shutdown().await });
     }
 }

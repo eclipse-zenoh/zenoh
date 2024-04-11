@@ -155,7 +155,7 @@ impl Router {
             state: newface,
         };
 
-        let _ = mux.face.set(face.clone());
+        let _ = mux.face.set(Face::downgrade(&face));
 
         ctrl_lock.new_transport_unicast_face(&mut tables, &self.tables, &mut face, &transport)?;
 

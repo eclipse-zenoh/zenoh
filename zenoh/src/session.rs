@@ -32,6 +32,7 @@ use crate::queryable::*;
 #[cfg(feature = "unstable")]
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::sample::DataInfoIntoSample;
 use crate::sample::QoS;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
@@ -40,6 +41,8 @@ use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
 use crate::Selector;
+#[cfg(feature = "unstable")]
+use crate::SourceInfo;
 use crate::Value;
 use log::{error, trace, warn};
 use std::collections::HashMap;
@@ -57,12 +60,7 @@ use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 #[cfg(feature = "unstable")]
-use zenoh_protocol::network::declare::SubscriberId;
-use zenoh_protocol::network::AtomicRequestId;
-use zenoh_protocol::network::RequestId;
-use zenoh_protocol::zenoh::reply::ReplyBody;
-use zenoh_protocol::zenoh::Del;
-use zenoh_protocol::zenoh::Put;
+use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -71,19 +69,20 @@ use zenoh_protocol::{
     network::{
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
-            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
+            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr, DeclareMode,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
-        ext,
         request::{self, ext::TargetType, Request},
-        Mapping, Push, Response, ResponseFinal,
+        AtomicRequestId, Mapping, Push, RequestId, Response, ResponseFinal,
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
-        PushBody, RequestBody, ResponseBody,
+        reply::ReplyBody,
+        Del, PushBody, Put, RequestBody, ResponseBody,
     },
 };
 use zenoh_result::ZResult;
+use zenoh_task::TaskController;
 use zenoh_util::core::AsyncResolve;
 
 zconfigurable! {
@@ -397,6 +396,8 @@ pub struct Session {
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
     pub(crate) alive: bool,
+    owns_runtime: bool,
+    task_controller: TaskController,
 }
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
@@ -417,6 +418,8 @@ impl Session {
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
+                owns_runtime: false,
+                task_controller: TaskController::default(),
             };
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
@@ -520,14 +523,19 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # }
     /// ```
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
+    pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
-            self.runtime.close().await?;
-
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
-
+            self.task_controller.terminate_all(Duration::from_secs(10));
+            if self.owns_runtime {
+                self.runtime.close().await?;
+            }
+            let mut state = zwrite!(self.state);
+            state.primitives.as_ref().unwrap().send_close();
+            // clean up to break cyclic references from self.state to itself
+            state.primitives.take();
+            state.queryables.clear();
+            self.alive = false;
             Ok(())
         })
     }
@@ -687,11 +695,12 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session
     ///     .put("key/expression", "payload")
-    ///     .with_encoding(Encoding::TEXT_PLAIN)
+    ///     .encoding(Encoding::TEXT_PLAIN)
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -702,19 +711,23 @@ impl Session {
         &'a self,
         key_expr: TryIntoKeyExpr,
         payload: IntoPayload,
-    ) -> PutBuilder<'a, 'b>
+    ) -> SessionPutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
         IntoPayload: Into<Payload>,
     {
-        PutBuilder {
+        PublicationBuilder {
             publisher: self.declare_publisher(key_expr),
-            payload: payload.into(),
-            kind: SampleKind::Put,
-            encoding: Encoding::default(),
+            kind: PublicationBuilderPut {
+                payload: payload.into(),
+                encoding: Encoding::default(),
+            },
+            timestamp: None,
             #[cfg(feature = "unstable")]
             attachment: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
         }
     }
 
@@ -738,18 +751,19 @@ impl Session {
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> DeleteBuilder<'a, 'b>
+    ) -> SessionDeleteBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PutBuilder {
+        PublicationBuilder {
             publisher: self.declare_publisher(key_expr),
-            payload: Payload::empty(),
-            kind: SampleKind::Delete,
-            encoding: Encoding::default(),
+            kind: PublicationBuilderDelete,
+            timestamp: None,
             #[cfg(feature = "unstable")]
             attachment: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
         }
     }
     /// Query data from the matching queryables in the system.
@@ -774,31 +788,35 @@ impl Session {
     /// }
     /// # }
     /// ```
-    pub fn get<'a, 'b: 'a, IntoSelector>(
+    pub fn get<'a, 'b: 'a, TryIntoSelector>(
         &'a self,
-        selector: IntoSelector,
+        selector: TryIntoSelector,
     ) -> GetBuilder<'a, 'b, DefaultHandler>
     where
-        IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
+        TryIntoSelector: TryInto<Selector<'b>>,
+        <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
         let timeout = {
             let conf = self.runtime.config().lock();
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
+        let qos: QoS = request::ext::QoSType::REQUEST.into();
         GetBuilder {
             session: self,
             selector,
             scope: Ok(None),
             target: QueryTarget::DEFAULT,
             consolidation: QueryConsolidation::DEFAULT,
+            qos: qos.into(),
             destination: Locality::default(),
             timeout,
             value: None,
             #[cfg(feature = "unstable")]
             attachment: None,
             handler: DefaultHandler::default(),
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
         }
     }
 }
@@ -810,6 +828,8 @@ impl Session {
             state: self.state.clone(),
             id: self.id,
             alive: false,
+            owns_runtime: self.owns_runtime,
+            task_controller: self.task_controller.clone(),
         }
     }
 
@@ -821,13 +841,14 @@ impl Session {
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::init(config).await {
                 Ok(mut runtime) => {
-                    let session = Self::init(
+                    let mut session = Self::init(
                         runtime.clone(),
                         aggregated_subscribers,
                         aggregated_publishers,
                     )
                     .res_async()
                     .await;
+                    session.owns_runtime = true;
                     match runtime.start().await {
                         Ok(()) => {
                             // Workaround for the declare_and_shoot problem
@@ -872,7 +893,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        interest_id: None,
+                        mode: DeclareMode::Push,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1085,7 +1106,7 @@ impl Session {
             // };
 
             primitives.send_declare(Declare {
-                interest_id: None,
+                mode: DeclareMode::Push,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1142,7 +1163,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        interest_id: None,
+                        mode: DeclareMode::Push,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1194,7 +1215,7 @@ impl Session {
                 distance: 0,
             };
             primitives.send_declare(Declare {
-                interest_id: None,
+                mode: DeclareMode::Push,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1216,7 +1237,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    interest_id: None,
+                    mode: DeclareMode::Push,
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1252,7 +1273,7 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(Declare {
-            interest_id: None,
+            mode: DeclareMode::Push,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1277,7 +1298,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    interest_id: None,
+                    mode: DeclareMode::Push,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -1374,30 +1395,34 @@ impl Session {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
-                zenoh_runtime::ZRuntime::RX.spawn({
-                    let session = self.clone();
-                    let msub = msub.clone();
-                    async move {
-                        match msub.current.lock() {
-                            Ok(mut current) => {
-                                if !*current {
-                                    if let Ok(status) =
-                                        session.matching_status(&msub.key_expr, msub.destination)
-                                    {
-                                        if status.matching_subscribers() {
-                                            *current = true;
-                                            let callback = msub.callback.clone();
-                                            (callback)(status)
+                self.task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                        let session = self.clone();
+                        let msub = msub.clone();
+                        async move {
+                            match msub.current.lock() {
+                                Ok(mut current) => {
+                                    if !*current {
+                                        if let Ok(status) = session
+                                            .matching_status(&msub.key_expr, msub.destination)
+                                        {
+                                            if status.matching_subscribers() {
+                                                *current = true;
+                                                let callback = msub.callback.clone();
+                                                (callback)(status)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                                Err(e) => {
+                                    log::error!(
+                                        "Error trying to acquire MathginListener lock: {}",
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    });
             }
         }
     }
@@ -1408,30 +1433,34 @@ impl Session {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
-                zenoh_runtime::ZRuntime::RX.spawn({
-                    let session = self.clone();
-                    let msub = msub.clone();
-                    async move {
-                        match msub.current.lock() {
-                            Ok(mut current) => {
-                                if *current {
-                                    if let Ok(status) =
-                                        session.matching_status(&msub.key_expr, msub.destination)
-                                    {
-                                        if !status.matching_subscribers() {
-                                            *current = false;
-                                            let callback = msub.callback.clone();
-                                            (callback)(status)
+                self.task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                        let session = self.clone();
+                        let msub = msub.clone();
+                        async move {
+                            match msub.current.lock() {
+                                Ok(mut current) => {
+                                    if *current {
+                                        if let Ok(status) = session
+                                            .matching_status(&msub.key_expr, msub.destination)
+                                        {
+                                            if !status.matching_subscribers() {
+                                                *current = false;
+                                                let callback = msub.callback.clone();
+                                                (callback)(status)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                                Err(e) => {
+                                    log::error!(
+                                        "Error trying to acquire MathginListener lock: {}",
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    });
             }
         }
     }
@@ -1554,21 +1583,21 @@ impl Session {
         drop(state);
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
-            #[allow(unused_mut)]
-            let mut sample = Sample::new(key_expr, payload.clone()).with_info(info.clone());
-            #[cfg(feature = "unstable")]
-            {
-                sample.attachment = attachment.clone();
-            }
+            let sample = info.clone().into_sample(
+                key_expr,
+                payload.clone(),
+                #[cfg(feature = "unstable")]
+                attachment.clone(),
+            );
             cb(sample);
         }
         if let Some((cb, key_expr)) = last {
-            #[allow(unused_mut)]
-            let mut sample = Sample::new(key_expr, payload).with_info(info);
-            #[cfg(feature = "unstable")]
-            {
-                sample.attachment = attachment;
-            }
+            let sample = info.into_sample(
+                key_expr,
+                payload,
+                #[cfg(feature = "unstable")]
+                attachment.clone(),
+            );
             cb(sample);
         }
     }
@@ -1580,10 +1609,12 @@ impl Session {
         scope: &Option<KeyExpr<'_>>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        qos: QoS,
         destination: Locality,
         timeout: Duration,
         value: Option<Value>,
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
@@ -1604,27 +1635,33 @@ impl Session {
             _ => 1,
         };
 
-        zenoh_runtime::ZRuntime::Net.spawn({
-            let state = self.state.clone();
-            let zid = self.runtime.zid();
-            async move {
-                tokio::time::sleep(timeout).await;
-                let mut state = zwrite!(state);
-                if let Some(query) = state.queries.remove(&qid) {
-                    std::mem::drop(state);
-                    log::debug!("Timeout on query {}! Send error and close.", qid);
-                    if query.reception_mode == ConsolidationMode::Latest {
-                        for (_, reply) in query.replies.unwrap().into_iter() {
-                            (query.callback)(reply);
+        let token = self.task_controller.get_cancellation_token();
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                let state = self.state.clone();
+                let zid = self.runtime.zid();
+                async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(timeout) => {
+                            let mut state = zwrite!(state);
+                            if let Some(query) = state.queries.remove(&qid) {
+                                std::mem::drop(state);
+                                log::debug!("Timeout on query {}! Send error and close.", qid);
+                                if query.reception_mode == ConsolidationMode::Latest {
+                                    for (_, reply) in query.replies.unwrap().into_iter() {
+                                        (query.callback)(reply);
+                                    }
+                                }
+                                (query.callback)(Reply {
+                                    sample: Err("Timeout".into()),
+                                    replier_id: zid,
+                                });
+                            }
                         }
+                        _ = token.cancelled() => {}
                     }
-                    (query.callback)(Reply {
-                        sample: Err("Timeout".into()),
-                        replier_id: zid,
-                    });
                 }
-            }
-        });
+            });
 
         let selector = match scope {
             Some(scope) => Selector {
@@ -1663,7 +1700,7 @@ impl Session {
             primitives.send_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
-                ext_qos: request::ext::QoSType::REQUEST,
+                ext_qos: qos.into(),
                 ext_tstamp: None,
                 ext_nodeid: request::ext::NodeIdType::DEFAULT,
                 ext_target: target,
@@ -1672,6 +1709,9 @@ impl Session {
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
                     consolidation,
                     parameters: selector.parameters().to_string(),
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source.into(),
+                    #[cfg(not(feature = "unstable"))]
                     ext_sinfo: None,
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
@@ -2047,8 +2087,7 @@ impl Primitives for Session {
             DeclareBody::DeclareToken(_) => todo!(),
             DeclareBody::UndeclareToken(_) => todo!(),
             DeclareBody::DeclareInterest(_) => todo!(),
-            DeclareBody::FinalInterest(_) => todo!(),
-            DeclareBody::UndeclareInterest(_) => todo!(),
+            DeclareBody::DeclareFinal(_) => todo!(),
         }
     }
 
@@ -2244,14 +2283,12 @@ impl Primitives for Session {
                                 attachment: _attachment.map(Into::into),
                             },
                         };
-
-                        #[allow(unused_mut)]
-                        let mut sample =
-                            Sample::new(key_expr.into_owned(), payload).with_info(Some(info));
-                        #[cfg(feature = "unstable")]
-                        {
-                            sample.attachment = attachment;
-                        }
+                        let sample = info.into_sample(
+                            key_expr.into_owned(),
+                            payload,
+                            #[cfg(feature = "unstable")]
+                            attachment,
+                        );
                         let new_reply = Reply {
                             sample: Ok(sample),
                             replier_id: ZenohId::rand(), // TODO

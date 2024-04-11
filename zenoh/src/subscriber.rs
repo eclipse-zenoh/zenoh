@@ -202,9 +202,6 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     #[cfg(not(feature = "unstable"))]
     pub(crate) reliability: Reliability,
 
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) mode: Mode,
-
     #[cfg(feature = "unstable")]
     pub origin: Locality,
     #[cfg(not(feature = "unstable"))]

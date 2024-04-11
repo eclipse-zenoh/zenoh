@@ -20,6 +20,7 @@ use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
+use crate::sample::builder::ValueBuilderTrait;
 use crate::value::Value;
 use log::{error, trace};
 use serde_json::json;
@@ -39,8 +40,8 @@ use zenoh_protocol::{
     },
     network::{
         declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
-        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
-        ResponseFinal,
+        ext, Declare, DeclareBody, DeclareMode, DeclareQueryable, DeclareSubscriber, Push, Request,
+        Response, ResponseFinal,
     },
     zenoh::{PushBody, RequestBody},
 };
@@ -276,7 +277,7 @@ impl AdminSpace {
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
-            interest_id: None,
+            mode: DeclareMode::Push,
 
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -289,7 +290,7 @@ impl AdminSpace {
         });
 
         primitives.send_declare(Declare {
-            interest_id: None,
+            mode: DeclareMode::Push,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -427,7 +428,7 @@ impl Primitives for AdminSpace {
                         parameters,
                         value: query
                             .ext_body
-                            .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
+                            .map(|b| Value::from(b.payload).encoding(b.encoding)),
                         qid: msg.id,
                         zid,
                         primitives,
@@ -580,7 +581,7 @@ fn router_data(context: &AdminContext, query: Query) {
     };
     if let Err(e) = query
         .reply(reply_key, payload)
-        .with_encoding(Encoding::APPLICATION_JSON)
+        .encoding(Encoding::APPLICATION_JSON)
         .res_sync()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);

@@ -199,6 +199,18 @@ pub mod reader {
         fn rewind(&mut self, mark: Self::Mark) -> bool;
     }
 
+    pub trait AdvanceableReader: Reader {
+        fn skip(&mut self, offset: usize) -> Result<(), DidntRead>;
+        fn backtrack(&mut self, offset: usize) -> Result<(), DidntRead>;
+        fn advance(&mut self, offset: isize) -> Result<(), DidntRead> {
+            if offset > 0 {
+                self.skip(offset as usize)
+            } else {
+                self.backtrack((-offset) as usize)
+            }
+        }
+    }
+
     #[derive(Debug, Clone, Copy)]
     pub struct DidntSiphon;
 
