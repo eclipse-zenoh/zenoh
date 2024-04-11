@@ -33,17 +33,16 @@ default = []
 [dependencies]
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
 bincode = { workspace = true }
-env_logger = { workspace = true }
+zenoh-util = {workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 serde = { workspace = true, features = ["default"] }
 zenoh = { workspace = true, features = ["unstable"], default-features = false }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
-zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 

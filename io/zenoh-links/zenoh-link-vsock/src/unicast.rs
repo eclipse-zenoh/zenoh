@@ -114,10 +114,10 @@ impl LinkUnicastVsock {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastVsock {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing vsock link: {}", self);
+        tracing::trace!("Closing vsock link: {}", self);
         self.get_mut_socket().shutdown().await.map_err(|e| {
             let e = zerror!("vsock link shutdown {}: {:?}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -125,7 +125,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -133,7 +133,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -141,7 +141,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on vsock link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -153,7 +153,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
             .await
             .map_err(|e| {
                 let e = zerror!("Read error on vsock link {}: {}", self, e);
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 e
             })?;
         Ok(())
@@ -334,28 +334,28 @@ async fn accept_task(
 
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept vsock connections: {}", e);
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
-    log::trace!("Ready to accept vsock connections on: {:?}", src_addr);
+    tracing::trace!("Ready to accept vsock connections on: {:?}", src_addr);
     loop {
         tokio::select! {
             _ = token.cancelled() => break,
             res = accept(&mut socket) => {
                 match res {
                     Ok((stream, dst_addr)) => {
-                        log::debug!("Accepted vsock connection on {:?}: {:?}", src_addr, dst_addr);
+                        tracing::debug!("Accepted vsock connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastVsock::new(stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-                            log::error!("{}-{}: {}", file!(), line!(), e)
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     },
                     Err(e) => {
-                        log::warn!("{}. Hint: increase the system open file limit.", e);
+                        tracing::warn!("{}. Hint: increase the system open file limit.", e);
                         // Throttle the accept loop upon an error
                         // NOTE: This might be due to various factors. However, the most common case is that
                         //       the process has reached the maximum number of open files in the system. On

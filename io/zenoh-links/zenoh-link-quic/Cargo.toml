@@ -28,7 +28,7 @@ description = "Internal crate for zenoh."
 async-trait = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 quinn = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pemfile = { workspace = true }

@@ -810,7 +810,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             priority: self.priority,
             destination: self.destination,
         };
-        log::trace!("publish({:?})", publisher.key_expr);
+        tracing::trace!("publish({:?})", publisher.key_expr);
         Ok(publisher)
     }
 }
@@ -829,7 +829,7 @@ fn resolve_put(
     kind: SampleKind,
     #[cfg(feature = "unstable")] attachment: Option<Attachment>,
 ) -> ZResult<()> {
-    log::trace!("write({:?}, [...])", &publisher.key_expr);
+    tracing::trace!("write({:?}, [...])", &publisher.key_expr);
     let primitives = zread!(publisher.session.state)
         .primitives
         .as_ref()

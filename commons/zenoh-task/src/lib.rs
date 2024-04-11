@@ -122,7 +122,7 @@ impl TaskController {
             .await
             .is_err()
         {
-            log::error!("Failed to terminate {} tasks", self.tracker.len());
+            tracing::error!("Failed to terminate {} tasks", self.tracker.len());
             return self.tracker.len();
         }
         0
@@ -183,7 +183,7 @@ impl TerminatableTask {
     pub async fn terminate_async(self, timeout: Duration) -> bool {
         self.token.cancel();
         if tokio::time::timeout(timeout, self.handle).await.is_err() {
-            log::error!("Failed to terminate the task");
+            tracing::error!("Failed to terminate the task");
             return false;
         };
         true

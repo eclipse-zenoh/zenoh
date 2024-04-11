@@ -136,7 +136,7 @@ impl HatTables {
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        log::trace!("Schedule computations");
+        tracing::trace!("Schedule computations");
         if self.peers_trees_task.is_none() {
             let task = TerminatableTask::spawn(
                 zenoh_runtime::ZRuntime::Net,
@@ -147,14 +147,14 @@ impl HatTables {
                     .await;
                     let mut tables = zwrite!(tables_ref.tables);
 
-                    log::trace!("Compute trees");
+                    tracing::trace!("Compute trees");
                     let new_childs = hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees();
 
-                    log::trace!("Compute routes");
+                    tracing::trace!("Compute routes");
                     pubsub::pubsub_tree_change(&mut tables, &new_childs);
                     queries::queries_tree_change(&mut tables, &new_childs);
 
-                    log::trace!("Computations completed");
+                    tracing::trace!("Computations completed");
                     hat_mut!(tables).peers_trees_task = None;
                 },
                 TerminatableTask::create_cancellation_token(),
@@ -426,7 +426,7 @@ impl HatBaseTrait for HatCode {
                     hat_mut!(tables).schedule_compute_trees(tables_ref.clone());
                 };
             }
-            (_, _) => log::error!("Closed transport in session closing!"),
+            (_, _) => tracing::error!("Closed transport in session closing!"),
         }
         Ok(())
     }
@@ -513,7 +513,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
         Some(link) => match link.get_zid(&(nodeid as u64)) {
             Some(router) => Some(*router),
             None => {
-                log::error!(
+                tracing::error!(
                     "Received peer declaration with unknown routing context id {}",
                     nodeid
                 );
@@ -521,7 +521,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
             }
         },
         None => {
-            log::error!(
+            tracing::error!(
                 "Could not find corresponding link in peers network for {}",
                 face
             );
