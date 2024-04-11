@@ -57,7 +57,7 @@ impl LinkMulticastUdp {
 #[async_trait]
 impl LinkMulticastTrait for LinkMulticastUdp {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing UDP link: {}", self);
+        tracing::trace!("Closing UDP link: {}", self);
         match self.multicast_addr.ip() {
             IpAddr::V4(dst_ip4) => match self.multicast_addr.ip() {
                 IpAddr::V4(src_ip4) => self.mcast_sock.leave_multicast_v4(dst_ip4, src_ip4),
@@ -67,7 +67,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
         }
         .map_err(|e| {
             let e = zerror!("Close error on UDP link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -78,7 +78,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
             .await
             .map_err(|e| {
                 let e = zerror!("Write error on UDP link {}: {}", self, e);
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 e.into()
             })
     }
@@ -95,7 +95,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
         loop {
             let (n, addr) = self.mcast_sock.recv_from(buffer).await.map_err(|e| {
                 let e = zerror!("Read error on UDP link {}: {}", self, e);
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 e
             })?;
 

@@ -657,7 +657,7 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
             }
             _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),
         };
-        log::trace!("undeclare_keyexpr({:?})", expr_id);
+        tracing::trace!("undeclare_keyexpr({:?})", expr_id);
         let mut state = zwrite!(session.state);
         state.local_resources.remove(&expr_id);
 

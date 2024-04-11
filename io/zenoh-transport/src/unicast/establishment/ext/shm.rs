@@ -203,7 +203,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         let codec = Zenoh080::new();
         let mut reader = ext.value.reader();
         let Ok(init_ack): Result<InitAck, _> = codec.read(&mut reader) else {
-            log::trace!("{} Decoding error.", S);
+            tracing::trace!("{} Decoding error.", S);
             state.is_shm = false;
             return Ok(0);
         };
@@ -219,7 +219,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
 
         // Verify that Bob has correctly read Alice challenge
         if challenge != init_ack.alice_challenge {
-            log::trace!(
+            tracing::trace!(
                 "{} Challenge mismatch: {} != {}.",
                 S,
                 init_ack.alice_challenge,
@@ -233,7 +233,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         let shm_buff = match zasyncwrite!(self.inner.reader).read_shmbuf(&init_ack.bob_info) {
             Ok(buff) => buff,
             Err(e) => {
-                log::trace!("{} {}", S, e);
+                tracing::trace!("{} {}", S, e);
                 state.is_shm = false;
                 return Ok(0);
             }
@@ -243,7 +243,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         let bytes: [u8; std::mem::size_of::<Challenge>()] = match shm_buff.as_slice().try_into() {
             Ok(bytes) => bytes,
             Err(_) => {
-                log::trace!("{} Failed to read remote Shm.", S);
+                tracing::trace!("{} Failed to read remote Shm.", S);
                 state.is_shm = false;
                 return Ok(0);
             }
@@ -288,7 +288,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         };
 
         if ext.value != 1 {
-            log::trace!("{} Invalid value.", S);
+            tracing::trace!("{} Invalid value.", S);
             state.is_shm = false;
             return Ok(());
         }
@@ -377,7 +377,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         let codec = Zenoh080::new();
         let mut reader = ext.value.reader();
         let Ok(init_syn): Result<InitSyn, _> = codec.read(&mut reader) else {
-            log::trace!("{} Decoding error.", S);
+            tracing::trace!("{} Decoding error.", S);
             state.is_shm = false;
             return Ok(0);
         };
@@ -386,7 +386,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         let shm_buff = match zasyncwrite!(self.inner.reader).read_shmbuf(&init_syn.alice_info) {
             Ok(buff) => buff,
             Err(e) => {
-                log::trace!("{} {}", S, e);
+                tracing::trace!("{} {}", S, e);
                 state.is_shm = false;
                 return Ok(0);
             }
@@ -396,7 +396,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         let bytes: [u8; std::mem::size_of::<Challenge>()] = match shm_buff.as_slice().try_into() {
             Ok(bytes) => bytes,
             Err(_) => {
-                log::trace!("{} Failed to read remote Shm.", S);
+                tracing::trace!("{} Failed to read remote Shm.", S);
                 state.is_shm = false;
                 return Ok(0);
             }
@@ -464,7 +464,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         // Verify that Alice has correctly read Bob challenge
         let bob_challnge = ext.value;
         if challenge != bob_challnge {
-            log::trace!(
+            tracing::trace!(
                 "{} Challenge mismatch: {} != {}.",
                 S,
                 bob_challnge,

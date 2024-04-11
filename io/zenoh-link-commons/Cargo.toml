@@ -32,7 +32,7 @@ async-trait = { workspace = true }
 rustls = { workspace = true }
 rustls-webpki = { workspace = true }
 flume = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 serde = { workspace = true, features = ["default"] }
 zenoh-buffers = { workspace = true }
 zenoh-codec = { workspace = true }

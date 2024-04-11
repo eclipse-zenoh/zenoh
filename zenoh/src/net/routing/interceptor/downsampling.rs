@@ -62,15 +62,15 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        log::debug!("New downsampler transport unicast {:?}", transport);
+        tracing::debug!("New downsampler transport unicast {:?}", transport);
         if let Some(interfaces) = &self.interfaces {
-            log::debug!(
+            tracing::debug!(
                 "New downsampler transport unicast config interfaces: {:?}",
                 interfaces
             );
             if let Ok(links) = transport.get_links() {
                 for link in links {
-                    log::debug!(
+                    tracing::debug!(
                         "New downsampler transport unicast link interfaces: {:?}",
                         link.interfaces
                     );
@@ -149,11 +149,11 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 return None;
                             }
                         } else {
-                            log::debug!("unxpected cache ID {}", id);
+                            tracing::debug!("unxpected cache ID {}", id);
                         }
                     }
                 } else {
-                    log::debug!("unxpected cache type {:?}", ctx.full_expr());
+                    tracing::debug!("unxpected cache type {:?}", ctx.full_expr());
                 }
             }
         }

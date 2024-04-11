@@ -111,7 +111,7 @@ impl InterceptorTrait for InterceptorsChain {
             match interceptor.intercept(ctx, cache) {
                 Some(newctx) => ctx = newctx,
                 None => {
-                    log::trace!("Msg intercepted!");
+                    tracing::trace!("Msg intercepted!");
                     return None;
                 }
             }
@@ -174,7 +174,7 @@ impl InterceptorTrait for IngressMsgLogger {
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
 
-        log::debug!(
+        tracing::debug!(
             "{} Recv {} Expr:{:?}",
             ctx.inface()
                 .map(|f| f.to_string())
@@ -200,7 +200,7 @@ impl InterceptorTrait for EgressMsgLogger {
         let expr = cache
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
-        log::debug!(
+        tracing::debug!(
             "{} Send {} Expr:{:?}",
             ctx.outface()
                 .map(|f| f.to_string())
@@ -219,7 +219,7 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        log::debug!("New transport unicast {:?}", transport);
+        tracing::debug!("New transport unicast {:?}", transport);
         (
             Some(Box::new(IngressMsgLogger {})),
             Some(Box::new(EgressMsgLogger {})),
@@ -227,12 +227,12 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
     }
 
     fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressInterceptor> {
-        log::debug!("New transport multicast {:?}", transport);
+        tracing::debug!("New transport multicast {:?}", transport);
         Some(Box::new(EgressMsgLogger {}))
     }
 
     fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressInterceptor> {
-        log::debug!("New peer multicast {:?}", transport);
+        tracing::debug!("New peer multicast {:?}", transport);
         Some(Box::new(IngressMsgLogger {}))
     }
 }

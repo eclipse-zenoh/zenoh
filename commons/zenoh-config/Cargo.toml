@@ -24,7 +24,7 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 
 [dependencies]
-log = { workspace = true }
+tracing = {workspace = true}
 flume = { workspace = true }
 json5 = { workspace = true }
 num_cpus = { workspace = true }
