@@ -19,15 +19,15 @@ use std::{
     env,
     future::Future,
     ops::Deref,
+    str::FromStr,
     sync::{
         atomic::{AtomicUsize, Ordering},
         OnceLock,
     },
     time::Duration,
-    str::FromStr,
 };
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
-use zenoh_result::{ZError, ZResult as Result, bail};
+use zenoh_result::{bail, ZError, ZResult as Result};
 use zenoh_runtime_derive::{ConfigureZRuntime, GenericRuntimeParam};
 
 const ZENOH_RUNTIME_ENV: &str = "ZENOH_RUNTIME";
