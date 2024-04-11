@@ -75,12 +75,31 @@ fn declare_param(
         // pub is needed within lazy_static
         #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
         #[serde(deny_unknown_fields)]
-        pub struct GenericRuntimeConfig<'a> {
+        pub struct AbstractRuntimeParam<'a> {
             #(
                 #[serde(borrow, default)]
-                #aliases: GenericRuntimeParam<'a, #helper_names>,
+                #aliases: RuntimeParamHelper<'a, #helper_names>,
             )*
         }
+
+        impl<'a> From<AbstractRuntimeParam<'a>> for GlobalRuntimeParam<'a> {
+            fn from(value: AbstractRuntimeParam<'a>) -> Self {
+                Self {
+                    #(
+                        #aliases: value.#aliases.into(),
+                        // #aliases: todo!(),
+                    )*
+                }
+            }
+        }
+
+        /// A global runtime parameter for zenoh runtimes
+        pub struct GlobalRuntimeParam<'a> {
+            #(
+                #aliases: RuntimeParam<'a>,
+            )*
+        }
+
     }
 }
 
@@ -92,8 +111,8 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         Data::Enum(DataEnum { variants, .. }) => variants,
         _ => unimplemented!("Only enum is supported."),
     };
-    let (names, aliases, params) = parse_variants(&variants);
-    let declare_param_quote = declare_param(&names, &aliases, &params);
+    let (variant_names, aliases, params) = parse_variants(&variants);
+    let declare_param_quote = declare_param(&variant_names, &aliases, &params);
     let aliases_string = aliases.iter().map(|x| x.to_string());
 
     let expanded = quote! {
@@ -102,30 +121,47 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             // We need to hold the reference of ZENOH_RUNTIME_ENV_STRING to prevent the issue of
             // "returning a value referencing data owned by the current function"
             pub static ref ZENOH_RUNTIME_ENV_STRING: String = env::var(ZENOH_RUNTIME_ENV).unwrap_or("()".to_string());
-            pub static ref ZRUNTIME_CONFIG: GenericRuntimeConfig<'static> = ron::from_str(&ZENOH_RUNTIME_ENV_STRING).unwrap();
+            pub static ref ZRUNTIME_PARAM: GlobalRuntimeParam<'static> = ron::from_str::<AbstractRuntimeParam>(&ZENOH_RUNTIME_ENV_STRING).unwrap().into();
+            // pub static ref ZRUNTIME_CONFIG: AbstractRuntimeParam<'static> = ron::from_str(&ZENOH_RUNTIME_ENV_STRING).unwrap();
         }
 
         #declare_param_quote
 
         impl #enum_name {
-            fn iter() -> impl Iterator<Item = #enum_name> {
+            /// Create an iterator from enum
+            pub fn iter() -> impl Iterator<Item = #enum_name> {
                 use #enum_name::*;
-                [#(#names,)*].into_iter()
+                [#(#variant_names,)*].into_iter()
             }
 
+            /// Initialize the tokio runtime according to the given config
             fn init(&self) -> Result<Runtime> {
                 use #enum_name::*;
 
-                // let env_str = env::var(ZENOH_RUNTIME_THREADS_ENV).unwrap_or("()".to_string());
-                // let config: GenericRuntimeConfig = ron::from_str(&env_str).unwrap();
                 match self {
                     #(
-                        #names => {
-                            let param: RuntimeParam = ZRUNTIME_CONFIG.#aliases.into();
-                            param.build(#names)
+                        #variant_names => {
+                            ZRUNTIME_PARAM.#aliases.build(#variant_names)
                         },
                     )*
                 }
+            }
+
+        }
+
+        impl RuntimeParamTrait for #enum_name {
+
+            fn param(&self) -> &RuntimeParam<'_> {
+                use #enum_name::*;
+
+                match self {
+                    #(
+                        #variant_names => {
+                            &ZRUNTIME_PARAM.#aliases
+                        },
+                    )*
+                }
+
             }
         }
 
@@ -134,7 +170,7 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 use #enum_name::*;
                 match self {
                     #(
-                        #names => {
+                        #variant_names => {
                             write!(f, #aliases_string)
                         },
                     )*
@@ -158,7 +194,7 @@ pub fn build_generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro
     };
     let field_names: Vec<_> = fields.iter().map(|field| &field.ident).collect();
     let field_types: Vec<_> = fields.iter().map(|field| &field.ty).collect();
-    let struct_name = format_ident!("Generic{}", &input.ident);
+    let helper_name = format_ident!("{}Helper", &input.ident);
 
     quote! {
 
@@ -166,7 +202,7 @@ pub fn build_generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro
 
         #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
         #[serde(deny_unknown_fields, default)]
-        struct #struct_name<'a, T>
+        struct #helper_name<'a, T>
         where
             T: DefaultParam<'a>,
         {
@@ -177,7 +213,7 @@ pub fn build_generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro
             _phantom: PhantomData<&'a T>,
         }
 
-        impl<'a, T> From<RuntimeParam<'a>> for #struct_name<'a, T>
+        impl<'a, T> From<RuntimeParam<'a>> for #helper_name<'a, T>
         where
             T: DefaultParam<'a>,
         {
@@ -190,19 +226,19 @@ pub fn build_generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro
             }
         }
 
-        impl<'a, T> From<#struct_name<'a, T>> for RuntimeParam<'a>
+        impl<'a, T> From<#helper_name<'a, T>> for RuntimeParam<'a>
         where
             T: DefaultParam<'a>,
         {
-            fn from(value: #struct_name<'a, T>) -> Self {
-                let #struct_name { #(#field_names,)* .. } = value;
+            fn from(value: #helper_name<'a, T>) -> Self {
+                let #helper_name { #(#field_names,)* .. } = value;
                 Self {
                     #(#field_names,)*
                 }
             }
         }
 
-        impl<'a, T: DefaultParam<'a>> Default for #struct_name<'a, T> {
+        impl<'a, T: DefaultParam<'a>> Default for #helper_name<'a, T> {
             fn default() -> Self {
                 T::param().into()
             }

@@ -24,9 +24,10 @@ use std::{
         OnceLock,
     },
     time::Duration,
+    str::FromStr,
 };
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
-use zenoh_result::ZResult as Result;
+use zenoh_result::{ZError, ZResult as Result, bail};
 use zenoh_runtime_derive::{ConfigureZRuntime, GenericRuntimeParam};
 
 const ZENOH_RUNTIME_ENV: &str = "ZENOH_RUNTIME";
@@ -51,6 +52,10 @@ impl<'a> Default for RuntimeParam<'a> {
             handover: "",
         }
     }
+}
+
+pub trait RuntimeParamTrait {
+    fn param(&self) -> &RuntimeParam<'_>;
 }
 
 impl RuntimeParam<'_> {
@@ -89,6 +94,18 @@ pub enum ZRuntime {
     #[alias(net)]
     #[param(worker_threads = 1)]
     Net,
+}
+
+impl FromStr for ZRuntime {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> core::result::Result<Self, Self::Err> {
+        if let Some(zrt) = ZRuntime::iter().find(|zrt| s == zrt.to_string()) {
+            Ok(zrt)
+        } else {
+            bail!("Invalid ZRuntime name: {s}")
+        }
+    }
 }
 
 impl ZRuntime {
