@@ -15,11 +15,26 @@ use clap::Parser;
 use futures::future;
 use git_version::git_version;
 use std::collections::HashSet;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
 use zenoh::plugins::PluginsManager;
 use zenoh::prelude::{EndPoint, WhatAmI};
 use zenoh::runtime::{AdminSpace, Runtime};
 use zenoh::Result;
+
+#[cfg(feature = "loki")]
+use url::Url;
+
+#[cfg(feature = "loki")]
+const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
+
+#[cfg(feature = "loki")]
+const LOKI_API_KEY_VAR: &str = "LOKI_API_KEY";
+
+#[cfg(feature = "loki")]
+const LOKI_API_KEY_HEADER_VAR: &str = "LOKI_API_KEY_HEADER";
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -85,7 +100,7 @@ fn load_plugin(
     paths: &Option<Vec<String>>,
 ) -> Result<()> {
     let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-        log::warn!("Plugin `{}` was already declared", declared.name());
+        tracing::warn!("Plugin `{}` was already declared", declared.name());
         declared
     } else if let Some(paths) = paths {
         plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
@@ -94,7 +109,7 @@ fn load_plugin(
     };
 
     if let Some(loaded) = declared.loaded_mut() {
-        log::warn!(
+        tracing::warn!(
             "Plugin `{}` was already loaded from {}",
             loaded.name(),
             loaded.path()
@@ -111,18 +126,13 @@ fn main() {
         .build()
         .unwrap()
         .block_on(async {
-        let mut log_builder =
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
-        #[cfg(feature = "stats")]
-        log_builder.format_timestamp_millis().init();
-        #[cfg(not(feature = "stats"))]
-        log_builder.init();
+        init_logging().unwrap();
 
-        log::info!("zenohd {}", *LONG_VERSION);
+        tracing::info!("zenohd {}", *LONG_VERSION);
 
         let args = Args::parse();
         let config = config_from_args(&args);
-        log::info!("Initial conf: {}", &config);
+        tracing::info!("Initial conf: {}", &config);
 
         let mut plugin_mgr = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
         // Static plugins are to be added here, with `.add_static::<PluginType>()`
@@ -133,7 +143,7 @@ fn main() {
                 paths,
                 required,
             } = plugin_load;
-            log::info!(
+            tracing::info!(
                 "Loading {req} plugin \"{name}\"",
                 req = if required { "required" } else { "" }
             );
@@ -141,7 +151,7 @@ fn main() {
                 if required {
                     panic!("Plugin load failure: {}", e)
                 } else {
-                    log::error!("Plugin load failure: {}", e)
+                    tracing::error!("Plugin load failure: {}", e)
                 }
             }
             if required {
@@ -159,14 +169,14 @@ fn main() {
 
         for plugin in plugin_mgr.loaded_plugins_iter_mut() {
             let required = required_plugins.contains(plugin.name());
-            log::info!(
+            tracing::info!(
                 "Starting {req} plugin \"{name}\"",
                 req = if required { "required" } else { "" },
                 name = plugin.name()
             );
             match plugin.start(&runtime) {
                 Ok(_) => {
-                    log::info!(
+                    tracing::info!(
                         "Successfully started plugin {} from {:?}",
                         plugin.name(),
                         plugin.path()
@@ -188,7 +198,7 @@ fn main() {
                             }
                         );
                     } else {
-                        log::error!(
+                        tracing::error!(
                             "Required plugin \"{}\" failed to start: {}",
                             plugin.name(),
                             if report.is_empty() {
@@ -201,7 +211,7 @@ fn main() {
                 }
             }
         }
-        log::info!("Finished loading plugins");
+        tracing::info!("Finished loading plugins");
 
         AdminSpace::start(&runtime, plugin_mgr, LONG_VERSION.clone()).await;
 
@@ -355,15 +365,68 @@ fn config_from_args(args: &Args) -> Config {
                     if let Err(e) =
                         config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
                     {
-                        log::warn!("Couldn't perform configuration {}: {}", json, e);
+                        tracing::warn!("Couldn't perform configuration {}: {}", json, e);
                     }
                 }
-                Err(e) => log::warn!("Couldn't perform configuration {}: {}", json, e),
+                Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
             }
         }
     }
-    log::debug!("Config: {:?}", &config);
+    tracing::debug!("Config: {:?}", &config);
     config
+}
+
+fn init_logging() -> Result<()> {
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("z=info"));
+
+    let fmt_layer = tracing_subscriber::fmt::Layer::new()
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_level(true)
+        .with_target(true);
+
+    let tracing_sub = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer);
+
+    #[cfg(feature = "loki")]
+    match (
+        get_loki_endpoint(),
+        get_loki_apikey(),
+        get_loki_apikey_header(),
+    ) {
+        (Some(loki_url), Some(header), Some(apikey)) => {
+            let (loki_layer, task) = tracing_loki::builder()
+                .label("service", "zenoh")?
+                .http_header(header, apikey)?
+                .build_url(Url::parse(&loki_url)?)?;
+
+            tracing_sub.with(loki_layer).init();
+            tokio::spawn(task);
+            return Ok(());
+        }
+        _ => {
+            tracing::warn!("Missing one of the required header for Loki!")
+        }
+    };
+
+    tracing_sub.init();
+    Ok(())
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_endpoint() -> Option<String> {
+    std::env::var(LOKI_ENDPOINT_VAR).ok()
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_apikey() -> Option<String> {
+    std::env::var(LOKI_API_KEY_VAR).ok()
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_apikey_header() -> Option<String> {
+    std::env::var(LOKI_API_KEY_HEADER_VAR).ok()
 }
 
 #[test]

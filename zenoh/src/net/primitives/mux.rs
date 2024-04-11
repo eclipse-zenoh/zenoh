@@ -60,7 +60,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -84,7 +84,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -108,7 +108,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -132,7 +132,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -156,7 +156,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -211,7 +211,7 @@ impl EPrimitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -336,7 +336,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -360,7 +360,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -384,7 +384,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -408,7 +408,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -432,7 +432,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -487,7 +487,7 @@ impl EPrimitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 

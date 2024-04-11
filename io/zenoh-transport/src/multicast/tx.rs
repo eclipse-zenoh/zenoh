@@ -37,7 +37,7 @@ impl TransportMulticastInner {
                 }
             }
             None => {
-                log::trace!(
+                tracing::trace!(
                     "Message dropped because the transport has no links: {}",
                     msg
                 );
@@ -59,7 +59,7 @@ impl TransportMulticastInner {
                 crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.multicast.shm.reader)
             };
             if let Err(e) = res {
-                log::trace!("Failed SHM conversion: {}", e);
+                tracing::trace!("Failed SHM conversion: {}", e);
                 return false;
             }
         }

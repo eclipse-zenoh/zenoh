@@ -49,7 +49,7 @@ impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
         (
             Dyn::new(move |t| {
                 if let Err(e) = sender.send(t) {
-                    log::error!("{}", e)
+                    tracing::error!("{}", e)
                 }
             }),
             receiver,
@@ -72,7 +72,7 @@ impl<T: Send + Sync + 'static> IntoCallbackReceiverPair<'static, T>
         (
             Dyn::new(move |t| {
                 if let Err(e) = sender.send(t) {
-                    log::error!("{}", e)
+                    tracing::error!("{}", e)
                 }
             }),
             receiver,

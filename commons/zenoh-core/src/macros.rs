@@ -170,7 +170,7 @@ macro_rules! zasync_executor_init {
             .await
             .unwrap();
 
-        log::trace!(
+        tracing::trace!(
             "Spawned {} additional threads in the async global executor",
             count
         );
@@ -186,7 +186,7 @@ macro_rules! zparse {
                 "Failed to read configuration: {} is not a valid value",
                 $str
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })
     };
@@ -204,7 +204,7 @@ macro_rules! zparse_default {
                     "Failed to read configuration: {} is not a valid value",
                     $str
                 );
-                log::warn!("{}", e);
+                tracing::warn!("{}", e);
                 $default
             }
         }

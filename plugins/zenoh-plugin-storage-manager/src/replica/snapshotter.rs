@@ -318,9 +318,9 @@ impl Snapshotter {
         let stable = replica_data.stable_log.read().await;
         let volatile = replica_data.volatile_log.read().await;
         let digest = replica_data.digest.read().await;
-        log::trace!("Stable log:: {:?}", stable);
-        log::trace!("Volatile log:: {:?}", volatile);
-        log::trace!("Digest:: {:?}", digest);
+        tracing::trace!("Stable log:: {:?}", stable);
+        tracing::trace!("Volatile log:: {:?}", volatile);
+        tracing::trace!("Digest:: {:?}", digest);
     }
 
     // Expose digest

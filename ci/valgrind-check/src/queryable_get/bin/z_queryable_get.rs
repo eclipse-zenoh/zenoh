@@ -15,10 +15,11 @@ use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh_util::init_log;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    init_log();
 
     let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();

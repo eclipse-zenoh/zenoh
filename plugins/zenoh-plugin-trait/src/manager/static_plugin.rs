@@ -94,10 +94,10 @@ where
     }
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         if self.instance.is_none() {
-            log::debug!("Plugin `{}` started", self.name());
+            tracing::debug!("Plugin `{}` started", self.name());
             self.instance = Some(P::start(self.name(), args)?);
         } else {
-            log::warn!("Plugin `{}` already started", self.name());
+            tracing::warn!("Plugin `{}` already started", self.name());
         }
         Ok(self)
     }
@@ -126,7 +126,7 @@ where
         self
     }
     fn stop(&mut self) {
-        log::debug!("Plugin `{}` stopped", self.name());
+        tracing::debug!("Plugin `{}` stopped", self.name());
         self.instance = None;
     }
     fn instance(&self) -> &Instance {

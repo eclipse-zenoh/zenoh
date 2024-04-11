@@ -20,7 +20,7 @@ use zenoh_ext::*;
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    env_logger::init();
+    zenoh_util::init_log_from_env();
 
     let (config, key_expr, value, history, prefix, complete) = parse_args();
 

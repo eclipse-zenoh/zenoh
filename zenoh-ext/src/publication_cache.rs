@@ -127,7 +127,7 @@ impl<'a> PublicationCache<'a> {
                 }
                 Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
             };
-        log::debug!(
+        tracing::debug!(
             "Create PublicationCache on {} with history={} resource_limit={:?}",
             &key_expr,
             conf.history,
@@ -192,7 +192,7 @@ impl<'a> PublicationCache<'a> {
                                     }
                                     queue.push_back(sample);
                                 } else if cache.len() >= limit {
-                                    log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
+                                    tracing::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
                                     pub_key_expr);
                                 } else {
                                     let mut queue: VecDeque<Sample> = VecDeque::new();
@@ -214,7 +214,7 @@ impl<'a> PublicationCache<'a> {
                                                 }
                                             }
                                             if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
-                                                log::warn!("Error replying to query: {}", e);
+                                                tracing::warn!("Error replying to query: {}", e);
                                             }
                                         }
                                     }
@@ -228,7 +228,7 @@ impl<'a> PublicationCache<'a> {
                                                     }
                                                 }
                                                 if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
-                                                    log::warn!("Error replying to query: {}", e);
+                                                    tracing::warn!("Error replying to query: {}", e);
                                                 }
                                             }
                                         }

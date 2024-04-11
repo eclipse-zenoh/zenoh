@@ -264,7 +264,7 @@ impl StageIn {
                     tch.sn.set(sn).unwrap();
                     // Reinsert the batch
                     *c_guard = Some(batch);
-                    log::warn!(
+                    tracing::warn!(
                         "Zenoh message dropped because it can not be fragmented: {:?}",
                         msg
                     );
@@ -374,7 +374,7 @@ impl Backoff {
                 }
                 None => {
                     self.retry_time = NanoSeconds::MAX;
-                    log::warn!(
+                    tracing::warn!(
                         "Pipeline pull backoff overflow detected! Retrying in {}ns.",
                         self.retry_time
                     );
