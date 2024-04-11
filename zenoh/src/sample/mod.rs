@@ -19,7 +19,7 @@ use crate::prelude::{KeyExpr, Value};
 use crate::sample::builder::{QoSBuilderTrait, ValueBuilderTrait};
 use crate::time::Timestamp;
 use crate::Priority;
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use serde::Serialize;
 use std::{convert::TryFrom, fmt};
 use zenoh_protocol::core::CongestionControl;
@@ -212,8 +212,9 @@ impl From<Option<DataInfo>> for SourceInfo {
 }
 
 mod attachment {
-    use crate::Payload;
-    #[zenoh_macros::unstable]
+    #[cfg(feature = "unstable")]
+    use crate::payload::Payload;
+    #[cfg(feature = "unstable")]
     use zenoh_protocol::zenoh::ext::AttachmentType;
 
     #[zenoh_macros::unstable]

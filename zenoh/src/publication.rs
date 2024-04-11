@@ -14,16 +14,15 @@
 
 //! Publishing primitives.
 use crate::net::primitives::Primitives;
-use crate::payload::OptionPayload;
 use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
 use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
     handlers::{Callback, DefaultHandler, IntoHandler},
+    payload::OptionPayload,
+    sample::Attachment,
     Id,
 };
 use std::future::Ready;
