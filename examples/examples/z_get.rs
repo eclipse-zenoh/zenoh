@@ -55,7 +55,7 @@ async fn main() {
             }
             Err(err) => {
                 let payload = err
-                    .payload
+                    .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(">> Received (ERROR: '{}')", payload);

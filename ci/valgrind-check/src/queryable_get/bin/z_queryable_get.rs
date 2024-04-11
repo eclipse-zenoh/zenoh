@@ -34,7 +34,7 @@ async fn main() {
                 query
                     .reply(
                         query.selector().key_expr,
-                        query.value().unwrap().payload.clone(),
+                        query.value().unwrap().payload().clone(),
                     )
                     .res()
                     .await
@@ -71,7 +71,7 @@ async fn main() {
                 ),
                 Err(err) => println!(
                     ">> Received (ERROR: '{}')",
-                    err.payload
+                    err.payload()
                         .deserialize::<String>()
                         .unwrap_or_else(|e| format!("{}", e))
                 ),

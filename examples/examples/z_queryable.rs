@@ -44,7 +44,7 @@ async fn main() {
             None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
             Some(value) => {
                 let payload = value
-                    .payload
+                    .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(

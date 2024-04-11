@@ -426,9 +426,7 @@ impl Primitives for AdminSpace {
                     inner: Arc::new(QueryInner {
                         key_expr: key_expr.clone(),
                         parameters,
-                        value: query
-                            .ext_body
-                            .map(|b| Value::from(b.payload).encoding(b.encoding)),
+                        value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
                         qid: msg.id,
                         zid,
                         primitives,

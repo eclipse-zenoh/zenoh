@@ -489,17 +489,15 @@ pub struct ReplyErrBuilder<'a> {
 
 impl ValueBuilderTrait for ReplyErrBuilder<'_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        Self {
-            value: self.value.encoding(encoding),
-            ..self
-        }
+        let mut value = self.value.clone();
+        value.encoding = encoding.into();
+        Self { value, ..self }
     }
 
     fn payload<T: Into<Payload>>(self, payload: T) -> Self {
-        Self {
-            value: self.value.payload(payload),
-            ..self
-        }
+        let mut value = self.value.clone();
+        value.payload = payload.into();
+        Self { value, ..self }
     }
 
     fn value<T: Into<Value>>(self, value: T) -> Self {

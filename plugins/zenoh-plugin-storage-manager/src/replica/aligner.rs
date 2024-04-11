@@ -106,11 +106,8 @@ impl Aligner {
             log::trace!("[ALIGNER] Received queried samples: {missing_data:?}");
 
             for (key, (ts, value)) in missing_data {
-                let Value {
-                    payload, encoding, ..
-                } = value;
-                let sample = SampleBuilder::put(key, payload)
-                    .encoding(encoding)
+                let sample = SampleBuilder::put(key, value.payload().clone())
+                    .encoding(value.encoding().clone())
                     .timestamp(ts)
                     .into();
                 log::debug!("[ALIGNER] Adding {:?} to storage", sample);
