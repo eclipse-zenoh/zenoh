@@ -16,7 +16,7 @@
 use crate::encoding::Encoding;
 use crate::payload::Payload;
 use crate::prelude::{KeyExpr, Value};
-use crate::sample::builder::{QoSBuilderTrait, ValueBuilderTrait};
+use crate::sample::builder::QoSBuilderTrait;
 use crate::time::Timestamp;
 use crate::Priority;
 #[cfg(feature = "unstable")]
@@ -378,7 +378,7 @@ impl Sample {
 
 impl From<Sample> for Value {
     fn from(sample: Sample) -> Self {
-        Value::new(sample.payload).encoding(sample.encoding)
+        Value::new(sample.payload, sample.encoding)
     }
 }
 

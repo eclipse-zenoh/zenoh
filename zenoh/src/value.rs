@@ -13,27 +13,26 @@
 //
 
 //! Value primitives.
-use crate::{encoding::Encoding, payload::Payload, sample::builder::ValueBuilderTrait};
+use crate::{encoding::Encoding, payload::Payload};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the [`Payload`] should be interpreted.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Value {
-    /// The binary [`Payload`] of this [`Value`].
-    pub payload: Payload,
-    /// The [`Encoding`] of this [`Value`].
-    pub encoding: Encoding,
+    pub(crate) payload: Payload,
+    pub(crate) encoding: Encoding,
 }
 
 impl Value {
-    /// Creates a new [`Value`] with default [`Encoding`].
-    pub fn new<T>(payload: T) -> Self
+    /// Creates a new [`Value`] with specified [`Payload`] and  [`Encoding`].
+    pub fn new<T, E>(payload: T, encoding: E) -> Self
     where
         T: Into<Payload>,
+        E: Into<Encoding>,
     {
         Value {
             payload: payload.into(),
-            encoding: Encoding::default(),
+            encoding: encoding.into(),
         }
     }
     /// Creates an empty [`Value`].
@@ -48,24 +47,15 @@ impl Value {
     pub fn is_empty(&self) -> bool {
         self.payload.is_empty() && self.encoding == Encoding::default()
     }
-}
 
-impl ValueBuilderTrait for Value {
-    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        Self {
-            encoding: encoding.into(),
-            ..self
-        }
+    /// Gets binary [`Payload`] of this [`Value`].
+    pub fn payload(&self) -> &Payload {
+        &self.payload
     }
-    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
-        Self {
-            payload: payload.into(),
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self { payload, encoding }
+
+    /// Gets [`Encoding`] of this [`Value`].
+    pub fn encoding(&self) -> &Encoding {
+        &self.encoding
     }
 }
 

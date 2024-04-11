@@ -72,7 +72,7 @@ fn query_with_ringbuffer() {
         query
             .value()
             .unwrap()
-            .payload
+            .payload()
             .deserialize::<String>()
             .unwrap(),
         "query2"
