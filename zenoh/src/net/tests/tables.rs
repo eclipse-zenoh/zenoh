@@ -234,8 +234,8 @@ fn multisub_test() {
     tables::close_face(&tables, &face0);
 }
 
-#[test]
-fn clean_test() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn clean_test() {
     let config = Config::default();
     let router = Router::new(
         ZenohId::try_from([1]).unwrap(),

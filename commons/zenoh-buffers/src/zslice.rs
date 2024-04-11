@@ -114,6 +114,10 @@ impl ZSlice {
         }
     }
 
+    pub fn empty() -> Self {
+        unsafe { ZSlice::new_unchecked(Arc::new([]), 0, 0) }
+    }
+
     /// # Safety
     /// This function does not verify wether the `start` and `end` indexes are within the buffer boundaries.
     /// If a [`ZSlice`] is built via this constructor, a later access may panic if `start` and `end` indexes are out-of-bound.

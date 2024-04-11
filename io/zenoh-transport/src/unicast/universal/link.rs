@@ -102,7 +102,7 @@ impl TransportLinkUnicastUniversal {
                 // to finish in the close() joining its handle
                 // TODO(yuyuan): do more study to check which ZRuntime should be used or refine the
                 // termination
-                zenoh_runtime::ZRuntime::TX
+                zenoh_runtime::ZRuntime::Net
                     .spawn(async move { transport.del_link(tx.inner.link()).await });
             }
         };
@@ -260,7 +260,8 @@ async fn rx_task(
                 let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 #[cfg(feature = "stats")]
                 {
-                    transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
+
+                    transport.stats.inc_rx_bytes(2 + batch.len()); // Account for the batch len encoding (16 bits)
                 }
                 transport.read_messages(batch, &l)?;
             }

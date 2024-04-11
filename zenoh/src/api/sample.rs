@@ -30,6 +30,12 @@ use zenoh_protocol::{
 pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 #[zenoh_macros::unstable]
 use serde::Serialize;
+use std::{convert::TryFrom, fmt};
+use zenoh_protocol::core::CongestionControl;
+use zenoh_protocol::core::EntityGlobalId;
+use zenoh_protocol::network::declare::ext::QoSType;
+
+pub mod builder;
 
 pub type SourceSn = u64;
 

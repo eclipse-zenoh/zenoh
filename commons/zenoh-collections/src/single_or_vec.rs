@@ -182,14 +182,17 @@ impl<T> SingleOrVec<T> {
         self.vectorize().insert(at, value);
     }
 }
+
 enum DrainInner<'a, T> {
     Vec(alloc::vec::Drain<'a, T>),
     Single(&'a mut SingleOrVecInner<T>),
     Done,
 }
+
 pub struct Drain<'a, T> {
     inner: DrainInner<'a, T>,
 }
+
 impl<'a, T> Iterator for Drain<'a, T> {
     type Item = T;
 

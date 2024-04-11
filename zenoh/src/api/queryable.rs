@@ -27,6 +27,17 @@ use super::{
 };
 use crate::net::primitives::Primitives;
 use std::{fmt, future::Ready, ops::Deref, sync::Arc};
+use crate::prelude::*;
+use crate::sample::builder::SampleBuilder;
+use crate::sample::QoSBuilder;
+#[cfg(feature = "unstable")]
+use crate::sample::SourceInfo;
+use crate::Id;
+use crate::SessionRef;
+use crate::Undeclarable;
+#[cfg(feature = "unstable")]
+use crate::{query::ReplyKeyExpr, sample::Attachment};
+use std::fmt;
 use uhlc::Timestamp;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::{

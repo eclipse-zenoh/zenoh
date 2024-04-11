@@ -26,6 +26,7 @@ members = [
   "commons/zenoh-result",
   "commons/zenoh-shm",
   "commons/zenoh-sync",
+  "commons/zenoh-task",
   "commons/zenoh-util",
   "commons/zenoh-runtime",
   "examples",
@@ -51,7 +52,7 @@ members = [
   "zenoh-ext",
   "zenohd",
 ]
-exclude = ["ci/nostd-check"]
+exclude = ["ci/nostd-check", "ci/valgrind-check"]
 
 [workspace.package]
 rust-version = "1.66.1"
@@ -159,6 +160,7 @@ tokio-rustls = "0.25.0"
 console-subscriber = "0.2"
 typenum = "1.16.0"
 uhlc = { version = "0.7.0", default-features = false } # Default features are disabled due to usage in no_std crates
+unwrap-infallible = "0.1.5"
 unzip-n = "0.1.2"
 url = "2.3.1"
 urlencoding = "2.1.2"
@@ -200,6 +202,7 @@ zenoh-link = { version = "0.11.0-dev", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "0.11.0-dev", path = "io/zenoh-link-commons" }
 zenoh = { version = "0.11.0-dev", path = "zenoh", default-features = false }
 zenoh-runtime = { version = "0.11.0-dev", path = "commons/zenoh-runtime" }
+zenoh-task = { version = "0.11.0-dev", path = "commons/zenoh-task" }
 
 [profile.dev]
 debug = true
