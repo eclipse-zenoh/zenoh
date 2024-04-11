@@ -140,7 +140,7 @@ impl PolicyEnforcer {
         if self.acl_enabled {
             if let Some(rules) = &acl_config.rules {
                 if rules.is_empty() {
-                    log::warn!("[ACCESS LOG]: ACL ruleset in config file is empty!!!");
+                    tracing::warn!("[ACCESS LOG]: ACL ruleset in config file is empty!!!");
                     self.policy_map = PolicyMap::default();
                     self.subject_map = SubjectMap::default();
                     if self.default_permission == Permission::Deny {
@@ -184,7 +184,7 @@ impl PolicyEnforcer {
                     self.subject_map = subject_map;
                 }
             } else {
-                log::warn!("[ACCESS LOG]: No ACL rules have been specified!!!");
+                tracing::warn!("[ACCESS LOG]: No ACL rules have been specified!!!");
             }
         }
         Ok(())

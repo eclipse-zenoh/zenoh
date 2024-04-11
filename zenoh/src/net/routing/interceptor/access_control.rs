@@ -56,18 +56,18 @@ pub(crate) fn acl_interceptor_factories(
         let mut policy_enforcer = PolicyEnforcer::new();
         match policy_enforcer.init(acl_config) {
             Ok(_) => {
-                log::info!("[ACCESS LOG]: Access control is enabled and initialized");
+                tracing::info!("[ACCESS LOG]: Access control is enabled and initialized");
                 res.push(Box::new(AclEnforcer {
                     enforcer: Arc::new(policy_enforcer),
                 }))
             }
-            Err(e) => log::error!(
+            Err(e) => tracing::error!(
                 "[ACCESS LOG]: Access control enabled but not initialized with error {}!",
                 e
             ),
         }
     } else {
-        log::info!("[ACCESS LOG]: Access Control is disabled in config!");
+        tracing::info!("[ACCESS LOG]: Access Control is disabled in config!");
     }
 
     Ok(res)
@@ -94,7 +94,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                         }
                     }
                     Err(e) => {
-                        log::error!(
+                        tracing::error!(
                             "[ACCESS LOG]: Couldn't get interface list with error: {}",
                             e
                         );
@@ -122,7 +122,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 }
             }
             Err(e) => {
-                log::error!("[ACCESS LOG]: Failed to get zid with error :{}", e);
+                tracing::error!("[ACCESS LOG]: Failed to get zid with error :{}", e);
                 (None, None)
             }
         }
@@ -132,12 +132,12 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         _transport: &TransportMulticast,
     ) -> Option<EgressInterceptor> {
-        log::debug!("[ACCESS LOG]: Transport Multicast is disabled in interceptor");
+        tracing::debug!("[ACCESS LOG]: Transport Multicast is disabled in interceptor");
         None
     }
 
     fn new_peer_multicast(&self, _transport: &TransportMulticast) -> Option<IngressInterceptor> {
-        log::debug!("[ACCESS LOG]: Peer Multicast is disabled in interceptor");
+        tracing::debug!("[ACCESS LOG]: Peer Multicast is disabled in interceptor");
         None
     }
 }
@@ -155,7 +155,7 @@ impl InterceptorTrait for IngressAclEnforcer {
             .and_then(|i| match i.downcast_ref::<String>() {
                 Some(e) => Some(e.as_str()),
                 None => {
-                    log::debug!("[ACCESS LOG]: Cache content was not of type String");
+                    tracing::debug!("[ACCESS LOG]: Cache content was not of type String");
                     None
                 }
             })
@@ -217,7 +217,7 @@ impl InterceptorTrait for EgressAclEnforcer {
             .and_then(|i| match i.downcast_ref::<String>() {
                 Some(e) => Some(e.as_str()),
                 None => {
-                    log::debug!("[ACCESS LOG]: Cache content was not of type String");
+                    tracing::debug!("[ACCESS LOG]: Cache content was not of type String");
                     None
                 }
             })
@@ -287,17 +287,17 @@ pub trait AclActionMethods {
                     continue;
                 }
                 Err(e) => {
-                    log::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
+                    tracing::debug!("[ACCESS LOG]: Authorization incomplete due to error {}", e);
                     return Permission::Deny;
                 }
             }
         }
 
         if decision == Permission::Deny {
-            log::debug!("[ACCESS LOG]: {} is unauthorized to {}", zid, log_msg);
+            tracing::debug!("[ACCESS LOG]: {} is unauthorized to {}", zid, log_msg);
             return Permission::Deny;
         }
-        log::trace!("[ACCESS LOG]: {} is authorized to {}", zid, log_msg);
+        tracing::trace!("[ACCESS LOG]: {} is authorized to {}", zid, log_msg);
         Permission::Allow
     }
 }
