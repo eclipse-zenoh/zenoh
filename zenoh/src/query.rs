@@ -14,12 +14,11 @@
 
 //! Query primitives.
 use crate::handlers::{locked, Callback, DefaultHandler};
-use crate::payload::OptionPayload;
 use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
 use crate::sample::QoSBuilder;
 use crate::Session;
+#[cfg(feature = "unstable")]
+use crate::{payload::OptionPayload, sample::Attachment};
 use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;

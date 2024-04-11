@@ -38,9 +38,12 @@ async fn main() {
         .callback(|sample| {
             println!(
                 ">> [Subscriber] Received {} ('{}': '{}')",
-                sample.kind,
-                sample.key_expr.as_str(),
-                sample.value
+                sample.kind(),
+                sample.key_expr().as_str(),
+                sample
+                    .payload()
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e))
             );
         })
         .res()

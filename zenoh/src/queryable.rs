@@ -17,17 +17,18 @@
 use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
 use crate::net::primitives::Primitives;
-use crate::payload::OptionPayload;
 use crate::prelude::*;
 use crate::sample::builder::SampleBuilder;
 use crate::sample::QoSBuilder;
-#[cfg(feature = "unstable")]
-use crate::sample::SourceInfo;
 use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
-use crate::{query::ReplyKeyExpr, sample::Attachment};
+use crate::{
+    payload::OptionPayload,
+    query::ReplyKeyExpr,
+    sample::{Attachment, SourceInfo},
+};
 use std::fmt;
 use std::future::Ready;
 use std::ops::Deref;
