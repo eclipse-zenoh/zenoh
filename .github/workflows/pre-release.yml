@@ -77,6 +77,75 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
+  checks-ubuntu-24:
+    name: Code checks
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - name: Update and install packages
+        run: apt-get update && apt-get install -y curl git build-essential
+
+      - name: Install Rust toolchain
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Add Zenoh Rust toolchain version
+        run: rustup override set $(cat rust-toolchain.toml | grep '^channel' | sed 's/[^"]*"//' | sed 's/"//')
+
+      - name: Install rustup components
+        run: rustup component add rustfmt clippy
+
+      - name: Code format check
+        run: cargo fmt --check
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+      - name: Clippy check
+        run: cargo +stable clippy --all-targets --features=${{ inputs.features }} -- --deny warnings
+
+      - name: Clippy unstable check
+        run: cargo +stable clippy --all-targets  -- --deny warnings
+
+      - name: Clippy all features
+        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
+
+  tests-ubuntu-24:
+    name: Tests on Ubuntu 24.04
+    needs: checks-ubuntu-24
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - name: Update and install packages
+        run: apt-get update && apt-get install -y curl git build-essential
+        
+      - name: Install Rust toolchain
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - name: Clone this repository
+        uses: actions/checkout@v4
+      
+      - name: Add Zenoh Rust toolchain version
+        run: rustup override set $(cat rust-toolchain.toml | grep '^channel' | sed 's/[^"]*"//' | sed 's/"//')
+
+      - name: Install nextest
+        run: cargo +stable install --locked cargo-nextest
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+      - name: Run tests
+        run: cargo nextest run --release --features=${{ inputs.features }} --verbose
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+          ASYNC_STD_THREAD_COUNT: 4
+
+      - name: Run doctests
+        run: cargo test --release --features=${{ inputs.features }} --doc
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+          ASYNC_STD_THREAD_COUNT: 4
+
   doc:
     name: Generate documentation
     needs: checks
