@@ -543,6 +543,15 @@ impl<'a> Deserialize<'a, Cow<'a, [u8]>> for ZSerde {
     }
 }
 
+impl From<Payload> for Cow<'static, [u8]> {
+    fn from(v: Payload) -> Self {
+        match v.0.contiguous() {
+            Cow::Borrowed(s) => Cow::Owned(s.to_vec()),
+            Cow::Owned(s) => Cow::Owned(s),
+        }
+    }
+}
+
 impl<'a> From<&'a Payload> for Cow<'a, [u8]> {
     fn from(value: &'a Payload) -> Self {
         ZSerde.deserialize(value).unwrap_infallible()
@@ -650,7 +659,15 @@ impl<'a> Deserialize<'a, Cow<'a, str>> for ZSerde {
     type Error = Utf8Error;
 
     fn deserialize(self, v: &'a Payload) -> Result<Cow<'a, str>, Self::Error> {
-        let v: Cow<[u8]> = Self.deserialize(v).unwrap_infallible();
+        Cow::try_from(v)
+    }
+}
+
+impl TryFrom<Payload> for Cow<'static, str> {
+    type Error = Utf8Error;
+
+    fn try_from(v: Payload) -> Result<Self, Self::Error> {
+        let v: Cow<'static, [u8]> = Cow::from(v);
         let _ = core::str::from_utf8(v.as_ref())?;
         // SAFETY: &str is &[u8] with the guarantee that every char is UTF-8
         //         As implemented internally https://doc.rust-lang.org/std/str/fn.from_utf8_unchecked.html.
@@ -661,8 +678,12 @@ impl<'a> Deserialize<'a, Cow<'a, str>> for ZSerde {
 impl<'a> TryFrom<&'a Payload> for Cow<'a, str> {
     type Error = Utf8Error;
 
-    fn try_from(value: &'a Payload) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
+    fn try_from(v: &'a Payload) -> Result<Self, Self::Error> {
+        let v: Cow<'a, [u8]> = Cow::from(v);
+        let _ = core::str::from_utf8(v.as_ref())?;
+        // SAFETY: &str is &[u8] with the guarantee that every char is UTF-8
+        //         As implemented internally https://doc.rust-lang.org/std/str/fn.from_utf8_unchecked.html.
+        Ok(unsafe { core::mem::transmute(v) })
     }
 }
 
