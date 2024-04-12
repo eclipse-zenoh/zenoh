@@ -82,12 +82,12 @@ impl Properties<'_> {
     pub fn extend<'s, I, K, V>(&mut self, iter: I)
     where
         I: IntoIterator<Item = (&'s K, &'s V)>,
-        K: AsRef<str> + 's,
-        V: AsRef<str> + 's,
+        K: Borrow<str> + 's,
+        V: Borrow<str> + 's,
     {
         self.0 = Cow::Owned(Parameters::extend(
             Parameters::iter(self.as_str()),
-            iter.into_iter().map(|(k, v)| (k.as_ref(), v.as_ref())),
+            iter.into_iter().map(|(k, v)| (k.borrow(), v.borrow())),
         ));
     }
 
@@ -136,30 +136,30 @@ impl<'s> From<Cow<'s, str>> for Properties<'s> {
 
 impl<'s, K, V> FromIterator<(&'s K, &'s V)> for Properties<'_>
 where
-    K: AsRef<str> + 's,
-    V: AsRef<str> + 's,
+    K: Borrow<str> + 's,
+    V: Borrow<str> + 's,
 {
     fn from_iter<T: IntoIterator<Item = (&'s K, &'s V)>>(iter: T) -> Self {
-        let inner = Parameters::from_iter(iter.into_iter().map(|(k, v)| (k.as_ref(), v.as_ref())));
+        let inner = Parameters::from_iter(iter.into_iter().map(|(k, v)| (k.borrow(), v.borrow())));
         Self(Cow::Owned(inner))
     }
 }
 
 impl<'s, K, V> FromIterator<&'s (K, V)> for Properties<'_>
 where
-    K: AsRef<str> + 's,
-    V: AsRef<str> + 's,
+    K: Borrow<str> + 's,
+    V: Borrow<str> + 's,
 {
     fn from_iter<T: IntoIterator<Item = &'s (K, V)>>(iter: T) -> Self {
-        let inner = Parameters::from_iter(iter.into_iter().map(|(k, v)| (k.as_ref(), v.as_ref())));
+        let inner = Parameters::from_iter(iter.into_iter().map(|(k, v)| (k.borrow(), v.borrow())));
         Self(Cow::Owned(inner))
     }
 }
 
 impl<'s, K, V> From<&'s [(K, V)]> for Properties<'_>
 where
-    K: AsRef<str> + 's,
-    V: AsRef<str> + 's,
+    K: Borrow<str> + 's,
+    V: Borrow<str> + 's,
 {
     fn from(value: &'s [(K, V)]) -> Self {
         Self::from_iter(value.iter())
@@ -169,8 +169,8 @@ where
 #[cfg(feature = "std")]
 impl<K, V> From<HashMap<K, V>> for Properties<'_>
 where
-    K: AsRef<str>,
-    V: AsRef<str>,
+    K: Borrow<str>,
+    V: Borrow<str>,
 {
     fn from(map: HashMap<K, V>) -> Self {
         Self::from_iter(map.iter())
@@ -189,6 +189,15 @@ impl From<&Properties<'_>> for HashMap<String, String> {
     fn from(props: &Properties<'_>) -> Self {
         HashMap::from_iter(
             Parameters::iter(props.as_str()).map(|(k, v)| (k.to_string(), v.to_string())),
+        )
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'s> From<&'s Properties<'s>> for HashMap<Cow<'s, str>, Cow<'s, str>> {
+    fn from(props: &'s Properties<'s>) -> Self {
+        HashMap::from_iter(
+            Parameters::iter(props.as_str()).map(|(k, v)| (Cow::from(k), Cow::from(v))),
         )
     }
 }
@@ -251,5 +260,17 @@ mod tests {
             Properties::from("p1=x=y;p2=a==b"),
             Properties::from(&[("p1", "x=y"), ("p2", "a==b")][..])
         );
+
+        let mut hm: HashMap<String, String> = HashMap::new();
+        hm.insert("p1".to_string(), "v1".to_string());
+        assert_eq!(Properties::from(hm), Properties::from("p1=v1"));
+
+        let mut hm: HashMap<&str, &str> = HashMap::new();
+        hm.insert("p1", "v1");
+        assert_eq!(Properties::from(hm), Properties::from("p1=v1"));
+
+        let mut hm: HashMap<Cow<str>, Cow<str>> = HashMap::new();
+        hm.insert(Cow::from("p1"), Cow::from("v1"));
+        assert_eq!(Properties::from(hm), Properties::from("p1=v1"));
     }
 }
