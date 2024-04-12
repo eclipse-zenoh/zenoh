@@ -82,7 +82,6 @@ impl Properties<'_> {
     pub fn extend<'s, I, K, V>(&mut self, iter: I)
     where
         I: IntoIterator<Item = (&'s K, &'s V)>,
-        // I::Item: std::borrow::Borrow<(K, V)>,
         K: AsRef<str> + 's,
         V: AsRef<str> + 's,
     {

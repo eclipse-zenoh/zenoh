@@ -32,13 +32,8 @@ pub struct Parameters;
 
 impl Parameters {
     pub fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
-        s.split(LIST_SEPARATOR).filter_map(|prop| {
-            if prop.is_empty() {
-                None
-            } else {
-                Some(split_once(prop, FIELD_SEPARATOR))
-            }
-        })
+        s.split(LIST_SEPARATOR)
+            .filter_map(|prop| (!prop.is_empty()).then(|| split_once(prop, FIELD_SEPARATOR)))
     }
 
     #[allow(clippy::should_implement_trait)]
@@ -55,11 +50,20 @@ impl Parameters {
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
-        let mut from = iter
-            .filter(|(k, _)| !k.is_empty())
-            .collect::<Vec<(&str, &str)>>();
-        from.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+        let mut from = iter.collect::<Vec<(&str, &str)>>();
+        from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
         Self::concat_into(from.iter().copied(), into);
+    }
+
+    pub fn from_slice_mut(slice: &mut [(&str, &str)]) -> String {
+        let mut into = String::new();
+        Self::from_slice_mut_into(slice, &mut into);
+        into
+    }
+
+    pub fn from_slice_mut_into(slice: &mut [(&str, &str)], into: &mut String) {
+        slice.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
+        Self::concat_into(slice.iter().copied(), into);
     }
 
     pub fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
@@ -147,8 +151,8 @@ impl Parameters {
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
-        let mut first = into.is_empty();
-        for (k, v) in iter {
+        let mut first = true;
+        for (k, v) in iter.filter(|(k, _)| !k.is_empty()) {
             if !first {
                 into.push(LIST_SEPARATOR);
             }
