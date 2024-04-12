@@ -15,6 +15,8 @@ pub const LIST_SEPARATOR: char = ';';
 pub const FIELD_SEPARATOR: char = '=';
 pub const VALUE_SEPARATOR: char = '|';
 
+use alloc::{string::String, vec::Vec};
+
 fn split_once(s: &str, c: char) -> (&str, &str) {
     match s.find(c) {
         Some(index) => {
