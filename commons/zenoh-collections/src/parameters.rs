@@ -33,7 +33,8 @@ pub struct Parameters;
 impl Parameters {
     pub fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
         s.split(LIST_SEPARATOR)
-            .filter_map(|prop| (!prop.is_empty()).then(|| split_once(prop, FIELD_SEPARATOR)))
+            .filter(|p| !p.is_empty())
+            .map(|p| split_once(p, FIELD_SEPARATOR))
     }
 
     #[allow(clippy::should_implement_trait)]
