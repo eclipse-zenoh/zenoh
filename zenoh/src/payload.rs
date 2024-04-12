@@ -28,6 +28,7 @@ use zenoh_buffers::{
     ZBufReader, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_collections::Properties;
 use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
@@ -842,6 +843,63 @@ impl TryFrom<&Payload> for bool {
 }
 
 // - Zenoh advanced types encoders/decoders
+// Properties
+impl Serialize<Properties<'_>> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: Properties<'_>) -> Self::Output {
+        Self.serialize(t.as_str())
+    }
+}
+
+impl From<Properties<'_>> for Payload {
+    fn from(t: Properties<'_>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&Properties<'_>> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: &Properties<'_>) -> Self::Output {
+        Self.serialize(t.as_str())
+    }
+}
+
+impl<'s> From<&'s Properties<'s>> for Payload {
+    fn from(t: &'s Properties<'s>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl<'s> Deserialize<'s, Properties<'s>> for ZSerde {
+    type Error = ZDeserializeError;
+
+    fn deserialize(self, v: &'s Payload) -> Result<Properties<'s>, Self::Error> {
+        let s = v
+            .deserialize::<Cow<'s, str>>()
+            .map_err(|_| ZDeserializeError)?;
+        Ok(Properties::from(s))
+    }
+}
+
+impl TryFrom<Payload> for Properties<'static> {
+    type Error = ZDeserializeError;
+
+    fn try_from(v: Payload) -> Result<Self, Self::Error> {
+        let s = v.deserialize::<Cow<str>>().map_err(|_| ZDeserializeError)?;
+        Ok(Properties::from(s.into_owned()))
+    }
+}
+
+impl<'s> TryFrom<&'s Payload> for Properties<'s> {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: &'s Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
 // JSON
 impl Serialize<serde_json::Value> for ZSerde {
     type Output = Result<Payload, serde_json::Error>;
@@ -1313,6 +1371,7 @@ mod tests {
         use rand::Rng;
         use std::borrow::Cow;
         use zenoh_buffers::{ZBuf, ZSlice};
+        use zenoh_collections::Properties;
 
         const NUM: usize = 1_000;
 
@@ -1404,6 +1463,10 @@ mod tests {
         // ZBuf
         serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 0]));
         serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 64]));
+
+        // Properties
+        serialize_deserialize!(Properties, Properties::from(""));
+        serialize_deserialize!(Properties, Properties::from("a=1;b=2;c3"));
 
         // Tuple
         serialize_deserialize!((usize, usize), (0, 1));

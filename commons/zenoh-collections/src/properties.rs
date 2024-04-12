@@ -126,6 +126,15 @@ impl From<String> for Properties<'_> {
     }
 }
 
+impl<'s> From<Cow<'s, str>> for Properties<'s> {
+    fn from(value: Cow<'s, str>) -> Self {
+        match value {
+            Cow::Borrowed(s) => Properties::from(s),
+            Cow::Owned(s) => Properties::from(s),
+        }
+    }
+}
+
 impl<'s, K, V> FromIterator<(&'s K, &'s V)> for Properties<'_>
 where
     K: AsRef<str> + 's,
