@@ -133,7 +133,7 @@ pub(crate) struct QueryState {
 ///     .await
 ///     .unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
-///     println!("Received {:?}", reply.sample)
+///     println!("Received {:?}", reply.sample())
 /// }
 /// # }
 /// ```
@@ -232,7 +232,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
-    ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
+    ///     .callback(|reply| {println!("Received {:?}", reply.sample());})
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -325,7 +325,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!("Received {:?}", reply.sample);
+    ///     println!("Received {:?}", reply.sample());
     /// }
     /// # }
     /// ```
