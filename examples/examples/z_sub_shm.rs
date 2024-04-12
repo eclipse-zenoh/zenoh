@@ -14,8 +14,8 @@
 use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh_examples::CommonArgs;
 use zenoh::shm::provider::zsliceshm::ZSliceShm;
+use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
