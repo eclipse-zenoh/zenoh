@@ -77,10 +77,33 @@ impl Default for QueryConsolidation {
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
-    /// The result of this Reply.
-    pub sample: Result<Sample, Value>,
-    /// The id of the zenoh instance that answered this Reply.
-    pub replier_id: ZenohId,
+    pub(crate) sample: Result<Sample, Value>,
+    pub(crate) replier_id: ZenohId,
+}
+
+impl Reply {
+    /// Gets the result of this Reply.
+    pub fn sample(&self) -> Result<&Sample, &Value> {
+        self.sample.as_ref()
+    }
+
+    /// Gets the id of the zenoh instance that answered this Reply.
+    pub fn replier_id(&self) -> ZenohId {
+        self.replier_id
+    }
+
+    /// Attempts to convert reply into sample.
+    pub fn try_into_sample(self) -> Result<Sample, Value> {
+        self.try_into()
+    }
+}
+
+impl TryFrom<Reply> for Sample {
+    type Error = Value;
+
+    fn try_from(value: Reply) -> Result<Self, Self::Error> {
+        value.sample
+    }
 }
 
 pub(crate) struct QueryState {

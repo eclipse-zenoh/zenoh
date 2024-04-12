@@ -306,7 +306,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 let receiver = z.get(&qres).consolidation(qc).res().await.unwrap();
 
                                 while let Ok(reply) = receiver.recv_async().await {
-                                    match reply.sample {
+                                    match reply.sample() {
                                         Ok(sample) => {
                                             match bincode::deserialize_from::<PayloadReader, Member>(
                                                 sample.payload().reader(),

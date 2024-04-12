@@ -100,7 +100,7 @@ impl Task {
                         replies = session.get(ke).timeout(Duration::from_secs(10)).res() => {
                             let replies = replies?;
                             while let Ok(reply) = replies.recv_async().await {
-                                match reply.sample {
+                                match reply.sample() {
                                     Ok(sample) => {
                                         let recv_size = sample.payload().len();
                                         if recv_size != *expected_size {

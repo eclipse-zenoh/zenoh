@@ -41,7 +41,7 @@ async fn main() {
         .await
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
-        match reply.sample {
+        match reply.sample() {
             Ok(sample) => {
                 let payload = sample
                     .payload()

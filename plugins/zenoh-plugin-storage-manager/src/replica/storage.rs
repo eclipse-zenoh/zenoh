@@ -649,7 +649,7 @@ impl StorageService {
                 }
             };
             while let Ok(reply) = replies.recv_async().await {
-                match reply.sample {
+                match reply.try_into() {
                     Ok(sample) => {
                         self.process_sample(sample).await;
                     }

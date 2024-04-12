@@ -61,6 +61,6 @@ pub trait ExtractSample {
 
 impl ExtractSample for Reply {
     fn extract(self) -> ZResult<Sample> {
-        self.sample.map_err(|e| zerror!("{:?}", e).into())
+        self.try_into().map_err(|e| zerror!("{:?}", e).into())
     }
 }
