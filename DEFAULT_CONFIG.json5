@@ -188,7 +188,7 @@
   //       "actions": [
   //         "put"
   //       ],
-  //      "flows":["egress","ingress"],
+  //       "flows":["egress","ingress"],
   //       "permission": "allow",
   //       "key_exprs": [
   //         "test/thr"
