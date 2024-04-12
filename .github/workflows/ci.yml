@@ -113,16 +113,16 @@ jobs:
         run: ci/valgrind-check/run.sh
         shell: bash
 
-  # NOTE: In GitHub repository settings, the "Require status checks to pass
-  # before merging" branch protection rule ensures that commits are only merged
-  # from branches where specific status checks have passed. These checks are
-  # specified manually as a list of workflow job names. Thus we use this extra
-  # job to signal whether all CI checks have passed.
-  ci:
-    name: CI status checks
-    runs-on: ubuntu-latest
-    needs: [check, test]
-    if: always()
-    steps:
-      - name: Check whether all jobs pass
-        run: echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'
+  # # NOTE: In GitHub repository settings, the "Require status checks to pass
+  # # before merging" branch protection rule ensures that commits are only merged
+  # # from branches where specific status checks have passed. These checks are
+  # # specified manually as a list of workflow job names. Thus we use this extra
+  # # job to signal whether all CI checks have passed.
+  # ci:
+  #   name: CI status checks
+  #   runs-on: ubuntu-latest
+  #   needs: [check, test]
+  #   if: always()
+  #   steps:
+  #     - name: Check whether all jobs pass
+  #       run: echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'
