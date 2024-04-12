@@ -407,12 +407,12 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         } else {
             key_expr.into()
         };
-        let consolidation = if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
+        let consolidation = if selector.parameters().contains_key(TIME_RANGE_KEY) {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
         } else {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
-        let raw = selector.decode().any(|(k, _)| k.as_ref() == RAW_KEY);
+        let raw = selector.parameters().contains_key(RAW_KEY);
         let mut query = req.state().0.get(&selector).consolidation(consolidation);
         if !body.is_empty() {
             let encoding: Encoding = req

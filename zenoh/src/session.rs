@@ -24,8 +24,8 @@ use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
 use crate::payload::Payload;
+use crate::prelude::KeyExpr;
 use crate::prelude::Locality;
-use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -1621,7 +1621,7 @@ impl Session {
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
             ConsolidationMode::Auto => {
-                if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
+                if selector.parameters().contains_key(TIME_RANGE_KEY) {
                     ConsolidationMode::None
                 } else {
                     ConsolidationMode::Latest
@@ -1728,7 +1728,7 @@ impl Session {
             self.handle_query(
                 true,
                 &wexpr,
-                selector.parameters(),
+                selector.parameters().as_str(),
                 qid,
                 target,
                 consolidation,
@@ -1797,13 +1797,11 @@ impl Session {
             }
         };
 
-        let parameters = parameters.to_owned();
-
         let zid = self.runtime.zid();
 
         let query_inner = Arc::new(QueryInner {
             key_expr,
-            parameters,
+            parameters: parameters.to_owned().into(),
             value: body.map(|b| Value {
                 payload: b.payload.into(),
                 encoding: b.encoding.into(),
@@ -2189,13 +2187,8 @@ impl Primitives for Session {
                 };
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        if !matches!(
-                            query
-                                .selector
-                                .parameters()
-                                .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
-                            Ok([true])
-                        ) && !query.selector.key_expr.intersects(&key_expr)
+                        if !matches!(query.selector.accept_any_keyexpr(), Ok(Some(true)))
+                            && !query.selector.key_expr.intersects(&key_expr)
                         {
                             log::warn!(
                                 "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",

@@ -194,7 +194,7 @@ impl<'a> Metadata<'a> {
         self.as_str().is_empty()
     }
 
-    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> {
+    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> + Clone {
         Parameters::iter(self.0)
     }
 
@@ -311,7 +311,7 @@ impl<'a> Config<'a> {
         self.as_str().is_empty()
     }
 
-    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> {
+    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> + Clone {
         Parameters::iter(self.0)
     }
 

@@ -20,6 +20,7 @@ use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::sample::builder::SampleBuilder;
 use crate::sample::QoSBuilder;
+use crate::selector::Parameters;
 use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
@@ -46,7 +47,7 @@ pub(crate) struct QueryInner {
     /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
     /// This Query's selector parameters.
-    pub(crate) parameters: String,
+    pub(crate) parameters: Parameters<'static>,
     /// This Query's body.
     pub(crate) value: Option<Value>,
 
@@ -80,7 +81,7 @@ impl Query {
     pub fn selector(&self) -> Selector<'_> {
         Selector {
             key_expr: self.inner.key_expr.clone(),
-            parameters: (&self.inner.parameters).into(),
+            parameters: self.inner.parameters.clone(),
         }
     }
 
@@ -92,7 +93,7 @@ impl Query {
 
     /// This Query's selector parameters.
     #[inline(always)]
-    pub fn parameters(&self) -> &str {
+    pub fn parameters(&self) -> &Parameters {
         &self.inner.parameters
     }
 
@@ -220,9 +221,7 @@ impl Query {
         })
     }
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        self.parameters()
-            .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM])
-            .map(|a| a[0])
+        Ok(self.parameters().accept_any_keyexpr()?.unwrap_or(false))
     }
 }
 

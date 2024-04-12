@@ -510,7 +510,7 @@ impl StorageService {
                         return;
                     }
                 };
-                match storage.get(stripped_key, q.parameters()).await {
+                match storage.get(stripped_key, q.parameters().as_str()).await {
                     Ok(stored_data) => {
                         for entry in stored_data {
                             if let Err(e) = q
@@ -542,7 +542,7 @@ impl StorageService {
                 }
             };
             let mut storage = self.storage.lock().await;
-            match storage.get(stripped_key, q.parameters()).await {
+            match storage.get(stripped_key, q.parameters().as_str()).await {
                 Ok(stored_data) => {
                     for entry in stored_data {
                         if let Err(e) = q

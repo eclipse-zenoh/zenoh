@@ -378,9 +378,10 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
-            selector: self
-                .selector
-                .and_then(|s| s.accept_any_keyexpr(accept == ReplyKeyExpr::Any)),
+            selector: self.selector.map(|mut s| {
+                s.set_accept_any_keyexpr(accept == ReplyKeyExpr::Any);
+                s
+            }),
             ..self
         }
     }

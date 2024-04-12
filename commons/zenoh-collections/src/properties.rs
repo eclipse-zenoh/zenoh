@@ -1,6 +1,3 @@
-use alloc::borrow::Cow;
-use core::borrow::Borrow;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -14,8 +11,11 @@ use core::borrow::Borrow;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::Parameters;
-use std::{collections::HashMap, fmt};
+use crate::{Parameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR};
+use alloc::borrow::Cow;
+use core::{borrow::Borrow, fmt};
+#[cfg(feature = "std")]
+use std::collections::HashMap;
 
 /// A map of key/value (String,String) properties.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
@@ -25,8 +25,19 @@ use std::{collections::HashMap, fmt};
 pub struct Properties<'s>(Cow<'s, str>);
 
 impl Properties<'_> {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    pub fn contains_key<K>(&self, k: K) -> bool
+    where
+        K: Borrow<str>,
+    {
+        self.get(k).is_some()
     }
 
     pub fn get<K>(&self, k: K) -> Option<&str>
@@ -43,7 +54,7 @@ impl Properties<'_> {
         Parameters::values(self.as_str(), k.borrow())
     }
 
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&str, &str)> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
         Parameters::iter(self.as_str())
     }
 
@@ -67,11 +78,31 @@ impl Properties<'_> {
         self.0 = Cow::Owned(inner);
         removed
     }
+
+    pub fn extend<'s, I, K, V>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = (&'s K, &'s V)>,
+        // I::Item: std::borrow::Borrow<(K, V)>,
+        K: AsRef<str> + 's,
+        V: AsRef<str> + 's,
+    {
+        self.0 = Cow::Owned(Parameters::extend(
+            Parameters::iter(self.as_str()),
+            iter.into_iter().map(|(k, v)| (k.as_ref(), v.as_ref())),
+        ));
+    }
+
+    pub fn into_owned(self) -> Properties<'static> {
+        Properties(Cow::Owned(self.0.into_owned()))
+    }
 }
 
 impl<'s> From<&'s str> for Properties<'s> {
-    fn from(value: &'s str) -> Self {
+    fn from(mut value: &'s str) -> Self {
         if Parameters::is_sorted(Parameters::iter(value)) {
+            value = value.trim_end_matches(|c| {
+                c == LIST_SEPARATOR || c == FIELD_SEPARATOR || c == VALUE_SEPARATOR
+            });
             Self(Cow::Borrowed(value))
         } else {
             Self(Cow::Owned(Parameters::from_iter(Parameters::iter(value))))
@@ -80,8 +111,12 @@ impl<'s> From<&'s str> for Properties<'s> {
 }
 
 impl From<String> for Properties<'_> {
-    fn from(value: String) -> Self {
+    fn from(mut value: String) -> Self {
         if Parameters::is_sorted(Parameters::iter(value.as_str())) {
+            let s = value.trim_end_matches(|c| {
+                c == LIST_SEPARATOR || c == FIELD_SEPARATOR || c == VALUE_SEPARATOR
+            });
+            value.truncate(s.len());
             Self(Cow::Owned(value))
         } else {
             Self(Cow::Owned(Parameters::from_iter(Parameters::iter(
@@ -123,6 +158,7 @@ where
     }
 }
 
+#[cfg(feature = "std")]
 impl<K, V> From<HashMap<K, V>> for Properties<'_>
 where
     K: AsRef<str>,
@@ -133,11 +169,26 @@ where
     }
 }
 
-impl From<Properties<'_>> for HashMap<String, String> {
-    fn from(props: Properties) -> Self {
+#[cfg(feature = "std")]
+impl<'s> From<&'s Properties<'s>> for HashMap<&'s str, &'s str> {
+    fn from(props: &'s Properties<'s>) -> Self {
+        HashMap::from_iter(Parameters::iter(props.as_str()))
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<&Properties<'_>> for HashMap<String, String> {
+    fn from(props: &Properties<'_>) -> Self {
         HashMap::from_iter(
             Parameters::iter(props.as_str()).map(|(k, v)| (k.to_string(), v.to_string())),
         )
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<Properties<'_>> for HashMap<String, String> {
+    fn from(props: Properties) -> Self {
+        HashMap::from(&props)
     }
 }
 
@@ -170,6 +221,11 @@ mod tests {
 
         assert_eq!(
             Properties::from("p1=v1;p2=v2;"),
+            Properties::from(&[("p1", "v1"), ("p2", "v2")][..])
+        );
+
+        assert_eq!(
+            Properties::from("p1=v1;p2=v2;|="),
             Properties::from(&[("p1", "v1"), ("p2", "v2")][..])
         );
 

@@ -190,13 +190,13 @@ impl AlignQueryable {
     }
 
     fn parse_selector(&self, selector: Selector) -> Option<AlignComponent> {
-        let properties = selector.parameters_stringmap().unwrap(); // note: this is a hashmap
+        let properties = selector.parameters(); // note: this is a hashmap
         log::trace!("[ALIGN QUERYABLE] Properties are: {:?}", properties);
-        if properties.get(super::ERA).is_some() {
+        if properties.contains_key(super::ERA) {
             Some(AlignComponent::Era(
                 EraType::from_str(properties.get(super::ERA).unwrap()).unwrap(),
             ))
-        } else if properties.get(super::INTERVALS).is_some() {
+        } else if properties.contains_key(super::INTERVALS) {
             let mut intervals = properties.get(super::INTERVALS).unwrap().to_string();
             intervals.remove(0);
             intervals.pop();
@@ -206,7 +206,7 @@ impl AlignQueryable {
                     .map(|x| x.parse::<u64>().unwrap())
                     .collect::<Vec<u64>>(),
             ))
-        } else if properties.get(super::SUBINTERVALS).is_some() {
+        } else if properties.contains_key(super::SUBINTERVALS) {
             let mut subintervals = properties.get(super::SUBINTERVALS).unwrap().to_string();
             subintervals.remove(0);
             subintervals.pop();
@@ -216,7 +216,7 @@ impl AlignQueryable {
                     .map(|x| x.parse::<u64>().unwrap())
                     .collect::<Vec<u64>>(),
             ))
-        } else if properties.get(super::CONTENTS).is_some() {
+        } else if properties.contains_key(super::CONTENTS) {
             let contents = serde_json::from_str(properties.get(super::CONTENTS).unwrap()).unwrap();
             Some(AlignComponent::Contents(contents))
         } else {
