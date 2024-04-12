@@ -36,6 +36,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+use zenoh_collections::Parameters;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionUnicastConf;
 #[cfg(feature = "shared-memory")]
@@ -45,7 +46,7 @@ use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{endpoint, ZenohId},
+    core::ZenohId,
     transport::{close, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -379,9 +380,7 @@ impl TransportManager {
             .await?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
-            endpoint
-                .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+            endpoint.config_mut().extend(Parameters::iter(config))?;
         };
         manager.new_listener(endpoint).await
     }
@@ -690,9 +689,7 @@ impl TransportManager {
             .await?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
-            endpoint
-                .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+            endpoint.config_mut().extend(Parameters::iter(config))?;
         };
 
         // Create a new link associated by calling the Link Manager

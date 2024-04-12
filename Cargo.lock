@@ -4553,6 +4553,9 @@ dependencies = [
 [[package]]
 name = "zenoh-collections"
 version = "0.11.0-dev"
+dependencies = [
+ "rand 0.8.5",
+]
 
 [[package]]
 name = "zenoh-config"
@@ -4717,6 +4720,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.24.1",
  "tokio-util",
+ "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -4782,6 +4786,7 @@ dependencies = [
  "tokio-rustls 0.25.0",
  "tokio-util",
  "webpki-roots",
+ "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -4826,6 +4831,7 @@ dependencies = [
  "tokio-util",
  "unix-named-pipe",
  "zenoh-buffers",
+ "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -5005,6 +5011,7 @@ dependencies = [
  "serde",
  "uhlc",
  "zenoh-buffers",
+ "zenoh-collections",
  "zenoh-keyexpr",
  "zenoh-result",
 ]

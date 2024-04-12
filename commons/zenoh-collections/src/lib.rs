@@ -20,6 +20,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+pub mod parameters;
+pub use parameters::*;
+
 pub mod single_or_vec;
 pub use single_or_vec::*;
 

@@ -25,14 +25,12 @@ use config::{
 };
 use secrecy::ExposeSecret;
 use std::net::SocketAddr;
+use zenoh_collections::Parameters;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 use zenoh_protocol::{
-    core::{
-        endpoint::{Address, Parameters},
-        Locator,
-    },
+    core::{endpoint::Address, Locator},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -131,8 +129,7 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
             };
         }
 
-        let mut s = String::new();
-        Parameters::extend(ps.drain(..), &mut s);
+        let s = Parameters::from_iter(ps.drain(..));
 
         Ok(s)
     }

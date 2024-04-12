@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use zenoh_collections::Parameters;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionMulticastConf;
 #[cfg(feature = "shared-memory")]
@@ -27,7 +28,7 @@ use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
 use zenoh_protocol::core::ZenohId;
-use zenoh_protocol::{core::endpoint, transport::close};
+use zenoh_protocol::transport::close;
 use zenoh_result::{bail, zerror, ZResult};
 
 pub struct TransportManagerConfigMulticast {
@@ -259,9 +260,7 @@ impl TransportManager {
             .await?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
-            endpoint
-                .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+            endpoint.config_mut().extend(Parameters::iter(config))?;
         }
 
         // Open the link

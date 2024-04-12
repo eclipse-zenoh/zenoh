@@ -85,6 +85,7 @@ impl<'a> Selector<'a> {
     {
         self.decode_into_map()
     }
+
     /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
     pub fn parameters_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
         self.decode_into_map()
@@ -185,6 +186,7 @@ impl<'a> Selector<'a> {
             selector.drain(splice_start..(splice_end + (splice_end != selector.len()) as usize));
         }
     }
+
     #[cfg(any(feature = "unstable", test))]
     pub(crate) fn parameter_index(&self, param_name: &str) -> ZResult<Option<u32>> {
         let starts_with_param = |s: &str| {
