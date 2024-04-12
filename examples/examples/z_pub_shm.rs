@@ -105,7 +105,7 @@ async fn main() -> Result<(), zenoh::Error> {
             path,
             String::from_utf8_lossy(&sbuf[0..slice_len])
         );
-        publisher.put(ZSlice::from(sbuf)).res().await?; // todo:
+        publisher.put(sbuf).res().await?;
     }
 
     Ok(())

@@ -14,7 +14,7 @@
 
 use core::ops::{Deref, DerefMut};
 
-use zenoh_buffers::ZSlice;
+use zenoh_buffers::{ZBuf, ZSlice};
 
 use crate::SharedMemoryBuf;
 
@@ -31,12 +31,12 @@ impl ZSliceShmMut {
         Self { slice }
     }
 
-    pub(crate) fn try_new(slice: SharedMemoryBuf) -> Option<Self> {
-        match slice.is_unique() && slice.is_valid() {
-            true => Some(Self { slice }),
-            false => None,
-        }
-    }
+    //pub(crate) fn try_new(slice: SharedMemoryBuf) -> Option<Self> {
+    //    match slice.is_unique() && slice.is_valid() {
+    //        true => Some(Self { slice }),
+    //        false => None,
+    //    }
+    //}
 }
 
 impl Deref for ZSliceShmMut {
@@ -62,6 +62,12 @@ impl AsRef<[u8]> for ZSliceShmMut {
 impl AsMut<[u8]> for ZSliceShmMut {
     fn as_mut(&mut self) -> &mut [u8] {
         self
+    }
+}
+
+impl From<ZSliceShmMut> for ZBuf {
+    fn from(val: ZSliceShmMut) -> Self {
+        val.slice.into()
     }
 }
 

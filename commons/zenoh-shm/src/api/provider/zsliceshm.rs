@@ -14,12 +14,13 @@
 
 use core::ops::Deref;
 
-use zenoh_buffers::ZSlice;
+use zenoh_buffers::{ZBuf, ZSlice};
 
 use crate::SharedMemoryBuf;
 
 /// An immutable SHM slice
 #[zenoh_macros::unstable_doc]
+#[derive(Clone)]
 pub struct ZSliceShm {
     slice: SharedMemoryBuf,
 }
@@ -41,6 +42,12 @@ impl Deref for ZSliceShm {
 impl AsRef<[u8]> for ZSliceShm {
     fn as_ref(&self) -> &[u8] {
         self
+    }
+}
+
+impl From<ZSliceShm> for ZBuf {
+    fn from(val: ZSliceShm) -> Self {
+        val.slice.into()
     }
 }
 

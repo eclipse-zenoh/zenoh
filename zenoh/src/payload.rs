@@ -30,7 +30,9 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::SharedMemoryBuf;
+use zenoh_shm::api::provider::zsliceshm::ZSliceShm;
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::api::provider::zsliceshmmut::ZSliceShmMut;
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
@@ -1063,62 +1065,47 @@ impl TryFrom<&Payload> for serde_pickle::Value {
 
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
-impl Serialize<Arc<SharedMemoryBuf>> for ZSerde {
+impl Serialize<ZSliceShm> for ZSerde {
     type Output = Payload;
 
-    fn serialize(self, t: Arc<SharedMemoryBuf>) -> Self::Output {
-        Payload::new(t)
-    }
-}
-#[cfg(feature = "shared-memory")]
-impl From<Arc<SharedMemoryBuf>> for Payload {
-    fn from(t: Arc<SharedMemoryBuf>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl Serialize<Box<SharedMemoryBuf>> for ZSerde {
-    type Output = Payload;
-
-    fn serialize(self, t: Box<SharedMemoryBuf>) -> Self::Output {
-        let smb: Arc<SharedMemoryBuf> = t.into();
-        Self.serialize(smb)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<Box<SharedMemoryBuf>> for Payload {
-    fn from(t: Box<SharedMemoryBuf>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl Serialize<SharedMemoryBuf> for ZSerde {
-    type Output = Payload;
-
-    fn serialize(self, t: SharedMemoryBuf) -> Self::Output {
+    fn serialize(self, t: ZSliceShm) -> Self::Output {
         Payload::new(t)
     }
 }
 
 #[cfg(feature = "shared-memory")]
-impl From<SharedMemoryBuf> for Payload {
-    fn from(t: SharedMemoryBuf) -> Self {
+impl From<ZSliceShm> for Payload {
+    fn from(t: ZSliceShm) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+// Shared memory conversion
+#[cfg(feature = "shared-memory")]
+impl Serialize<ZSliceShmMut> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: ZSliceShmMut) -> Self::Output {
+        Payload::new(t)
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl From<ZSliceShmMut> for Payload {
+    fn from(t: ZSliceShmMut) -> Self {
         ZSerde.serialize(t)
     }
 }
 
 #[cfg(feature = "shared-memory")]
-impl Deserialize<'_, SharedMemoryBuf> for ZSerde {
+impl Deserialize<'_, ZSliceShm> for ZSerde {
     type Error = ZDeserializeError;
 
-    fn deserialize(self, v: &Payload) -> Result<SharedMemoryBuf, Self::Error> {
-        // A SharedMemoryBuf is expected to have only one slice
+    fn deserialize(self, v: &Payload) -> Result<ZSliceShm, Self::Error> {
+        // A ZSliceShm is expected to have only one slice
         let mut zslices = v.0.zslices();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_ref::<ZSliceShm>() {
                 return Ok(shmb.clone());
             }
         }
@@ -1127,7 +1114,7 @@ impl Deserialize<'_, SharedMemoryBuf> for ZSerde {
 }
 
 #[cfg(feature = "shared-memory")]
-impl TryFrom<Payload> for SharedMemoryBuf {
+impl TryFrom<Payload> for ZSliceShm {
     type Error = ZDeserializeError;
 
     fn try_from(value: Payload) -> Result<Self, Self::Error> {

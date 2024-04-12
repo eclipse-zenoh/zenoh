@@ -132,5 +132,5 @@ async fn run() -> Result<()> {
     let publisher = session.declare_publisher("my/key/expr").res_async().await?;
 
     // Publish SHM buffer
-    publisher.put(ZSlice::from(sbuf)).res_async().await // todo:
+    publisher.put(sbuf).res_async().await
 }

@@ -22,7 +22,6 @@ mod tests {
     use zenoh::shm::provider::shared_memory_provider::{
         BlockOn, GarbageCollect, SharedMemoryProviderBuilder,
     };
-    use zenoh_buffers::ZSlice;
     use zenoh_core::ztimeout;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -140,7 +139,7 @@ mod tests {
 
                 // Publish this message
                 ztimeout!(peer02
-                    .put(&key_expr, ZSlice::from(sbuf)) // todo:
+                    .put(&key_expr, sbuf)
                     .congestion_control(CongestionControl::Block)
                     .res_async())
                 .unwrap();

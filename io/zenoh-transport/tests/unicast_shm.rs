@@ -264,7 +264,7 @@ mod tests {
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
-                    payload: zenoh_buffers::ZSlice::from(sbuf).into(), // todo:
+                    payload: sbuf.into(),
                     timestamp: None,
                     encoding: Encoding::empty(),
                     ext_sinfo: None,
@@ -308,7 +308,7 @@ mod tests {
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
-                    payload: zenoh_buffers::ZSlice::from(sbuf).into(), // todo:
+                    payload: sbuf.into(),
                     timestamp: None,
                     encoding: Encoding::empty(),
                     ext_sinfo: None,
