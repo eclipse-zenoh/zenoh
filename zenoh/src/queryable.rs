@@ -839,7 +839,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 #[derive(Debug)]
 pub struct Queryable<'a, Receiver> {
     pub(crate) queryable: CallbackQueryable<'a>,
-    pub receiver: Receiver,
+    pub(crate) receiver: Receiver,
 }
 
 impl<'a, Receiver> Queryable<'a, Receiver> {

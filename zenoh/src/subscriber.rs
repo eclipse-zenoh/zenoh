@@ -442,7 +442,7 @@ where
 #[derive(Debug)]
 pub struct Subscriber<'a, Receiver> {
     pub(crate) subscriber: SubscriberInner<'a>,
-    pub receiver: Receiver,
+    pub(crate) receiver: Receiver,
 }
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {

@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{arg, Command};
+use std::ops::Deref;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
@@ -46,7 +47,7 @@ async fn main() {
     let queryable = session.declare_queryable(key).res().await.unwrap();
 
     async_std::task::spawn({
-        let receiver = queryable.receiver.clone();
+        let receiver = queryable.deref().clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
                 request.reply(key, HTML).res().await.unwrap();

@@ -269,7 +269,7 @@ impl fmt::Debug for ScoutInner {
 #[derive(Debug)]
 pub struct Scout<Receiver> {
     pub(crate) scout: ScoutInner,
-    pub receiver: Receiver,
+    pub(crate) receiver: Receiver,
 }
 
 impl<Receiver> Deref for Scout<Receiver> {
