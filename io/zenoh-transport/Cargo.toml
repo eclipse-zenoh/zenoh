@@ -28,7 +28,6 @@ description = "Internal crate for zenoh."
 shared-memory = [
     "zenoh-protocol/shared-memory",
     "zenoh-shm",
-    "zenoh-shm/shared-memory",
     "zenoh-codec/shared-memory",
     "zenoh-buffers/shared-memory",
     "zenoh-sync/shared-memory",

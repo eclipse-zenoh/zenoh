@@ -27,18 +27,9 @@ readme = "README.md"
 publish = false
 
 [features]
-shared-memory = ["zenoh-shm","zenoh/shared-memory"]
+shared-memory = ["zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
 transport_unixpipe = ["zenoh/transport_unixpipe"]
-
-# Unfortunately, the feature "transport_unixpipe" is always
-# enabled for the lines below. It looks like a Cargo bug :(
-#
-# [target.'cfg(unix)'.dependencies]
-# zenoh = { workspace = true, features = ["transport_unixpipe"] }
-#
-# [target.'cfg(not(unix))'.dependencies]
-# zenoh = { workspace = true }
 
 [dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
@@ -52,7 +43,6 @@ log = { workspace = true }
 zenoh = { workspace = true }
 zenoh-collections = { workspace = true }
 zenoh-ext = { workspace = true }
-zenoh-shm = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
@@ -100,7 +90,7 @@ path = "examples/z_sub.rs"
 [[example]]
 name = "z_sub_shm"
 path = "examples/z_sub_shm.rs"
-required-features = ["shared-memory"]
+required-features = ["unstable", "shared-memory"]
 
 [[example]]
 name = "z_pull"

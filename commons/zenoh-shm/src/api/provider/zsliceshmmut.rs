@@ -22,6 +22,7 @@ use super::zsliceshm::ZSliceShm;
 
 /// A mutable SHM slice
 #[zenoh_macros::unstable_doc]
+#[derive(Debug)]
 pub struct ZSliceShmMut {
     slice: SharedMemoryBuf,
 }

@@ -20,7 +20,7 @@ use crate::SharedMemoryBuf;
 
 /// An immutable SHM slice
 #[zenoh_macros::unstable_doc]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ZSliceShm {
     slice: SharedMemoryBuf,
 }
@@ -28,6 +28,12 @@ pub struct ZSliceShm {
 impl ZSliceShm {
     pub(crate) fn new(slice: SharedMemoryBuf) -> Self {
         Self { slice }
+    }
+}
+
+impl ZSliceShm {
+    pub fn as_slice(&self) -> &[u8] {
+        self.slice.as_slice()
     }
 }
 

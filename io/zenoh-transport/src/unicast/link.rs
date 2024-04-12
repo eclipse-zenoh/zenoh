@@ -14,7 +14,7 @@
 use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
 use std::fmt;
 use std::sync::Arc;
-use zenoh_buffers::{as_mut_slice_featureless, BBuf, ZSlice, ZSliceBuffer};
+use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::zcondfeat;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::transport::{BatchSize, Close, OpenAck, TransportMessage};
@@ -207,7 +207,7 @@ impl TransportLinkUnicastRx {
     pub async fn recv_batch<C, T>(&mut self, buff: C) -> ZResult<RBatch>
     where
         C: Fn() -> T + Copy,
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         const ERR: &str = "Read error from link: ";
 
@@ -219,18 +219,15 @@ impl TransportLinkUnicastRx {
             let l = BatchSize::from_le_bytes(len) as usize;
 
             // Read the bytes
-            let slice = unsafe {
-                as_mut_slice_featureless(&mut into)
-                    .get_mut(len.len()..len.len() + l)
-                    .ok_or_else(|| zerror!("{ERR}{self}. Invalid batch length or buffer size."))?
-            };
+            let slice = into
+                .as_mut()
+                .get_mut(len.len()..len.len() + l)
+                .ok_or_else(|| zerror!("{ERR}{self}. Invalid batch length or buffer size."))?;
             self.link.read_exact(slice).await?;
             len.len() + l
         } else {
             // Read the bytes
-            self.link
-                .read(unsafe { as_mut_slice_featureless(&mut into) })
-                .await?
+            self.link.read(into.as_mut()).await?
         };
 
         // log::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);

@@ -55,17 +55,17 @@ pub mod ext {
     use crate::{common::ZExtUnit, zextunit};
     use crate::{common::ZExtZBuf, zextzbuf};
 
+    /// # SourceInfo extension
+    /// Used to carry additional information about the source of data
+    pub type SourceInfo = zextzbuf!(0x1, false);
+    pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
+
     /// # Shared Memory extension
     /// Used to carry additional information about the shared-memory layour of data
     #[cfg(feature = "shared-memory")]
     pub type Shm = zextunit!(0x2, true);
     #[cfg(feature = "shared-memory")]
     pub type ShmType = crate::zenoh::ext::ShmType<{ Shm::ID }>;
-
-    /// # SourceInfo extension
-    /// Used to carry additional information about the source of data
-    pub type SourceInfo = zextzbuf!(0x1, false);
-    pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
 }
 
 impl Err {

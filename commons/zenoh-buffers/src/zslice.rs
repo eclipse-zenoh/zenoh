@@ -28,40 +28,10 @@ use core::{
 /*************************************/
 /*           ZSLICE BUFFER           */
 /*************************************/
-pub trait ZSliceBuffer: Send + Sync + fmt::Debug {
+pub trait ZSliceBuffer: Any + Send + Sync + fmt::Debug {
     fn as_slice(&self) -> &[u8];
-
-    #[cfg(feature = "shared-memory")]
-    /// # Safety
-    /// Get mutable access to underlying data. This is safe if
-    /// there is no sharing of underlying data.
-    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8];
-    #[cfg(feature = "shared-memory")]
-    fn as_mut_slice(&mut self) -> Option<&mut [u8]>;
-
-    #[cfg(not(feature = "shared-memory"))]
-    fn as_mut_slice(&mut self) -> &mut [u8];
-
     fn as_any(&self) -> &dyn Any;
-    #[cfg(feature = "shared-memory")]
-    fn is_valid(&self) -> bool {
-        true
-    }
-}
-
-/// # Safety
-/// Get mutable access to underlying data. For "shared-memory" feature
-/// this is safe if there is no sharing of underlying data for SHM buffers,
-/// for not "shared-memory" operation this is always safe. This function is
-/// intended to make ZSlice's interface more homogenious as it differs depending
-/// on "shared-memory" feature
-#[inline]
-pub unsafe fn as_mut_slice_featureless<T: ZSliceBuffer + ?Sized>(slice: &mut T) -> &mut [u8] {
-    #[cfg(feature = "shared-memory")]
-    return slice.as_mut_slice_unchecked();
-
-    #[cfg(not(feature = "shared-memory"))]
-    slice.as_mut_slice()
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl ZSliceBuffer for Vec<u8> {
@@ -69,21 +39,11 @@ impl ZSliceBuffer for Vec<u8> {
         self.as_ref()
     }
 
-    #[cfg(feature = "shared-memory")]
-    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
-    #[cfg(feature = "shared-memory")]
-    fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
-        Some(self.as_mut())
-    }
-
-    #[cfg(not(feature = "shared-memory"))]
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
-
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -93,21 +53,11 @@ impl ZSliceBuffer for Box<[u8]> {
         self.as_ref()
     }
 
-    #[cfg(feature = "shared-memory")]
-    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
-    #[cfg(feature = "shared-memory")]
-    fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
-        Some(self.as_mut())
-    }
-
-    #[cfg(not(feature = "shared-memory"))]
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
-
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -117,21 +67,11 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
         self.as_ref()
     }
 
-    #[cfg(feature = "shared-memory")]
-    unsafe fn as_mut_slice_unchecked(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
-    #[cfg(feature = "shared-memory")]
-    fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
-        Some(self.as_mut())
-    }
-
-    #[cfg(not(feature = "shared-memory"))]
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
-
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -196,7 +136,44 @@ impl ZSlice {
             kind: ZSliceKind::Raw,
         }
     }
+    /*
+        #[inline]
+        #[must_use]
+        pub fn downcast<T>(self) -> Result<T, Self>
+        where
+            T: ZSliceBuffer + Any + Sized,
+        {
+            match Arc::downcast::<T>(self.buf) {
+                Ok(val) => todo!(),
+                Err(_) => todo!(),
+            }
 
+            match Arc::try_unwrap(self.buf) {
+                Ok(t) => match t.as_any().downcast::<T>() {
+                    Some(t) => Ok(t),
+                    None => {
+                        Err(ZSlice {
+                            buf: self.buf,
+                            start: self.start,
+                            end: self.end,
+                            #[cfg(feature = "shared-memory")]
+                            kind: sel
+                        })
+                    }
+                }
+                Err(buf) => {
+                    Err(ZSlice {
+                        buf,
+                        start: self.start,
+                        end: self.end,
+                        #[cfg(feature = "shared-memory")]
+                        kind: sel
+                    })
+                }
+            }
+            // Arc::try_unwrap(self.buf). ?.as_any().downcast::<T>()
+        }
+    */
     #[inline]
     #[must_use]
     pub fn downcast_ref<T>(&self) -> Option<&T>
@@ -204,6 +181,15 @@ impl ZSlice {
         T: Any,
     {
         self.buf.as_any().downcast_ref::<T>()
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
+    where
+        T: Any,
+    {
+        Arc::get_mut(&mut self.buf).and_then(|val| val.as_any_mut().downcast_mut::<T>())
     }
 
     #[inline]
@@ -222,17 +208,6 @@ impl ZSlice {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    /// Checks if the underlying data is valid.
-    /// For shared memory buffers the underlying data may be forcibly deallocated, and
-    /// this method provides and interface to check it. For other underlying buffer types
-    /// this method always returns true
-    #[cfg(feature = "shared-memory")]
-    #[inline]
-    #[must_use]
-    pub fn is_valid(&self) -> bool {
-        self.buf.is_valid()
     }
 
     #[inline]
@@ -501,12 +476,7 @@ mod tests {
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
         let range = zslice.range();
-        let mbuf = Arc::get_mut(&mut zslice.buf).unwrap();
-
-        #[cfg(feature = "shared-memory")]
-        let mut_slice = mbuf.as_mut_slice().unwrap();
-        #[cfg(not(feature = "shared-memory"))]
-        let mut_slice = mbuf.as_mut_slice();
+        let mut_slice = zslice.downcast_mut::<Vec<u8>>().unwrap();
 
         mut_slice[range][..buf.len()].clone_from_slice(&buf[..]);
 

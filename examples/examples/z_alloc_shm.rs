@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::buffers::ZSlice;
 use zenoh::prelude::r#async::*;
 use zenoh::shm::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
 use zenoh::shm::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
