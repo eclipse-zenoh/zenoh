@@ -16,4 +16,5 @@ pub mod chunk;
 pub mod shared_memory_provider;
 pub mod shared_memory_provider_backend;
 pub mod types;
+pub mod zsliceshm;
 pub mod zsliceshmmut;

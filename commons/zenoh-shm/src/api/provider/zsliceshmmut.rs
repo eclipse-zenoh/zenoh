@@ -18,16 +18,24 @@ use zenoh_buffers::ZSlice;
 
 use crate::SharedMemoryBuf;
 
-/// An SHM ZSlice in an exceptional state when it is recently allocated and thus
-/// is known to be unique, so it can be safely mutated without any checks.
+use super::zsliceshm::ZSliceShm;
+
+/// A mutable SHM slice
 #[zenoh_macros::unstable_doc]
 pub struct ZSliceShmMut {
-    pub(crate) slice: SharedMemoryBuf,
+    slice: SharedMemoryBuf,
 }
 
 impl ZSliceShmMut {
-    pub(crate) fn new(slice: SharedMemoryBuf) -> Self {
+    pub(crate) unsafe fn new_unchecked(slice: SharedMemoryBuf) -> Self {
         Self { slice }
+    }
+
+    pub(crate) fn try_new(slice: SharedMemoryBuf) -> Option<Self> {
+        match slice.is_unique() && slice.is_valid() {
+            true => Some(Self { slice }),
+            false => None,
+        }
     }
 }
 
@@ -60,5 +68,11 @@ impl AsMut<[u8]> for ZSliceShmMut {
 impl From<ZSliceShmMut> for ZSlice {
     fn from(val: ZSliceShmMut) -> Self {
         val.slice.into()
+    }
+}
+
+impl From<ZSliceShmMut> for ZSliceShm {
+    fn from(val: ZSliceShmMut) -> Self {
+        ZSliceShm::new(val.slice)
     }
 }

@@ -724,7 +724,7 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(ZSliceShmMut::new(wrapped))
+        Ok(unsafe { ZSliceShmMut::new_unchecked(wrapped) })
     }
 
     /// Try to collect free chunks.
@@ -801,7 +801,7 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(ZSliceShmMut::new(wrapped))
+        Ok(unsafe { ZSliceShmMut::new_unchecked(wrapped) })
     }
 
     fn alloc_resources() -> ZResult<(
@@ -906,6 +906,6 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(ZSliceShmMut::new(wrapped))
+        Ok(unsafe { ZSliceShmMut::new_unchecked(wrapped) })
     }
 }
