@@ -24,45 +24,44 @@ on:
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_PROFILE_DEV_DEBUG: false
-  ZENOH_RUNTIME: "(rx: (handover: app), acc: (handover: app), app: (max_blocking_threads: 1), tx: (max_blocking_threads: 1))"
 
 jobs:
-  # check:
-  #   name: Run checks on ${{ matrix.os }}
-  #   runs-on: ${{ matrix.os }}
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       os: [ubuntu-latest, macOS-latest, windows-latest]
-  #
-  #   steps:
-  #     - name: Clone this repository
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Install Rust toolchain
-  #       run: |
-  #         rustup show
-  #         rustup component add rustfmt clippy
-  #
-  #     - name: Code format check
-  #       run: cargo fmt --check
-  #
-  #     - name: Clippy
-  #       run: cargo +stable clippy --all-targets -- --deny warnings
-  #
-  #     - name: Clippy unstable targets
-  #       run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
-  #
-  #     - name: Clippy all features
-  #       if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
-  #       run: cargo +stable clippy --all-targets --all-features -- --deny warnings
-  #
-  #     - name: Install generic no_std target
-  #       # Generic no_std target architecture is x86_64-unknown-none
-  #       run: rustup target add x86_64-unknown-none
-  #
-  #     - name: Perform no_std checks
-  #       run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
+  check:
+    name: Run checks on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
+
+      - name: Code format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo +stable clippy --all-targets -- --deny warnings
+
+      - name: Clippy unstable targets
+        run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
+
+      - name: Clippy all features
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
+        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
+
+      - name: Install generic no_std target
+        # Generic no_std target architecture is x86_64-unknown-none
+        run: rustup target add x86_64-unknown-none
+
+      - name: Perform no_std checks
+        run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -86,45 +85,43 @@ jobs:
             *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
           esac
 
-      # - name: Install latest nextest
-      #   uses: taiki-e/install-action@nextest
-      #
-      # - name: Run tests
-      #   run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-      #
-      # - name: Run tests with SHM
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
-      #
-      # - name: Check for feature leaks
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: cargo nextest run -p zenohd --no-default-features
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Run tests
+        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
+      - name: Run tests with SHM
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
+
+      - name: Check for feature leaks
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo nextest run -p zenohd --no-default-features
 
       - name: Run doctests
         run: cargo test --doc
-        # run: cargo test -p zenoh-ext --doc declare_publication_cache
-        # timeout-minutes: 5
 
-      # - name: Install valgrind
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: sudo apt-get install -y valgrind
-      #   shell: bash
-      #
-      # - name: Run memory leaks check
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: ci/valgrind-check/run.sh
-      #   shell: bash
+      - name: Install valgrind
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get install -y valgrind
+        shell: bash
 
-  # # NOTE: In GitHub repository settings, the "Require status checks to pass
-  # # before merging" branch protection rule ensures that commits are only merged
-  # # from branches where specific status checks have passed. These checks are
-  # # specified manually as a list of workflow job names. Thus we use this extra
-  # # job to signal whether all CI checks have passed.
-  # ci:
-  #   name: CI status checks
-  #   runs-on: ubuntu-latest
-  #   needs: [check, test]
-  #   if: always()
-  #   steps:
-  #     - name: Check whether all jobs pass
-  #       run: echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'
+      - name: Run memory leaks check
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: ci/valgrind-check/run.sh
+        shell: bash
+
+  # NOTE: In GitHub repository settings, the "Require status checks to pass
+  # before merging" branch protection rule ensures that commits are only merged
+  # from branches where specific status checks have passed. These checks are
+  # specified manually as a list of workflow job names. Thus we use this extra
+  # job to signal whether all CI checks have passed.
+  ci:
+    name: CI status checks
+    runs-on: ubuntu-latest
+    needs: [check, test]
+    if: always()
+    steps:
+      - name: Check whether all jobs pass
+        run: echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'
