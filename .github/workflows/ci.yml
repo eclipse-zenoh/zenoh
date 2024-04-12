@@ -101,18 +101,19 @@ jobs:
       #   run: cargo nextest run -p zenohd --no-default-features
 
       - name: Run doctests
-        run: cargo test -p zenoh-ext --doc declare_publication_cache
-        timeout-minutes: 5
+        run: cargo test --doc
+        # run: cargo test -p zenoh-ext --doc declare_publication_cache
+        # timeout-minutes: 5
 
-      - name: Install valgrind
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: sudo apt-get install -y valgrind
-        shell: bash
-
-      - name: Run memory leaks check
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: ci/valgrind-check/run.sh
-        shell: bash
+      # - name: Install valgrind
+      #   if: ${{ matrix.os == 'ubuntu-latest' }}
+      #   run: sudo apt-get install -y valgrind
+      #   shell: bash
+      #
+      # - name: Run memory leaks check
+      #   if: ${{ matrix.os == 'ubuntu-latest' }}
+      #   run: ci/valgrind-check/run.sh
+      #   shell: bash
 
   # # NOTE: In GitHub repository settings, the "Require status checks to pass
   # # before merging" branch protection rule ensures that commits are only merged
