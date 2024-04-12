@@ -101,7 +101,8 @@ jobs:
       #   run: cargo nextest run -p zenohd --no-default-features
 
       - name: Run doctests
-        run: timeout 5m cargo test -p zenoh-ext --doc declare_publication_cache
+        run: cargo test -p zenoh-ext --doc declare_publication_cache
+        timeout-minutes: 5
 
       - name: Install valgrind
         if: ${{ matrix.os == 'ubuntu-latest' }}
