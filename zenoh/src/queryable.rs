@@ -220,6 +220,7 @@ impl Query {
             }
         })
     }
+    #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
         Ok(self.parameters().accept_any_keyexpr()?.unwrap_or(false))
     }
@@ -407,9 +408,12 @@ impl SyncResolve for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
 
 impl Query {
     fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        if !self._accepts_any_replies().unwrap_or(false)
-            && !self.key_expr().intersects(&sample.key_expr)
-        {
+        let c = zcondfeat!(
+            "unstable",
+            !self._accepts_any_replies().unwrap_or(false),
+            true
+        );
+        if c && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
         #[cfg(not(feature = "unstable"))]
