@@ -79,15 +79,15 @@ impl Properties<'_> {
         removed
     }
 
-    pub fn extend<'s, I, K, V>(&mut self, iter: I)
+    pub fn join<'s, I, K, V>(&mut self, iter: I)
     where
-        I: IntoIterator<Item = (&'s K, &'s V)>,
-        K: Borrow<str> + 's,
-        V: Borrow<str> + 's,
+        I: Iterator<Item = (&'s K, &'s V)> + Clone,
+        K: Borrow<str> + 's + ?Sized,
+        V: Borrow<str> + 's + ?Sized,
     {
-        self.0 = Cow::Owned(Parameters::extend(
+        self.0 = Cow::Owned(Parameters::join(
             Parameters::iter(self.as_str()),
-            iter.into_iter().map(|(k, v)| (k.borrow(), v.borrow())),
+            iter.map(|(k, v)| (k.borrow(), v.borrow())),
         ));
     }
 
@@ -98,30 +98,20 @@ impl Properties<'_> {
 
 impl<'s> From<&'s str> for Properties<'s> {
     fn from(mut value: &'s str) -> Self {
-        if Parameters::is_sorted(Parameters::iter(value)) {
-            value = value.trim_end_matches(|c| {
-                c == LIST_SEPARATOR || c == FIELD_SEPARATOR || c == VALUE_SEPARATOR
-            });
-            Self(Cow::Borrowed(value))
-        } else {
-            Self(Cow::Owned(Parameters::from_iter(Parameters::iter(value))))
-        }
+        value = value.trim_end_matches(|c| {
+            c == LIST_SEPARATOR || c == FIELD_SEPARATOR || c == VALUE_SEPARATOR
+        });
+        Self(Cow::Borrowed(value))
     }
 }
 
 impl From<String> for Properties<'_> {
     fn from(mut value: String) -> Self {
-        if Parameters::is_sorted(Parameters::iter(value.as_str())) {
-            let s = value.trim_end_matches(|c| {
-                c == LIST_SEPARATOR || c == FIELD_SEPARATOR || c == VALUE_SEPARATOR
-            });
-            value.truncate(s.len());
-            Self(Cow::Owned(value))
-        } else {
-            Self(Cow::Owned(Parameters::from_iter(Parameters::iter(
-                value.as_str(),
-            ))))
-        }
+        let s = value.trim_end_matches(|c| {
+            c == LIST_SEPARATOR || c == FIELD_SEPARATOR || c == VALUE_SEPARATOR
+        });
+        value.truncate(s.len());
+        Self(Cow::Owned(value))
     }
 }
 
@@ -136,8 +126,8 @@ impl<'s> From<Cow<'s, str>> for Properties<'s> {
 
 impl<'s, K, V> FromIterator<(&'s K, &'s V)> for Properties<'_>
 where
-    K: Borrow<str> + 's,
-    V: Borrow<str> + 's,
+    K: Borrow<str> + 's + ?Sized,
+    V: Borrow<str> + 's + ?Sized,
 {
     fn from_iter<T: IntoIterator<Item = (&'s K, &'s V)>>(iter: T) -> Self {
         let inner = Parameters::from_iter(iter.into_iter().map(|(k, v)| (k.borrow(), v.borrow())));

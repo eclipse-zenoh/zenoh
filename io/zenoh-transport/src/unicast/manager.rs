@@ -380,7 +380,7 @@ impl TransportManager {
             .await?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
-            endpoint.config_mut().extend(Parameters::iter(config))?;
+            endpoint.config_mut().join(Parameters::iter(config))?;
         };
         manager.new_listener(endpoint).await
     }
@@ -689,7 +689,7 @@ impl TransportManager {
             .await?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
-            endpoint.config_mut().extend(Parameters::iter(config))?;
+            endpoint.config_mut().join(Parameters::iter(config))?;
         };
 
         // Create a new link associated by calling the Link Manager

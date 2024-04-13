@@ -233,49 +233,6 @@ impl Parameters<'_> {
         }
     }
 }
-#[test]
-fn selector_accessors() {
-    let time_range = "[now(-2s)..now(2s)]".parse().unwrap();
-    for selector in [
-        "hello/there?_timetrick",
-        "hello/there?_timetrick;_time",
-        "hello/there?_timetrick;_time;_filter",
-        "hello/there?_timetrick;_time=[..]",
-        "hello/there?_timetrick;_time=[..];_filter",
-    ] {
-        let mut selector = Selector::try_from(selector).unwrap();
-        println!("Parameters start: {}", selector.parameters());
-        for i in selector.parameters().iter() {
-            println!("\t{:?}", i);
-        }
-
-        assert_eq!(selector.parameters().get("_timetrick").unwrap(), "");
-
-        selector.set_time_range(time_range);
-        assert_eq!(selector.time_range().unwrap().unwrap(), time_range);
-        assert!(selector.parameters().contains_key(TIME_RANGE_KEY));
-
-        let hm: HashMap<String, String> = HashMap::from(selector.parameters());
-        assert!(hm.contains_key(TIME_RANGE_KEY));
-
-        let hm: HashMap<&str, &str> = HashMap::from(selector.parameters());
-        assert!(hm.contains_key(TIME_RANGE_KEY));
-
-        selector.parameters_mut().insert("_filter", "");
-        assert_eq!(selector.parameters().get("_filter").unwrap(), "");
-
-        selector.set_accept_any_keyexpr(true);
-
-        println!("Parameters end: {}", selector.parameters());
-        for i in selector.parameters().iter() {
-            println!("\t{:?}", i);
-        }
-        assert_eq!(
-            &format!("{}", selector),
-            "hello/there?_anyke;_filter;_time=[now(-2s)..now(2s)];_timetrick"
-        );
-    }
-}
 
 impl std::fmt::Debug for Selector<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -390,5 +347,55 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
             key_expr: key_selector,
             parameters: "".into(),
         }
+    }
+}
+
+#[test]
+fn selector_accessors() {
+    let time_range = "[now(-2s)..now(2s)]".parse().unwrap();
+    for selector in [
+        "hello/there?_timetrick",
+        "hello/there?_timetrick;_time",
+        "hello/there?_timetrick;_time;_filter",
+        "hello/there?_timetrick;_time=[..]",
+        "hello/there?_timetrick;_time=[..];_filter",
+    ] {
+        let mut selector = Selector::try_from(selector).unwrap();
+        println!("Parameters start: {}", selector.parameters());
+        for i in selector.parameters().iter() {
+            println!("\t{:?}", i);
+        }
+
+        assert_eq!(selector.parameters().get("_timetrick").unwrap(), "");
+
+        selector.set_time_range(time_range);
+        assert_eq!(selector.time_range().unwrap().unwrap(), time_range);
+        assert!(selector.parameters().contains_key(TIME_RANGE_KEY));
+
+        let hm: HashMap<&str, &str> = HashMap::from(selector.parameters());
+        assert!(hm.contains_key(TIME_RANGE_KEY));
+
+        selector.parameters_mut().insert("_filter", "");
+        assert_eq!(selector.parameters().get("_filter").unwrap(), "");
+
+        let hm: HashMap<String, String> = HashMap::from(selector.parameters());
+        assert!(hm.contains_key(TIME_RANGE_KEY));
+
+        selector.parameters_mut().join(hm.iter());
+        assert_eq!(selector.parameters().get("_filter").unwrap(), "");
+
+        selector.set_accept_any_keyexpr(true);
+
+        println!("Parameters end: {}", selector.parameters());
+        for i in selector.parameters().iter() {
+            println!("\t{:?}", i);
+        }
+
+        assert_eq!(
+            HashMap::<String, String>::from(selector.parameters()),
+            HashMap::<String, String>::from(Parameters::from(
+                "_anyke;_filter;_time=[now(-2s)..now(2s)];_timetrick"
+            ))
+        );
     }
 }

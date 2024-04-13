@@ -802,14 +802,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 8030).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .join(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 
@@ -902,14 +902,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 8040).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .join(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 

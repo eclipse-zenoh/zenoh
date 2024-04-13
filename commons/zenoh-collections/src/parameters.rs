@@ -28,6 +28,81 @@ fn split_once(s: &str, c: char) -> (&str, &str) {
 }
 
 /// Parameters provides an `HashMap<&str, &str>`-like view over a `&str` when `&str` follows the format `a=b;c=d|e;f=g`.
+/// [`SortedParameters`] it's like [`Parameters`] but with the guarantee that keys are sorted upon insertion.
+pub struct SortedParameters;
+
+impl SortedParameters {
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_iter<'s, I>(iter: I) -> String
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        let mut into = String::new();
+        Self::from_iter_into(iter, &mut into);
+        into
+    }
+
+    pub fn from_iter_into<'s, I>(iter: I, into: &mut String)
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        let mut from = iter.collect::<Vec<(&str, &str)>>();
+        from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
+        Parameters::from_iter_into(from.iter().copied(), into);
+    }
+
+    pub fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> (String, Option<&'s str>)
+    where
+        I: Iterator<Item = (&'s str, &'s str)> + Clone,
+    {
+        let mut ic = iter.clone();
+        let item = ic.find(|(key, _)| *key == k).map(|(_, v)| v);
+
+        let current = iter.filter(|x| x.0 != k);
+        let new = Some((k, v)).into_iter();
+        let iter = current.chain(new);
+        (SortedParameters::from_iter(iter), item)
+    }
+
+    pub fn join<'s, C, N>(current: C, new: N) -> String
+    where
+        C: Iterator<Item = (&'s str, &'s str)> + Clone,
+        N: Iterator<Item = (&'s str, &'s str)> + Clone,
+    {
+        let mut into = String::new();
+        SortedParameters::join_into(current, new, &mut into);
+        into
+    }
+
+    pub fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
+    where
+        C: Iterator<Item = (&'s str, &'s str)> + Clone,
+        N: Iterator<Item = (&'s str, &'s str)> + Clone,
+    {
+        let n = new.clone();
+        let current = current
+            .clone()
+            .filter(|(kc, _)| !n.clone().any(|(kn, _)| kn == *kc));
+        let iter = current.chain(new);
+        SortedParameters::from_iter_into(iter, into);
+    }
+
+    pub fn is_sorted<'s, I>(iter: I) -> bool
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        let mut prev = None;
+        for (k, _) in iter {
+            match prev.take() {
+                Some(p) if k < p => return false,
+                _ => prev = Some(k),
+            }
+        }
+        true
+    }
+}
+
+/// Parameters provides an `HashMap<&str, &str>`-like view over a `&str` when `&str` follows the format `a=b;c=d|e;f=g`.
 pub struct Parameters;
 
 impl Parameters {
@@ -51,20 +126,7 @@ impl Parameters {
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
-        let mut from = iter.collect::<Vec<(&str, &str)>>();
-        from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
-        Self::concat_into(from.iter().copied(), into);
-    }
-
-    pub fn from_slice_mut(slice: &mut [(&str, &str)]) -> String {
-        let mut into = String::new();
-        Self::from_slice_mut_into(slice, &mut into);
-        into
-    }
-
-    pub fn from_slice_mut_into(slice: &mut [(&str, &str)], into: &mut String) {
-        slice.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
-        Self::concat_into(slice.iter().copied(), into);
+        Self::concat_into(iter, into);
     }
 
     pub fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
@@ -106,37 +168,27 @@ impl Parameters {
         (Parameters::concat(iter), item)
     }
 
-    pub fn extend<'s, C, N>(current: C, new: N) -> String
+    pub fn join<'s, C, N>(current: C, new: N) -> String
     where
-        C: Iterator<Item = (&'s str, &'s str)>,
-        N: Iterator<Item = (&'s str, &'s str)>,
+        C: Iterator<Item = (&'s str, &'s str)> + Clone,
+        N: Iterator<Item = (&'s str, &'s str)> + Clone,
     {
         let mut into = String::new();
-        Parameters::extend_into(current, new, &mut into);
+        Parameters::join_into(current, new, &mut into);
         into
     }
 
-    pub fn extend_into<'s, C, N>(current: C, new: N, into: &mut String)
+    pub fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
     where
-        C: Iterator<Item = (&'s str, &'s str)>,
-        N: Iterator<Item = (&'s str, &'s str)>,
+        C: Iterator<Item = (&'s str, &'s str)> + Clone,
+        N: Iterator<Item = (&'s str, &'s str)> + Clone,
     {
+        let n = new.clone();
+        let current = current
+            .clone()
+            .filter(|(kc, _)| !n.clone().any(|(kn, _)| kn == *kc));
         let iter = current.chain(new);
         Parameters::from_iter_into(iter, into);
-    }
-
-    pub fn is_sorted<'s, I>(iter: I) -> bool
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let mut prev = None;
-        for (k, _) in iter {
-            match prev.take() {
-                Some(p) if k < p => return false,
-                _ => prev = Some(k),
-            }
-        }
-        true
     }
 
     fn concat<'s, I>(iter: I) -> String

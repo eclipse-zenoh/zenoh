@@ -13,8 +13,8 @@
 //
 use super::locator::*;
 use alloc::{borrow::ToOwned, format, string::String};
-use core::{convert::TryFrom, fmt, str::FromStr};
-use zenoh_collections::Parameters;
+use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
+use zenoh_collections::{Parameters, SortedParameters};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 // Parsing chars
@@ -240,25 +240,19 @@ impl<'a> MetadataMut<'a> {
 }
 
 impl MetadataMut<'_> {
-    pub fn extend<I, K, V>(&mut self, iter: I) -> ZResult<()>
+    pub fn join<'s, I, K, V>(&mut self, iter: I) -> ZResult<()>
     where
-        I: Iterator<Item = (K, V)>,
-        K: AsRef<str>,
-        V: AsRef<str>,
+        I: Iterator<Item = (&'s K, &'s V)> + Clone,
+        K: Borrow<str> + 's + ?Sized,
+        V: Borrow<str> + 's + ?Sized,
     {
-        for (k, v) in iter {
-            let k: &str = k.as_ref();
-            let v: &str = v.as_ref();
-            self.insert(k, v)?
-        }
-        Ok(())
-    }
-
-    pub fn insert(&mut self, k: &str, v: &str) -> ZResult<()> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::insert(self.0.metadata().iter(), k, v).0,
+            SortedParameters::join(
+                self.0.metadata().iter(),
+                iter.map(|(k, v)| (k.borrow(), v.borrow())),
+            ),
             self.0.config(),
         )?;
 
@@ -266,11 +260,30 @@ impl MetadataMut<'_> {
         Ok(())
     }
 
-    pub fn remove(&mut self, k: &str) -> ZResult<()> {
+    pub fn insert<K, V>(&mut self, k: K, v: V) -> ZResult<()>
+    where
+        K: Borrow<str>,
+        V: Borrow<str>,
+    {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::remove(self.0.metadata().iter(), k).0,
+            SortedParameters::insert(self.0.metadata().iter(), k.borrow(), v.borrow()).0,
+            self.0.config(),
+        )?;
+
+        self.0.inner = ep.inner;
+        Ok(())
+    }
+
+    pub fn remove<K>(&mut self, k: K) -> ZResult<()>
+    where
+        K: Borrow<str>,
+    {
+        let ep = EndPoint::new(
+            self.0.protocol(),
+            self.0.address(),
+            Parameters::remove(self.0.metadata().iter(), k.borrow()).0,
             self.0.config(),
         )?;
 
@@ -357,38 +370,51 @@ impl<'a> ConfigMut<'a> {
 }
 
 impl ConfigMut<'_> {
-    pub fn extend<I, K, V>(&mut self, iter: I) -> ZResult<()>
+    pub fn join<'s, I, K, V>(&mut self, iter: I) -> ZResult<()>
     where
-        I: Iterator<Item = (K, V)>,
-        K: AsRef<str>,
-        V: AsRef<str>,
+        I: Iterator<Item = (&'s K, &'s V)> + Clone,
+        K: Borrow<str> + 's + ?Sized,
+        V: Borrow<str> + 's + ?Sized,
     {
-        for (k, v) in iter {
-            let k: &str = k.as_ref();
-            let v: &str = v.as_ref();
-            self.insert(k, v)?
-        }
-        Ok(())
-    }
-
-    pub fn insert(&mut self, k: &str, v: &str) -> ZResult<()> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::insert(self.0.config().iter(), k, v).0,
+            SortedParameters::join(
+                self.0.config().iter(),
+                iter.map(|(k, v)| (k.borrow(), v.borrow())),
+            ),
         )?;
 
         self.0.inner = ep.inner;
         Ok(())
     }
 
-    pub fn remove(&mut self, k: &str) -> ZResult<()> {
+    pub fn insert<K, V>(&mut self, k: K, v: V) -> ZResult<()>
+    where
+        K: Borrow<str>,
+        V: Borrow<str>,
+    {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::remove(self.0.config().iter(), k).0,
+            SortedParameters::insert(self.0.config().iter(), k.borrow(), v.borrow()).0,
+        )?;
+
+        self.0.inner = ep.inner;
+        Ok(())
+    }
+
+    pub fn remove<K>(&mut self, k: K) -> ZResult<()>
+    where
+        K: Borrow<str>,
+    {
+        let ep = EndPoint::new(
+            self.0.protocol(),
+            self.0.address(),
+            self.0.metadata(),
+            Parameters::remove(self.0.config().iter(), k.borrow()).0,
         )?;
 
         self.0.inner = ep.inner;
@@ -550,14 +576,14 @@ impl TryFrom<String> for EndPoint {
             (Some(midx), None) if midx > pidx && !s[midx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
-                Parameters::from_iter_into(Parameters::iter(&s[midx + 1..]), &mut inner);
+                SortedParameters::from_iter_into(Parameters::iter(&s[midx + 1..]), &mut inner);
                 Ok(EndPoint { inner })
             }
             // There is some config
             (None, Some(cidx)) if cidx > pidx && !s[cidx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..cidx + 1]); // Includes config separator
-                Parameters::from_iter_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
+                SortedParameters::from_iter_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
                 Ok(EndPoint { inner })
             }
             // There is some metadata and some config
@@ -570,10 +596,10 @@ impl TryFrom<String> for EndPoint {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
 
-                Parameters::from_iter_into(Parameters::iter(&s[midx + 1..cidx]), &mut inner);
+                SortedParameters::from_iter_into(Parameters::iter(&s[midx + 1..cidx]), &mut inner);
 
                 inner.push(CONFIG_SEPARATOR);
-                Parameters::from_iter_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
+                SortedParameters::from_iter_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
 
                 Ok(EndPoint { inner })
             }
@@ -792,14 +818,14 @@ fn endpoints() {
     let mut endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
     endpoint
         .metadata_mut()
-        .extend([("a", "1"), ("c", "3"), ("b", "2")].iter().copied())
+        .join([("a", "1"), ("c", "3"), ("b", "2")].iter().copied())
         .unwrap();
     assert_eq!(endpoint.as_str(), "udp/127.0.0.1:7447?a=1;b=2;c=3");
 
     let mut endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
     endpoint
         .config_mut()
-        .extend([("A", "1"), ("C", "3"), ("B", "2")].iter().copied())
+        .join([("A", "1"), ("C", "3"), ("B", "2")].iter().copied())
         .unwrap();
     assert_eq!(endpoint.as_str(), "udp/127.0.0.1:7447#A=1;B=2;C=3");
 
