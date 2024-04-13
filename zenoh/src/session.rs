@@ -2187,9 +2187,12 @@ impl Primitives for Session {
                 };
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        if !matches!(query.selector.accept_any_keyexpr(), Ok(Some(true)))
-                            && !query.selector.key_expr.intersects(&key_expr)
-                        {
+                        let c = zcondfeat!(
+                            "unstable",
+                            !matches!(query.selector.accept_any_keyexpr(), Ok(Some(true))),
+                            true
+                        );
+                        if c && !query.selector.key_expr.intersects(&key_expr) {
                             log::warn!(
                                 "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
                                 key_expr,
