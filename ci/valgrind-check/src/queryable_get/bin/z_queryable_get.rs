@@ -33,7 +33,7 @@ async fn main() {
             zenoh_runtime::ZRuntime::Application.block_in_place(async move {
                 query
                     .reply(
-                        query.selector().key_expr,
+                        query.selector().key_expr(),
                         query.value().unwrap().payload().clone(),
                     )
                     .res()

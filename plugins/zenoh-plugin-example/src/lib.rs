@@ -174,7 +174,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
-                    if query.selector().key_expr.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
+                    if query.selector().key_expr().intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
                         query.reply_sample(sample.clone()).res().await.unwrap();
                     }
                 }

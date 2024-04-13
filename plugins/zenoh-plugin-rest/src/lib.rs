@@ -274,7 +274,7 @@ impl RunningPluginTrait for RunningPlugin {
         with_extended_string(&mut key, &["/version"], |key| {
             if keyexpr::new(key.as_str())
                 .unwrap()
-                .intersects(&selector.key_expr)
+                .intersects(selector.key_expr())
             {
                 responses.push(zenoh::plugins::Response::new(
                     key.clone(),
@@ -285,7 +285,7 @@ impl RunningPluginTrait for RunningPlugin {
         with_extended_string(&mut key, &["/port"], |port_key| {
             if keyexpr::new(port_key.as_str())
                 .unwrap()
-                .intersects(&selector.key_expr)
+                .intersects(selector.key_expr())
             {
                 responses.push(zenoh::plugins::Response::new(
                     port_key.clone(),
