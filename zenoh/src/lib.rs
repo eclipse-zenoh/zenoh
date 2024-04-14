@@ -121,6 +121,7 @@ pub mod core {
     pub use zenoh_result::Error;
     /// A zenoh result.
     pub use zenoh_result::ZResult as Result;
+    pub use zenoh_util::core::zresult::ErrNo;
 }
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
@@ -348,10 +349,10 @@ pub mod internal {
     pub use zenoh_macros::unstable;
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
+    pub use zenoh_task::TerminatableTask;
     pub use zenoh_util::core::ResolveFuture;
     pub use zenoh_util::LibLoader;
     pub use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
-    pub use zenoh_task::TerminatableTask;
 }
 
 #[cfg(feature = "shared-memory")]
