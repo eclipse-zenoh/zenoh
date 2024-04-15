@@ -11,11 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{Parameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR};
 use alloc::borrow::Cow;
 use core::{borrow::Borrow, fmt};
 #[cfg(feature = "std")]
 use std::collections::HashMap;
+
+const LIST_SEPARATOR: char = ';';
+const FIELD_SEPARATOR: char = '=';
+const VALUE_SEPARATOR: char = '|';
+
+fn split_once(s: &str, c: char) -> (&str, &str) {
+    match s.find(c) {
+        Some(index) => {
+            let (l, r) = s.split_at(index);
+            (l, &r[1..])
+        }
+        None => (s, ""),
+    }
+}
 
 /// A map of key/value (String,String) properties.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
@@ -71,25 +84,37 @@ impl Properties<'_> {
         self.get(k).is_some()
     }
 
-    /// Returns a reference to the value corresponding to the key.
+    /// Returns a reference to the `&str`-value corresponding to the key.
     pub fn get<K>(&self, k: K) -> Option<&str>
     where
         K: Borrow<str>,
     {
-        Parameters::get(self.as_str(), k.borrow())
+        self.iter()
+            .find(|(key, _)| *key == k.borrow())
+            .map(|(_, value)| value)
     }
 
-    /// Returns an iterator to the values corresponding to the key.
+    /// Returns an iterator to the `&str`-values corresponding to the key.
     pub fn values<K>(&self, k: K) -> impl DoubleEndedIterator<Item = &str>
     where
         K: Borrow<str>,
     {
-        Parameters::values(self.as_str(), k.borrow())
+        match self.get(k) {
+            Some(v) => v.split(VALUE_SEPARATOR),
+            None => {
+                let mut i = "".split(VALUE_SEPARATOR);
+                i.next();
+                i
+            }
+        }
     }
 
     /// Returns an iterator on the key-value pairs as `(&str, &str)`.
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
-        Parameters::iter(self.as_str())
+        self.as_str()
+            .split(LIST_SEPARATOR)
+            .filter(|p| !p.is_empty())
+            .map(|p| split_once(p, FIELD_SEPARATOR))
     }
 
     /// Inserts a key-value pair into the map.
@@ -100,10 +125,17 @@ impl Properties<'_> {
         K: Borrow<str>,
         V: Borrow<str>,
     {
-        let (inner, removed) = Parameters::insert(self.iter(), k.borrow(), v.borrow());
-        let removed = removed.map(|s| s.to_string());
-        self.0 = Cow::Owned(inner);
-        removed
+        let item = self
+            .iter()
+            .find(|(key, _)| *key == k.borrow())
+            .map(|(_, v)| v.to_string());
+
+        let current = self.iter().filter(|x| x.0 != k.borrow());
+        let new = Some((k.borrow(), v.borrow())).into_iter();
+        let iter = current.chain(new);
+
+        *self = Self::from_iter(iter);
+        item
     }
 
     /// Removes a key from the map, returning the value at the key if the key was previously in the properties.    
@@ -111,23 +143,35 @@ impl Properties<'_> {
     where
         K: Borrow<str>,
     {
-        let (inner, removed) = Parameters::remove(self.iter(), k.borrow());
-        let removed = removed.map(|s| s.to_string());
-        self.0 = Cow::Owned(inner);
-        removed
+        let item = self
+            .iter()
+            .find(|(key, _)| *key == k.borrow())
+            .map(|(_, v)| v.to_string());
+        let iter = self.iter().filter(|x| x.0 != k.borrow());
+
+        *self = Self::from_iter(iter);
+        item
     }
 
-    /// Join an iterator of key-value pairs `(&str, &str)` into properties.
-    pub fn join<'s, I, K, V>(&mut self, iter: I)
+    /// Extend these properties with other properties.
+    pub fn extend(&mut self, other: &Properties) {
+        self.extend_from_iter(other.iter());
+    }
+
+    /// Extend these properties from an iterator.
+    pub fn extend_from_iter<'s, I, K, V>(&mut self, iter: I)
     where
         I: Iterator<Item = (&'s K, &'s V)> + Clone,
         K: Borrow<str> + 's + ?Sized,
         V: Borrow<str> + 's + ?Sized,
     {
-        self.0 = Cow::Owned(Parameters::join(
-            Parameters::iter(self.as_str()),
-            iter.map(|(k, v)| (k.borrow(), v.borrow())),
-        ));
+        let new: I = iter.clone();
+        let current = self
+            .iter()
+            .filter(|(kc, _)| !new.clone().any(|(kn, _)| *kc == kn.borrow()));
+        let iter = current.chain(iter.map(|(k, v)| (k.borrow(), v.borrow())));
+
+        *self = Self::from_iter(iter);
     }
 
     /// Convert these properties into owned properties.
@@ -170,7 +214,29 @@ where
     V: Borrow<str> + 's + ?Sized,
 {
     fn from_iter<T: IntoIterator<Item = (&'s K, &'s V)>>(iter: T) -> Self {
-        let inner = Parameters::from_iter(iter.into_iter().map(|(k, v)| (k.borrow(), v.borrow())));
+        fn concat<'s, I>(iter: I) -> String
+        where
+            I: Iterator<Item = (&'s str, &'s str)>,
+        {
+            let mut into = String::new();
+            let mut first = true;
+            for (k, v) in iter.filter(|(k, _)| !k.is_empty()) {
+                if !first {
+                    into.push(LIST_SEPARATOR);
+                }
+                into.push_str(k);
+                if !v.is_empty() {
+                    into.push(FIELD_SEPARATOR);
+                    into.push_str(v);
+                }
+                first = false;
+            }
+            into
+        }
+
+        let iter = iter.into_iter();
+        let inner = concat(iter.map(|(k, v)| (k.borrow(), v.borrow())));
+
         Self(Cow::Owned(inner))
     }
 }
@@ -181,8 +247,7 @@ where
     V: Borrow<str> + 's,
 {
     fn from_iter<T: IntoIterator<Item = &'s (K, V)>>(iter: T) -> Self {
-        let inner = Parameters::from_iter(iter.into_iter().map(|(k, v)| (k.borrow(), v.borrow())));
-        Self(Cow::Owned(inner))
+        Self::from_iter(iter.into_iter().map(|(k, v)| (k.borrow(), v.borrow())))
     }
 }
 
@@ -210,25 +275,21 @@ where
 #[cfg(feature = "std")]
 impl<'s> From<&'s Properties<'s>> for HashMap<&'s str, &'s str> {
     fn from(props: &'s Properties<'s>) -> Self {
-        HashMap::from_iter(Parameters::iter(props.as_str()))
+        HashMap::from_iter(props.iter())
     }
 }
 
 #[cfg(feature = "std")]
 impl From<&Properties<'_>> for HashMap<String, String> {
     fn from(props: &Properties<'_>) -> Self {
-        HashMap::from_iter(
-            Parameters::iter(props.as_str()).map(|(k, v)| (k.to_string(), v.to_string())),
-        )
+        HashMap::from_iter(props.iter().map(|(k, v)| (k.to_string(), v.to_string())))
     }
 }
 
 #[cfg(feature = "std")]
 impl<'s> From<&'s Properties<'s>> for HashMap<Cow<'s, str>, Cow<'s, str>> {
     fn from(props: &'s Properties<'s>) -> Self {
-        HashMap::from_iter(
-            Parameters::iter(props.as_str()).map(|(k, v)| (Cow::from(k), Cow::from(v))),
-        )
+        HashMap::from_iter(props.iter().map(|(k, v)| (Cow::from(k), Cow::from(v))))
     }
 }
 

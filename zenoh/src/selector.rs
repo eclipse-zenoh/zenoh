@@ -388,7 +388,7 @@ fn selector_accessors() {
         let hm: HashMap<String, String> = HashMap::from(selector.parameters());
         assert!(hm.contains_key(TIME_RANGE_KEY));
 
-        selector.parameters_mut().join(hm.iter());
+        selector.parameters_mut().extend_from_iter(hm.iter());
         assert_eq!(selector.parameters().get("_filter").unwrap(), "");
 
         selector.set_accept_any_keyexpr(true);
