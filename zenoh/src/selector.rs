@@ -21,8 +21,10 @@ use std::{
     ops::{Deref, DerefMut},
     str::FromStr,
 };
-use zenoh_collections::Properties;
-use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
+use zenoh_protocol::core::{
+    key_expr::{keyexpr, OwnedKeyExpr},
+    Properties,
+};
 use zenoh_result::ZResult;
 use zenoh_util::time_range::TimeRange;
 

@@ -28,7 +28,7 @@ use zenoh_buffers::{
     ZBufReader, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_collections::Properties;
+use zenoh_protocol::core::Properties;
 use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
@@ -1371,7 +1371,7 @@ mod tests {
         use rand::Rng;
         use std::borrow::Cow;
         use zenoh_buffers::{ZBuf, ZSlice};
-        use zenoh_collections::Properties;
+        use zenoh_protocol::core::Properties;
 
         const NUM: usize = 1_000;
 

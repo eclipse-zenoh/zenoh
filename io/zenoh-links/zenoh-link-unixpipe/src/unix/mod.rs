@@ -21,11 +21,10 @@ pub mod unicast;
 
 use async_trait::async_trait;
 pub use unicast::*;
-use zenoh_collections::Parameters;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::Locator;
+use zenoh_protocol::core::{Locator, Parameters};
 use zenoh_result::ZResult;
 
 pub const UNIXPIPE_LOCATOR_PREFIX: &str = "unixpipe";

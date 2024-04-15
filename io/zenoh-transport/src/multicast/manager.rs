@@ -19,7 +19,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use zenoh_collections::Parameters;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionMulticastConf;
 #[cfg(feature = "shared-memory")]
@@ -27,8 +26,10 @@ use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
-use zenoh_protocol::core::ZenohId;
-use zenoh_protocol::transport::close;
+use zenoh_protocol::{
+    core::{Parameters, ZenohId},
+    transport::close,
+};
 use zenoh_result::{bail, zerror, ZResult};
 
 pub struct TransportManagerConfigMulticast {

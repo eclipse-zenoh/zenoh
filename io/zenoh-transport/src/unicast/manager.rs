@@ -36,7 +36,6 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-use zenoh_collections::Parameters;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionUnicastConf;
 #[cfg(feature = "shared-memory")]
@@ -46,7 +45,7 @@ use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::ZenohId,
+    core::{Parameters, ZenohId},
     transport::{close, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};

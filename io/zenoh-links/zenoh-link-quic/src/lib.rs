@@ -25,12 +25,11 @@ use config::{
 };
 use secrecy::ExposeSecret;
 use std::net::SocketAddr;
-use zenoh_collections::Parameters;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 use zenoh_protocol::{
-    core::{endpoint::Address, Locator},
+    core::{endpoint::Address, Locator, Parameters},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};

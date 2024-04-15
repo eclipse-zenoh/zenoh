@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::locator::*;
+use super::{
+    locator::*,
+    parameters::{Parameters, SortedParameters},
+};
 use alloc::{borrow::ToOwned, format, string::String};
 use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
-use zenoh_collections::{Parameters, SortedParameters};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 // Parsing chars

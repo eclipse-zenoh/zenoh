@@ -5030,7 +5030,7 @@ dependencies = [
  "futures",
  "lazy_static",
  "tokio",
- "zenoh-collections",
+ "zenoh-protocol",
  "zenoh-result",
 ]
 
