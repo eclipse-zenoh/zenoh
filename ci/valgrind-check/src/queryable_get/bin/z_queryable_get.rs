@@ -33,8 +33,8 @@ async fn main() {
             zenoh_runtime::ZRuntime::Application.block_in_place(async move {
                 query
                     .reply(
-                        query.selector().key_expr,
-                        query.value().unwrap().payload.clone(),
+                        query.selector().key_expr(),
+                        query.value().unwrap().payload().clone(),
                     )
                     .res()
                     .await
@@ -71,7 +71,7 @@ async fn main() {
                 ),
                 Err(err) => println!(
                     ">> Received (ERROR: '{}')",
-                    err.payload
+                    err.payload()
                         .deserialize::<String>()
                         .unwrap_or_else(|e| format!("{}", e))
                 ),

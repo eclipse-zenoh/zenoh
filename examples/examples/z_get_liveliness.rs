@@ -40,7 +40,7 @@ async fn main() {
             Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr().as_str(),),
             Err(err) => {
                 let payload = err
-                    .payload
+                    .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(">> Received (ERROR: '{}')", payload);

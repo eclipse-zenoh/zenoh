@@ -65,7 +65,7 @@ use zenoh_util::time_range::TimeRange;
 #[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
-    pub key_expr: KeyExpr<'a>,
+    pub(crate) key_expr: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
     pub(crate) parameters: Parameters<'a>,
 }
@@ -84,8 +84,12 @@ impl<'a> Selector<'a> {
         }
     }
 
-    /// Gets the parameters.
-    pub fn parameters(&self) -> &Parameters {
+    /// Gets the key-expression.
+    pub fn key_expr(&'a self) -> &KeyExpr<'a> {
+        &self.key_expr
+    }
+    /// Gets the parameters as a raw string.
+    pub fn parameters(&self) -> &Parameters<'a> {
         &self.parameters
     }
 

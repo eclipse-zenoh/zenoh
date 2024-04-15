@@ -155,7 +155,7 @@ impl<'a> Liveliness<'a> {
         LivelinessSubscriberBuilder {
             session: self.session.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -198,7 +198,7 @@ impl<'a> Liveliness<'a> {
             session: &self.session,
             key_expr,
             timeout,
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 }
@@ -608,7 +608,7 @@ where
 /// while let Ok(token) = tokens.recv_async().await {
 ///     match token.sample {
 ///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr().as_str()),
-///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload),
+///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload()),
 ///     }
 /// }
 /// # }

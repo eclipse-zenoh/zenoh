@@ -230,7 +230,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let e = s.sample.unwrap_err();
-                assert_eq!(e.payload.len(), size);
+                assert_eq!(e.payload().len(), size);
                 cnt += 1;
             }
         }
