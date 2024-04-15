@@ -303,12 +303,12 @@ impl StorageService {
                 {
                     match update.kind {
                         SampleKind::Put => {
-                            SampleBuilder::put(KeyExpr::from(k.clone()), update.data.value.payload)
-                                .encoding(update.data.value.encoding)
+                            SampleBuilder::put(k.clone(), update.data.value.payload().clone())
+                                .encoding(update.data.value.encoding().clone())
                                 .timestamp(update.data.timestamp)
                                 .into()
                         }
-                        SampleKind::Delete => SampleBuilder::delete(KeyExpr::from(k.clone()))
+                        SampleKind::Delete => SampleBuilder::delete(k.clone())
                             .timestamp(update.data.timestamp)
                             .into(),
                     }
@@ -331,8 +331,10 @@ impl StorageService {
                         storage
                             .put(
                                 stripped_key,
-                                Value::new(sample_to_store.payload().clone())
-                                    .encoding(sample_to_store.encoding().clone()),
+                                Value::new(
+                                    sample_to_store.payload().clone(),
+                                    sample_to_store.encoding().clone(),
+                                ),
                                 *sample_to_store.timestamp().unwrap(),
                             )
                             .await
@@ -516,8 +518,8 @@ impl StorageService {
                     Ok(stored_data) => {
                         for entry in stored_data {
                             if let Err(e) = q
-                                .reply(key.clone(), entry.value.payload)
-                                .encoding(entry.value.encoding)
+                                .reply(key.clone(), entry.value.payload().clone())
+                                .encoding(entry.value.encoding().clone())
                                 .timestamp(entry.timestamp)
                                 .res()
                                 .await
@@ -548,8 +550,8 @@ impl StorageService {
                 Ok(stored_data) => {
                     for entry in stored_data {
                         if let Err(e) = q
-                            .reply(q.key_expr().clone(), entry.value.payload)
-                            .encoding(entry.value.encoding)
+                            .reply(q.key_expr().clone(), entry.value.payload().clone())
+                            .encoding(entry.value.encoding().clone())
                             .timestamp(entry.timestamp)
                             .res()
                             .await
@@ -667,20 +669,14 @@ impl StorageService {
 fn serialize_update(update: &Update) -> String {
     let Update {
         kind,
-        data:
-            StoredData {
-                value: Value {
-                    payload, encoding, ..
-                },
-                timestamp,
-            },
+        data: StoredData { value, timestamp },
     } = update;
-    let zbuf: ZBuf = payload.into();
+    let zbuf: ZBuf = value.payload().into();
 
     let result = (
         kind.to_string(),
         timestamp.to_string(),
-        encoding.to_string(),
+        value.encoding().to_string(),
         zbuf.slices().collect::<Vec<&[u8]>>(),
     );
     serde_json::to_string_pretty(&result).unwrap()
@@ -692,7 +688,7 @@ fn construct_update(data: String) -> Update {
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).encoding(result.2);
+    let value = Value::new(payload, result.2);
     let data = StoredData {
         value,
         timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()

@@ -30,13 +30,16 @@ async fn main() {
         .declare_queryable(&queryable_key_expr.clone())
         .callback(move |query| {
             println!(">> Handling query '{}'", query.selector());
-            let reply = Ok(Sample::new(
-                queryable_key_expr.clone(),
-                query.value().unwrap().clone(),
-            ));
-            zenoh_runtime::ZRuntime::Application.block_in_place(
-                async move { query.reply(reply).res().await.unwrap(); }
-            );
+            zenoh_runtime::ZRuntime::Application.block_in_place(async move {
+                query
+                    .reply(
+                        query.selector().key_expr(),
+                        query.value().unwrap().payload().clone(),
+                    )
+                    .res()
+                    .await
+                    .unwrap();
+            });
         })
         .complete(true)
         .res()
@@ -51,7 +54,7 @@ async fn main() {
         println!("Sending Query '{get_selector}'...");
         let replies = get_session
             .get(&get_selector)
-            .with_value(idx)
+            .value(idx)
             .target(QueryTarget::All)
             .res()
             .await
@@ -60,10 +63,18 @@ async fn main() {
             match reply.sample {
                 Ok(sample) => println!(
                     ">> Received ('{}': '{}')",
-                    sample.key_expr.as_str(),
-                    sample.value,
+                    sample.key_expr().as_str(),
+                    sample
+                        .payload()
+                        .deserialize::<String>()
+                        .unwrap_or_else(|e| format!("{}", e))
                 ),
-                Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+                Err(err) => println!(
+                    ">> Received (ERROR: '{}')",
+                    err.payload()
+                        .deserialize::<String>()
+                        .unwrap_or_else(|e| format!("{}", e))
+                ),
             }
         }
     }

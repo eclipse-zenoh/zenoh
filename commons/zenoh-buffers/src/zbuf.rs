@@ -720,12 +720,12 @@ impl BacktrackableWriter for ZBufWriter<'_> {
 #[cfg(feature = "std")]
 impl<'a> io::Write for ZBufWriter<'a> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
         match <Self as Writer>::write(self, buf) {
             Ok(n) => Ok(n.get()),
-            Err(_) => Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "UnexpectedEof",
-            )),
+            Err(_) => Err(io::ErrorKind::UnexpectedEof.into()),
         }
     }
 

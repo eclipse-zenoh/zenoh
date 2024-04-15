@@ -298,7 +298,8 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 #[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     #[cfg(feature = "unstable")]
-    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
+    fn attachment<U: Into<OptionPayload>>(self, attachment: U) -> Self {
+        let attachment: OptionPayload = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
@@ -476,17 +477,15 @@ pub struct ReplyErrBuilder<'a> {
 
 impl ValueBuilderTrait for ReplyErrBuilder<'_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        Self {
-            value: self.value.encoding(encoding),
-            ..self
-        }
+        let mut value = self.value.clone();
+        value.encoding = encoding.into();
+        Self { value, ..self }
     }
 
     fn payload<T: Into<Payload>>(self, payload: T) -> Self {
-        Self {
-            value: self.value.payload(payload),
-            ..self
-        }
+        let mut value = self.value.clone();
+        value.payload = payload.into();
+        Self { value, ..self }
     }
 
     fn value<T: Into<Value>>(self, value: T) -> Self {

@@ -317,6 +317,145 @@ pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 }
 
+/// Scouting primitives.
+pub mod scouting;
+
+/// Scout for routers and/or peers.
+///
+/// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
+///
+/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
+///
+/// # Arguments
+///
+/// * `what` - The kind of zenoh process to scout for
+/// * `config` - The configuration [`Config`] to use for scouting
+///
+/// # Examples
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::r#async::*;
+/// use zenoh::scouting::WhatAmI;
+///
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+///     .res()
+///     .await
+///     .unwrap();
+/// while let Ok(hello) = receiver.recv_async().await {
+///     println!("{}", hello);
+/// }
+/// # }
+/// ```
+pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
+    what: I,
+    config: TryIntoConfig,
+) -> ScoutBuilder<DefaultHandler>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error:
+        Into<zenoh_result::Error>,
+{
+    ScoutBuilder {
+        what: what.into(),
+        config: config.try_into().map_err(|e| e.into()),
+        handler: DefaultHandler::default(),
+    }
+}
+
+/// Open a zenoh [`Session`].
+///
+/// # Arguments
+///
+/// * `config` - The [`Config`] for the zenoh session
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// # }
+/// ```
+///
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use std::str::FromStr;
+/// use zenoh::prelude::r#async::*;
+///
+/// let mut config = config::peer();
+/// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
+/// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
+///
+/// let session = zenoh::open(config).res().await.unwrap();
+/// # }
+/// ```
+pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    OpenBuilder { config }
+}
+
+/// A builder returned by [`open`] used to open a zenoh [`Session`].
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// # }
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+pub struct OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    config: TryIntoConfig,
+}
+
+impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type To = ZResult<Session>;
+}
+
+impl<TryIntoConfig> SyncResolve for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        let config: crate::config::Config = self
+            .config
+            .try_into()
+            .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
+        Session::new(config).res_sync()
+    }
+}
+
+impl<TryIntoConfig> AsyncResolve for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+/// Initialize a Session with an existing Runtime.
+/// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
 pub mod runtime {
     pub use crate::net::runtime::{AdminSpace, Runtime};

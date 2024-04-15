@@ -24,9 +24,10 @@ use crate::api::sample::QoS;
 use crate::api::sample::QoSBuilder;
 use crate::api::sample::Sample;
 use crate::api::sample::SampleKind;
-#[cfg(feature = "unstable")]
-use crate::api::sample::SourceInfo;
 use crate::api::value::Value;
+#[cfg(feature = "unstable")]
+use crate::{payload::OptionPayload, sample::SourceInfo};
+use std::marker::PhantomData;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
@@ -53,7 +54,7 @@ pub trait SampleBuilderTrait {
     fn source_info(self, source_info: SourceInfo) -> Self;
     /// Attach user-provided data in key-value format
     #[zenoh_macros::unstable]
-    fn attachment<T: Into<Option<Attachment>>>(self, attachment: T) -> Self;
+    fn attachment<T: Into<OptionPayload>>(self, attachment: T) -> Self;
 }
 
 pub trait ValueBuilderTrait {
@@ -179,7 +180,8 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
     }
 
     #[zenoh_macros::unstable]
-    fn attachment<U: Into<Option<Attachment>>>(self, attachment: U) -> Self {
+    fn attachment<U: Into<OptionPayload>>(self, attachment: U) -> Self {
+        let attachment: OptionPayload = attachment.into();
         Self {
             sample: Sample {
                 attachment: attachment.into(),

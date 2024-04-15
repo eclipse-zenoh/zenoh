@@ -319,7 +319,7 @@ impl<'a> Publisher<'a> {
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Borrow(self),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -424,7 +424,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Shared(self.clone()),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 }

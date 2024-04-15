@@ -306,7 +306,7 @@ impl RunningPluginTrait for StorageRuntime {
         with_extended_string(&mut key, &["/version"], |key| {
             if keyexpr::new(key.as_str())
                 .unwrap()
-                .intersects(&selector.key_expr)
+                .intersects(selector.key_expr())
             {
                 responses.push(zenoh::plugins::Response::new(
                     key.clone(),
@@ -321,7 +321,7 @@ impl RunningPluginTrait for StorageRuntime {
                     with_extended_string(key, &["/__path__"], |key| {
                         if keyexpr::new(key.as_str())
                             .unwrap()
-                            .intersects(&selector.key_expr)
+                            .intersects(selector.key_expr())
                         {
                             responses.push(zenoh::plugins::Response::new(
                                 key.clone(),
@@ -331,7 +331,7 @@ impl RunningPluginTrait for StorageRuntime {
                     });
                     if keyexpr::new(key.as_str())
                         .unwrap()
-                        .intersects(&selector.key_expr)
+                        .intersects(selector.key_expr())
                     {
                         responses.push(zenoh::plugins::Response::new(
                             key.clone(),
@@ -347,7 +347,7 @@ impl RunningPluginTrait for StorageRuntime {
                     with_extended_string(key, &[storage], |key| {
                         if keyexpr::new(key.as_str())
                             .unwrap()
-                            .intersects(&selector.key_expr)
+                            .intersects(selector.key_expr())
                         {
                             if let Ok(value) = task::block_on(async {
                                 let (tx, rx) = async_std::channel::bounded(1);

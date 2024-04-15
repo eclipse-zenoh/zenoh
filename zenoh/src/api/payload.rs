@@ -90,6 +90,11 @@ impl Payload {
         Ok(Payload::new(buf))
     }
 
+    /// Get a [`PayloadWriter`] implementing [`std::io::Write`] trait.
+    pub fn writer(&mut self) -> PayloadWriter<'_> {
+        PayloadWriter(self.0.writer())
+    }
+
     /// Get a [`PayloadReader`] implementing [`std::io::Read`] trait.
     pub fn iter<T>(&self) -> PayloadIterator<'_, T>
     where
@@ -103,12 +108,7 @@ impl Payload {
         }
     }
 
-    /// Get a [`PayloadWriter`] implementing [`std::io::Write`] trait.
-    pub fn writer(&mut self) -> PayloadWriter<'_> {
-        PayloadWriter(self.0.writer())
-    }
-
-    /// Encode an object of type `T` as a [`Value`] using the [`ZSerde`].
+    /// Serialize an object of type `T` as a [`Value`] using the [`ZSerde`].
     ///
     /// ```rust
     /// use zenoh::payload::Payload;
@@ -125,7 +125,7 @@ impl Payload {
         ZSerde.serialize(t)
     }
 
-    /// Decode an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
     pub fn deserialize<'a, T>(&'a self) -> ZResult<T>
     where
         ZSerde: Deserialize<'a, T>,
@@ -136,7 +136,7 @@ impl Payload {
             .map_err(|e| zerror!("{:?}", e).into())
     }
 
-    /// Decode an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Infallibly deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
     pub fn into<'a, T>(&'a self) -> T
     where
         ZSerde: Deserialize<'a, T, Error = Infallible>,
@@ -227,6 +227,50 @@ where
         }
 
         Payload::new(buffer)
+    }
+}
+
+/// Wrapper type for API ergonomicity to allow any type `T` to be converted into `Option<Payload>` where `T` implements `Into<Payload>`.
+#[repr(transparent)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OptionPayload(Option<Payload>);
+
+impl<T> From<T> for OptionPayload
+where
+    T: Into<Payload>,
+{
+    fn from(value: T) -> Self {
+        Self(Some(value.into()))
+    }
+}
+
+impl<T> From<Option<T>> for OptionPayload
+where
+    T: Into<Payload>,
+{
+    fn from(mut value: Option<T>) -> Self {
+        match value.take() {
+            Some(v) => Self(Some(v.into())),
+            None => Self(None),
+        }
+    }
+}
+
+impl<T> From<&Option<T>> for OptionPayload
+where
+    for<'a> &'a T: Into<Payload>,
+{
+    fn from(value: &Option<T>) -> Self {
+        match value.as_ref() {
+            Some(v) => Self(Some(v.into())),
+            None => Self(None),
+        }
+    }
+}
+
+impl From<OptionPayload> for Option<Payload> {
+    fn from(value: OptionPayload) -> Self {
+        value.0
     }
 }
 
@@ -857,7 +901,7 @@ impl Serialize<&serde_yaml::Value> for ZSerde {
 
     fn serialize(self, t: &serde_yaml::Value) -> Self::Output {
         let mut payload = Payload::empty();
-        serde_yaml::to_writer(payload.0.writer(), t)?;
+        serde_yaml::to_writer(payload.writer(), t)?;
         Ok(payload)
     }
 }
@@ -1091,15 +1135,9 @@ impl TryFrom<Payload> for SharedMemoryBuf {
 }
 
 // Tuple
-impl<A, B> Serialize<(A, B)> for ZSerde
-where
-    A: Into<Payload>,
-    B: Into<Payload>,
-{
-    type Output = Payload;
-
-    fn serialize(self, t: (A, B)) -> Self::Output {
-        let (a, b) = t;
+macro_rules! impl_tuple {
+    ($t:expr) => {{
+        let (a, b) = $t;
 
         let codec = Zenoh080::new();
         let mut buffer: ZBuf = ZBuf::empty();
@@ -1116,6 +1154,29 @@ where
         }
 
         Payload::new(buffer)
+    }};
+}
+impl<A, B> Serialize<(A, B)> for ZSerde
+where
+    A: Into<Payload>,
+    B: Into<Payload>,
+{
+    type Output = Payload;
+
+    fn serialize(self, t: (A, B)) -> Self::Output {
+        impl_tuple!(t)
+    }
+}
+
+impl<A, B> Serialize<&(A, B)> for ZSerde
+where
+    for<'a> &'a A: Into<Payload>,
+    for<'b> &'b B: Into<Payload>,
+{
+    type Output = Payload;
+
+    fn serialize(self, t: &(A, B)) -> Self::Output {
+        impl_tuple!(t)
     }
 }
 
@@ -1400,6 +1461,15 @@ mod tests {
         let p = Payload::from_iter(hm.clone().iter().map(|(k, v)| (k, Cow::from(v))));
         println!("Deserialize:\t{:?}\n", p);
         let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        assert_eq!(hm, o);
+
+        let mut hm: HashMap<String, String> = HashMap::new();
+        hm.insert(String::from("0"), String::from("a"));
+        hm.insert(String::from("1"), String::from("b"));
+        println!("Serialize:\t{:?}", hm);
+        let p = Payload::from_iter(hm.iter());
+        println!("Deserialize:\t{:?}\n", p);
+        let o = HashMap::from_iter(p.iter::<(String, String)>());
         assert_eq!(hm, o);
     }
 }

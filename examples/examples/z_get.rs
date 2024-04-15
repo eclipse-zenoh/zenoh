@@ -29,6 +29,10 @@ async fn main() {
     println!("Sending Query '{selector}'...");
     let replies = session
         .get(&selector)
+        // // By default get receives replies from a FIFO. 
+        // // Uncomment this line to use a ring channel instead. 
+        // // More information on the ring channel are available in the z_pull example.
+        .with(zenoh::handlers::RingChannel::default())
         .value(value)
         .target(target)
         .timeout(timeout)
@@ -50,7 +54,7 @@ async fn main() {
             }
             Err(err) => {
                 let payload = err
-                    .payload
+                    .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(">> Received (ERROR: '{}')", payload);

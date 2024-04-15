@@ -101,8 +101,8 @@ fn result_to_json(sample: Result<Sample, Value>) -> JSONSample {
         Ok(sample) => sample_to_json(&sample),
         Err(err) => JSONSample {
             key: "ERROR".into(),
-            value: payload_to_json(&err.payload, &err.encoding),
-            encoding: err.encoding.to_string(),
+            value: payload_to_json(err.payload(), err.encoding()),
+            encoding: err.encoding().to_string(),
             time: None,
         },
     }
@@ -143,7 +143,7 @@ fn result_to_html(sample: Result<Sample, Value>) -> String {
         Err(err) => {
             format!(
                 "<dt>ERROR</dt>\n<dd>{}</dd>\n",
-                err.payload.deserialize::<Cow<str>>().unwrap_or_default()
+                err.payload().deserialize::<Cow<str>>().unwrap_or_default()
             )
         }
     }
@@ -176,8 +176,11 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
             ),
             Err(value) => response(
                 StatusCode::Ok,
-                Cow::from(&value.encoding).as_ref(),
-                &value.payload.deserialize::<Cow<str>>().unwrap_or_default(),
+                Cow::from(value.encoding()).as_ref(),
+                &value
+                    .payload()
+                    .deserialize::<Cow<str>>()
+                    .unwrap_or_default(),
             ),
         },
         Err(_) => response(StatusCode::Ok, "", ""),
@@ -275,7 +278,7 @@ impl RunningPluginTrait for RunningPlugin {
         with_extended_string(&mut key, &["/version"], |key| {
             if keyexpr::new(key.as_str())
                 .unwrap()
-                .intersects(&selector.key_expr)
+                .intersects(selector.key_expr())
             {
                 responses.push(zenoh::plugins::Response::new(
                     key.clone(),
@@ -286,7 +289,7 @@ impl RunningPluginTrait for RunningPlugin {
         with_extended_string(&mut key, &["/port"], |port_key| {
             if keyexpr::new(port_key.as_str())
                 .unwrap()
-                .intersects(&selector.key_expr)
+                .intersects(selector.key_expr())
             {
                 responses.push(zenoh::plugins::Response::new(
                     port_key.clone(),

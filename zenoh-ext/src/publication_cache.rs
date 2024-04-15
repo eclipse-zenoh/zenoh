@@ -208,8 +208,8 @@ impl<'a> PublicationCache<'a> {
                         // on query, reply with cach content
                         query = quer_recv.recv_async() => {
                             if let Ok(query) = query {
-                                if !query.selector().key_expr.as_str().contains('*') {
-                                    if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
+                                if !query.selector().key_expr().as_str().contains('*') {
+                                    if let Some(queue) = cache.get(query.selector().key_expr().as_keyexpr()) {
                                         for sample in queue {
                                             if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
                                                 if !time_range.contains(timestamp.get_time().to_system_time()){
@@ -223,7 +223,7 @@ impl<'a> PublicationCache<'a> {
                                     }
                                 } else {
                                     for (key_expr, queue) in cache.iter() {
-                                        if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
+                                        if query.selector().key_expr().intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                             for sample in queue {
                                                 if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
                                                     if !time_range.contains(timestamp.get_time().to_system_time()){
