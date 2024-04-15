@@ -78,7 +78,7 @@ jobs:
           ASYNC_STD_THREAD_COUNT: 4
 
   checks-ubuntu-24:
-    name: Code checks
+    name: Code checks on Ubuntu 24.04
     runs-on: ubuntu-latest
     container: ubuntu:24.04
     steps:
@@ -86,7 +86,9 @@ jobs:
         run: apt-get update && apt-get install -y curl git build-essential
 
       - name: Install Rust toolchain
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . "$HOME/.cargo/env"
 
       - name: Clone this repository
         uses: actions/checkout@v4
@@ -121,7 +123,9 @@ jobs:
         run: apt-get update && apt-get install -y curl git build-essential
         
       - name: Install Rust toolchain
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . "$HOME/.cargo/env"
 
       - name: Clone this repository
         uses: actions/checkout@v4
