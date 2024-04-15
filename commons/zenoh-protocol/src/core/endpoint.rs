@@ -239,7 +239,7 @@ impl<'a> MetadataMut<'a> {
 }
 
 impl MetadataMut<'_> {
-    pub fn join<'s, I, K, V>(&mut self, iter: I) -> ZResult<()>
+    pub fn extend_from_iter<'s, I, K, V>(&mut self, iter: I) -> ZResult<()>
     where
         I: Iterator<Item = (&'s K, &'s V)> + Clone,
         K: Borrow<str> + 's + ?Sized,
@@ -369,7 +369,7 @@ impl<'a> ConfigMut<'a> {
 }
 
 impl ConfigMut<'_> {
-    pub fn join<'s, I, K, V>(&mut self, iter: I) -> ZResult<()>
+    pub fn extend_from_iter<'s, I, K, V>(&mut self, iter: I) -> ZResult<()>
     where
         I: Iterator<Item = (&'s K, &'s V)> + Clone,
         K: Borrow<str> + 's + ?Sized,
@@ -817,14 +817,14 @@ fn endpoints() {
     let mut endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
     endpoint
         .metadata_mut()
-        .join([("a", "1"), ("c", "3"), ("b", "2")].iter().copied())
+        .extend_from_iter([("a", "1"), ("c", "3"), ("b", "2")].iter().copied())
         .unwrap();
     assert_eq!(endpoint.as_str(), "udp/127.0.0.1:7447?a=1;b=2;c=3");
 
     let mut endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
     endpoint
         .config_mut()
-        .join([("A", "1"), ("C", "3"), ("B", "2")].iter().copied())
+        .extend_from_iter([("A", "1"), ("C", "3"), ("B", "2")].iter().copied())
         .unwrap();
     assert_eq!(endpoint.as_str(), "udp/127.0.0.1:7447#A=1;B=2;C=3");
 

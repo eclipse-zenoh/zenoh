@@ -317,7 +317,7 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 7070).parse().unwrap();
     endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
@@ -396,7 +396,7 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 7080).parse().unwrap();
     endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),

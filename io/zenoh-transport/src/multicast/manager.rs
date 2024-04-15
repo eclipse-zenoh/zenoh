@@ -261,7 +261,9 @@ impl TransportManager {
             .await?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
-            endpoint.config_mut().join(Parameters::iter(config))?;
+            endpoint
+                .config_mut()
+                .extend_from_iter(Parameters::iter(config))?;
         }
 
         // Open the link

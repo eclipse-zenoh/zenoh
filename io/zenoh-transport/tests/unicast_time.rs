@@ -398,7 +398,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
     endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
@@ -497,7 +497,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
     endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),

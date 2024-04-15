@@ -994,7 +994,7 @@ async fn transport_unicast_tls_only_server() {
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 16070).parse().unwrap();
     endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
                 (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
@@ -1039,7 +1039,7 @@ async fn transport_unicast_quic_only_server() {
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 16080).parse().unwrap();
     endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
                 (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
@@ -1087,7 +1087,7 @@ async fn transport_unicast_tls_only_mutual_success() {
     let mut client_endpoint: EndPoint = ("tls/localhost:10461").parse().unwrap();
     client_endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
                 (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
@@ -1103,7 +1103,7 @@ async fn transport_unicast_tls_only_mutual_success() {
     let mut server_endpoint: EndPoint = ("tls/localhost:10461").parse().unwrap();
     server_endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
                 (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
@@ -1157,14 +1157,14 @@ async fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     let mut client_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
     client_endpoint
         .config_mut()
-        .join([(TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA)].iter().copied())
+        .extend_from_iter([(TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA)].iter().copied())
         .unwrap();
 
     // Define the locator
     let mut server_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
     server_endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
                 (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
@@ -1223,7 +1223,7 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     let mut client_endpoint: EndPoint = ("tls/localhost:10463").parse().unwrap();
     client_endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
                 // Using the SERVER_CERT and SERVER_KEY in the client to simulate the case the client has
@@ -1243,7 +1243,7 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     let mut server_endpoint: EndPoint = ("tls/localhost:10463").parse().unwrap();
     server_endpoint
         .config_mut()
-        .join(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
                 (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
