@@ -15,11 +15,11 @@ use core::panic;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::{
+    borrow::Borrow,
     collections::HashMap,
     env,
     future::Future,
     ops::Deref,
-    str::FromStr,
     sync::{
         atomic::{AtomicUsize, Ordering},
         OnceLock,
@@ -27,14 +27,10 @@ use std::{
     time::Duration,
 };
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
-use zenoh_result::{bail, ZError, ZResult as Result};
+use zenoh_result::ZResult as Result;
 use zenoh_runtime_derive::{ConfigureZRuntime, GenericRuntimeParam};
 
 const ZENOH_RUNTIME_ENV: &str = "ZENOH_RUNTIME";
-
-trait DefaultParam {
-    fn param() -> RuntimeParam;
-}
 
 #[derive(Deserialize, Debug, GenericRuntimeParam)]
 #[serde(deny_unknown_fields, default)]
@@ -52,10 +48,6 @@ impl Default for RuntimeParam {
             handover: None,
         }
     }
-}
-
-pub trait RuntimeParamTrait {
-    fn param(&self) -> &RuntimeParam;
 }
 
 impl RuntimeParam {
@@ -94,18 +86,6 @@ pub enum ZRuntime {
     #[serde(rename = "net")]
     #[param(worker_threads = 1)]
     Net,
-}
-
-impl FromStr for ZRuntime {
-    type Err = ZError;
-
-    fn from_str(s: &str) -> core::result::Result<Self, Self::Err> {
-        if let Some(zrt) = ZRuntime::iter().find(|zrt| s == zrt.to_string()) {
-            Ok(zrt)
-        } else {
-            bail!("Invalid ZRuntime name: {s}")
-        }
-    }
 }
 
 impl ZRuntime {
@@ -157,7 +137,8 @@ impl ZRuntimePool {
     pub fn get(&self, zrt: &ZRuntime) -> &Handle {
         // Although the ZRuntime is called to use `zrt`, it may be handover to another one
         // specified via the environmental variable.
-        let zrt = match zrt.param().handover {
+        let param: &RuntimeParam = zrt.borrow();
+        let zrt = match param.handover {
             Some(handover) => handover,
             None => *zrt,
         };

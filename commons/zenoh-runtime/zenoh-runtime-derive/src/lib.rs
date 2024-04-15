@@ -80,14 +80,18 @@ fn parse_variants(
     (name_vec, alias_vec, param_vec)
 }
 
-fn declare_param(
-    names: &[&Ident],
+// To generate the following quotes for
+// 1. struct DefaultParamOf`#variant_name`
+// 2. impl `DefaultParam` for DefaultParamOf`#variant_name`
+// 3.
+fn generate_declare_param(
+    variant_names: &[&Ident],
     aliases: &Vec<TokenStream>,
     params: &[TokenStream],
 ) -> TokenStream {
-    let helper_names: Vec<_> = names
+    let helper_names: Vec<_> = variant_names
         .iter()
-        .map(|name| format_ident!("Default{}", name))
+        .map(|name| format_ident!("DefaultParamOf{}", name))
         .collect();
     let params_with_default = params.iter().map(|x| {
         if x.to_string() != "" {
@@ -97,6 +101,10 @@ fn declare_param(
         }
     });
     quote! {
+        trait DefaultParam {
+            fn param() -> RuntimeParam;
+        }
+
         #(
             #[derive(Debug, Clone, Copy)]
             struct #helper_names;
@@ -110,10 +118,10 @@ fn declare_param(
             }
         )*
 
-        // pub is needed within lazy_static
+        // An internal helper struct for parsing the RuntimeParam
         #[derive(Deserialize, Debug, Clone, Copy)]
         #[serde(deny_unknown_fields)]
-        pub struct AbstractRuntimeParam {
+        struct AbstractRuntimeParam {
             #(
                 #[serde(default)]
                 #aliases: RuntimeParamHelper<#helper_names>,
@@ -131,6 +139,7 @@ fn declare_param(
         }
 
         /// A global runtime parameter for zenoh runtimes
+        // pub is needed within lazy_static
         pub struct GlobalRuntimeParam {
             #(
                 #aliases: RuntimeParam,
@@ -149,8 +158,7 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         _ => unimplemented!("Only enum is supported."),
     };
     let (variant_names, aliases, params) = parse_variants(&variants);
-    let declare_param_quote = declare_param(&variant_names, &aliases, &params);
-    let aliases_string = aliases.iter().map(|x| x.to_string());
+    let declare_param_quote = generate_declare_param(&variant_names, &aliases, &params);
 
     let expanded = quote! {
 
@@ -166,18 +174,17 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 .from_str::<AbstractRuntimeParam>(&ZENOH_RUNTIME_ENV_STRING)
                 .unwrap()
                 .into();
-            // pub static ref ZRUNTIME_CONFIG: AbstractRuntimeParam<'static> = ron::from_str(&ZENOH_RUNTIME_ENV_STRING).unwrap();
         }
 
         #declare_param_quote
 
         impl #enum_name {
-            /// Create an iterator from enum
+            #[doc = concat!("Create an iterator from ", stringify!(#enum_name))]
             pub fn iter() -> impl Iterator<Item = #enum_name> {
                 [#(#variant_names,)*].into_iter()
             }
 
-            /// Initialize the tokio runtime according to the given config
+            #[doc = "Initialize the tokio runtime according to the given config"]
             fn init(&self) -> Result<Runtime> {
                 match self {
                     #(
@@ -190,9 +197,9 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
         }
 
-        impl RuntimeParamTrait for #enum_name {
-
-            fn param(&self) -> &RuntimeParam {
+        #[doc = concat!("Borrow the underlying `RuntimeParam` from ", stringify!(#enum_name))]
+        impl Borrow<RuntimeParam> for #enum_name {
+            fn borrow(&self) -> &RuntimeParam {
                 match self {
                     #(
                         #variant_names => {
@@ -200,16 +207,14 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                         },
                     )*
                 }
-
             }
         }
-
         impl std::fmt::Display for #enum_name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
                     #(
                         #variant_names => {
-                            write!(f, #aliases_string)
+                            write!(f, stringify!(#aliases))
                         },
                     )*
 
