@@ -154,7 +154,7 @@ impl fmt::Display for FaceState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WeakFace {
     pub(crate) tables: Weak<TablesLock>,
     pub(crate) state: Weak<FaceState>,

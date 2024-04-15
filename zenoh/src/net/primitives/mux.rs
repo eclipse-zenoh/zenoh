@@ -50,18 +50,22 @@ impl Primitives for Mux {
         if self.interceptor.interceptors.is_empty() {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
+            let Some(face) = face.upgrade() else {
+                log::debug!("Invalid face: {:?}. Interest not sent: {:?}", face, msg);
+                return;
+            };
             let ctx = RoutingContext::new_out(msg, face.clone());
             let prefix = ctx
                 .wire_expr()
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
             if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            log::debug!("Uninitialized multiplexer. Interest not sent: {:?}", msg);
         }
     }
 
