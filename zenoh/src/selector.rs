@@ -72,6 +72,18 @@ pub struct Selector<'a> {
 
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
+    /// Builds a new selector
+    pub fn new<K, P>(key_expr: K, parameters: P) -> Self
+    where
+        K: Into<KeyExpr<'a>>,
+        P: Into<Parameters<'a>>,
+    {
+        Self {
+            key_expr: key_expr.into(),
+            parameters: parameters.into(),
+        }
+    }
+
     /// Gets the parameters.
     pub fn parameters(&self) -> &Parameters {
         &self.parameters
@@ -85,11 +97,20 @@ impl<'a> Selector<'a> {
         &mut self.parameters
     }
 
+    /// Sets the `parameters` part of this `Selector`.
+    #[inline(always)]
+    pub fn set_parameters<P>(&mut self, parameters: P)
+    where
+        P: Into<Parameters<'static>>,
+    {
+        self.parameters = parameters.into();
+    }
+
     /// Create an owned version of this selector with `'static` lifetime.
     pub fn into_owned(self) -> Selector<'static> {
         Selector {
             key_expr: self.key_expr.into_owned(),
-            parameters: Parameters(self.parameters.0.into_owned()),
+            parameters: self.parameters.into_owned(),
         }
     }
 
@@ -102,14 +123,6 @@ impl<'a> Selector<'a> {
     /// Sets the time range targeted by the selector.
     pub fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
         self.parameters_mut().set_time_range(time_range);
-    }
-
-    #[zenoh_macros::unstable]
-    /// Sets the `parameters` part of this `Selector`.
-    #[inline(always)]
-    pub fn with_parameters(mut self, parameters: &'a str) -> Self {
-        self.parameters = parameters.into();
-        self
     }
 
     #[zenoh_macros::unstable]
@@ -192,6 +205,11 @@ impl From<Parameters<'_>> for HashMap<String, String> {
 }
 
 impl Parameters<'_> {
+    /// Create an owned version of these parameters with `'static` lifetime.
+    pub fn into_owned(self) -> Parameters<'static> {
+        Parameters(self.0.into_owned())
+    }
+
     #[zenoh_macros::unstable]
     /// Sets the time range targeted by the selector.
     pub fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {

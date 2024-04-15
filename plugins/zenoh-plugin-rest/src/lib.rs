@@ -403,7 +403,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         };
         let query_part = url.query();
         let selector = if let Some(q) = query_part {
-            Selector::from(key_expr).with_parameters(q)
+            Selector::new(key_expr, q)
         } else {
             key_expr.into()
         };
