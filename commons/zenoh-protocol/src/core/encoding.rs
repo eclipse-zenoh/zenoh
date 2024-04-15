@@ -18,8 +18,8 @@ pub type EncodingId = u16;
 
 /// [`Encoding`] is a metadata that indicates how the data payload should be interpreted.
 /// For wire-efficiency and extensibility purposes, Zenoh defines an [`Encoding`] as
-/// composed of an unsigned integer prefix and a string suffix. The actual meaning of the
-/// prefix and suffix are out-of-scope of the protocol definition. Therefore, Zenoh does not
+/// composed of an unsigned integer prefix and a bytes schema. The actual meaning of the
+/// prefix and schema are out-of-scope of the protocol definition. Therefore, Zenoh does not
 /// impose any encoding mapping and users are free to use any mapping they like.
 /// Nevertheless, it is worth highlighting that Zenoh still provides a default mapping as part
 /// of the API as per user convenience. That mapping has no impact on the Zenoh protocol definition.
@@ -40,7 +40,7 @@ pub struct Encoding {
 /// +---------------+
 /// ```
 pub mod flag {
-    pub const S: u32 = 1; // 0x01 Suffix    if S==1 then suffix is present
+    pub const S: u32 = 1; // 0x01 Suffix    if S==1 then schema is present
 }
 
 impl Encoding {

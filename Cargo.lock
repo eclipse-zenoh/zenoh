@@ -3955,6 +3955,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
+name = "unwrap-infallible"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "151ac09978d3c2862c4e39b557f4eceee2cc72150bc4cb4f16abf061b6e381fb"
+
+[[package]]
 name = "unzip-n"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4479,6 +4485,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uhlc",
+ "unwrap-infallible",
  "uuid",
  "vec_map",
  "zenoh-buffers",
@@ -4496,6 +4503,7 @@ dependencies = [
  "zenoh-runtime",
  "zenoh-shm",
  "zenoh-sync",
+ "zenoh-task",
  "zenoh-transport",
  "zenoh-util",
 ]
@@ -4605,6 +4613,7 @@ dependencies = [
  "zenoh",
  "zenoh-collections",
  "zenoh-ext",
+ "zenoh-shm",
 ]
 
 [[package]]
@@ -4628,6 +4637,7 @@ dependencies = [
  "zenoh-result",
  "zenoh-runtime",
  "zenoh-sync",
+ "zenoh-task",
  "zenoh-util",
 ]
 
@@ -5010,6 +5020,7 @@ dependencies = [
 name = "zenoh-runtime"
 version = "0.11.0-dev"
 dependencies = [
+ "futures",
  "lazy_static",
  "tokio",
  "zenoh-collections",
@@ -5038,6 +5049,18 @@ dependencies = [
  "zenoh-collections",
  "zenoh-core",
  "zenoh-result",
+ "zenoh-runtime",
+]
+
+[[package]]
+name = "zenoh-task"
+version = "0.11.0-dev"
+dependencies = [
+ "futures",
+ "log",
+ "tokio",
+ "tokio-util",
+ "zenoh-core",
  "zenoh-runtime",
 ]
 
@@ -5072,6 +5095,7 @@ dependencies = [
  "zenoh-runtime",
  "zenoh-shm",
  "zenoh-sync",
+ "zenoh-task",
  "zenoh-util",
 ]
 

@@ -20,6 +20,7 @@ use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
+use crate::sample::builder::ValueBuilderTrait;
 use crate::value::Value;
 use log::{error, trace};
 use serde_json::json;
@@ -430,9 +431,7 @@ impl Primitives for AdminSpace {
                     inner: Arc::new(QueryInner {
                         key_expr: key_expr.clone(),
                         parameters,
-                        value: query
-                            .ext_body
-                            .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
+                        value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
                         qid: msg.id,
                         zid,
                         primitives,
@@ -585,7 +584,7 @@ fn router_data(context: &AdminContext, query: Query) {
     };
     if let Err(e) = query
         .reply(reply_key, payload)
-        .with_encoding(Encoding::APPLICATION_JSON)
+        .encoding(Encoding::APPLICATION_JSON)
         .res_sync()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);

@@ -21,6 +21,7 @@ use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
 use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
+use zenoh::sample::builder::SampleBuilder;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 
@@ -105,12 +106,10 @@ impl Aligner {
             log::trace!("[ALIGNER] Received queried samples: {missing_data:?}");
 
             for (key, (ts, value)) in missing_data {
-                let Value {
-                    payload, encoding, ..
-                } = value;
-                let sample = Sample::new(key, payload)
-                    .with_encoding(encoding)
-                    .with_timestamp(ts);
+                let sample = SampleBuilder::put(key, value.payload().clone())
+                    .encoding(value.encoding().clone())
+                    .timestamp(ts)
+                    .into();
                 log::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
                     log::error!("[ALIGNER] Error adding sample to storage: {}", e)

@@ -275,6 +275,7 @@ impl Resource {
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
             if Arc::strong_count(res) <= 3 && res.childs.is_empty() {
+                // consider only childless resource held by only one external object (+ 1 strong count for resclone, + 1 strong count for res.parent to a total of 3 )
                 log::debug!("Unregister resource {}", res.expr());
                 if let Some(context) = mutres.context.as_mut() {
                     for match_ in &mut context.matches {
@@ -288,12 +289,24 @@ impl Resource {
                         }
                     }
                 }
+                mutres.nonwild_prefix.take();
                 {
                     get_mut_unchecked(parent).childs.remove(&res.suffix);
                 }
                 Resource::clean(parent);
             }
         }
+    }
+
+    pub fn close(self: &mut Arc<Resource>) {
+        let r = get_mut_unchecked(self);
+        for c in r.childs.values_mut() {
+            Self::close(c);
+        }
+        r.parent.take();
+        r.childs.clear();
+        r.nonwild_prefix.take();
+        r.session_ctxs.clear();
     }
 
     #[cfg(test)]

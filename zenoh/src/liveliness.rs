@@ -15,6 +15,8 @@
 //! Liveliness primitives.
 //!
 //! see [`Liveliness`]
+use zenoh_protocol::network::request;
+
 use crate::{query::Reply, Id};
 
 #[zenoh_macros::unstable]
@@ -153,7 +155,7 @@ impl<'a> Liveliness<'a> {
         LivelinessSubscriberBuilder {
             session: self.session.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -196,7 +198,7 @@ impl<'a> Liveliness<'a> {
             session: &self.session,
             key_expr,
             timeout,
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 }
@@ -606,7 +608,7 @@ where
 /// while let Ok(token) = tokens.recv_async().await {
 ///     match token.sample {
 ///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr().as_str()),
-///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload),
+///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload()),
 ///     }
 /// }
 /// # }
@@ -756,18 +758,19 @@ where
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-
         self.session
             .query(
                 &self.key_expr?.into(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 QueryTarget::DEFAULT,
                 QueryConsolidation::DEFAULT,
+                request::ext::QoSType::REQUEST.into(),
                 Locality::default(),
                 self.timeout,
                 None,
                 #[cfg(feature = "unstable")]
                 None,
+                SourceInfo::empty(),
                 callback,
             )
             .map(|_| receiver)

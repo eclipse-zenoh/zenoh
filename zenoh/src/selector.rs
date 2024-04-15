@@ -65,13 +65,17 @@ use std::{
 #[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
-    pub key_expr: KeyExpr<'a>,
-    /// the part of this selector identifying which values should be part of the selection.
+    pub(crate) key_expr: KeyExpr<'a>,
+    /// The part of this selector identifying which values should be part of the selection.
     pub(crate) parameters: Cow<'a, str>,
 }
 
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
+    /// Gets the key-expression.
+    pub fn key_expr(&'a self) -> &KeyExpr<'a> {
+        &self.key_expr
+    }
     /// Gets the parameters as a raw string.
     pub fn parameters(&self) -> &str {
         &self.parameters

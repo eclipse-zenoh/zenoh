@@ -225,7 +225,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
 impl Drop for LinkUnicastWs {
     fn drop(&mut self) {
-        zenoh_runtime::ZRuntime::TX.block_in_place(async {
+        zenoh_runtime::ZRuntime::Acceptor.block_in_place(async {
             let mut guard = zasynclock!(self.send);
             // Close the underlying TCP socket
             guard.close().await.unwrap_or_else(|e| {
