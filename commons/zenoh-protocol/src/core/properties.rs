@@ -61,7 +61,6 @@ fn split_once(s: &str, c: char) -> (&str, &str) {
 /// let pi = Properties::from_iter(vec![("a", "1"), ("b", "2"), ("c", "3|4|5"), ("d", "6")]);
 /// assert_eq!(p, pi);
 /// ```
-#[non_exhaustive]
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct Properties<'s>(Cow<'s, str>);
 
