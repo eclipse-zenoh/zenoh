@@ -96,11 +96,13 @@ impl<'a> Selector<'a> {
         (self.key_expr, self.parameters)
     }
 
+    #[zenoh_macros::unstable]
     /// Sets the time range targeted by the selector.
     pub fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
         self.parameters_mut().set_time_range(time_range);
     }
 
+    #[zenoh_macros::unstable]
     /// Sets the `parameters` part of this `Selector`.
     #[inline(always)]
     pub fn with_parameters(mut self, parameters: &'a str) -> Self {
@@ -108,6 +110,7 @@ impl<'a> Selector<'a> {
         self
     }
 
+    #[zenoh_macros::unstable]
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
