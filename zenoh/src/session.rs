@@ -2049,7 +2049,7 @@ impl Primitives for Session {
             }
             DeclareBody::DeclareToken(_) => todo!(),
             DeclareBody::UndeclareToken(_) => todo!(),
-            DeclareBody::DeclareFinal => todo!(),
+            DeclareBody::DeclareFinal(_) => todo!(),
         }
     }
 

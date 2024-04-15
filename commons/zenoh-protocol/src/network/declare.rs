@@ -97,7 +97,7 @@ pub enum DeclareBody {
     UndeclareQueryable(UndeclareQueryable),
     DeclareToken(DeclareToken),
     UndeclareToken(UndeclareToken),
-    DeclareFinal,
+    DeclareFinal(DeclareFinal),
 }
 
 impl DeclareBody {
@@ -116,7 +116,7 @@ impl DeclareBody {
             5 => DeclareBody::UndeclareQueryable(UndeclareQueryable::rand()),
             6 => DeclareBody::DeclareToken(DeclareToken::rand()),
             7 => DeclareBody::UndeclareToken(UndeclareToken::rand()),
-            8 => DeclareBody::DeclareFinal,
+            8 => DeclareBody::DeclareFinal(DeclareFinal::rand()),
             _ => unreachable!(),
         }
     }

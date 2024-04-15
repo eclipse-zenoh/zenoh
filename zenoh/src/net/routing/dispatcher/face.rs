@@ -214,7 +214,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::DeclareFinal => todo!(),
+            zenoh_protocol::network::DeclareBody::DeclareFinal(_) => todo!(),
         }
         drop(ctrl_lock);
     }

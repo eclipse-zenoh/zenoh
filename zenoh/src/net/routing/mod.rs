@@ -117,7 +117,7 @@ impl RoutingContext<NetworkMessage> {
                 DeclareBody::UndeclareQueryable(m) => Some(&m.ext_wire_expr.wire_expr),
                 DeclareBody::DeclareToken(m) => Some(&m.wire_expr),
                 DeclareBody::UndeclareToken(m) => Some(&m.ext_wire_expr.wire_expr),
-                DeclareBody::DeclareFinal => None,
+                DeclareBody::DeclareFinal(_) => None,
             },
             NetworkBody::OAM(_) => None,
         }
