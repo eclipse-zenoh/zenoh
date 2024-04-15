@@ -190,6 +190,7 @@ impl From<Parameters<'_>> for HashMap<String, String> {
 }
 
 impl Parameters<'_> {
+    #[zenoh_macros::unstable]
     /// Sets the time range targeted by the selector.
     pub fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
         let mut time_range: Option<TimeRange> = time_range.into();
@@ -199,6 +200,7 @@ impl Parameters<'_> {
         };
     }
 
+    #[zenoh_macros::unstable]
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
