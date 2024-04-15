@@ -128,7 +128,10 @@ impl<'s> Properties<'s> {
         K: Borrow<str> + 'e + ?Sized,
         V: Borrow<str> + 'e + ?Sized,
     {
-        let inner = Parameters::join(self.iter(), iter.map(|(k, v)| (k.borrow(), v.borrow())));
+        let inner = Parameters::from_iter(Parameters::join(
+            self.iter(),
+            iter.map(|(k, v)| (k.borrow(), v.borrow())),
+        ));
         self.0 = Cow::Owned(inner);
     }
 
@@ -341,7 +344,9 @@ impl<'s> OrderedProperties<'s> {
 
     fn order(&mut self) {
         if !self.0.is_ordered() {
-            self.0 = Properties(Cow::Owned(Parameters::from_iter_sort(self.iter())));
+            self.0 = Properties(Cow::Owned(Parameters::from_iter(Parameters::sort(
+                self.iter(),
+            ))));
         }
     }
 }

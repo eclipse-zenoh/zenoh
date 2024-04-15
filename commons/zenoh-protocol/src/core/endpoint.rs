@@ -248,10 +248,10 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::join_sort(
+            Parameters::from_iter(Parameters::sort(Parameters::join(
                 self.0.metadata().iter(),
                 iter.map(|(k, v)| (k.borrow(), v.borrow())),
-            ),
+            ))),
             self.0.config(),
         )?;
 
@@ -379,10 +379,10 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::join_sort(
+            Parameters::from_iter(Parameters::sort(Parameters::join(
                 self.0.config().iter(),
                 iter.map(|(k, v)| (k.borrow(), v.borrow())),
-            ),
+            ))),
         )?;
 
         self.0.inner = ep.inner;
@@ -575,14 +575,20 @@ impl TryFrom<String> for EndPoint {
             (Some(midx), None) if midx > pidx && !s[midx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
-                Parameters::from_iter_sort_into(Parameters::iter(&s[midx + 1..]), &mut inner);
+                Parameters::from_iter_into(
+                    Parameters::sort(Parameters::iter(&s[midx + 1..])),
+                    &mut inner,
+                );
                 Ok(EndPoint { inner })
             }
             // There is some config
             (None, Some(cidx)) if cidx > pidx && !s[cidx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..cidx + 1]); // Includes config separator
-                Parameters::from_iter_sort_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
+                Parameters::from_iter_into(
+                    Parameters::sort(Parameters::iter(&s[cidx + 1..])),
+                    &mut inner,
+                );
                 Ok(EndPoint { inner })
             }
             // There is some metadata and some config
@@ -595,10 +601,16 @@ impl TryFrom<String> for EndPoint {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
 
-                Parameters::from_iter_sort_into(Parameters::iter(&s[midx + 1..cidx]), &mut inner);
+                Parameters::from_iter_into(
+                    Parameters::sort(Parameters::iter(&s[midx + 1..cidx])),
+                    &mut inner,
+                );
 
                 inner.push(CONFIG_SEPARATOR);
-                Parameters::from_iter_sort_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
+                Parameters::from_iter_into(
+                    Parameters::sort(Parameters::iter(&s[cidx + 1..])),
+                    &mut inner,
+                );
 
                 Ok(EndPoint { inner })
             }

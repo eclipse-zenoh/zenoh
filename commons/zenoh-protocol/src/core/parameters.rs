@@ -44,6 +44,29 @@ impl Parameters {
             .map(|p| split_once(p, FIELD_SEPARATOR))
     }
 
+    /// Same as [`Self::from_iter_into`] but keys are sorted in alphabetical order.
+    pub fn sort<'s, I>(iter: I) -> impl Iterator<Item = (&'s str, &'s str)>
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        let mut from = iter.collect::<Vec<(&str, &str)>>();
+        from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
+        from.into_iter()
+    }
+
+    /// Joins two key-value `(&str, &str)` iterators removing from `current` any element whose key is present in `new`.
+    pub fn join<'s, C, N>(current: C, new: N) -> impl Iterator<Item = (&'s str, &'s str)> + Clone
+    where
+        C: Iterator<Item = (&'s str, &'s str)> + Clone,
+        N: Iterator<Item = (&'s str, &'s str)> + Clone + 's,
+    {
+        let n = new.clone();
+        let current = current
+            .clone()
+            .filter(move |(kc, _)| !n.clone().any(|(kn, _)| kn == *kc));
+        current.chain(new)
+    }
+
     /// Builds a string from an iterator preserving the order.
     #[allow(clippy::should_implement_trait)]
     pub fn from_iter<'s, I>(iter: I) -> String
@@ -61,76 +84,6 @@ impl Parameters {
         I: Iterator<Item = (&'s str, &'s str)>,
     {
         Parameters::concat_into(iter, into);
-    }
-
-    /// Same as [`Self::from_iter`] but keys are sorted in alphabetical order.
-    pub fn from_iter_sort<'s, I>(iter: I) -> String
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let mut into = String::new();
-        Parameters::from_iter_into(iter, &mut into);
-        into
-    }
-
-    /// Same as [`Self::from_iter_into`] but keys are sorted in alphabetical order.
-    pub fn from_iter_sort_into<'s, I>(iter: I, into: &mut String)
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let mut from = iter.collect::<Vec<(&str, &str)>>();
-        from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
-        Parameters::from_iter_into(from.iter().copied(), into);
-    }
-
-    /// Builds a string by joining two key-value `(&str, &str)` iterators removing from `current` any element whose key is present in `new`.
-    pub fn join<'s, C, N>(current: C, new: N) -> String
-    where
-        C: Iterator<Item = (&'s str, &'s str)> + Clone,
-        N: Iterator<Item = (&'s str, &'s str)> + Clone,
-    {
-        let mut into = String::new();
-        Parameters::join_into(current, new, &mut into);
-        into
-    }
-
-    /// Same as [`Self::join`] but it writes into a user-provided string instead of allocating a new one.
-    pub fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
-    where
-        C: Iterator<Item = (&'s str, &'s str)> + Clone,
-        N: Iterator<Item = (&'s str, &'s str)> + Clone,
-    {
-        let n = new.clone();
-        let current = current
-            .clone()
-            .filter(|(kc, _)| !n.clone().any(|(kn, _)| kn == *kc));
-        let iter = current.chain(new);
-        Parameters::from_iter_into(iter, into);
-    }
-
-    /// Same as [`Self::join`] but keys are sorted in alphabetical order.
-    pub fn join_sort<'s, C, N>(current: C, new: N) -> String
-    where
-        C: Iterator<Item = (&'s str, &'s str)> + Clone,
-        N: Iterator<Item = (&'s str, &'s str)> + Clone,
-    {
-        let mut into = String::new();
-        Parameters::join_sort_into(current, new, &mut into);
-        into
-    }
-
-    /// Same as [`Self::join_into`] but keys are sorted in alphabetical order.
-    pub fn join_sort_into<'s, C, N>(current: C, new: N, into: &mut String)
-    where
-        C: Iterator<Item = (&'s str, &'s str)> + Clone,
-        N: Iterator<Item = (&'s str, &'s str)> + Clone,
-    {
-        let n = new.clone();
-        let current = current
-            .clone()
-            .filter(|(kc, _)| !n.clone().any(|(kn, _)| kn == *kc));
-        let iter = current.chain(new);
-        Parameters::from_iter_into(iter, into);
     }
 
     /// Get the a `&str`-value for a `&str`-key according to the parameters format.
@@ -152,26 +105,32 @@ impl Parameters {
         }
     }
 
-    /// Insert a key-value `(&str, &str)` pair by appending it at the end of `s` preserving the insertion order.
-    pub fn insert<'s>(s: &'s str, k: &str, v: &str) -> (String, Option<&'s str>) {
-        let mut iter = Parameters::iter(s);
+    fn _insert<'s, I>(
+        i: I,
+        k: &'s str,
+        v: &'s str,
+    ) -> (impl Iterator<Item = (&'s str, &'s str)>, Option<&'s str>)
+    where
+        I: Iterator<Item = (&'s str, &'s str)> + Clone,
+    {
+        let mut iter = i.clone();
         let item = iter.find(|(key, _)| *key == k).map(|(_, v)| v);
 
-        let current = Parameters::iter(s).filter(|x| x.0 != k);
+        let current = i.filter(move |x| x.0 != k);
         let new = Some((k, v)).into_iter();
-        let iter = current.chain(new);
+        (current.chain(new), item)
+    }
+
+    /// Insert a key-value `(&str, &str)` pair by appending it at the end of `s` preserving the insertion order.
+    pub fn insert<'s>(s: &'s str, k: &'s str, v: &'s str) -> (String, Option<&'s str>) {
+        let (iter, item) = Parameters::_insert(Parameters::iter(s), k, v);
         (Parameters::from_iter(iter), item)
     }
 
     /// Same as [`Self::insert`] but keys are sorted in alphabetical order.
     pub fn insert_sort<'s>(s: &'s str, k: &'s str, v: &'s str) -> (String, Option<&'s str>) {
-        let mut iter = Parameters::iter(s);
-        let item = iter.find(|(key, _)| *key == k).map(|(_, v)| v);
-
-        let current = Parameters::iter(s).filter(|x| x.0 != k);
-        let new = Some((k, v)).into_iter();
-        let iter = current.chain(new);
-        (Parameters::from_iter_sort(iter), item)
+        let (iter, item) = Parameters::_insert(Parameters::iter(s), k, v);
+        (Parameters::from_iter(Parameters::sort(iter)), item)
     }
 
     /// Remove a key-value `(&str, &str)` pair from `s` preserving the insertion order.
