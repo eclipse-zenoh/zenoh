@@ -11,24 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::parameters::{
+    Parameters, SortedParameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR,
+};
 use alloc::borrow::Cow;
 use core::{borrow::Borrow, fmt};
 #[cfg(feature = "std")]
 use std::collections::HashMap;
-
-const LIST_SEPARATOR: char = ';';
-const FIELD_SEPARATOR: char = '=';
-const VALUE_SEPARATOR: char = '|';
-
-fn split_once(s: &str, c: char) -> (&str, &str) {
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s, ""),
-    }
-}
 
 /// A map of key/value (String,String) properties.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
@@ -61,17 +50,17 @@ fn split_once(s: &str, c: char) -> (&str, &str) {
 /// let pi = Properties::from_iter(vec![("a", "1"), ("b", "2"), ("c", "3|4|5"), ("d", "6")]);
 /// assert_eq!(p, pi);
 /// ```
-#[derive(Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Hash, Default)]
 pub struct Properties<'s>(Cow<'s, str>);
 
-impl Properties<'_> {
+impl<'s> Properties<'s> {
     /// Returns `true` if properties does not contain anything.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
     /// Returns properties as [`str`].
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(&'s self) -> &'s str {
         &self.0
     }
 
@@ -80,40 +69,28 @@ impl Properties<'_> {
     where
         K: Borrow<str>,
     {
-        self.get(k).is_some()
+        Parameters::get(self.as_str(), k.borrow()).is_some()
     }
 
     /// Returns a reference to the `&str`-value corresponding to the key.
-    pub fn get<K>(&self, k: K) -> Option<&str>
+    pub fn get<K>(&'s self, k: K) -> Option<&'s str>
     where
         K: Borrow<str>,
     {
-        self.iter()
-            .find(|(key, _)| *key == k.borrow())
-            .map(|(_, value)| value)
+        Parameters::get(self.as_str(), k.borrow())
     }
 
     /// Returns an iterator to the `&str`-values corresponding to the key.
-    pub fn values<K>(&self, k: K) -> impl DoubleEndedIterator<Item = &str>
+    pub fn values<K>(&'s self, k: K) -> impl DoubleEndedIterator<Item = &'s str>
     where
         K: Borrow<str>,
     {
-        match self.get(k) {
-            Some(v) => v.split(VALUE_SEPARATOR),
-            None => {
-                let mut i = "".split(VALUE_SEPARATOR);
-                i.next();
-                i
-            }
-        }
+        Parameters::values(self.as_str(), k.borrow())
     }
 
     /// Returns an iterator on the key-value pairs as `(&str, &str)`.
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
-        self.as_str()
-            .split(LIST_SEPARATOR)
-            .filter(|p| !p.is_empty())
-            .map(|p| split_once(p, FIELD_SEPARATOR))
+    pub fn iter(&'s self) -> impl DoubleEndedIterator<Item = (&'s str, &'s str)> + Clone {
+        Parameters::iter(self.as_str())
     }
 
     /// Inserts a key-value pair into the map.
@@ -124,16 +101,9 @@ impl Properties<'_> {
         K: Borrow<str>,
         V: Borrow<str>,
     {
-        let item = self
-            .iter()
-            .find(|(key, _)| *key == k.borrow())
-            .map(|(_, v)| v.to_string());
-
-        let current = self.iter().filter(|x| x.0 != k.borrow());
-        let new = Some((k.borrow(), v.borrow())).into_iter();
-        let iter = current.chain(new);
-
-        *self = Self::from_iter(iter);
+        let (inner, item) = Parameters::insert(self.iter(), k.borrow(), v.borrow());
+        let item = item.map(|i| i.to_string());
+        self.0 = Cow::Owned(inner);
         item
     }
 
@@ -142,13 +112,9 @@ impl Properties<'_> {
     where
         K: Borrow<str>,
     {
-        let item = self
-            .iter()
-            .find(|(key, _)| *key == k.borrow())
-            .map(|(_, v)| v.to_string());
-        let iter = self.iter().filter(|x| x.0 != k.borrow());
-
-        *self = Self::from_iter(iter);
+        let (inner, item) = Parameters::remove(self.iter(), k.borrow());
+        let item = item.map(|i| i.to_string());
+        self.0 = Cow::Owned(inner);
         item
     }
 
@@ -158,19 +124,14 @@ impl Properties<'_> {
     }
 
     /// Extend these properties from an iterator.
-    pub fn extend_from_iter<'s, I, K, V>(&mut self, iter: I)
+    pub fn extend_from_iter<'e, I, K, V>(&mut self, iter: I)
     where
-        I: Iterator<Item = (&'s K, &'s V)> + Clone,
-        K: Borrow<str> + 's + ?Sized,
-        V: Borrow<str> + 's + ?Sized,
+        I: Iterator<Item = (&'e K, &'e V)> + Clone,
+        K: Borrow<str> + 'e + ?Sized,
+        V: Borrow<str> + 'e + ?Sized,
     {
-        let new: I = iter.clone();
-        let current = self
-            .iter()
-            .filter(|(kc, _)| !new.clone().any(|(kn, _)| *kc == kn.borrow()));
-        let iter = current.chain(iter.map(|(k, v)| (k.borrow(), v.borrow())));
-
-        *self = Self::from_iter(iter);
+        let inner = Parameters::join(self.iter(), iter.map(|(k, v)| (k.borrow(), v.borrow())));
+        self.0 = Cow::Owned(inner);
     }
 
     /// Convert these properties into owned properties.
@@ -180,14 +141,7 @@ impl Properties<'_> {
 
     /// Returns true if all keys are sorted in alphabetical order.
     pub fn is_ordered(&self) -> bool {
-        let mut prev = None;
-        for (k, _) in self.iter() {
-            match prev.take() {
-                Some(p) if k < p => return false,
-                _ => prev = Some(k),
-            }
-        }
-        true
+        Parameters::is_ordered(self.iter())
     }
 }
 
@@ -225,29 +179,8 @@ where
     V: Borrow<str> + 's + ?Sized,
 {
     fn from_iter<T: IntoIterator<Item = (&'s K, &'s V)>>(iter: T) -> Self {
-        fn concat<'s, I>(iter: I) -> String
-        where
-            I: Iterator<Item = (&'s str, &'s str)>,
-        {
-            let mut into = String::new();
-            let mut first = true;
-            for (k, v) in iter.filter(|(k, _)| !k.is_empty()) {
-                if !first {
-                    into.push(LIST_SEPARATOR);
-                }
-                into.push_str(k);
-                if !v.is_empty() {
-                    into.push(FIELD_SEPARATOR);
-                    into.push_str(v);
-                }
-                first = false;
-            }
-            into
-        }
-
         let iter = iter.into_iter();
-        let inner = concat(iter.map(|(k, v)| (k.borrow(), v.borrow())));
-
+        let inner = Parameters::from_iter(iter.map(|(k, v)| (k.borrow(), v.borrow())));
         Self(Cow::Owned(inner))
     }
 }
@@ -323,17 +256,17 @@ impl fmt::Debug for Properties<'_> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Hash, Default)]
 pub struct OrderedProperties<'s>(Properties<'s>);
 
-impl OrderedProperties<'_> {
+impl<'s> OrderedProperties<'s> {
     /// Returns `true` if properties does not contain anything.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
     /// Returns properties as [`str`].
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(&'s self) -> &'s str {
         self.0.as_str()
     }
 
@@ -346,7 +279,7 @@ impl OrderedProperties<'_> {
     }
 
     /// Returns a reference to the `&str`-value corresponding to the key.
-    pub fn get<K>(&self, k: K) -> Option<&str>
+    pub fn get<K>(&'s self, k: K) -> Option<&'s str>
     where
         K: Borrow<str>,
     {
@@ -354,7 +287,7 @@ impl OrderedProperties<'_> {
     }
 
     /// Returns an iterator to the `&str`-values corresponding to the key.
-    pub fn values<K>(&self, k: K) -> impl DoubleEndedIterator<Item = &str>
+    pub fn values<K>(&'s self, k: K) -> impl DoubleEndedIterator<Item = &'s str>
     where
         K: Borrow<str>,
     {
@@ -362,7 +295,7 @@ impl OrderedProperties<'_> {
     }
 
     /// Returns an iterator on the key-value pairs as `(&str, &str)`.
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
+    pub fn iter(&'s self) -> impl DoubleEndedIterator<Item = (&'s str, &'s str)> + Clone {
         self.0.iter()
     }
 
@@ -393,11 +326,11 @@ impl OrderedProperties<'_> {
     }
 
     /// Extend these properties from an iterator.
-    pub fn extend_from_iter<'s, I, K, V>(&mut self, iter: I)
+    pub fn extend_from_iter<'e, I, K, V>(&mut self, iter: I)
     where
-        I: Iterator<Item = (&'s K, &'s V)> + Clone,
-        K: Borrow<str> + 's + ?Sized,
-        V: Borrow<str> + 's + ?Sized,
+        I: Iterator<Item = (&'e K, &'e V)> + Clone,
+        K: Borrow<str> + 'e + ?Sized,
+        V: Borrow<str> + 'e + ?Sized,
     {
         self.0.extend_from_iter(iter);
         self.order();
@@ -410,9 +343,7 @@ impl OrderedProperties<'_> {
 
     fn order(&mut self) {
         if !self.0.is_ordered() {
-            let mut from = self.0.iter().collect::<Vec<(&str, &str)>>();
-            from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
-            self.0 = Properties::from_iter(from);
+            self.0 = Properties(Cow::Owned(SortedParameters::from_iter(self.iter())));
         }
     }
 }
