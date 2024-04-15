@@ -29,11 +29,11 @@ fn split_once(s: &str, c: char) -> (&str, &str) {
 
 /// Parameters provides an `HashMap<&str, &str>`-like view over a `&str` when `&str` follows the format `a=b;c=d|e;f=g`.
 /// [`SortedParameters`] it's like [`Parameters`] but with the guarantee that keys are sorted upon insertion.
-pub(super) struct SortedParameters;
+pub struct SortedParameters;
 
 impl SortedParameters {
     #[allow(clippy::should_implement_trait)]
-    pub(super) fn from_iter<'s, I>(iter: I) -> String
+    pub fn from_iter<'s, I>(iter: I) -> String
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
@@ -42,7 +42,7 @@ impl SortedParameters {
         into
     }
 
-    pub(super) fn from_iter_into<'s, I>(iter: I, into: &mut String)
+    pub fn from_iter_into<'s, I>(iter: I, into: &mut String)
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
@@ -51,7 +51,7 @@ impl SortedParameters {
         Parameters::from_iter_into(from.iter().copied(), into);
     }
 
-    pub(super) fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> (String, Option<&'s str>)
+    pub fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> (String, Option<&'s str>)
     where
         I: Iterator<Item = (&'s str, &'s str)> + Clone,
     {
@@ -64,7 +64,7 @@ impl SortedParameters {
         (SortedParameters::from_iter(iter), item)
     }
 
-    pub(super) fn join<'s, C, N>(current: C, new: N) -> String
+    pub fn join<'s, C, N>(current: C, new: N) -> String
     where
         C: Iterator<Item = (&'s str, &'s str)> + Clone,
         N: Iterator<Item = (&'s str, &'s str)> + Clone,
@@ -74,7 +74,7 @@ impl SortedParameters {
         into
     }
 
-    pub(super) fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
+    pub fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
     where
         C: Iterator<Item = (&'s str, &'s str)> + Clone,
         N: Iterator<Item = (&'s str, &'s str)> + Clone,
@@ -89,17 +89,17 @@ impl SortedParameters {
 }
 
 /// Parameters provides an `HashMap<&str, &str>`-like view over a `&str` when `&str` follows the format `a=b;c=d|e;f=g`.
-pub(super) struct Parameters;
+pub struct Parameters;
 
 impl Parameters {
-    pub(super) fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
+    pub fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
         s.split(LIST_SEPARATOR)
             .filter(|p| !p.is_empty())
             .map(|p| split_once(p, FIELD_SEPARATOR))
     }
 
     #[allow(clippy::should_implement_trait)]
-    pub(super) fn from_iter<'s, I>(iter: I) -> String
+    pub fn from_iter<'s, I>(iter: I) -> String
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
@@ -108,20 +108,20 @@ impl Parameters {
         into
     }
 
-    pub(super) fn from_iter_into<'s, I>(iter: I, into: &mut String)
+    pub fn from_iter_into<'s, I>(iter: I, into: &mut String)
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
         Self::concat_into(iter, into);
     }
 
-    pub(super) fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
+    pub fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
         Self::iter(s)
             .find(|(key, _)| *key == k)
             .map(|(_, value)| value)
     }
 
-    pub(super) fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s str> {
+    pub fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s str> {
         match Self::get(s, k) {
             Some(v) => v.split(VALUE_SEPARATOR),
             None => {
@@ -132,7 +132,7 @@ impl Parameters {
         }
     }
 
-    pub(super) fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> (String, Option<&'s str>)
+    pub fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> (String, Option<&'s str>)
     where
         I: Iterator<Item = (&'s str, &'s str)> + Clone,
     {
@@ -145,7 +145,7 @@ impl Parameters {
         (Parameters::from_iter(iter), item)
     }
 
-    pub(super) fn remove<'s, I>(mut iter: I, k: &'s str) -> (String, Option<&'s str>)
+    pub fn remove<'s, I>(mut iter: I, k: &'s str) -> (String, Option<&'s str>)
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
@@ -154,7 +154,7 @@ impl Parameters {
         (Parameters::concat(iter), item)
     }
 
-    pub(super) fn join<'s, C, N>(current: C, new: N) -> String
+    pub fn join<'s, C, N>(current: C, new: N) -> String
     where
         C: Iterator<Item = (&'s str, &'s str)> + Clone,
         N: Iterator<Item = (&'s str, &'s str)> + Clone,
@@ -164,7 +164,7 @@ impl Parameters {
         into
     }
 
-    pub(super) fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
+    pub fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
     where
         C: Iterator<Item = (&'s str, &'s str)> + Clone,
         N: Iterator<Item = (&'s str, &'s str)> + Clone,
@@ -204,7 +204,7 @@ impl Parameters {
         }
     }
 
-    pub(super) fn is_ordered<'s, I>(iter: I) -> bool
+    pub fn is_ordered<'s, I>(iter: I) -> bool
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
@@ -219,7 +219,7 @@ impl Parameters {
     }
 
     #[cfg(feature = "test")]
-    pub(super) fn rand(into: &mut String) {
+    pub fn rand(into: &mut String) {
         use rand::{
             distributions::{Alphanumeric, DistString},
             Rng,
