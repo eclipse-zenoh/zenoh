@@ -177,6 +177,18 @@ impl Properties<'_> {
     pub fn into_owned(self) -> Properties<'static> {
         Properties(Cow::Owned(self.0.into_owned()))
     }
+
+    /// Returns true if all keys are sorted in alphabetical order.
+    pub fn is_ordered(&self) -> bool {
+        let mut prev = None;
+        for (k, _) in self.iter() {
+            match prev.take() {
+                Some(p) if k < p => return false,
+                _ => prev = Some(k),
+            }
+        }
+        true
+    }
 }
 
 impl<'s> From<&'s str> for Properties<'s> {
@@ -306,6 +318,207 @@ impl fmt::Display for Properties<'_> {
 }
 
 impl fmt::Debug for Properties<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct OrderedProperties<'s>(Properties<'s>);
+
+impl OrderedProperties<'_> {
+    /// Returns `true` if properties does not contain anything.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns properties as [`str`].
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    /// Returns `true` if properties contains the specified key.
+    pub fn contains_key<K>(&self, k: K) -> bool
+    where
+        K: Borrow<str>,
+    {
+        self.0.contains_key(k)
+    }
+
+    /// Returns a reference to the `&str`-value corresponding to the key.
+    pub fn get<K>(&self, k: K) -> Option<&str>
+    where
+        K: Borrow<str>,
+    {
+        self.0.get(k)
+    }
+
+    /// Returns an iterator to the `&str`-values corresponding to the key.
+    pub fn values<K>(&self, k: K) -> impl DoubleEndedIterator<Item = &str>
+    where
+        K: Borrow<str>,
+    {
+        self.0.values(k)
+    }
+
+    /// Returns an iterator on the key-value pairs as `(&str, &str)`.
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
+        self.0.iter()
+    }
+
+    /// Removes a key from the map, returning the value at the key if the key was previously in the properties.    
+    pub fn remove<K>(&mut self, k: K) -> Option<String>
+    where
+        K: Borrow<str>,
+    {
+        self.0.remove(k)
+    }
+
+    /// Inserts a key-value pair into the map.
+    /// If the map did not have this key present, [`None`]` is returned.
+    /// If the map did have this key present, the value is updated, and the old value is returned.
+    pub fn insert<K, V>(&mut self, k: K, v: V) -> Option<String>
+    where
+        K: Borrow<str>,
+        V: Borrow<str>,
+    {
+        let item = self.0.insert(k, v);
+        self.order();
+        item
+    }
+
+    /// Extend these properties with other properties.
+    pub fn extend(&mut self, other: &Properties) {
+        self.extend_from_iter(other.iter());
+    }
+
+    /// Extend these properties from an iterator.
+    pub fn extend_from_iter<'s, I, K, V>(&mut self, iter: I)
+    where
+        I: Iterator<Item = (&'s K, &'s V)> + Clone,
+        K: Borrow<str> + 's + ?Sized,
+        V: Borrow<str> + 's + ?Sized,
+    {
+        self.0.extend_from_iter(iter);
+        self.order();
+    }
+
+    /// Convert these properties into owned properties.
+    pub fn into_owned(self) -> OrderedProperties<'static> {
+        OrderedProperties(self.0.into_owned())
+    }
+
+    fn order(&mut self) {
+        if !self.0.is_ordered() {
+            let mut from = self.0.iter().collect::<Vec<(&str, &str)>>();
+            from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
+            self.0 = Properties::from_iter(from);
+        }
+    }
+}
+
+impl<'s> From<Properties<'s>> for OrderedProperties<'s> {
+    fn from(value: Properties<'s>) -> Self {
+        let mut props = Self(value);
+        props.order();
+        props
+    }
+}
+
+impl<'s> From<&'s str> for OrderedProperties<'s> {
+    fn from(value: &'s str) -> Self {
+        Self::from(Properties::from(value))
+    }
+}
+
+impl From<String> for OrderedProperties<'_> {
+    fn from(value: String) -> Self {
+        Self::from(Properties::from(value))
+    }
+}
+
+impl<'s> From<Cow<'s, str>> for OrderedProperties<'s> {
+    fn from(value: Cow<'s, str>) -> Self {
+        Self::from(Properties::from(value))
+    }
+}
+
+impl<'s, K, V> FromIterator<(&'s K, &'s V)> for OrderedProperties<'_>
+where
+    K: Borrow<str> + 's + ?Sized,
+    V: Borrow<str> + 's + ?Sized,
+{
+    fn from_iter<T: IntoIterator<Item = (&'s K, &'s V)>>(iter: T) -> Self {
+        Self::from(Properties::from_iter(iter))
+    }
+}
+
+impl<'s, K, V> FromIterator<&'s (K, V)> for OrderedProperties<'_>
+where
+    K: Borrow<str> + 's,
+    V: Borrow<str> + 's,
+{
+    fn from_iter<T: IntoIterator<Item = &'s (K, V)>>(iter: T) -> Self {
+        Self::from(Properties::from_iter(iter))
+    }
+}
+
+impl<'s, K, V> From<&'s [(K, V)]> for OrderedProperties<'_>
+where
+    K: Borrow<str> + 's,
+    V: Borrow<str> + 's,
+{
+    fn from(value: &'s [(K, V)]) -> Self {
+        Self::from_iter(value.iter())
+    }
+}
+
+#[cfg(feature = "std")]
+impl<K, V> From<HashMap<K, V>> for OrderedProperties<'_>
+where
+    K: Borrow<str>,
+    V: Borrow<str>,
+{
+    fn from(map: HashMap<K, V>) -> Self {
+        Self::from_iter(map.iter())
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'s> From<&'s OrderedProperties<'s>> for HashMap<&'s str, &'s str> {
+    fn from(props: &'s OrderedProperties<'s>) -> Self {
+        HashMap::from(&props.0)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<&OrderedProperties<'_>> for HashMap<String, String> {
+    fn from(props: &OrderedProperties<'_>) -> Self {
+        HashMap::from(&props.0)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'s> From<&'s OrderedProperties<'s>> for HashMap<Cow<'s, str>, Cow<'s, str>> {
+    fn from(props: &'s OrderedProperties<'s>) -> Self {
+        HashMap::from(&props.0)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<OrderedProperties<'_>> for HashMap<String, String> {
+    fn from(props: OrderedProperties) -> Self {
+        HashMap::from(&props)
+    }
+}
+
+impl fmt::Display for OrderedProperties<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Debug for OrderedProperties<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
