@@ -10,7 +10,6 @@ const KEY_EXPR: &str = "test/demo";
 const VALUE: &str = "zenoh";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[cfg(not(target_os = "windows"))]
 async fn test_acl() {
     zenoh_util::init_log_from_env();
     test_pub_sub_deny().await;
@@ -56,7 +55,7 @@ async fn test_pub_sub_deny() {
     let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
-            "acl",
+            "access_control",
             r#"{
                 "enabled": true,
                 "default_permission": "deny",
@@ -104,7 +103,7 @@ async fn test_pub_sub_allow() {
     let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
-            "acl",
+            "access_control",
             r#"{
             
               "enabled": false,
@@ -152,7 +151,7 @@ async fn test_pub_sub_allow_then_deny() {
     let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
-            "acl",
+            "access_control",
             r#"
         {"enabled": true,
           "default_permission": "allow",
@@ -212,7 +211,7 @@ async fn test_pub_sub_deny_then_allow() {
     let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
-            "acl",
+            "access_control",
             r#"
         {"enabled": true,
           "default_permission": "deny",
@@ -272,7 +271,7 @@ async fn test_get_qbl_deny() {
     let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
-            "acl",
+            "access_control",
             r#"{
                 "enabled": true,
                 "default_permission": "deny",
@@ -328,7 +327,7 @@ async fn test_get_qbl_allow() {
     let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
-            "acl",
+            "access_control",
             r#"{
                 "enabled": true,
                 "default_permission": "allow",
@@ -384,7 +383,7 @@ async fn test_get_qbl_deny_then_allow() {
     let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
-            "acl",
+            "access_control",
             r#"
         {"enabled": true,
           "default_permission": "deny",
@@ -455,7 +454,7 @@ async fn test_get_qbl_allow_then_deny() {
     let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
-            "acl",
+            "access_control",
             r#"
         {"enabled": true,
           "default_permission": "allow",

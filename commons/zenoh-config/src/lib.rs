@@ -497,7 +497,9 @@ validated_struct::validator! {
 
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
-        pub acl: AclConfig {
+
+        ///Configuration of the access control (ACL)
+        pub access_control: AclConfig {
             pub enabled: bool,
             pub default_permission: Permission,
             pub rules: Option<Vec<AclConfigRules>>

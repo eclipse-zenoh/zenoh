@@ -175,8 +175,8 @@
   //      ],
   //    },
   //  ],
-  //  /// configure acl rules 
-  //  acl: {
+  //  /// configure access control (ACL) rules 
+  //  access_control: {
   //   ///[true/false] acl will be activated only if this is set to true
   //   "enabled": false,
   //   ///[deny/allow] default permission is deny (even if this is left empty or not specified)
@@ -186,12 +186,12 @@
   //   [
   //     {
   //       "actions": [
-  //         "put"
+  //         put, get, declare_subscriber, declare_queryable
   //       ],
   //       "flows":["egress","ingress"],
   //       "permission": "allow",
   //       "key_exprs": [
-  //         "test/thr"
+  //         "test/demo"
   //       ],
   //       "interfaces": [
   //         "lo0"
