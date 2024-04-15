@@ -13,7 +13,7 @@
 //
 
 //! Callback handler trait.
-use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
+use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 use super::{callback::Callback, Dyn, IntoHandler};
 use std::sync::{Arc, Weak};
