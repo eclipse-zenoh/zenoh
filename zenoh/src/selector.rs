@@ -25,8 +25,8 @@ use zenoh_protocol::core::{
     key_expr::{keyexpr, OwnedKeyExpr},
     Properties,
 };
-use zenoh_result::ZResult;
-use zenoh_util::time_range::TimeRange;
+#[cfg(feature = "unstable")]
+use ::{zenoh_result::ZResult, zenoh_util::time_range::TimeRange};
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of parameters
