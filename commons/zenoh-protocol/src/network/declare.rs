@@ -107,7 +107,7 @@ impl DeclareBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..8) {
+        match rng.gen_range(0..9) {
             0 => DeclareBody::DeclareKeyExpr(DeclareKeyExpr::rand()),
             1 => DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr::rand()),
             2 => DeclareBody::DeclareSubscriber(DeclareSubscriber::rand()),
