@@ -10,7 +10,7 @@ use syn::{
 };
 
 struct SerdeAttribute {
-    alias: LitStr,
+    rename: LitStr,
 }
 
 impl Parse for SerdeAttribute {
@@ -22,13 +22,13 @@ impl Parse for SerdeAttribute {
                     lit: Lit::Str(str), ..
                 }) = kv.value
                 {
-                    return Ok(SerdeAttribute { alias: str });
+                    return Ok(SerdeAttribute { rename: str });
                 }
             }
         }
         Err(syn::Error::new(
             tokens.span(),
-            "Invalid alias detected, expect #[serde(rename = \"name\")]",
+            "Invalid rename detected, expect #[serde(rename = \"name\")]",
         ))
     }
 }
@@ -49,7 +49,7 @@ fn parse_variants(
             .map(|attr| {
                 attr.parse_args::<SerdeAttribute>()
                     .map(|x| {
-                        x.alias
+                        x.rename
                             .value()
                             .parse::<TokenStream>()
                             .expect("Failed to convert LitStr to Ident TokenStream")
