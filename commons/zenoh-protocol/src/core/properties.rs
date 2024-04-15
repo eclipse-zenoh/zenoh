@@ -26,7 +26,7 @@ use std::collections::HashMap;
 ///
 /// Example:
 /// ```
-/// use zenoh_collections::Properties;
+/// use zenoh_protocol::core::Properties;
 ///
 /// let a = "a=1;b=2;c=3|4|5;d=6";
 /// let p = Properties::from(a);
