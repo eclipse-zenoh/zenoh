@@ -24,7 +24,6 @@ on:
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_PROFILE_DEV_DEBUG: false
-  ZENOH_RUNTIME: '( rx: (handover: app), acc: (handover: app), net: (handover: app), app: (worker_threads: 2, max_blocking_threads: 1), tx: (worker_threads: 1, max_blocking_threads: 1))'
 
 jobs:
   check:
