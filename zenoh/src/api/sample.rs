@@ -13,12 +13,8 @@
 //
 
 use super::{
-    builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
-    encoding::Encoding,
-    key_expr::KeyExpr,
-    payload::Payload,
-    publication::Priority,
-    value::Value,
+    builders::sample::QoSBuilderTrait, encoding::Encoding, key_expr::KeyExpr, payload::Payload,
+    publication::Priority, value::Value,
 };
 use std::{convert::TryFrom, fmt};
 use zenoh_protocol::{
@@ -27,7 +23,7 @@ use zenoh_protocol::{
 };
 
 #[zenoh_macros::unstable]
-pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
+pub use attachment::Attachment;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 

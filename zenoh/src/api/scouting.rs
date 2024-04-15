@@ -373,6 +373,7 @@ where
     ScoutBuilder {
         what: what.into(),
         config: config.try_into().map_err(|e| e.into()),
-        handler: DefaultHandler,
+        handler: DefaultHandler::default(),
     }
 }
+

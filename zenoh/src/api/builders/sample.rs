@@ -26,8 +26,7 @@ use crate::api::sample::Sample;
 use crate::api::sample::SampleKind;
 use crate::api::value::Value;
 #[cfg(feature = "unstable")]
-use crate::{payload::OptionPayload, sample::SourceInfo};
-use std::marker::PhantomData;
+use crate::{api::payload::OptionPayload, sample::SourceInfo};
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;

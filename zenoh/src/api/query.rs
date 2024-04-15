@@ -33,6 +33,7 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use super::{
     builders::sample::SampleBuilderTrait,
+    payload::OptionPayload,
     sample::{Attachment, SourceInfo},
 };
 

@@ -40,6 +40,7 @@ use zenoh_result::ZResult;
 use {
     super::{
         builders::sample::SampleBuilderTrait,
+        payload::OptionPayload,
         query::ReplyKeyExpr,
         sample::{Attachment, SourceInfo},
     },

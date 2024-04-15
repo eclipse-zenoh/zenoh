@@ -13,7 +13,7 @@
 //
 
 //! Value primitives.
-use super::{builders::sample::ValueBuilderTrait, encoding::Encoding, payload::Payload};
+use super::{encoding::Encoding, payload::Payload};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the [`Payload`] should be interpreted.
 #[non_exhaustive]

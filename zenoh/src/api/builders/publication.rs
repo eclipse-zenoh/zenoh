@@ -16,6 +16,8 @@ use std::future::Ready;
 use crate::api::builders::sample::SampleBuilderTrait;
 use crate::api::builders::sample::{QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait};
 use crate::api::key_expr::KeyExpr;
+#[cfg(feature = "unstable")]
+use crate::api::payload::OptionPayload;
 use crate::api::publication::Priority;
 #[cfg(feature = "unstable")]
 use crate::api::sample::Attachment;
@@ -156,7 +158,8 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
         }
     }
     #[cfg(feature = "unstable")]
-    fn attachment<TA: Into<Option<Attachment>>>(self, attachment: TA) -> Self {
+    fn attachment<TA: Into<OptionPayload>>(self, attachment: TA) -> Self {
+        let attachment: OptionPayload = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
