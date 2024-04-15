@@ -493,14 +493,7 @@ impl Digest {
                     .get_mut(&subinterval)
                     .unwrap()
                     .content
-                    .retain(|x| {
-                        let timestamp_identical =
-                            x.timestamp.get_time() == entry.timestamp.get_time() &&
-                            x.timestamp.get_id() == entry.timestamp.get_id();
-                        let key_identical = x.key == entry.key;
-                        let element_identical = timestamp_identical && key_identical;
-                        !element_identical
-                    });
+                    .retain(|x| x.timestamp != entry.timestamp || x.key != entry.key);
                 subintervals_to_update.insert(subinterval);
             }
             if current.intervals.contains_key(&interval) {
