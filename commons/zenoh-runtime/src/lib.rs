@@ -28,15 +28,19 @@ use std::{
 };
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 use zenoh_result::ZResult as Result;
-use zenoh_runtime_derive::{ConfigureZRuntime, GenericRuntimeParam};
+use zenoh_runtime_derive::{GenericRuntimeParam, RegisterParam};
 
-const ZENOH_RUNTIME_ENV: &str = "ZENOH_RUNTIME";
+pub const ZENOH_RUNTIME_ENV: &str = "ZENOH_RUNTIME";
 
+/// Available parameters to configure the ZRuntime.
 #[derive(Deserialize, Debug, GenericRuntimeParam)]
 #[serde(deny_unknown_fields, default)]
 pub struct RuntimeParam {
+    /// Number of async worker threads. At least one.
     pub worker_threads: usize,
+    /// Number of maximal worker threads for blocking tasks. At least one.
     pub max_blocking_threads: usize,
+    /// Hand over one ZRuntime to another one.
     pub handover: Option<ZRuntime>,
 }
 
@@ -69,20 +73,45 @@ impl RuntimeParam {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug, ConfigureZRuntime, Deserialize)]
+/// [`ZRuntime`], the access point of manipulate runtimes within zenoh.
+/// The runtime parameter can be configured by setting the environmental variable [`ZENOH_RUNTIME_ENV`].
+/// The parsing syntax use [RON](https://github.com/ron-rs/ron). An example configuration looks
+/// like
+///
+/// ```console
+/// ZENOH_RUNTIME='(
+///   rx: (handover: app),
+///   acc: (handover: app),
+///   app: (worker_threads: 2),
+///   tx: (max_blocking_threads: 1)
+/// )'
+/// ```
+/// Note: The runtime parameter takes effect at the beginning of the zenoh process and no longer be
+/// changed after the initialization.
+#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug, RegisterParam, Deserialize)]
+#[param(RuntimeParam)]
 pub enum ZRuntime {
+    /// Renamed to app. Default param: worker_threads = 1
     #[serde(rename = "app")]
     #[param(worker_threads = 1)]
     Application,
+
+    /// Renamed to acc. Default param: worker_threads = 1
     #[serde(rename = "acc")]
     #[param(worker_threads = 1)]
     Acceptor,
+
+    /// Renamed to tx. Default param: worker_threads = 1
     #[serde(rename = "tx")]
     #[param(worker_threads = 1)]
     TX,
+
+    /// Renamed to rx. Default param: worker_threads = 1
     #[serde(rename = "rx")]
     #[param(worker_threads = 1)]
     RX,
+
+    /// Renamed to net. Default param: worker_threads = 1
     #[serde(rename = "net")]
     #[param(worker_threads = 1)]
     Net,

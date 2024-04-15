@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
@@ -80,16 +80,13 @@ fn parse_variants(
     (name_vec, alias_vec, param_vec)
 }
 
-// To generate the following quotes for
-// 1. struct DefaultParamOf`#variant_name`
-// 2. impl `DefaultParam` for DefaultParamOf`#variant_name`
-// 3.
 fn generate_declare_param(
+    meta_param: &Ident,
     variant_names: &[&Ident],
     aliases: &Vec<TokenStream>,
     params: &[TokenStream],
 ) -> TokenStream {
-    let helper_names: Vec<_> = variant_names
+    let default_param_of_variant: Vec<_> = variant_names
         .iter()
         .map(|name| format_ident!("DefaultParamOf{}", name))
         .collect();
@@ -102,16 +99,18 @@ fn generate_declare_param(
     });
     quote! {
         trait DefaultParam {
-            fn param() -> RuntimeParam;
+            fn param() -> #meta_param;
         }
 
         #(
+            // Declare struct DefaultParamOf`#variant_name`
             #[derive(Debug, Clone, Copy)]
-            struct #helper_names;
+            struct #default_param_of_variant;
 
-            impl DefaultParam for #helper_names {
-                fn param() -> RuntimeParam {
-                    RuntimeParam {
+            // impl `DefaultParam` for `DefaultParamOf#variant_name`
+            impl DefaultParam for #default_param_of_variant {
+                fn param() -> #meta_param {
+                    #meta_param {
                         #params_with_default
                     }
                 }
@@ -124,10 +123,11 @@ fn generate_declare_param(
         struct AbstractRuntimeParam {
             #(
                 #[serde(default)]
-                #aliases: RuntimeParamHelper<#helper_names>,
+                #aliases: RuntimeParamHelper<#default_param_of_variant>,
             )*
         }
 
+        // AbstractRuntimeParam => GlobalRuntimeParam, extract fields from AbstractRuntimeParam
         impl From<AbstractRuntimeParam> for GlobalRuntimeParam {
             fn from(value: AbstractRuntimeParam) -> Self {
                 Self {
@@ -142,25 +142,44 @@ fn generate_declare_param(
         // pub is needed within lazy_static
         pub struct GlobalRuntimeParam {
             #(
-                #aliases: RuntimeParam,
+                #aliases: #meta_param,
             )*
         }
 
     }
 }
 
-#[proc_macro_derive(ConfigureZRuntime, attributes(alias, param))]
-pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse_macro_input!(input);
+fn derive_register_param(input: DeriveInput) -> Result<TokenStream, syn::Error> {
+    // enum representing the runtime
     let enum_name = &input.ident;
+
+    // Parse the parameter to register, called meta_param
+    let attr = input
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("param"))
+        .ok_or(syn::Error::new(
+            input.span(),
+            "Expected attribute #[param(StructName)] is missing.",
+        ))?;
+    let meta_param = match &attr.meta {
+        Meta::List(list) => syn::parse2::<Ident>(list.tokens.to_token_stream()),
+        _ => Err(syn::Error::new(
+            attr.span(),
+            format!("Failed to parse #[param({})]", attr.to_token_stream()),
+        )),
+    }?;
+
+    // Parse the variants and associated parameters of the enum
     let variants = match input.data {
         Data::Enum(DataEnum { variants, .. }) => variants,
         _ => unimplemented!("Only enum is supported."),
     };
     let (variant_names, aliases, params) = parse_variants(&variants);
-    let declare_param_quote = generate_declare_param(&variant_names, &aliases, &params);
+    let declare_param_quote =
+        generate_declare_param(&meta_param, &variant_names, &aliases, &params);
 
-    let expanded = quote! {
+    let tokens = quote! {
 
         use ron::{extensions::Extensions, options::Options};
         use #enum_name::*;
@@ -197,9 +216,14 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
         }
 
-        #[doc = concat!("Borrow the underlying `RuntimeParam` from ", stringify!(#enum_name))]
-        impl Borrow<RuntimeParam> for #enum_name {
-            fn borrow(&self) -> &RuntimeParam {
+        #[doc = concat!(
+            "Borrow the underlying `",
+            stringify!(#meta_param),
+            "` from ",
+            stringify!(#enum_name)
+        )]
+        impl Borrow<#meta_param> for #enum_name {
+            fn borrow(&self) -> &#meta_param {
                 match self {
                     #(
                         #variant_names => {
@@ -222,27 +246,40 @@ pub fn enum_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
         }
     };
-    proc_macro::TokenStream::from(expanded)
+    Ok(tokens)
 }
 
-#[proc_macro_derive(GenericRuntimeParam)]
-pub fn build_generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+#[proc_macro_derive(RegisterParam, attributes(alias, param))]
+pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: DeriveInput = syn::parse_macro_input!(input);
+    derive_register_param(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+fn derive_generic_runtime_param(input: DeriveInput) -> Result<TokenStream, syn::Error> {
+    let meta_param = &input.ident;
     let fields = match &input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(fields),
             ..
         }) => &fields.named,
-        _ => panic!("Expected a struct with named fields"),
+        _ => {
+            return Err(syn::Error::new(
+                input.span(),
+                "Expected a struct with named fields",
+            ))
+        }
     };
     let field_names: Vec<_> = fields.iter().map(|field| &field.ident).collect();
     let field_types: Vec<_> = fields.iter().map(|field| &field.ty).collect();
-    let helper_name = format_ident!("{}Helper", &input.ident);
+    let helper_name = format_ident!("{}Helper", meta_param);
 
-    quote! {
+    let tokens = quote! {
 
         use std::marker::PhantomData;
 
+        // Declare a helper struct to be generic over any T implementing DefaultParam
         #[derive(Deserialize, Debug, Clone, Copy)]
         #[serde(deny_unknown_fields, default)]
         struct #helper_name<T>
@@ -256,12 +293,12 @@ pub fn build_generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro
             _phantom: PhantomData<T>,
         }
 
-        impl<T> From<RuntimeParam> for #helper_name<T>
+        impl<T> From<#meta_param> for #helper_name<T>
         where
             T: DefaultParam,
         {
-            fn from(value: RuntimeParam) -> Self {
-                let RuntimeParam { #(#field_names,)* } = value;
+            fn from(value: #meta_param) -> Self {
+                let #meta_param { #(#field_names,)* } = value;
                 Self {
                     #(#field_names,)*
                     _phantom: PhantomData::default(),
@@ -269,7 +306,7 @@ pub fn build_generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro
             }
         }
 
-        impl<T> From<#helper_name<T>> for RuntimeParam
+        impl<T> From<#helper_name<T>> for #meta_param
         where
             T: DefaultParam,
         {
@@ -290,6 +327,15 @@ pub fn build_generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro
             }
         }
 
-    }
-    .into()
+    };
+
+    Ok(tokens)
+}
+
+#[proc_macro_derive(GenericRuntimeParam)]
+pub fn generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse_macro_input!(input);
+    derive_generic_runtime_param(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
