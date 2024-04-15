@@ -20,19 +20,50 @@ use std::collections::HashMap;
 /// A map of key/value (String,String) properties.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
 /// and `=` as separator between a key and its value. Keys and values are trimed.
+///
+/// Example:
+/// ```
+/// use zenoh_collections::Properties;
+///
+/// let a = "a=1;b=2;c=3|4|5;d=6";
+/// let p = Properties::from(a);
+///
+/// // Retrieve values
+/// assert!(!p.is_empty());
+/// assert_eq!(p.get("a").unwrap(), "1");
+/// assert_eq!(p.get("b").unwrap(), "2");
+/// assert_eq!(p.get("c").unwrap(), "3|4|5");
+/// assert_eq!(p.get("d").unwrap(), "6");
+/// assert_eq!(p.values("c").collect::<Vec<&str>>(), vec!["3", "4", "5"]);
+///
+/// // Iterate over properties
+/// let mut iter = p.iter();
+/// assert_eq!(iter.next().unwrap(), ("a", "1"));
+/// assert_eq!(iter.next().unwrap(), ("b", "2"));
+/// assert_eq!(iter.next().unwrap(), ("c", "3|4|5"));
+/// assert_eq!(iter.next().unwrap(), ("d", "6"));
+/// assert!(iter.next().is_none());
+///
+/// // Create properties from iterators
+/// let pi = Properties::from_iter(vec![("a", "1"), ("b", "2"), ("c", "3|4|5"), ("d", "6")]);
+/// assert_eq!(p, pi);
+/// ```
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct Properties<'s>(Cow<'s, str>);
 
 impl Properties<'_> {
+    /// Returns `true` if properties does not contain anything.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// Returns properties as [`str`].
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
+    /// Returns `true` if properties contains the specified key.
     pub fn contains_key<K>(&self, k: K) -> bool
     where
         K: Borrow<str>,
@@ -40,6 +71,7 @@ impl Properties<'_> {
         self.get(k).is_some()
     }
 
+    /// Returns a reference to the value corresponding to the key.
     pub fn get<K>(&self, k: K) -> Option<&str>
     where
         K: Borrow<str>,
@@ -47,6 +79,7 @@ impl Properties<'_> {
         Parameters::get(self.as_str(), k.borrow())
     }
 
+    /// Returns an iterator to the values corresponding to the key.
     pub fn values<K>(&self, k: K) -> impl DoubleEndedIterator<Item = &str>
     where
         K: Borrow<str>,
@@ -54,10 +87,14 @@ impl Properties<'_> {
         Parameters::values(self.as_str(), k.borrow())
     }
 
+    /// Returns an iterator on the key-value pairs as `(&str, &str)`.
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
         Parameters::iter(self.as_str())
     }
 
+    /// Inserts a key-value pair into the map.
+    /// If the map did not have this key present, [`None`]` is returned.
+    /// If the map did have this key present, the value is updated, and the old value is returned.
     pub fn insert<K, V>(&mut self, k: K, v: V) -> Option<String>
     where
         K: Borrow<str>,
@@ -69,6 +106,7 @@ impl Properties<'_> {
         removed
     }
 
+    /// Removes a key from the map, returning the value at the key if the key was previously in the properties.    
     pub fn remove<K>(&mut self, k: K) -> Option<String>
     where
         K: Borrow<str>,
@@ -79,6 +117,7 @@ impl Properties<'_> {
         removed
     }
 
+    /// Join an iterator of key-value pairs `(&str, &str)` into properties.
     pub fn join<'s, I, K, V>(&mut self, iter: I)
     where
         I: Iterator<Item = (&'s K, &'s V)> + Clone,
@@ -91,6 +130,7 @@ impl Properties<'_> {
         ));
     }
 
+    /// Convert these properties into owned properties.
     pub fn into_owned(self) -> Properties<'static> {
         Properties(Cow::Owned(self.0.into_owned()))
     }
