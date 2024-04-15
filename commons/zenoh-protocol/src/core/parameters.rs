@@ -28,21 +28,53 @@ fn split_once(s: &str, c: char) -> (&str, &str) {
 }
 
 /// Parameters provides an `HashMap<&str, &str>`-like view over a `&str` when `&str` follows the format `a=b;c=d|e;f=g`.
-/// [`SortedParameters`] it's like [`Parameters`] but with the guarantee that keys are sorted upon insertion.
-pub struct SortedParameters;
+///
+/// `;` is the separator between the key-value `(&str, &str)` elements.
+///
+/// `=` is the separator between the `&str`-key and `&str`-value
+///
+/// `|` is the separator between multiple elements of the values.
+pub struct Parameters;
 
-impl SortedParameters {
+impl Parameters {
+    /// Returns an iterator of key-value `(&str, &str)` pairs according to the parameters format.
+    pub fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
+        s.split(LIST_SEPARATOR)
+            .filter(|p| !p.is_empty())
+            .map(|p| split_once(p, FIELD_SEPARATOR))
+    }
+
+    /// Builds a string from an iterator preserving the order.
     #[allow(clippy::should_implement_trait)]
     pub fn from_iter<'s, I>(iter: I) -> String
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
         let mut into = String::new();
-        Self::from_iter_into(iter, &mut into);
+        Parameters::from_iter_into(iter, &mut into);
         into
     }
 
+    /// Same as [`Self::from_iter`] but it writes into a user-provided string instead of allocating a new one.
     pub fn from_iter_into<'s, I>(iter: I, into: &mut String)
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        Parameters::concat_into(iter, into);
+    }
+
+    /// Same as [`Self::from_iter`] but keys are sorted in alphabetical order.
+    pub fn from_iter_sort<'s, I>(iter: I) -> String
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        let mut into = String::new();
+        Parameters::from_iter_into(iter, &mut into);
+        into
+    }
+
+    /// Same as [`Self::from_iter_into`] but keys are sorted in alphabetical order.
+    pub fn from_iter_sort_into<'s, I>(iter: I, into: &mut String)
     where
         I: Iterator<Item = (&'s str, &'s str)>,
     {
@@ -51,109 +83,7 @@ impl SortedParameters {
         Parameters::from_iter_into(from.iter().copied(), into);
     }
 
-    pub fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> (String, Option<&'s str>)
-    where
-        I: Iterator<Item = (&'s str, &'s str)> + Clone,
-    {
-        let mut ic = iter.clone();
-        let item = ic.find(|(key, _)| *key == k).map(|(_, v)| v);
-
-        let current = iter.filter(|x| x.0 != k);
-        let new = Some((k, v)).into_iter();
-        let iter = current.chain(new);
-        (SortedParameters::from_iter(iter), item)
-    }
-
-    pub fn join<'s, C, N>(current: C, new: N) -> String
-    where
-        C: Iterator<Item = (&'s str, &'s str)> + Clone,
-        N: Iterator<Item = (&'s str, &'s str)> + Clone,
-    {
-        let mut into = String::new();
-        SortedParameters::join_into(current, new, &mut into);
-        into
-    }
-
-    pub fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
-    where
-        C: Iterator<Item = (&'s str, &'s str)> + Clone,
-        N: Iterator<Item = (&'s str, &'s str)> + Clone,
-    {
-        let n = new.clone();
-        let current = current
-            .clone()
-            .filter(|(kc, _)| !n.clone().any(|(kn, _)| kn == *kc));
-        let iter = current.chain(new);
-        SortedParameters::from_iter_into(iter, into);
-    }
-}
-
-/// Parameters provides an `HashMap<&str, &str>`-like view over a `&str` when `&str` follows the format `a=b;c=d|e;f=g`.
-pub struct Parameters;
-
-impl Parameters {
-    pub fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
-        s.split(LIST_SEPARATOR)
-            .filter(|p| !p.is_empty())
-            .map(|p| split_once(p, FIELD_SEPARATOR))
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_iter<'s, I>(iter: I) -> String
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let mut into = String::new();
-        Self::from_iter_into(iter, &mut into);
-        into
-    }
-
-    pub fn from_iter_into<'s, I>(iter: I, into: &mut String)
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        Self::concat_into(iter, into);
-    }
-
-    pub fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
-        Self::iter(s)
-            .find(|(key, _)| *key == k)
-            .map(|(_, value)| value)
-    }
-
-    pub fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s str> {
-        match Self::get(s, k) {
-            Some(v) => v.split(VALUE_SEPARATOR),
-            None => {
-                let mut i = "".split(VALUE_SEPARATOR);
-                i.next();
-                i
-            }
-        }
-    }
-
-    pub fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> (String, Option<&'s str>)
-    where
-        I: Iterator<Item = (&'s str, &'s str)> + Clone,
-    {
-        let mut ic = iter.clone();
-        let item = ic.find(|(key, _)| *key == k).map(|(_, v)| v);
-
-        let current = iter.filter(|x| x.0 != k);
-        let new = Some((k, v)).into_iter();
-        let iter = current.chain(new);
-        (Parameters::from_iter(iter), item)
-    }
-
-    pub fn remove<'s, I>(mut iter: I, k: &'s str) -> (String, Option<&'s str>)
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let item = iter.find(|(key, _)| *key == k).map(|(_, v)| v);
-        let iter = iter.filter(|x| x.0 != k);
-        (Parameters::concat(iter), item)
-    }
-
+    /// Builds a string by joining two key-value `(&str, &str)` iterators removing from `current` any element whose key is present in `new`.
     pub fn join<'s, C, N>(current: C, new: N) -> String
     where
         C: Iterator<Item = (&'s str, &'s str)> + Clone,
@@ -164,6 +94,7 @@ impl Parameters {
         into
     }
 
+    /// Same as [`Self::join`] but it writes into a user-provided string instead of allocating a new one.
     pub fn join_into<'s, C, N>(current: C, new: N, into: &mut String)
     where
         C: Iterator<Item = (&'s str, &'s str)> + Clone,
@@ -175,6 +106,92 @@ impl Parameters {
             .filter(|(kc, _)| !n.clone().any(|(kn, _)| kn == *kc));
         let iter = current.chain(new);
         Parameters::from_iter_into(iter, into);
+    }
+
+    /// Same as [`Self::join`] but keys are sorted in alphabetical order.
+    pub fn join_sort<'s, C, N>(current: C, new: N) -> String
+    where
+        C: Iterator<Item = (&'s str, &'s str)> + Clone,
+        N: Iterator<Item = (&'s str, &'s str)> + Clone,
+    {
+        let mut into = String::new();
+        Parameters::join_sort_into(current, new, &mut into);
+        into
+    }
+
+    /// Same as [`Self::join_into`] but keys are sorted in alphabetical order.
+    pub fn join_sort_into<'s, C, N>(current: C, new: N, into: &mut String)
+    where
+        C: Iterator<Item = (&'s str, &'s str)> + Clone,
+        N: Iterator<Item = (&'s str, &'s str)> + Clone,
+    {
+        let n = new.clone();
+        let current = current
+            .clone()
+            .filter(|(kc, _)| !n.clone().any(|(kn, _)| kn == *kc));
+        let iter = current.chain(new);
+        Parameters::from_iter_into(iter, into);
+    }
+
+    /// Get the a `&str`-value for a `&str`-key according to the parameters format.
+    pub fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
+        Parameters::iter(s)
+            .find(|(key, _)| *key == k)
+            .map(|(_, value)| value)
+    }
+
+    /// Get the a `&str`-value iterator for a `&str`-key according to the parameters format.
+    pub fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s str> {
+        match Parameters::get(s, k) {
+            Some(v) => v.split(VALUE_SEPARATOR),
+            None => {
+                let mut i = "".split(VALUE_SEPARATOR);
+                i.next();
+                i
+            }
+        }
+    }
+
+    /// Insert a key-value `(&str, &str)` pair by appending it at the end of `s` preserving the insertion order.
+    pub fn insert<'s>(s: &'s str, k: &str, v: &str) -> (String, Option<&'s str>) {
+        let mut iter = Parameters::iter(s);
+        let item = iter.find(|(key, _)| *key == k).map(|(_, v)| v);
+
+        let current = Parameters::iter(s).filter(|x| x.0 != k);
+        let new = Some((k, v)).into_iter();
+        let iter = current.chain(new);
+        (Parameters::from_iter(iter), item)
+    }
+
+    /// Same as [`Self::insert`] but keys are sorted in alphabetical order.
+    pub fn insert_sort<'s>(s: &'s str, k: &'s str, v: &'s str) -> (String, Option<&'s str>) {
+        let mut iter = Parameters::iter(s);
+        let item = iter.find(|(key, _)| *key == k).map(|(_, v)| v);
+
+        let current = Parameters::iter(s).filter(|x| x.0 != k);
+        let new = Some((k, v)).into_iter();
+        let iter = current.chain(new);
+        (Parameters::from_iter_sort(iter), item)
+    }
+
+    /// Remove a key-value `(&str, &str)` pair from `s` preserving the insertion order.
+    pub fn remove<'s>(s: &'s str, k: &str) -> (String, Option<&'s str>) {
+        let mut iter = Parameters::iter(s);
+        let item = iter.find(|(key, _)| *key == k).map(|(_, v)| v);
+        let iter = iter.filter(|x| x.0 != k);
+        (Parameters::concat(iter), item)
+    }
+
+    /// Returns `true` if all keys are sorted in alphabetical order
+    pub fn is_ordered(s: &str) -> bool {
+        let mut prev = None;
+        for (k, _) in Parameters::iter(s) {
+            match prev.take() {
+                Some(p) if k < p => return false,
+                _ => prev = Some(k),
+            }
+        }
+        true
     }
 
     fn concat<'s, I>(iter: I) -> String
@@ -202,20 +219,6 @@ impl Parameters {
             }
             first = false;
         }
-    }
-
-    pub fn is_ordered<'s, I>(iter: I) -> bool
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let mut prev = None;
-        for (k, _) in iter {
-            match prev.take() {
-                Some(p) if k < p => return false,
-                _ => prev = Some(k),
-            }
-        }
-        true
     }
 
     #[cfg(feature = "test")]

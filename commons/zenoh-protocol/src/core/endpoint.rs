@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{
-    locator::*,
-    parameters::{Parameters, SortedParameters},
-};
+use super::{locator::*, parameters::Parameters};
 use alloc::{borrow::ToOwned, format, string::String};
 use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -251,7 +248,7 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            SortedParameters::join(
+            Parameters::join_sort(
                 self.0.metadata().iter(),
                 iter.map(|(k, v)| (k.borrow(), v.borrow())),
             ),
@@ -270,7 +267,7 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            SortedParameters::insert(self.0.metadata().iter(), k.borrow(), v.borrow()).0,
+            Parameters::insert_sort(self.0.metadata().as_str(), k.borrow(), v.borrow()).0,
             self.0.config(),
         )?;
 
@@ -285,7 +282,7 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::remove(self.0.metadata().iter(), k.borrow()).0,
+            Parameters::remove(self.0.metadata().as_str(), k.borrow()).0,
             self.0.config(),
         )?;
 
@@ -382,7 +379,7 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            SortedParameters::join(
+            Parameters::join_sort(
                 self.0.config().iter(),
                 iter.map(|(k, v)| (k.borrow(), v.borrow())),
             ),
@@ -401,7 +398,7 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            SortedParameters::insert(self.0.config().iter(), k.borrow(), v.borrow()).0,
+            Parameters::insert_sort(self.0.config().as_str(), k.borrow(), v.borrow()).0,
         )?;
 
         self.0.inner = ep.inner;
@@ -416,7 +413,7 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::remove(self.0.config().iter(), k.borrow()).0,
+            Parameters::remove(self.0.config().as_str(), k.borrow()).0,
         )?;
 
         self.0.inner = ep.inner;
@@ -578,14 +575,14 @@ impl TryFrom<String> for EndPoint {
             (Some(midx), None) if midx > pidx && !s[midx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
-                SortedParameters::from_iter_into(Parameters::iter(&s[midx + 1..]), &mut inner);
+                Parameters::from_iter_sort_into(Parameters::iter(&s[midx + 1..]), &mut inner);
                 Ok(EndPoint { inner })
             }
             // There is some config
             (None, Some(cidx)) if cidx > pidx && !s[cidx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..cidx + 1]); // Includes config separator
-                SortedParameters::from_iter_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
+                Parameters::from_iter_sort_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
                 Ok(EndPoint { inner })
             }
             // There is some metadata and some config
@@ -598,10 +595,10 @@ impl TryFrom<String> for EndPoint {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
 
-                SortedParameters::from_iter_into(Parameters::iter(&s[midx + 1..cidx]), &mut inner);
+                Parameters::from_iter_sort_into(Parameters::iter(&s[midx + 1..cidx]), &mut inner);
 
                 inner.push(CONFIG_SEPARATOR);
-                SortedParameters::from_iter_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
+                Parameters::from_iter_sort_into(Parameters::iter(&s[cidx + 1..]), &mut inner);
 
                 Ok(EndPoint { inner })
             }

@@ -11,9 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::parameters::{
-    Parameters, SortedParameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR,
-};
+use super::parameters::{Parameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR};
 use alloc::borrow::Cow;
 use core::{borrow::Borrow, fmt};
 #[cfg(feature = "std")]
@@ -101,7 +99,7 @@ impl<'s> Properties<'s> {
         K: Borrow<str>,
         V: Borrow<str>,
     {
-        let (inner, item) = Parameters::insert(self.iter(), k.borrow(), v.borrow());
+        let (inner, item) = Parameters::insert(self.as_str(), k.borrow(), v.borrow());
         let item = item.map(|i| i.to_string());
         self.0 = Cow::Owned(inner);
         item
@@ -112,7 +110,7 @@ impl<'s> Properties<'s> {
     where
         K: Borrow<str>,
     {
-        let (inner, item) = Parameters::remove(self.iter(), k.borrow());
+        let (inner, item) = Parameters::remove(self.as_str(), k.borrow());
         let item = item.map(|i| i.to_string());
         self.0 = Cow::Owned(inner);
         item
@@ -139,9 +137,9 @@ impl<'s> Properties<'s> {
         Properties(Cow::Owned(self.0.into_owned()))
     }
 
-    /// Returns true if all keys are sorted in alphabetical order.
+    /// Returns `true`` if all keys are sorted in alphabetical order.
     pub fn is_ordered(&self) -> bool {
-        Parameters::is_ordered(self.iter())
+        Parameters::is_ordered(self.as_str())
     }
 }
 
@@ -343,7 +341,7 @@ impl<'s> OrderedProperties<'s> {
 
     fn order(&mut self) {
         if !self.0.is_ordered() {
-            self.0 = Properties(Cow::Owned(SortedParameters::from_iter(self.iter())));
+            self.0 = Properties(Cow::Owned(Parameters::from_iter_sort(self.iter())));
         }
     }
 }
