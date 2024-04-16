@@ -51,6 +51,7 @@ members = [
   "plugins/zenoh-plugin-trait",
   "zenoh",
   "zenoh-ext",
+  "zenoh-ext/examples",
   "zenohd",
 ]
 exclude = ["ci/nostd-check", "ci/valgrind-check"]

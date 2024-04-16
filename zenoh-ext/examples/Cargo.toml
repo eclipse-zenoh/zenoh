@@ -13,7 +13,7 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zenoh-ext"
+name = "zenoh-ext-examples"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
@@ -21,7 +21,7 @@ authors = ["kydos <angelo@icorsaro.net>", "Julien Enoch <julien@enoch.fr>"]
 edition = { workspace = true }
 license = { workspace = true }
 categories = { workspace = true }
-description = "Zenoh: extensions to the client API."
+description = "Internal crate for zenoh"
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -39,12 +39,24 @@ futures = { workspace = true }
 tracing = {workspace = true}
 serde = { workspace = true, features = ["default"] }
 zenoh = { workspace = true, features = ["unstable"], default-features = false }
-zenoh-core = { workspace = true }
-zenoh-macros = { workspace = true }
-zenoh-result = { workspace = true }
-zenoh-sync = { workspace = true }
-zenoh-runtime = { workspace = true }
-zenoh-task = { workspace = true }
+zenoh-ext = {workspace = true }
+clap = { workspace = true, features = ["derive"] }
+
+[[example]]
+name = "z_query_sub"
+path = "examples/z_query_sub.rs"
+
+[[example]]
+name = "z_pub_cache"
+path = "examples/z_pub_cache.rs"
+
+[[example]]
+name = "z_member"
+path = "examples/z_member.rs"
+
+[[example]]
+name = "z_view_size"
+path = "examples/z_view_size.rs"
 
 [package.metadata.docs.rs]
 features = ["unstable"]
