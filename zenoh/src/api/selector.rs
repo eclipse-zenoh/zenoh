@@ -329,7 +329,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 
 #[test]
 fn selector_accessors() {
-    use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
+    use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
 
     let time_range = "[now(-2s)..now(2s)]".parse().unwrap();
     for selector in [
