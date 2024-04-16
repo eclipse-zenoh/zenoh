@@ -229,23 +229,6 @@ impl Parameters<'_> {
     }
 
     #[cfg(any(feature = "unstable", test))]
-    pub(crate) fn set_accept_any_keyexpr<T: Into<Option<bool>>>(&mut self, anyke: T) {
-        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
-
-        let mut anyke: Option<bool> = anyke.into();
-        match anyke.take() {
-            Some(ak) => {
-                if ak {
-                    self.0.insert(ANYKE, "")
-                } else {
-                    self.0.insert(ANYKE, "false")
-                }
-            }
-            None => self.0.remove(ANYKE),
-        };
-    }
-
-    #[cfg(any(feature = "unstable", test))]
     pub(crate) fn accept_any_keyexpr(&self) -> ZResult<Option<bool>> {
         use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
 
@@ -374,6 +357,8 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 
 #[test]
 fn selector_accessors() {
+    use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
+
     let time_range = "[now(-2s)..now(2s)]".parse().unwrap();
     for selector in [
         "hello/there?_timetrick",
@@ -406,7 +391,7 @@ fn selector_accessors() {
         selector.parameters_mut().extend_from_iter(hm.iter());
         assert_eq!(selector.parameters().get("_filter").unwrap(), "");
 
-        selector.parameters_mut().set_accept_any_keyexpr(true);
+        selector.parameters_mut().insert(ANYKE, "");
 
         println!("Parameters end: {}", selector.parameters());
         for i in selector.parameters().iter() {
