@@ -1190,7 +1190,7 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             // New plugin configuration for compare with original configuration.
             // Return error if it's not an object.
             // Note: it's ok if original "new_value" is not an object: this can be some subkey of the plugin configuration. But the result of the merge should be an object.
-            // Buf this may happen if original plugin configuration is not an object itself (e.g. null).
+            // Error occurs  if the original plugin configuration is not an object itself (e.g. null).
             let Some(new_plugin_config) = new_value.as_object() else {
                 return Err(format!(
                     "Attempt to provide non-object value as configuration for plugin `{plugin}`"
@@ -1199,7 +1199,7 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             };
             // Original plugin configuration for compare with new configuration.
             // If for some reason it's not defined or not an object, we default to an empty object.
-            // Usually this happens when no plugin with this name defined. Reject then should be performed by the validator which accepts plugin name.
+            // Usually this happens when no plugin with this name defined. Reject then should be performed by the validator with `plugin not found` error.
             let empty_config = Map::new();
             let current_plugin_config = value.as_object().unwrap_or(&empty_config);
             match validator.check_config(plugin, key, current_plugin_config, new_plugin_config) {
