@@ -1,3 +1,22 @@
+//
+// Copyright (c) 2023 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::{
@@ -149,7 +168,7 @@ fn generate_declare_param(
     }
 }
 
-fn derive_register_param(input: DeriveInput) -> Result<TokenStream, syn::Error> {
+pub(crate) fn derive_register_param(input: DeriveInput) -> Result<TokenStream, syn::Error> {
     // enum representing the runtime
     let enum_name = &input.ident;
 
@@ -249,15 +268,7 @@ fn derive_register_param(input: DeriveInput) -> Result<TokenStream, syn::Error> 
     Ok(tokens)
 }
 
-#[proc_macro_derive(RegisterParam, attributes(alias, param))]
-pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse_macro_input!(input);
-    derive_register_param(input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
-}
-
-fn derive_generic_runtime_param(input: DeriveInput) -> Result<TokenStream, syn::Error> {
+pub(crate) fn derive_generic_runtime_param(input: DeriveInput) -> Result<TokenStream, syn::Error> {
     let meta_param = &input.ident;
     let fields = match &input.data {
         Data::Struct(DataStruct {
@@ -330,12 +341,4 @@ fn derive_generic_runtime_param(input: DeriveInput) -> Result<TokenStream, syn::
     };
 
     Ok(tokens)
-}
-
-#[proc_macro_derive(GenericRuntimeParam)]
-pub fn generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: DeriveInput = syn::parse_macro_input!(input);
-    derive_generic_runtime_param(input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
 }

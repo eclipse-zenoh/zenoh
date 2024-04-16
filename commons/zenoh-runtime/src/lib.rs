@@ -27,8 +27,8 @@ use std::{
     time::Duration,
 };
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
+use zenoh_macros::{GenericRuntimeParam, RegisterParam};
 use zenoh_result::ZResult as Result;
-use zenoh_runtime_derive::{GenericRuntimeParam, RegisterParam};
 
 pub const ZENOH_RUNTIME_ENV: &str = "ZENOH_RUNTIME";
 
