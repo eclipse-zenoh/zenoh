@@ -36,14 +36,19 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
+#[derive(Clone, Debug)]
+pub struct Interface {
+    id: usize,
+    name: String,
+}
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
-    interface_list: Vec<i32>,
+    interface_list: Vec<Interface>,
     zid: ZenohId,
 }
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
-    interface_list: Vec<i32>,
+    interface_list: Vec<Interface>,
     zid: ZenohId,
 }
 
@@ -77,15 +82,18 @@ impl InterceptorFactoryTrait for AclEnforcer {
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         match transport.get_zid() {
             Ok(zid) => {
-                let mut interface_list: Vec<i32> = Vec::new();
+                let mut interface_list: Vec<Interface> = Vec::new();
                 match transport.get_links() {
                     Ok(links) => {
                         for link in links {
                             let enforcer = self.enforcer.clone();
                             for face in link.interfaces {
-                                let subject = &Subject::Interface(face);
+                                let subject = &Subject::Interface(face.clone());
                                 if let Some(val) = enforcer.subject_map.get(subject) {
-                                    interface_list.push(*val);
+                                    interface_list.push(Interface {
+                                        id: *val,
+                                        name: face,
+                                    });
                                 }
                             }
                         }
@@ -274,29 +282,44 @@ impl InterceptorTrait for EgressAclEnforcer {
 }
 pub trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
-    fn interface_list(&self) -> Vec<i32>;
+    fn interface_list(&self) -> Vec<Interface>;
     fn zid(&self) -> ZenohId;
     fn flow(&self) -> InterceptorFlow;
-
     fn action(&self, action: Action, log_msg: &str, key_expr: &str) -> Permission {
         let policy_enforcer = self.policy_enforcer();
         let interface_list = self.interface_list();
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission;
         for subject in &interface_list {
-            match policy_enforcer.policy_decision_point(*subject, self.flow(), action, key_expr) {
+            match policy_enforcer.policy_decision_point(subject.id, self.flow(), action, key_expr) {
                 Ok(Permission::Allow) => {
+                    tracing::trace!(
+                        "{} on {} is authorized to {} on {}",
+                        zid,
+                        subject.name,
+                        log_msg,
+                        key_expr
+                    );
                     decision = Permission::Allow;
                     break;
                 }
                 Ok(Permission::Deny) => {
+                    tracing::trace!(
+                        "{} on {} is unauthorized to {} on {}",
+                        zid,
+                        subject.name,
+                        log_msg,
+                        key_expr
+                    );
+
                     decision = Permission::Deny;
                     continue;
                 }
                 Err(e) => {
                     tracing::debug!(
-                        "{} has an authorization error to {} on {}: {}",
+                        "{} on {} has an authorization error to {} on {}: {}",
                         zid,
+                        subject.name,
                         log_msg,
                         key_expr,
                         e
@@ -305,13 +328,7 @@ pub trait AclActionMethods {
                 }
             }
         }
-
-        if decision == Permission::Deny {
-            tracing::debug!("{} is unauthorized to {} on {}", zid, log_msg, key_expr);
-            return Permission::Deny;
-        }
-        tracing::trace!("{} is authorized to {} on {}", zid, log_msg, key_expr);
-        Permission::Allow
+        decision
     }
 }
 
@@ -320,7 +337,7 @@ impl AclActionMethods for EgressAclEnforcer {
         self.policy_enforcer.clone()
     }
 
-    fn interface_list(&self) -> Vec<i32> {
+    fn interface_list(&self) -> Vec<Interface> {
         self.interface_list.clone()
     }
 
@@ -337,7 +354,7 @@ impl AclActionMethods for IngressAclEnforcer {
         self.policy_enforcer.clone()
     }
 
-    fn interface_list(&self) -> Vec<i32> {
+    fn interface_list(&self) -> Vec<Interface> {
         self.interface_list.clone()
     }
 

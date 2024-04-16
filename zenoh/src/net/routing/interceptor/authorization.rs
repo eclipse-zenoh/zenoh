@@ -27,8 +27,8 @@ use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
 type PolicyForSubject = FlowPolicy;
 
-type PolicyMap = HashMap<i32, PolicyForSubject, RandomState>;
-type SubjectMap = HashMap<Subject, i32, RandomState>;
+type PolicyMap = HashMap<usize, PolicyForSubject, RandomState>;
+type SubjectMap = HashMap<Subject, usize, RandomState>;
 type KeTreeRule = KeBoxTree<bool>;
 
 #[derive(Default)]
@@ -236,7 +236,7 @@ impl PolicyEnforcer {
 
     pub fn policy_decision_point(
         &self,
-        subject: i32,
+        subject: usize,
         flow: InterceptorFlow,
         action: Action,
         key_expr: &str,
