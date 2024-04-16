@@ -88,15 +88,13 @@ impl<'a> Selector<'a> {
     pub fn key_expr(&'a self) -> &KeyExpr<'a> {
         &self.key_expr
     }
-    /// Gets the parameters as a raw string.
+
+    /// Gets a reference to selector's [`Parameters`].
     pub fn parameters(&self) -> &Parameters<'a> {
         &self.parameters
     }
 
-    /// Gets a mutable reference to the parameters as a String.
-    ///
-    /// Note that calling this function may cause an allocation and copy if the selector's parameters wasn't
-    /// already owned by `self`. `self` owns its parameters as soon as this function returns.
+    /// Gets a mutable reference to selector's [`Parameters`].
     pub fn parameters_mut(&mut self) -> &mut Parameters<'a> {
         &mut self.parameters
     }
