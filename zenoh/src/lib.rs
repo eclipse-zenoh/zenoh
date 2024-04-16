@@ -70,7 +70,7 @@
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
 //!     let replies = session.get("key/expression").res().await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
-//!         println!(">> Received {:?}", reply.sample);
+//!         println!(">> Received {:?}", reply.result());
 //!     }
 //! }
 //! ```

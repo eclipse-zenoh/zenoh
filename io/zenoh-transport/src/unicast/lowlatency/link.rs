@@ -62,7 +62,7 @@ pub(crate) async fn send_with_link(
         }
         link.write_all(&buffer).await?;
     }
-    log::trace!("Sent: {:?}", msg);
+    tracing::trace!("Sent: {:?}", msg);
 
     #[cfg(feature = "stats")]
     {
@@ -122,13 +122,13 @@ impl TransportUnicastLowlatency {
                 c_transport.stats.clone(),
             )
             .await;
-            log::debug!(
+            tracing::debug!(
                 "[{}] Keepalive task finished with result {:?}",
                 c_transport.manager.config.zid,
                 res
             );
             if res.is_err() {
-                log::debug!(
+                tracing::debug!(
                     "[{}] <on keepalive exit> finalizing transport with peer: {}",
                     c_transport.manager.config.zid,
                     c_transport.config.zid
@@ -190,13 +190,13 @@ impl TransportUnicastLowlatency {
                 }
             };
 
-            log::debug!(
+            tracing::debug!(
                 "[{}] Rx task finished with result {:?}",
                 c_transport.manager.config.zid,
                 res
             );
             if res.is_err() {
-                log::debug!(
+                tracing::debug!(
                     "[{}] <on rx exit> finalizing transport with peer: {}",
                     c_transport.manager.config.zid,
                     c_transport.config.zid

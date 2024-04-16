@@ -110,7 +110,7 @@ fn queries() {
             .res()
             .unwrap();
         while let Ok(reply) = get.recv() {
-            let response = reply.sample.as_ref().unwrap();
+            let response = reply.result().unwrap();
             for (k, v) in response.attachment().unwrap().iter::<(
                 [u8; std::mem::size_of::<usize>()],
                 [u8; std::mem::size_of::<usize>()],

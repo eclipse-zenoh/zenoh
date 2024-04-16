@@ -108,7 +108,7 @@ impl<T: Send + 'static> IntoHandler<'static, T> for RingChannel {
                     drop(g);
                     let _ = sender.try_send(());
                 }
-                Err(e) => log::error!("{}", e),
+                Err(e) => tracing::error!("{}", e),
             }),
             receiver,
         )

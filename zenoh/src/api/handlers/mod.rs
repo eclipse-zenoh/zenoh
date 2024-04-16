@@ -26,7 +26,7 @@ use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 /// An alias for `Arc<T>`.
 pub type Dyn<T> = std::sync::Arc<T>;
 
-/// A type that can be converted into a [`Callback`]-handler pair.
+/// A type that can be converted into a [`Callback`]-Handler pair.
 ///
 /// When Zenoh functions accept types that implement these, it intends to use the [`Callback`] as just that,
 /// while granting you access to the handler through the returned value via [`std::ops::Deref`] and [`std::ops::DerefMut`].

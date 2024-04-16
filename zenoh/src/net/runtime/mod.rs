@@ -97,11 +97,11 @@ impl Runtime {
     }
 
     pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
-        log::debug!("Zenoh Rust API {}", GIT_VERSION);
+        tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
 
         let zid = *config.id();
 
-        log::info!("Using PID: {}", zid);
+        tracing::info!("Using PID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
         let metadata = config.metadata().clone();
@@ -154,7 +154,7 @@ impl Runtime {
                                 Some(event) => {
                                     if &*event == "connect/endpoints" {
                                         if let Err(e) = runtime2.update_peers().await {
-                                            log::error!("Error updating peers: {}", e);
+                                            tracing::error!("Error updating peers: {}", e);
                                         }
                                     }
                                 },
@@ -185,7 +185,7 @@ impl Runtime {
     }
 
     pub async fn close(&self) -> ZResult<()> {
-        log::trace!("Runtime::close())");
+        tracing::trace!("Runtime::close())");
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.state
             .task_controller

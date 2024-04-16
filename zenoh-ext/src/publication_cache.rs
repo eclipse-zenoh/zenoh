@@ -130,7 +130,7 @@ impl<'a> PublicationCache<'a> {
                 }
                 Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
             };
-        log::debug!(
+        tracing::debug!(
             "Create PublicationCache on {} with history={} resource_limit={:?}",
             &key_expr,
             conf.history,
@@ -163,8 +163,8 @@ impl<'a> PublicationCache<'a> {
         let queryable = queryable.res_sync()?;
 
         // take local ownership of stuff to be moved into task
-        let sub_recv = local_sub.receiver.clone();
-        let quer_recv = queryable.receiver.clone();
+        let sub_recv = local_sub.handler().clone();
+        let quer_recv = queryable.handler().clone();
         let pub_key_expr = key_expr.into_owned();
         let resources_limit = conf.resources_limit;
         let history = conf.history;
@@ -195,7 +195,7 @@ impl<'a> PublicationCache<'a> {
                                     }
                                     queue.push_back(sample);
                                 } else if cache.len() >= limit {
-                                    log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
+                                    tracing::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
                                     pub_key_expr);
                                 } else {
                                     let mut queue: VecDeque<Sample> = VecDeque::new();
@@ -205,19 +205,19 @@ impl<'a> PublicationCache<'a> {
                             }
                         },
 
-                        // on query, reply with cach content
+                        // on query, reply with cache content
                         query = quer_recv.recv_async() => {
                             if let Ok(query) = query {
                                 if !query.selector().key_expr().as_str().contains('*') {
                                     if let Some(queue) = cache.get(query.selector().key_expr().as_keyexpr()) {
                                         for sample in queue {
-                                            if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
+                                            if let (Ok(Some(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
                                                 if !time_range.contains(timestamp.get_time().to_system_time()){
                                                     continue;
                                                 }
                                             }
                                             if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
-                                                log::warn!("Error replying to query: {}", e);
+                                                tracing::warn!("Error replying to query: {}", e);
                                             }
                                         }
                                     }
@@ -225,13 +225,13 @@ impl<'a> PublicationCache<'a> {
                                     for (key_expr, queue) in cache.iter() {
                                         if query.selector().key_expr().intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                             for sample in queue {
-                                                if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp()) {
+                                                if let (Ok(Some(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
                                                     if !time_range.contains(timestamp.get_time().to_system_time()){
                                                         continue;
                                                     }
                                                 }
                                                 if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
-                                                    log::warn!("Error replying to query: {}", e);
+                                                    tracing::warn!("Error replying to query: {}", e);
                                                 }
                                             }
                                         }

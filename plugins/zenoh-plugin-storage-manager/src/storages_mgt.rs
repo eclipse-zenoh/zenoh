@@ -35,7 +35,7 @@ pub(crate) async fn start_storage(
     let storage_name = parts[7];
     let name = format!("{uuid}/{storage_name}");
 
-    log::trace!("Start storage '{}' on keyexpr '{}'", name, config.key_expr);
+    tracing::trace!("Start storage '{}' on keyexpr '{}'", name, config.key_expr);
 
     let (tx, rx) = flume::bounded(1);
 

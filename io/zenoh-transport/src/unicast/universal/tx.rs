@@ -24,7 +24,7 @@ impl TransportUnicastUniversal {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
-                log::trace!("Scheduled: {:?}", $msg);
+                tracing::trace!("Scheduled: {:?}", $msg);
                 return pl.push_network_message($msg);
             };
         }
@@ -47,7 +47,7 @@ impl TransportUnicastUniversal {
         }
 
         // No Link found
-        log::trace!(
+        tracing::trace!(
             "Message dropped because the transport has no links: {}",
             msg
         );
@@ -67,7 +67,7 @@ impl TransportUnicastUniversal {
                 crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)
             };
             if let Err(e) = res {
-                log::trace!("Failed SHM conversion: {}", e);
+                tracing::trace!("Failed SHM conversion: {}", e);
                 return false;
             }
         }

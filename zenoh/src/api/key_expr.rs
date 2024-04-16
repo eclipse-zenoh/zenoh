@@ -26,7 +26,7 @@ use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
     core::{key_expr::canon::Canonizable, ExprId, WireExpr},
-    network::{declare, DeclareBody, DeclareMode, Mapping, UndeclareKeyExpr},
+    network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
 
@@ -628,14 +628,14 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
             }
             _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),
         };
-        log::trace!("undeclare_keyexpr({:?})", expr_id);
+        tracing::trace!("undeclare_keyexpr({:?})", expr_id);
         let mut state = zwrite!(session.state);
         state.local_resources.remove(&expr_id);
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(zenoh_protocol::network::Declare {
-            mode: DeclareMode::Push,
+            interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,

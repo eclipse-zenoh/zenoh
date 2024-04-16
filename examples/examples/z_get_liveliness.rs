@@ -19,7 +19,7 @@ use zenoh_examples::CommonArgs;
 #[tokio::main]
 async fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::init_log_from_env();
 
     let (config, key_expr, timeout) = parse_args();
 
@@ -35,7 +35,7 @@ async fn main() {
         .await
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
-        match reply.sample {
+        match reply.result() {
             Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr().as_str(),),
             Err(err) => {
                 let payload = err

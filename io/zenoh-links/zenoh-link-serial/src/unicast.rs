@@ -95,7 +95,7 @@ impl LinkUnicastSerial {
         let res = match self.get_port_mut().bytes_to_read() {
             Ok(b) => b,
             Err(e) => {
-                log::warn!(
+                tracing::warn!(
                     "Unable to check if there are bytes to read in serial {}: {}",
                     self.src_locator,
                     e
@@ -113,11 +113,11 @@ impl LinkUnicastSerial {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastSerial {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing Serial link: {}", self);
+        tracing::trace!("Closing Serial link: {}", self);
         let _guard = zasynclock!(self.write_lock);
         self.get_port_mut().clear().map_err(|e| {
             let e = zerror!("Unable to close Serial link {}: {}", self, e);
-            log::error!("{}", e);
+            tracing::error!("{}", e);
             e
         })?;
         self.is_connected.store(false, Ordering::Release);
@@ -128,7 +128,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         let _guard = zasynclock!(self.write_lock);
         self.get_port_mut().write(buffer).await.map_err(|e| {
             let e = zerror!("Unable to write on Serial link {}: {}", self, e);
-            log::error!("{}", e);
+            tracing::error!("{}", e);
             e
         })?;
         Ok(buffer.len())
@@ -149,7 +149,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
                 Ok(read) => return Ok(read),
                 Err(e) => {
                     let e = zerror!("Read error on Serial link {}: {}", self, e);
-                    log::error!("{}", e);
+                    tracing::error!("{}", e);
                     drop(_guard);
                     tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                     continue;
@@ -188,11 +188,11 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         // e.g. for serial port "/dev/ttyUSB0" interface name will be "ttyUSB0"
         match z_serial::get_available_port_names() {
             Ok(interfaces) => {
-                log::trace!("get_interface_names for serial: {:?}", interfaces);
+                tracing::trace!("get_interface_names for serial: {:?}", interfaces);
                 interfaces
             }
             Err(e) => {
-                log::debug!("get_interface_names for serial failed: {:?}", e);
+                tracing::debug!("get_interface_names for serial failed: {:?}", e);
                 vec![]
             }
         }
@@ -273,14 +273,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(endpoint.address());
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
-        log::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+        tracing::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
         let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -299,14 +299,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(endpoint.address());
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
-        log::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+        tracing::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
         let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -355,7 +355,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
                 "Can not delete the Serial listener because it has not been found: {}",
                 path
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e
         })?;
 
@@ -396,12 +396,12 @@ async fn accept_read_task(
             tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
         }
 
-        log::trace!("Creating serial link from {:?}", src_path);
+        tracing::trace!("Creating serial link from {:?}", src_path);
         is_connected.store(true, Ordering::Release);
         Ok(link.clone())
     }
 
-    log::trace!("Ready to accept Serial connections on: {:?}", src_path);
+    tracing::trace!("Ready to accept Serial connections on: {:?}", src_path);
 
     loop {
         tokio::select! {
@@ -414,14 +414,14 @@ async fn accept_read_task(
                     Ok(link) => {
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
-                            log::error!("{}-{}: {}", file!(), line!(), e)
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 
                         // Ensure the creation of this link is only once
                         break;
                     }
                     Err(e) =>  {
-                        log::warn!("{}. Hint: Is the serial cable connected?", e);
+                        tracing::warn!("{}. Hint: Is the serial cable connected?", e);
                         tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
                         continue;
 

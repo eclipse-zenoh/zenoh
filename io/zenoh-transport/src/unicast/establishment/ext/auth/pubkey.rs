@@ -373,7 +373,7 @@ impl<'a> OpenFsm for &'a AuthPubKeyFsm<'a> {
         _input: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
         const S: &str = "PubKey extension - Send InitSyn.";
-        log::trace!("{S}");
+        tracing::trace!("{S}");
 
         let init_syn = InitSyn {
             alice_pubkey: zasyncread!(self.inner).pub_key.clone(),
@@ -396,7 +396,7 @@ impl<'a> OpenFsm for &'a AuthPubKeyFsm<'a> {
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "PubKey extension - Recv InitAck.";
-        log::trace!("{S}");
+        tracing::trace!("{S}");
 
         let (state, mut ext) = input;
 
@@ -442,7 +442,7 @@ impl<'a> OpenFsm for &'a AuthPubKeyFsm<'a> {
         state: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         const S: &str = "PubKey extension - Send OpenSyn.";
-        log::trace!("{S}");
+        tracing::trace!("{S}");
 
         let open_syn = OpenSyn {
             nonce_encrypted_with_bob_pubkey: state.nonce.clone(),
@@ -549,7 +549,7 @@ impl<'a> AcceptFsm for &'a AuthPubKeyFsm<'a> {
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "PubKey extension - Recv InitSyn.";
-        log::trace!("{S}");
+        tracing::trace!("{S}");
 
         let (state, mut ext) = input;
 
@@ -587,7 +587,7 @@ impl<'a> AcceptFsm for &'a AuthPubKeyFsm<'a> {
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         const S: &str = "PubKey extension - Send InitAck.";
-        log::trace!("{S}");
+        tracing::trace!("{S}");
 
         let init_ack = InitAck {
             bob_pubkey: zasyncread!(self.inner).pub_key.clone(),
@@ -611,7 +611,7 @@ impl<'a> AcceptFsm for &'a AuthPubKeyFsm<'a> {
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         const S: &str = "PubKey extension - Recv OpenSyn.";
-        log::trace!("{S}");
+        tracing::trace!("{S}");
 
         let (state, mut ext) = input;
 
@@ -650,7 +650,7 @@ impl<'a> AcceptFsm for &'a AuthPubKeyFsm<'a> {
         _input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         const S: &str = "PubKey extension - Send OpenAck.";
-        log::trace!("{S}");
+        tracing::trace!("{S}");
 
         Ok(Some(ZExtUnit::new()))
     }

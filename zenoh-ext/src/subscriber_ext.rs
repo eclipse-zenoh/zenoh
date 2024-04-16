@@ -38,7 +38,7 @@ where
 {
     type Output = Forward<Map<RecvStream<'a, Sample>, fn(Sample) -> Result<Sample, S::Error>>, S>;
     fn forward(&'a mut self, sink: S) -> Self::Output {
-        futures::StreamExt::forward(futures::StreamExt::map(self.receiver.stream(), Ok), sink)
+        futures::StreamExt::forward(futures::StreamExt::map(self.stream(), Ok), sink)
     }
 }
 

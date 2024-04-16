@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use super::{
     builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
     encoding::Encoding,
@@ -51,7 +50,7 @@ pub(crate) struct QueryInner {
     /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
     /// This Query's selector parameters.
-    pub(crate) parameters: String,
+    pub(crate) parameters: Parameters<'static>,
     /// This Query's body.
     pub(crate) value: Option<Value>,
 
@@ -85,7 +84,7 @@ impl Query {
     pub fn selector(&self) -> Selector<'_> {
         Selector {
             key_expr: self.inner.key_expr.clone(),
-            parameters: (&self.inner.parameters).into(),
+            parameters: self.inner.parameters.clone(),
         }
     }
 
@@ -97,7 +96,7 @@ impl Query {
 
     /// This Query's selector parameters.
     #[inline(always)]
-    pub fn parameters(&self) -> &str {
+    pub fn parameters(&self) -> &Parameters {
         &self.inner.parameters
     }
 
@@ -212,10 +211,13 @@ impl Query {
             }
         })
     }
+    #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        self.parameters()
-            .get_bools([crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM])
-            .map(|a| a[0])
+        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+
+        Ok(self
+            .parameters()
+            .contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM))
     }
 }
 
@@ -397,9 +399,12 @@ impl SyncResolve for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
 
 impl Query {
     fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        if !self._accepts_any_replies().unwrap_or(false)
-            && !self.key_expr().intersects(&sample.key_expr)
-        {
+        let c = zcondfeat!(
+            "unstable",
+            !self._accepts_any_replies().unwrap_or(false),
+            true
+        );
+        if c && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
         #[cfg(not(feature = "unstable"))]
@@ -825,12 +830,12 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct Queryable<'a, Receiver> {
+pub struct Queryable<'a, Handler> {
     pub(crate) queryable: CallbackQueryable<'a>,
-    pub receiver: Receiver,
+    pub(crate) handler: Handler,
 }
 
-impl<'a, Receiver> Queryable<'a, Receiver> {
+impl<'a, Handler> Queryable<'a, Handler> {
     /// Returns the [`EntityGlobalId`] of this Queryable.
     ///
     /// # Examples
@@ -855,6 +860,20 @@ impl<'a, Receiver> Queryable<'a, Receiver> {
         }
     }
 
+    /// Returns a reference to this queryable's handler.
+    /// An handler is anything that implements [`IntoHandler`].
+    /// The default handler is [`DefaultHandler`].
+    pub fn handler(&self) -> &Handler {
+        &self.handler
+    }
+
+    /// Returns a mutable reference to this queryable's handler.
+    /// An handler is anything that implements [`IntoHandler`].
+    /// The default handler is [`DefaultHandler`].
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.handler
+    }
+
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
@@ -867,11 +886,17 @@ impl<'a, T> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
     }
 }
 
-impl<Receiver> Deref for Queryable<'_, Receiver> {
-    type Target = Receiver;
+impl<Handler> Deref for Queryable<'_, Handler> {
+    type Target = Handler;
 
     fn deref(&self) -> &Self::Target {
-        &self.receiver
+        self.handler()
+    }
+}
+
+impl<Handler> DerefMut for Queryable<'_, Handler> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.handler_mut()
     }
 }
 
@@ -904,7 +929,7 @@ where
                     state: qable_state,
                     alive: true,
                 },
-                receiver,
+                handler: receiver,
             })
     }
 }

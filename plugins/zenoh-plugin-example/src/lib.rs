@@ -14,7 +14,6 @@
 #![recursion_limit = "256"]
 
 use futures::select;
-use log::{debug, info};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -23,6 +22,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use zenoh::key_expr::{keyexpr, KeyExpr};
+use tracing::{debug, info};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::runtime::Runtime;
 use zenoh::sample::Sample;
@@ -113,7 +113,7 @@ impl RunningPluginTrait for RunningPlugin {
                     guard.flag.store(false, Relaxed);
                     guard.flag = Arc::new(AtomicBool::new(true));
                     match KeyExpr::try_from(selector.clone()) {
-                        Err(e) => log::error!("{}", e),
+                        Err(e) => tracing::error!("{}", e),
                         Ok(selector) => {
                             async_std::task::spawn(run(
                                 guard.runtime.clone(),
@@ -144,7 +144,7 @@ impl Drop for RunningPlugin {
 }
 
 async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
-    env_logger::init();
+    zenoh_util::init_log_from_env();
 
     // create a zenoh Session that shares the same Runtime than zenohd
     let session = zenoh::session::init(runtime).res().await.unwrap();

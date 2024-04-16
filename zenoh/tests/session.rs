@@ -148,7 +148,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             .declare_queryable(key_expr)
             .callback(move |query| {
                 c_msgs.fetch_add(1, Ordering::Relaxed);
-                match query.parameters() {
+                match query.parameters().as_str() {
                     "ok_put" => {
                         tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async {
@@ -193,7 +193,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             let selector = format!("{}?ok_put", key_expr);
             let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                let s = s.sample.unwrap();
+                let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Put);
                 assert_eq!(s.payload().len(), size);
                 cnt += 1;
@@ -211,7 +211,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             let selector = format!("{}?ok_del", key_expr);
             let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                let s = s.sample.unwrap();
+                let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Delete);
                 assert_eq!(s.payload().len(), 0);
                 cnt += 1;
@@ -229,7 +229,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             let selector = format!("{}?err", key_expr);
             let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                let e = s.sample.unwrap_err();
+                let e = s.result().unwrap_err();
                 assert_eq!(e.payload().len(), size);
                 cnt += 1;
             }
@@ -248,8 +248,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_unicast() {
-    let _ = env_logger::try_init();
-
+    zenoh_util::init_log_from_env();
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_qryrep(&peer01, &peer02, Reliability::Reliable).await;
@@ -258,8 +257,7 @@ async fn zenoh_session_unicast() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_multicast() {
-    let _ = env_logger::try_init();
-
+    zenoh_util::init_log_from_env();
     let (peer01, peer02) =
         open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;

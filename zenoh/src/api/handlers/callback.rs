@@ -43,7 +43,7 @@ impl<T: Send + 'static> IntoHandler<'static, T> for (flume::Sender<T>, flume::Re
         (
             Dyn::new(move |t| {
                 if let Err(e) = sender.send(t) {
-                    log::error!("{}", e)
+                    tracing::error!("{}", e)
                 }
             }),
             receiver,

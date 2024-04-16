@@ -170,17 +170,13 @@ struct GroupState {
 
 pub struct Group {
     state: Arc<GroupState>,
-    tasks: Vec<JoinHandle<()>>,
+    task_controller: TaskController,
 }
 
 impl Drop for Group {
     fn drop(&mut self) {
         // cancel background tasks
-        tokio::runtime::Handle::current().block_on(async {
-            while let Some(handle) = self.tasks.pop() {
-                handle.abort();
-            }
-        });
+        self.task_controller.terminate_all(Duration::from_secs(10));
     }
 }
 
@@ -194,41 +190,38 @@ async fn keep_alive_task(state: Arc<GroupState>) {
         .mul_f32(state.local_member.refresh_ratio);
     loop {
         tokio::time::sleep(period).await;
-        log::trace!("Sending Keep Alive for: {}", &state.local_member.mid);
+        tracing::trace!("Sending Keep Alive for: {}", &state.local_member.mid);
         let _ = state.group_publisher.put(buf.clone()).res().await;
     }
 }
 
-fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
-    let watch_dog = async move {
-        loop {
-            tokio::time::sleep(period).await;
-            let now = Instant::now();
-            let mut ms = s.members.lock().await;
-            let expired_members: Vec<OwnedKeyExpr> = ms
-                .iter()
-                .filter(|e| e.1 .1 < now)
-                .map(|e| e.0.clone())
-                .collect();
+async fn watchdog_task(s: Arc<GroupState>, period: Duration) {
+    loop {
+        tokio::time::sleep(period).await;
+        let now = Instant::now();
+        let mut ms = s.members.lock().await;
+        let expired_members: Vec<OwnedKeyExpr> = ms
+            .iter()
+            .filter(|e| e.1 .1 < now)
+            .map(|e| e.0.clone())
+            .collect();
 
-            for e in &expired_members {
-                log::debug!("Member with lease expired: {}", e);
-                ms.remove(e);
-            }
-            if !expired_members.is_empty() {
-                log::debug!("Other members list: {:?}", ms.keys());
-                drop(ms);
-                let u_evt = &*s.user_events_tx.lock().await;
-                for e in expired_members {
-                    if let Some(tx) = u_evt {
-                        tx.send(GroupEvent::LeaseExpired(LeaseExpiredEvent { mid: e }))
-                            .unwrap()
-                    }
+        for e in &expired_members {
+            tracing::debug!("Member with lease expired: {}", e);
+            ms.remove(e);
+        }
+        if !expired_members.is_empty() {
+            tracing::debug!("Other members list: {:?}", ms.keys());
+            drop(ms);
+            let u_evt = &*s.user_events_tx.lock().await;
+            for e in expired_members {
+                if let Some(tx) = u_evt {
+                    tx.send(GroupEvent::LeaseExpired(LeaseExpiredEvent { mid: e }))
+                        .unwrap()
                 }
             }
         }
-    };
-    tokio::task::spawn(watch_dog)
+    }
 }
 
 async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
@@ -238,12 +231,12 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     )
     .try_into()
     .unwrap();
-    log::debug!("Started query handler for: {}", &qres);
+    tracing::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
     let queryable = z.declare_queryable(&qres).res().await.unwrap();
 
     while let Ok(query) = queryable.recv_async().await {
-        log::trace!("Serving query for: {}", &qres);
+        tracing::trace!("Serving query for: {}", &qres);
         query.reply(qres.clone(), buf.clone()).res().await.unwrap();
     }
 }
@@ -258,11 +251,11 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
         match bincode::deserialize_from::<PayloadReader, GroupNetEvent>(s.payload().reader()) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
-                    log::debug!("Member join: {:?}", &je.member);
+                    tracing::debug!("Member join: {:?}", &je.member);
                     let alive_till = Instant::now().add(je.member.lease);
                     let mut ms = state.members.lock().await;
                     ms.insert(je.member.mid.clone(), (je.member.clone(), alive_till));
-                    log::debug!("Other members list: {:?}", ms.keys());
+                    tracing::debug!("Other members list: {:?}", ms.keys());
                     state.cond.notify_all();
                     drop(ms);
                     let u_evt = &*state.user_events_tx.lock().await;
@@ -271,10 +264,10 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                     }
                 }
                 GroupNetEvent::Leave(le) => {
-                    log::debug!("Member leave: {:?}", &le.mid);
+                    tracing::debug!("Member leave: {:?}", &le.mid);
                     let mut ms = state.members.lock().await;
                     ms.remove(&le.mid);
-                    log::debug!("Other members list: {:?}", ms.keys());
+                    tracing::debug!("Other members list: {:?}", ms.keys());
                     drop(ms);
                     let u_evt = &*state.user_events_tx.lock().await;
                     if let Some(tx) = u_evt {
@@ -282,7 +275,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                     }
                 }
                 GroupNetEvent::KeepAlive(kae) => {
-                    log::debug!(
+                    tracing::debug!(
                         "KeepAlive from {} ({})",
                         &kae.mid,
                         if kae.mid.ne(&state.local_member.mid) {
@@ -296,23 +289,23 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                         let v = mm.remove(&kae.mid);
                         match v {
                             Some((m, _)) => {
-                                log::trace!("Updating leasefor: {:?}", &kae.mid);
+                                tracing::trace!("Updating leasefor: {:?}", &kae.mid);
                                 let alive_till = Instant::now().add(m.lease);
                                 mm.insert(m.mid.clone(), (m, alive_till));
                             }
                             None => {
-                                log::debug!(
+                                tracing::debug!(
                                     "Received Keep Alive from unknown member: {}",
                                     &kae.mid
                                 );
                                 let qres = format!("{}/{}/{}", GROUP_PREFIX, &state.gid, kae.mid);
                                 // @TODO: we could also send this member info
                                 let qc = ConsolidationMode::None;
-                                log::trace!("Issuing Query for {}", &qres);
+                                tracing::trace!("Issuing Query for {}", &qres);
                                 let receiver = z.get(&qres).consolidation(qc).res().await.unwrap();
 
                                 while let Ok(reply) = receiver.recv_async().await {
-                                    match reply.sample {
+                                    match reply.result() {
                                         Ok(sample) => {
                                             match bincode::deserialize_from::<PayloadReader, Member>(
                                                 sample.payload().reader(),
@@ -320,12 +313,12 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                                 Ok(m) => {
                                                     let mut expiry = Instant::now();
                                                     expiry = expiry.add(m.lease);
-                                                    log::debug!(
+                                                    tracing::debug!(
                                                         "Received member information: {:?}",
                                                         &m
                                                     );
                                                     mm.insert(kae.mid.clone(), (m.clone(), expiry));
-                                                    log::debug!(
+                                                    tracing::debug!(
                                                         "Other members list: {:?}",
                                                         mm.keys()
                                                     );
@@ -339,13 +332,13 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                                     }
                                                 }
                                                 Err(e) => {
-                                                    log::warn!(
+                                                    tracing::warn!(
                                                         "Unable to deserialize the Member info received: {}", e);
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            log::warn!("Error received: {:?}", e);
+                                            tracing::warn!("Error received: {:?}", e);
                                         }
                                     }
                                 }
@@ -353,12 +346,12 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                             }
                         }
                     } else {
-                        log::trace!("KeepAlive from Local Participant -- Ignoring");
+                        tracing::trace!("KeepAlive from Local Participant -- Ignoring");
                     }
                 }
             },
             Err(e) => {
-                log::warn!("Failed decoding net-event due to: {:?}", e);
+                tracing::warn!("Failed decoding net-event due to: {:?}", e);
             }
         }
     }
@@ -393,21 +386,22 @@ impl Group {
         let is_auto_liveliness = matches!(with.liveliness, MemberLiveliness::Auto);
 
         // announce the member:
-        log::debug!("Sending Join Message for local member: {:?}", &with);
+        tracing::debug!("Sending Join Message for local member: {:?}", &with);
         let join_evt = GroupNetEvent::Join(JoinEvent { member: with });
         let buf = bincode::serialize(&join_evt).unwrap();
         let _ = state.group_publisher.put(buf).res().await;
 
+        let task_controller = TaskController::default();
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {
-            tokio::task::spawn(keep_alive_task(state.clone()));
+            task_controller.spawn_abortable(keep_alive_task(state.clone()));
         }
-        let events_task = tokio::task::spawn(net_event_handler(z.clone(), state.clone()));
-        let queries_task = tokio::task::spawn(query_handler(z.clone(), state.clone()));
-        let watchdog_task = spawn_watchdog(state.clone(), Duration::from_secs(1));
+        task_controller.spawn_abortable(net_event_handler(z.clone(), state.clone()));
+        task_controller.spawn_abortable(query_handler(z.clone(), state.clone()));
+        task_controller.spawn_abortable(watchdog_task(state.clone(), Duration::from_secs(1)));
         Ok(Group {
             state,
-            tasks: Vec::from([events_task, queries_task, watchdog_task]),
+            task_controller,
         })
     }
 

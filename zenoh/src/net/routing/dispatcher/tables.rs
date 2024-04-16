@@ -169,12 +169,12 @@ impl Tables {
 pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
     match face.upgrade() {
         Some(mut face) => {
-            log::debug!("Close {}", face);
+            tracing::debug!("Close {}", face);
             face.task_controller.terminate_all(Duration::from_secs(10));
             finalize_pending_queries(tables, &mut face);
             zlock!(tables.ctrl_lock).close_face(tables, &mut face);
         }
-        None => log::error!("Face already closed!"),
+        None => tracing::error!("Face already closed!"),
     }
 }
 

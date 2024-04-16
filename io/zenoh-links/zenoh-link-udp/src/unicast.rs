@@ -150,7 +150,7 @@ impl LinkUnicastUdp {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastUdp {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing UDP link: {}", self);
+        tracing::trace!("Closing UDP link: {}", self);
         match &self.variant {
             LinkUnicastUdpVariant::Connected(link) => link.close().await,
             LinkUnicastUdpVariant::Unconnected(link) => {
@@ -274,7 +274,7 @@ impl LinkManagerUnicastUdp {
         .await
         .map_err(|e| {
             let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -285,20 +285,20 @@ impl LinkManagerUnicastUdp {
         // Connect the socket to the remote address
         socket.connect(dst_addr).await.map_err(|e| {
             let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
         // Get source and destination UDP addresses
         let src_addr = socket.local_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
         let dst_addr = socket.peer_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -313,7 +313,7 @@ impl LinkManagerUnicastUdp {
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -323,7 +323,7 @@ impl LinkManagerUnicastUdp {
 
         let local_addr = socket.local_addr().map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -493,11 +493,11 @@ async fn accept_read_task(
 
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept UDP connections: {}", e);
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
-    log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
+    tracing::trace!("Ready to accept UDP connections on: {:?}", src_addr);
 
     loop {
         // Buffers for deserialization
@@ -515,7 +515,7 @@ async fn accept_read_task(
                                 Some(link) => break link.upgrade(),
                                 None => {
                                     // A new peers has sent data to this socket
-                                    log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
+                                    tracing::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
                                     let unconnected = Arc::new(LinkUnicastUdpUnconnected {
                                         socket: Arc::downgrade(&socket),
                                         links: links.clone(),
@@ -531,7 +531,7 @@ async fn accept_read_task(
                                     ));
                                     // Add the new link to the set of connected peers
                                     if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-                                        log::error!("{}-{}: {}", file!(), line!(), e)
+                                        tracing::error!("{}-{}: {}", file!(), line!(), e)
                                     }
                                 }
                             }
@@ -548,7 +548,7 @@ async fn accept_read_task(
                     }
 
                     Err(e) => {
-                        log::warn!("{}. Hint: increase the system open file limit.", e);
+                        tracing::warn!("{}. Hint: increase the system open file limit.", e);
                         // Throttle the accept loop upon an error
                         // NOTE: This might be due to various factors. However, the most common case is that
                         //       the process has reached the maximum number of open files in the system. On

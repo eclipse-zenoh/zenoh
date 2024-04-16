@@ -129,7 +129,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     ) -> Self {
         let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new();
         self.plugins.push(PluginRecord::new(plugin_loader));
-        log::debug!(
+        tracing::debug!(
             "Declared static plugin {}",
             self.plugins.last().unwrap().name()
         );
@@ -149,7 +149,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
             .as_ref()
             .ok_or("Dynamic plugin loading is disabled")?
             .clone();
-        log::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
+        tracing::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
         let loader =
             DynamicPlugin::new(name, DynamicPluginSource::ByName((libloader, plugin_name)));
         self.plugins.push(PluginRecord::new(loader));
@@ -164,7 +164,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
         let paths = paths.iter().map(|p| p.as_ref().into()).collect();
-        log::debug!("Declared dynamic plugin {} by paths {:?}", &name, &paths);
+        tracing::debug!("Declared dynamic plugin {} by paths {:?}", &name, &paths);
         let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths));
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
@@ -269,7 +269,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
     for PluginsManager<StartArgs, Instance>
 {
     fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec> {
-        log::debug!(
+        tracing::debug!(
             "Plugin manager with prefix `{}` : requested plugins_status {:?}",
             self.default_lib_prefix,
             names

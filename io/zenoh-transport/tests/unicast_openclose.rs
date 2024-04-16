@@ -475,7 +475,7 @@ async fn openclose_lowlatency_transport(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13000).parse().unwrap();
     openclose_universal_transport(&endpoint).await;
 }
@@ -483,7 +483,7 @@ async fn openclose_tcp_only() {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13100).parse().unwrap();
     openclose_lowlatency_transport(&endpoint).await;
 }
@@ -491,7 +491,7 @@ async fn openclose_tcp_only_with_lowlatency_transport() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13010).parse().unwrap();
     openclose_universal_transport(&endpoint).await;
 }
@@ -499,7 +499,7 @@ async fn openclose_udp_only() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13110).parse().unwrap();
     openclose_lowlatency_transport(&endpoint).await;
 }
@@ -508,7 +508,7 @@ async fn openclose_udp_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn openclose_ws_only() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13020).parse().unwrap();
     openclose_universal_transport(&endpoint).await;
 }
@@ -517,7 +517,7 @@ async fn openclose_ws_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn openclose_ws_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13120).parse().unwrap();
     openclose_lowlatency_transport(&endpoint).await;
 }
@@ -526,7 +526,7 @@ async fn openclose_ws_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn openclose_unixpipe_only() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = "unixpipe/openclose_unixpipe_only".parse().unwrap();
     openclose_universal_transport(&endpoint).await;
 }
@@ -535,7 +535,7 @@ async fn openclose_unixpipe_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn openclose_unixpipe_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = "unixpipe/openclose_unixpipe_only_with_lowlatency_transport"
         .parse()
         .unwrap();
@@ -546,7 +546,7 @@ async fn openclose_unixpipe_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn openclose_unix_only() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let f1 = "zenoh-test-unix-socket-9.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
@@ -560,7 +560,7 @@ async fn openclose_unix_only() {
 async fn openclose_tls_only() {
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
     //       mapping to any existing domain. The certificate and key
@@ -639,14 +639,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 
@@ -737,14 +737,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 
@@ -758,7 +758,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 async fn openclose_tcp_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
 
     let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13001).parse().unwrap();
 
@@ -777,7 +777,7 @@ async fn openclose_tcp_only_connect_with_interface_restriction() {
 async fn openclose_tcp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
 
     let listen_endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], 13002)
         .parse()
@@ -796,7 +796,7 @@ async fn openclose_tcp_only_listen_with_interface_restriction() {
 async fn openclose_udp_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
 
     let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13003).parse().unwrap();
 
@@ -815,7 +815,7 @@ async fn openclose_udp_only_connect_with_interface_restriction() {
 async fn openclose_udp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let listen_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13004)
         .parse()
         .unwrap();
@@ -829,7 +829,7 @@ async fn openclose_udp_only_listen_with_interface_restriction() {
 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_vsock() {
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
     let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
     openclose_lowlatency_transport(&endpoint).await;
 }

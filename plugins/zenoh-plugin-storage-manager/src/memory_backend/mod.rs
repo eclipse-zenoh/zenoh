@@ -59,7 +59,7 @@ impl Volume for MemoryBackend {
     }
 
     async fn create_storage(&self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
-        log::debug!("Create Memory Storage with configuration: {:?}", properties);
+        tracing::debug!("Create Memory Storage with configuration: {:?}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))
     }
 }
@@ -67,7 +67,7 @@ impl Volume for MemoryBackend {
 impl Drop for MemoryBackend {
     fn drop(&mut self) {
         // nothing to do in case of memory backend
-        log::trace!("MemoryBackend::drop()");
+        tracing::trace!("MemoryBackend::drop()");
     }
 }
 
@@ -97,7 +97,7 @@ impl Storage for MemoryStorage {
         value: Value,
         timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
-        log::trace!("put for {:?}", key);
+        tracing::trace!("put for {:?}", key);
         let mut map = self.map.write().await;
         match map.entry(key) {
             std::collections::hash_map::Entry::Occupied(mut e) => {
@@ -116,7 +116,7 @@ impl Storage for MemoryStorage {
         key: Option<OwnedKeyExpr>,
         _timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
-        log::trace!("delete for {:?}", key);
+        tracing::trace!("delete for {:?}", key);
         self.map.write().await.remove_entry(&key);
         return Ok(StorageInsertionResult::Deleted);
     }
@@ -126,7 +126,7 @@ impl Storage for MemoryStorage {
         key: Option<OwnedKeyExpr>,
         _parameters: &str,
     ) -> ZResult<Vec<StoredData>> {
-        log::trace!("get for {:?}", key);
+        tracing::trace!("get for {:?}", key);
         // @TODO: use parameters???
         match self.map.read().await.get(&key) {
             Some(v) => Ok(vec![v.clone()]),
@@ -147,6 +147,6 @@ impl Storage for MemoryStorage {
 impl Drop for MemoryStorage {
     fn drop(&mut self) {
         // nothing to do in case of memory backend
-        log::trace!("MemoryStorage::drop()");
+        tracing::trace!("MemoryStorage::drop()");
     }
 }

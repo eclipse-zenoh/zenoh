@@ -145,7 +145,10 @@ pub fn map_zmsg_to_shminfo(msg: &mut NetworkMessage) -> ZResult<bool> {
             ResponseBody::Reply(b) => b.map_to_shminfo(),
             ResponseBody::Err(b) => b.map_to_shminfo(),
         },
-        NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
+        NetworkBody::ResponseFinal(_)
+        | NetworkBody::Interest(_)
+        | NetworkBody::Declare(_)
+        | NetworkBody::OAM(_) => Ok(false),
     }
 }
 
@@ -196,7 +199,10 @@ pub fn map_zmsg_to_shmbuf(
             ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
         },
-        NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
+        NetworkBody::ResponseFinal(_)
+        | NetworkBody::Interest(_)
+        | NetworkBody::Declare(_)
+        | NetworkBody::OAM(_) => Ok(false),
     }
 }
 

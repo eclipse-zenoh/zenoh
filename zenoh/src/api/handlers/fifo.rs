@@ -52,7 +52,7 @@ impl<T: Send + Sync + 'static> IntoHandler<'static, T>
         (
             Dyn::new(move |t| {
                 if let Err(e) = sender.send(t) {
-                    log::error!("{}", e)
+                    tracing::error!("{}", e)
                 }
             }),
             receiver,

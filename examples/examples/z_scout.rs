@@ -16,7 +16,7 @@ use zenoh::prelude::r#async::*;
 #[tokio::main]
 async fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::init_log_from_env();
 
     println!("Scouting...");
     let receiver = scout(WhatAmI::Peer | WhatAmI::Router, Config::default())

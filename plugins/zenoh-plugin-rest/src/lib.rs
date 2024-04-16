@@ -96,9 +96,9 @@ fn sample_to_json(sample: &Sample) -> JSONSample {
     }
 }
 
-fn result_to_json(sample: Result<Sample, Value>) -> JSONSample {
+fn result_to_json(sample: Result<&Sample, &Value>) -> JSONSample {
     match sample {
-        Ok(sample) => sample_to_json(&sample),
+        Ok(sample) => sample_to_json(sample),
         Err(err) => JSONSample {
             key: "ERROR".into(),
             value: payload_to_json(err.payload(), err.encoding()),
@@ -111,7 +111,7 @@ fn result_to_json(sample: Result<Sample, Value>) -> JSONSample {
 async fn to_json(results: flume::Receiver<Reply>) -> String {
     let values = results
         .stream()
-        .filter_map(move |reply| async move { Some(result_to_json(reply.sample)) })
+        .filter_map(move |reply| async move { Some(result_to_json(reply.result())) })
         .collect::<Vec<JSONSample>>()
         .await;
 
@@ -126,7 +126,7 @@ async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
     )
 }
 
-fn sample_to_html(sample: Sample) -> String {
+fn sample_to_html(sample: &Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.key_expr().as_str(),
@@ -137,7 +137,7 @@ fn sample_to_html(sample: Sample) -> String {
     )
 }
 
-fn result_to_html(sample: Result<Sample, Value>) -> String {
+fn result_to_html(sample: Result<&Sample, &Value>) -> String {
     match sample {
         Ok(sample) => sample_to_html(sample),
         Err(err) => {
@@ -152,7 +152,7 @@ fn result_to_html(sample: Result<Sample, Value>) -> String {
 async fn to_html(results: flume::Receiver<Reply>) -> String {
     let values = results
         .stream()
-        .filter_map(move |reply| async move { Some(result_to_html(reply.sample)) })
+        .filter_map(move |reply| async move { Some(result_to_html(reply.result())) })
         .collect::<Vec<String>>()
         .await
         .join("\n");
@@ -165,7 +165,7 @@ async fn to_html_response(results: flume::Receiver<Reply>) -> Response {
 
 async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
     match results.recv_async().await {
-        Ok(reply) => match reply.sample {
+        Ok(reply) => match reply.result() {
             Ok(sample) => response(
                 StatusCode::Ok,
                 Cow::from(sample.encoding()).as_ref(),
@@ -244,8 +244,8 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        let _ = env_logger::try_init();
-        log::debug!("REST plugin {}", LONG_VERSION.as_str());
+        zenoh_util::init_log_from_env();
+        tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
@@ -316,7 +316,7 @@ fn with_extended_string<R, F: FnMut(&mut String) -> R>(
 }
 
 async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
-    log::trace!("Incoming GET request: {:?}", req);
+    tracing::trace!("Incoming GET request: {:?}", req);
 
     let first_accept = match req.header("accept") {
         Some(accept) => accept[0]
@@ -344,7 +344,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                     }
                 };
                 async_std::task::spawn(async move {
-                    log::debug!(
+                    tracing::debug!(
                         "Subscribe to {} for SSE stream (task {})",
                         key_expr,
                         async_std::task::current().id()
@@ -369,23 +369,23 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         {
                             Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
-                                log::debug!(
+                                tracing::debug!(
                                     "SSE error ({})! Unsubscribe and terminate (task {})",
                                     e,
                                     async_std::task::current().id()
                                 );
                                 if let Err(e) = sub.undeclare().res().await {
-                                    log::error!("Error undeclaring subscriber: {}", e);
+                                    tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
                             Err(_) => {
-                                log::debug!(
+                                tracing::debug!(
                                     "SSE timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
                                 if let Err(e) = sub.undeclare().res().await {
-                                    log::error!("Error undeclaring subscriber: {}", e);
+                                    tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
@@ -410,16 +410,16 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         };
         let query_part = url.query();
         let selector = if let Some(q) = query_part {
-            Selector::from(key_expr).with_parameters(q)
+            Selector::new(key_expr, q)
         } else {
             key_expr.into()
         };
-        let consolidation = if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
+        let consolidation = if selector.parameters().contains_key(TIME_RANGE_KEY) {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
         } else {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
-        let raw = selector.decode().any(|(k, _)| k.as_ref() == RAW_KEY);
+        let raw = selector.parameters().contains_key(RAW_KEY);
         let mut query = req.state().0.get(&selector).consolidation(consolidation);
         if !body.is_empty() {
             let encoding: Encoding = req
@@ -448,7 +448,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
 }
 
 async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
-    log::trace!("Incoming PUT request: {:?}", req);
+    tracing::trace!("Incoming PUT request: {:?}", req);
     match req.body_bytes().await {
         Ok(bytes) => {
             let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
@@ -494,7 +494,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    let _ = env_logger::try_init();
+    zenoh_util::init_log_from_env();
 
     let zid = runtime.zid().to_string();
     let session = zenoh::session::init(runtime).res().await.unwrap();
@@ -525,7 +525,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
         .delete(write);
 
     if let Err(e) = app.listen(conf.http_port).await {
-        log::error!("Unable to start http server for REST: {:?}", e);
+        tracing::error!("Unable to start http server for REST: {:?}", e);
         return Err(e.into());
     }
     Ok(())

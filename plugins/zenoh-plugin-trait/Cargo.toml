@@ -28,7 +28,7 @@ name = "zenoh_plugin_trait"
 
 [dependencies]
 libloading = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 serde = { workspace = true }
 serde_json = { workspace = true }
 zenoh-macros = { workspace = true }

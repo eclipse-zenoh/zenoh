@@ -995,7 +995,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 #[zenoh_macros::unstable]
 pub struct MatchingListener<'a, Receiver> {
     pub(crate) listener: MatchingListenerInner<'a>,
-    pub receiver: Receiver,
+    pub(crate) receiver: Receiver,
 }
 
 #[zenoh_macros::unstable]

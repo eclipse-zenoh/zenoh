@@ -162,7 +162,7 @@ impl<'a> Liveliness<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session.liveliness().get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     if let Ok(sample) = reply.sample {
+    ///     if let Ok(sample) = reply.result() {
     ///         println!(">> Liveliness token {}", sample.key_expr());
     ///     }
     /// }
@@ -542,7 +542,7 @@ where
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
-        let (callback, receiver) = self.handler.into_handler();
+        let (callback, handler) = self.handler.into_handler();
         session
             .declare_subscriber_inner(
                 &key_expr,
@@ -557,7 +557,7 @@ where
                     state: sub_state,
                     alive: true,
                 },
-                receiver,
+                handler,
             })
     }
 }
@@ -593,7 +593,7 @@ where
 ///     .await
 ///     .unwrap();
 /// while let Ok(token) = tokens.recv_async().await {
-///     match token.sample {
+///     match token.result() {
 ///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr().as_str()),
 ///         Err(err) => println!("Received (ERROR: '{:?}')", err.payload()),
 ///     }
@@ -622,7 +622,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// let queryable = session
     ///     .liveliness()
     ///     .get("key/expression")
-    ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
+    ///     .callback(|reply| { println!("Received {:?}", reply.result()); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -697,7 +697,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!("Received {:?}", reply.sample);
+    ///     println!("Received {:?}", reply.result());
     /// }
     /// # }
     /// ```

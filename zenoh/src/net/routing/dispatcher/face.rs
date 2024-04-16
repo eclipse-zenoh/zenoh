@@ -154,7 +154,7 @@ impl fmt::Display for FaceState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WeakFace {
     pub(crate) tables: Weak<TablesLock>,
     pub(crate) state: Weak<FaceState>,
@@ -185,6 +185,10 @@ impl Face {
 }
 
 impl Primitives for Face {
+    fn send_interest(&self, _msg: zenoh_protocol::network::Interest) {
+        todo!()
+    }
+
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match msg.body {
@@ -238,8 +242,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::DeclareInterest(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::DeclareFinal(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::DeclareFinal(_) => todo!(),
         }
         drop(ctrl_lock);
     }
