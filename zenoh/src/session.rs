@@ -784,7 +784,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session.get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!(">> Received {:?}", reply.sample());
+    ///     println!(">> Received {:?}", reply.result());
     /// }
     /// # }
     /// ```
