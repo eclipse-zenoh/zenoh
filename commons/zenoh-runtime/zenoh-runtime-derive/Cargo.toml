@@ -1,7 +1,13 @@
 [package]
-name = "zenoh_runtime_derive"
-version = "0.1.0"
-edition = "2021"
+name = "zenoh-runtime-derive"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = {workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+description = "Internal crate for zenoh."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

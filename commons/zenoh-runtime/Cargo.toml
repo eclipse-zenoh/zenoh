@@ -16,7 +16,7 @@ description = { workspace = true }
 libc = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
-zenoh_runtime_derive = { path = "zenoh-runtime-derive" }
+zenoh-runtime-derive = { workspace = true }
 futures = { workspace = true }
 lazy_static = { workspace = true }
 zenoh-result = { workspace = true, features = ["std"] }
