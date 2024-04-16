@@ -120,20 +120,6 @@ impl<'a> Selector<'a> {
     pub fn split(self) -> (KeyExpr<'a>, Parameters<'a>) {
         (self.key_expr, self.parameters)
     }
-
-    #[zenoh_macros::unstable]
-    /// Sets the time range targeted by the selector.
-    pub fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
-        self.parameters_mut().set_time_range(time_range);
-    }
-
-    #[zenoh_macros::unstable]
-    /// Extracts the standardized `_time` argument from the selector parameters.
-    ///
-    /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
-    pub fn time_range(&self) -> ZResult<Option<TimeRange>> {
-        self.parameters().time_range()
-    }
 }
 
 /// A wrapper type to help decode zenoh selector parameters.
@@ -216,7 +202,7 @@ impl Parameters<'_> {
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
-    fn time_range(&self) -> ZResult<Option<TimeRange>> {
+    pub fn time_range(&self) -> ZResult<Option<TimeRange>> {
         match self.0.get(TIME_RANGE_KEY) {
             Some(tr) => Ok(Some(tr.parse()?)),
             None => Ok(None),
@@ -360,8 +346,11 @@ fn selector_accessors() {
 
         assert_eq!(selector.parameters().get("_timetrick").unwrap(), "");
 
-        selector.set_time_range(time_range);
-        assert_eq!(selector.time_range().unwrap().unwrap(), time_range);
+        selector.parameters_mut().set_time_range(time_range);
+        assert_eq!(
+            selector.parameters().time_range().unwrap().unwrap(),
+            time_range
+        );
         assert!(selector.parameters().contains_key(TIME_RANGE_KEY));
 
         let hm: HashMap<&str, &str> = HashMap::from(selector.parameters());
