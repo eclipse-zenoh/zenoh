@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{arg, Command};
-use std::ops::Deref;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;

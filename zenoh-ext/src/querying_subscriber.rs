@@ -637,15 +637,15 @@ impl<Handler> std::ops::DerefMut for FetchingSubscriber<'_, Handler> {
 impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     fn new<
         KeySpace,
-        Handler,
+        InputHandler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
     >(
-        conf: FetchingSubscriberBuilder<'a, 'a, KeySpace, Handler, Fetch, TryIntoSample>,
+        conf: FetchingSubscriberBuilder<'a, 'a, KeySpace, InputHandler, Fetch, TryIntoSample>,
     ) -> ZResult<Self>
     where
         KeySpace: Into<crate::KeySpace>,
-        Handler: IntoHandler<'static, Sample, Handler = Handler> + Send,
+        InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
         let state = Arc::new(Mutex::new(InnerState {
