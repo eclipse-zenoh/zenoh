@@ -387,7 +387,8 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
             selector: self.selector.map(|mut s| {
-                s.set_accept_any_keyexpr(accept == ReplyKeyExpr::Any);
+                s.parameters_mut()
+                    .set_accept_any_keyexpr(accept == ReplyKeyExpr::Any);
                 s
             }),
             ..self

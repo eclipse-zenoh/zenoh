@@ -136,11 +136,6 @@ impl<'a> Selector<'a> {
     }
 
     #[cfg(any(feature = "unstable", test))]
-    pub(crate) fn set_accept_any_keyexpr<T: Into<Option<bool>>>(&mut self, anyke: T) {
-        self.parameters_mut().set_accept_any_keyexpr(anyke);
-    }
-
-    #[cfg(any(feature = "unstable", test))]
     pub(crate) fn accept_any_keyexpr(&self) -> ZResult<Option<bool>> {
         self.parameters().accept_any_keyexpr()
     }
@@ -411,7 +406,7 @@ fn selector_accessors() {
         selector.parameters_mut().extend_from_iter(hm.iter());
         assert_eq!(selector.parameters().get("_filter").unwrap(), "");
 
-        selector.set_accept_any_keyexpr(true);
+        selector.parameters_mut().set_accept_any_keyexpr(true);
 
         println!("Parameters end: {}", selector.parameters());
         for i in selector.parameters().iter() {
