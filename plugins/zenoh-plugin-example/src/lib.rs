@@ -14,7 +14,6 @@
 #![recursion_limit = "256"]
 
 use futures::select;
-use log::{debug, info};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;

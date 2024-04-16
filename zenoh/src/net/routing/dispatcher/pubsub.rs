@@ -43,7 +43,7 @@ pub(crate) fn declare_subscription(
         .cloned()
     {
         Some(mut prefix) => {
-            log::debug!(
+            tracing::debug!(
                 "{} Declare subscriber {} ({}{})",
                 face,
                 id,
@@ -114,7 +114,7 @@ pub(crate) fn undeclare_subscription(
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    log::error!(
+                    tracing::error!(
                         "{} Undeclare unknown subscriber {}{}!",
                         face,
                         prefix.expr(),
@@ -124,7 +124,7 @@ pub(crate) fn undeclare_subscription(
                 }
             },
             None => {
-                log::error!(
+                tracing::error!(
                     "{} Undeclare subscriber with unknown scope {}",
                     face,
                     expr.scope

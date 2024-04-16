@@ -51,7 +51,7 @@ impl Primitives for Mux {
             let _ = self.handler.schedule(msg);
         } else if let Some(face) = self.face.get() {
             let Some(face) = face.upgrade() else {
-                log::debug!("Invalid face: {:?}. Interest not sent: {:?}", face, msg);
+                tracing::debug!("Invalid face: {:?}. Interest not sent: {:?}", face, msg);
                 return;
             };
             let ctx = RoutingContext::new_out(msg, face.clone());
@@ -65,7 +65,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::debug!("Uninitialized multiplexer. Interest not sent: {:?}", msg);
+            tracing::debug!("Uninitialized multiplexer. Interest not sent: {:?}", msg);
         }
     }
 
@@ -365,7 +365,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 

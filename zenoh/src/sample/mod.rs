@@ -435,7 +435,7 @@ impl QoS {
         match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
             Err(e) => {
-                log::trace!(
+                tracing::trace!(
                     "Failed to convert priority: {}; replacing with default value",
                     e.to_string()
                 );

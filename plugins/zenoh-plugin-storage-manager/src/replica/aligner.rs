@@ -110,7 +110,7 @@ impl Aligner {
                     .encoding(value.encoding().clone())
                     .timestamp(ts)
                     .into();
-                log::debug!("[ALIGNER] Adding {:?} to storage", sample);
+                tracing::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
                     tracing::error!("[ALIGNER] Error adding sample to storage: {}", e)
                 });
@@ -343,7 +343,7 @@ impl Aligner {
                         }
                         Err(err) => {
                             tracing::error!(
-                                "[ALIGNER] Received error for query on selector {} :{}",
+                                "[ALIGNER] Received error for query on selector {} :{:?}",
                                 selector,
                                 err
                             );
@@ -353,7 +353,7 @@ impl Aligner {
                 }
             }
             Err(err) => {
-                tracing::error!("[ALIGNER] Query failed on selector `{}`: {}", selector, err);
+                tracing::error!("[ALIGNER] Query failed on selector `{}`: {:?}", selector, err);
                 no_err = false;
             }
         };
