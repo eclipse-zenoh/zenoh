@@ -139,7 +139,6 @@ impl Deref for ZRuntime {
 }
 
 lazy_static! {
-    // pub static ref ZRUNTIME_CONFIG: ZRuntimeConfig = ZRuntimeConfig::from_env();
     pub static ref ZRUNTIME_POOL: ZRuntimePool = ZRuntimePool::new();
     pub static ref ZRUNTIME_INDEX: HashMap<ZRuntime, AtomicUsize> = ZRuntime::iter().map(|zrt| (zrt, AtomicUsize::new(0))).collect();
 }
