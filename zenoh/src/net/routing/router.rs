@@ -95,7 +95,7 @@ impl Router {
                 )
             })
             .clone();
-        log::debug!("New {}", newface);
+        tracing::debug!("New {}", newface);
 
         let mut face = Face {
             tables: self.tables.clone(),
@@ -148,7 +148,7 @@ impl Router {
                 )
             })
             .clone();
-        log::debug!("New {}", newface);
+        tracing::debug!("New {}", newface);
 
         let mut face = Face {
             tables: self.tables.clone(),

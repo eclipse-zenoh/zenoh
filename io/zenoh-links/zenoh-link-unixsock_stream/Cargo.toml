@@ -34,7 +34,7 @@ description = "Internal crate for zenoh."
 [dependencies]
 async-trait = { workspace = true }
 futures = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 nix = { workspace = true }
 tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }

@@ -314,7 +314,7 @@ impl HatBaseTrait for HatCode {
                     hat_mut!(tables).gossip.as_mut().unwrap().remove_link(&zid);
                 };
             }
-            (_, _) => log::error!("Closed transport in session closing!"),
+            (_, _) => tracing::error!("Closed transport in session closing!"),
         }
         Ok(())
     }

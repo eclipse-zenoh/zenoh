@@ -96,19 +96,19 @@ impl AuthUsrPwd {
                 }
                 lookup.insert(user, password);
             }
-            log::debug!("{S} User-password dictionary has been configured.");
+            tracing::debug!("{S} User-password dictionary has been configured.");
         }
 
         let mut credentials: Option<(User, Password)> = None;
         if let Some(user) = config.user() {
             if let Some(password) = config.password() {
-                log::debug!("{S} User-password has been configured.");
+                tracing::debug!("{S} User-password has been configured.");
                 credentials = Some((user.as_bytes().to_owned(), password.as_bytes().to_owned()));
             }
         }
 
         if !lookup.is_empty() || credentials.is_some() {
-            log::debug!("{S} User-password authentication is enabled.");
+            tracing::debug!("{S} User-password authentication is enabled.");
             Ok(Some(Self {
                 lookup,
                 credentials,

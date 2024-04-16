@@ -30,11 +30,11 @@ where
     let (u, has_ext): (ZExtUnknown, bool) = codec.read(&mut *reader)?;
     if u.is_mandatory() {
         #[cfg(feature = "std")]
-        log::error!("Unknown {_s} ext: {u:?}");
+        tracing::error!("Unknown {_s} ext: {u:?}");
         return Err(DidntRead);
     } else {
         #[cfg(feature = "std")]
-        log::debug!("Unknown {_s} ext: {u:?}");
+        tracing::debug!("Unknown {_s} ext: {u:?}");
     }
     Ok((u, has_ext))
 }

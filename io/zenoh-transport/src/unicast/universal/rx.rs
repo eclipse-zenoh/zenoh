@@ -100,7 +100,7 @@ impl TransportUnicastUniversal {
                 self.trigger_callback(callback.as_ref(), msg)?;
             }
         } else {
-            log::debug!(
+            tracing::debug!(
                 "Transport: {}. No callback available, dropping messages: {:?}",
                 self.config.zid,
                 payload
@@ -152,7 +152,7 @@ impl TransportUnicastUniversal {
             if let Some(callback) = callback.as_ref() {
                 return self.trigger_callback(callback.as_ref(), msg);
             } else {
-                log::debug!(
+                tracing::debug!(
                     "Transport: {}. No callback available, dropping messages: {:?}",
                     self.config.zid,
                     msg
@@ -170,7 +170,7 @@ impl TransportUnicastUniversal {
     ) -> ZResult<()> {
         let precedes = guard.sn.roll(sn)?;
         if !precedes {
-            log::debug!(
+            tracing::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
                 self.config.zid,
                 sn,
@@ -193,7 +193,7 @@ impl TransportUnicastUniversal {
                 .decode()
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
-            log::trace!("Received: {:?}", msg);
+            tracing::trace!("Received: {:?}", msg);
 
             #[cfg(feature = "stats")]
             {
@@ -208,7 +208,7 @@ impl TransportUnicastUniversal {
                 }
                 TransportBody::KeepAlive(KeepAlive { .. }) => {}
                 _ => {
-                    log::debug!(
+                    tracing::debug!(
                         "Transport: {}. Message handling not implemented: {:?}",
                         self.config.zid,
                         msg

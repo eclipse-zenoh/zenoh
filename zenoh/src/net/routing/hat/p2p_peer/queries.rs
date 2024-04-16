@@ -297,7 +297,7 @@ impl HatQueriesTrait for HatCode {
         if key_expr.ends_with('/') {
             return EMPTY_ROUTE.clone();
         }
-        log::trace!(
+        tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -306,7 +306,7 @@ impl HatQueriesTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return EMPTY_ROUTE.clone();
             }
         };
@@ -364,7 +364,7 @@ impl HatQueriesTrait for HatCode {
             let key_expr = match OwnedKeyExpr::try_from(key_expr) {
                 Ok(ke) => ke,
                 Err(e) => {
-                    log::warn!("Invalid KE reached the system: {}", e);
+                    tracing::warn!("Invalid KE reached the system: {}", e);
                     return result;
                 }
             };

@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use libloading::Library;
-use log::{debug, warn};
 use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use std::ffi::OsString;
 use std::ops::Deref;
 use std::path::PathBuf;
+use tracing::{debug, warn};
 use zenoh_core::zconfigurable;
 use zenoh_result::{bail, ZResult};
 
@@ -111,7 +111,7 @@ impl LibLoader {
     pub unsafe fn search_and_load(&self, name: &str) -> ZResult<(Library, PathBuf)> {
         let filename = format!("{}{}{}", *LIB_PREFIX, name, *LIB_SUFFIX);
         let filename_ostr = OsString::from(&filename);
-        log::debug!(
+        tracing::debug!(
             "Search for library {} to load in {:?}",
             filename,
             self.search_paths
@@ -150,7 +150,7 @@ impl LibLoader {
         prefix: Option<&str>,
     ) -> Vec<(Library, PathBuf, String)> {
         let lib_prefix = format!("{}{}", *LIB_PREFIX, prefix.unwrap_or(""));
-        log::debug!(
+        tracing::debug!(
             "Search for libraries {}*{} to load in {:?}",
             lib_prefix,
             *LIB_SUFFIX,

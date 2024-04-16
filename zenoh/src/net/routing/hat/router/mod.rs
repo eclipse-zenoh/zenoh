@@ -266,7 +266,7 @@ impl HatTables {
                     .await;
                     let mut tables = zwrite!(tables_ref.tables);
 
-                    log::trace!("Compute trees");
+                    tracing::trace!("Compute trees");
                     let new_childs = match net_type {
                         WhatAmI::Router => hat_mut!(tables)
                             .routers_net
@@ -276,11 +276,11 @@ impl HatTables {
                         _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
                     };
 
-                    log::trace!("Compute routes");
+                    tracing::trace!("Compute routes");
                     pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
                     queries::queries_tree_change(&mut tables, &new_childs, net_type);
 
-                    log::trace!("Computations completed");
+                    tracing::trace!("Computations completed");
                     match net_type {
                         WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
                         _ => hat_mut!(tables).peers_trees_task = None,
@@ -694,7 +694,7 @@ impl HatBaseTrait for HatCode {
                     _ => (),
                 };
             }
-            (_, _) => log::error!("Closed transport in session closing!"),
+            (_, _) => tracing::error!("Closed transport in session closing!"),
         }
         Ok(())
     }
@@ -814,7 +814,7 @@ fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<
         Some(link) => match link.get_zid(&(nodeid as u64)) {
             Some(router) => Some(*router),
             None => {
-                log::error!(
+                tracing::error!(
                     "Received router declaration with unknown routing context id {}",
                     nodeid
                 );
@@ -822,7 +822,7 @@ fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<
             }
         },
         None => {
-            log::error!(
+            tracing::error!(
                 "Could not find corresponding link in routers network for {}",
                 face
             );
@@ -841,7 +841,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
         Some(link) => match link.get_zid(&(nodeid as u64)) {
             Some(router) => Some(*router),
             None => {
-                log::error!(
+                tracing::error!(
                     "Received peer declaration with unknown routing context id {}",
                     nodeid
                 );
@@ -849,7 +849,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
             }
         },
         None => {
-            log::error!(
+            tracing::error!(
                 "Could not find corresponding link in peers network for {}",
                 face
             );

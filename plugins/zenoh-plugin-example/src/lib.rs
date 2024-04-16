@@ -22,6 +22,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
+use tracing::{debug, info};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
@@ -110,7 +111,7 @@ impl RunningPluginTrait for RunningPlugin {
                     guard.flag.store(false, Relaxed);
                     guard.flag = Arc::new(AtomicBool::new(true));
                     match KeyExpr::try_from(selector.clone()) {
-                        Err(e) => log::error!("{}", e),
+                        Err(e) => tracing::error!("{}", e),
                         Ok(selector) => {
                             async_std::task::spawn(run(
                                 guard.runtime.clone(),
@@ -141,7 +142,7 @@ impl Drop for RunningPlugin {
 }
 
 async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
-    env_logger::init();
+    zenoh_util::init_log_from_env();
 
     // create a zenoh Session that shares the same Runtime than zenohd
     let session = zenoh::init(runtime).res().await.unwrap();
