@@ -850,4 +850,3 @@ impl EncodingMapping for SharedMemoryBuf {
 }
 
 pub struct EncodingBuilder(Encoding);
-

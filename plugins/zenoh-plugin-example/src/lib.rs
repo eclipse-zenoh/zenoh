@@ -21,8 +21,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
-use zenoh::key_expr::{keyexpr, KeyExpr};
 use tracing::{debug, info};
+use zenoh::key_expr::{keyexpr, KeyExpr};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::runtime::Runtime;
 use zenoh::sample::Sample;

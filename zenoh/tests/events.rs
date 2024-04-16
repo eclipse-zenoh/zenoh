@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
-use zenoh::prelude::r#async::*;
 use zenoh::internal::ztimeout;
+use zenoh::prelude::r#async::*;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
