@@ -69,7 +69,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
-            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr, DeclareMode,
+            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
         request::{self, ext::TargetType, Request},
@@ -784,7 +784,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session.get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!(">> Received {:?}", reply.sample);
+    ///     println!(">> Received {:?}", reply.result());
     /// }
     /// # }
     /// ```
@@ -893,7 +893,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1106,7 +1106,7 @@ impl Session {
             // };
 
             primitives.send_declare(Declare {
-                mode: DeclareMode::Push,
+                interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1163,7 +1163,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1215,7 +1215,7 @@ impl Session {
                 distance: 0,
             };
             primitives.send_declare(Declare {
-                mode: DeclareMode::Push,
+                interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1237,7 +1237,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1273,7 +1273,7 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(Declare {
-            mode: DeclareMode::Push,
+            interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1298,7 +1298,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -1653,7 +1653,7 @@ impl Session {
                                     }
                                 }
                                 (query.callback)(Reply {
-                                    sample: Err("Timeout".into()),
+                                    result: Err("Timeout".into()),
                                     replier_id: zid,
                                 });
                             }
@@ -1982,6 +1982,9 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
 }
 
 impl Primitives for Session {
+    fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
+        trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
+    }
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
@@ -2084,7 +2087,6 @@ impl Primitives for Session {
             }
             DeclareBody::DeclareToken(_) => todo!(),
             DeclareBody::UndeclareToken(_) => todo!(),
-            DeclareBody::DeclareInterest(_) => todo!(),
             DeclareBody::DeclareFinal(_) => todo!(),
         }
     }
@@ -2167,7 +2169,7 @@ impl Primitives for Session {
                         };
                         let new_reply = Reply {
                             replier_id,
-                            sample: Err(value),
+                            result: Err(value),
                         };
                         callback(new_reply);
                     }
@@ -2289,7 +2291,7 @@ impl Primitives for Session {
                             attachment,
                         );
                         let new_reply = Reply {
-                            sample: Ok(sample),
+                            result: Ok(sample),
                             replier_id: ZenohId::rand(), // TODO
                         };
                         let callback =
@@ -2299,15 +2301,15 @@ impl Primitives for Session {
                                 }
                                 ConsolidationMode::Monotonic => {
                                     match query.replies.as_ref().unwrap().get(
-                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                        new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
                                         Some(reply) => {
-                                            if new_reply.sample.as_ref().unwrap().timestamp
-                                                > reply.sample.as_ref().unwrap().timestamp
+                                            if new_reply.result.as_ref().unwrap().timestamp
+                                                > reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
-                                                        .sample
+                                                        .result
                                                         .as_ref()
                                                         .unwrap()
                                                         .key_expr
@@ -2323,7 +2325,7 @@ impl Primitives for Session {
                                         None => {
                                             query.replies.as_mut().unwrap().insert(
                                                 new_reply
-                                                    .sample
+                                                    .result
                                                     .as_ref()
                                                     .unwrap()
                                                     .key_expr
@@ -2337,15 +2339,15 @@ impl Primitives for Session {
                                 }
                                 Consolidation::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
-                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                        new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
                                         Some(reply) => {
-                                            if new_reply.sample.as_ref().unwrap().timestamp
-                                                > reply.sample.as_ref().unwrap().timestamp
+                                            if new_reply.result.as_ref().unwrap().timestamp
+                                                > reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
-                                                        .sample
+                                                        .result
                                                         .as_ref()
                                                         .unwrap()
                                                         .key_expr
@@ -2358,7 +2360,7 @@ impl Primitives for Session {
                                         None => {
                                             query.replies.as_mut().unwrap().insert(
                                                 new_reply
-                                                    .sample
+                                                    .result
                                                     .as_ref()
                                                     .unwrap()
                                                     .key_expr

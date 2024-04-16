@@ -332,7 +332,7 @@ impl Aligner {
         {
             Ok(replies) => {
                 while let Ok(reply) = replies.recv_async().await {
-                    match reply.sample {
+                    match reply.into_result() {
                         Ok(sample) => {
                             log::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",

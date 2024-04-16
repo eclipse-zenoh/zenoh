@@ -33,6 +33,7 @@ use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::network::declare::QueryableId;
+use zenoh_protocol::network::Interest;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -40,8 +41,8 @@ use zenoh_protocol::{
     },
     network::{
         declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
-        ext, Declare, DeclareBody, DeclareMode, DeclareQueryable, DeclareSubscriber, Push, Request,
-        Response, ResponseFinal,
+        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
+        ResponseFinal,
     },
     zenoh::{PushBody, RequestBody},
 };
@@ -277,7 +278,7 @@ impl AdminSpace {
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
-            mode: DeclareMode::Push,
+            interest_id: None,
 
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -290,7 +291,7 @@ impl AdminSpace {
         });
 
         primitives.send_declare(Declare {
-            mode: DeclareMode::Push,
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -320,6 +321,10 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
+    fn send_interest(&self, msg: Interest) {
+        log::trace!("Recv interest {:?}", msg);
+    }
+
     fn send_declare(&self, msg: Declare) {
         log::trace!("Recv declare {:?}", msg);
         if let DeclareBody::DeclareKeyExpr(m) = msg.body {

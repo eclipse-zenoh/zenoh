@@ -36,7 +36,7 @@ use zenoh_protocol::{
     core::{WhatAmI, WireExpr, ZenohId},
     network::declare::{
         common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
-        DeclareMode, DeclareQueryable, UndeclareQueryable,
+        DeclareQueryable, UndeclareQueryable,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -126,7 +126,7 @@ fn send_sourced_queryable_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode: DeclareMode::Push,
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -170,7 +170,7 @@ fn propagate_simple_queryable(
             let key_expr = Resource::decl_key(res, &mut dst_face);
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -339,7 +339,7 @@ fn send_forget_sourced_queryable_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode: DeclareMode::Push,
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -365,7 +365,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -479,7 +479,7 @@ pub(super) fn undeclare_client_queryable(
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -520,7 +520,7 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 let key_expr = Resource::decl_key(qabl, face);
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
