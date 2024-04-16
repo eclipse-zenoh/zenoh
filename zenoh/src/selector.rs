@@ -99,7 +99,7 @@ impl<'a> Selector<'a> {
         &mut self.parameters
     }
 
-    /// Sets the `parameters` part of this `Selector`.
+    /// Sets the parameters of this selector. This operation completly overwrites existing [`Parameters`].
     #[inline(always)]
     pub fn set_parameters<P>(&mut self, parameters: P)
     where
