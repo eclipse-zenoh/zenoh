@@ -186,7 +186,7 @@
   //   [
   //     {
   //       "actions": [
-  //         put, get, declare_subscriber, declare_queryable
+  //         "put", "get", "declare_subscriber", "declare_queryable"
   //       ],
   //       "flows":["egress","ingress"],
   //       "permission": "allow",
@@ -341,7 +341,6 @@
     shared_memory: {
       enabled: false,
     },
-    /// Access control configuration
     auth: {
       /// The configuration of authentification.
       /// A password implies a username is required.
