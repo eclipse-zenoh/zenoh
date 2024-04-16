@@ -2189,7 +2189,10 @@ impl Primitives for Session {
                     Some(query) => {
                         let c = zcondfeat!(
                             "unstable",
-                            !matches!(query.selector.accept_any_keyexpr(), Ok(Some(true))),
+                            !query
+                                .selector
+                                .parameters()
+                                .contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM),
                             true
                         );
                         if c && !query.selector.key_expr.intersects(&key_expr) {

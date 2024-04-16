@@ -134,11 +134,6 @@ impl<'a> Selector<'a> {
     pub fn time_range(&self) -> ZResult<Option<TimeRange>> {
         self.parameters().time_range()
     }
-
-    #[cfg(any(feature = "unstable", test))]
-    pub(crate) fn accept_any_keyexpr(&self) -> ZResult<Option<bool>> {
-        self.parameters().accept_any_keyexpr()
-    }
 }
 
 /// A wrapper type to help decode zenoh selector parameters.
@@ -224,16 +219,6 @@ impl Parameters<'_> {
     fn time_range(&self) -> ZResult<Option<TimeRange>> {
         match self.0.get(TIME_RANGE_KEY) {
             Some(tr) => Ok(Some(tr.parse()?)),
-            None => Ok(None),
-        }
-    }
-
-    #[cfg(any(feature = "unstable", test))]
-    pub(crate) fn accept_any_keyexpr(&self) -> ZResult<Option<bool>> {
-        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
-
-        match self.0.get(ANYKE) {
-            Some(ak) => Ok(Some(ak.parse()?)),
             None => Ok(None),
         }
     }

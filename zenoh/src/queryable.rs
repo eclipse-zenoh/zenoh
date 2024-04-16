@@ -222,7 +222,11 @@ impl Query {
     }
     #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        Ok(self.parameters().accept_any_keyexpr()?.unwrap_or(false))
+        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+
+        Ok(self
+            .parameters()
+            .contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM))
     }
 }
 
