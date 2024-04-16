@@ -14,7 +14,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
-use std::ops::Deref;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
@@ -161,8 +160,8 @@ impl<'a> PublicationCache<'a> {
         let queryable = queryable.res_sync()?;
 
         // take local ownership of stuff to be moved into task
-        let sub_recv = local_sub.deref().clone();
-        let quer_recv = queryable.deref().clone();
+        let sub_recv = local_sub.handler().clone();
+        let quer_recv = queryable.handler().clone();
         let pub_key_expr = key_expr.into_owned();
         let resources_limit = conf.resources_limit;
         let history = conf.history;

@@ -614,27 +614,27 @@ where
 /// }
 /// # }
 /// ```
-pub struct FetchingSubscriber<'a, Receiver> {
+pub struct FetchingSubscriber<'a, Handler> {
     subscriber: Subscriber<'a, ()>,
     callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
     state: Arc<Mutex<InnerState>>,
-    receiver: Receiver,
+    handler: Handler,
 }
 
-impl<Receiver> std::ops::Deref for FetchingSubscriber<'_, Receiver> {
-    type Target = Receiver;
+impl<Handler> std::ops::Deref for FetchingSubscriber<'_, Handler> {
+    type Target = Handler;
     fn deref(&self) -> &Self::Target {
-        &self.receiver
+        &self.handler
     }
 }
 
-impl<Receiver> std::ops::DerefMut for FetchingSubscriber<'_, Receiver> {
+impl<Handler> std::ops::DerefMut for FetchingSubscriber<'_, Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.receiver
+        &mut self.handler
     }
 }
 
-impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
+impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     fn new<
         KeySpace,
         Handler,
@@ -645,7 +645,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
     ) -> ZResult<Self>
     where
         KeySpace: Into<crate::KeySpace>,
-        Handler: IntoHandler<'static, Sample, Handler = Receiver> + Send,
+        Handler: IntoHandler<'static, Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
         let state = Arc::new(Mutex::new(InnerState {
@@ -698,7 +698,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
             subscriber,
             callback,
             state,
-            receiver,
+            handler: receiver,
         };
 
         // run fetch

@@ -31,7 +31,7 @@ use crate::{
 };
 use std::fmt;
 use std::future::Ready;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use uhlc::Timestamp;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
@@ -837,12 +837,12 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct Queryable<'a, Receiver> {
+pub struct Queryable<'a, Handler> {
     pub(crate) queryable: CallbackQueryable<'a>,
-    pub(crate) receiver: Receiver,
+    pub(crate) handler: Handler,
 }
 
-impl<'a, Receiver> Queryable<'a, Receiver> {
+impl<'a, Handler> Queryable<'a, Handler> {
     /// Returns the [`EntityGlobalId`] of this Queryable.
     ///
     /// # Examples
@@ -867,6 +867,20 @@ impl<'a, Receiver> Queryable<'a, Receiver> {
         }
     }
 
+    /// Returns a reference to this queryable's handler.
+    /// An handler is anything that implements [`IntoHandler`].
+    /// The default handler is [`DefaultHandler`].
+    pub fn handler(&self) -> &Handler {
+        &self.handler
+    }
+
+    /// Returns a mutable reference to this queryable's handler.
+    /// An handler is anything that implements [`IntoHandler`].
+    /// The default handler is [`DefaultHandler`].
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.handler
+    }
+
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
@@ -879,11 +893,17 @@ impl<'a, T> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
     }
 }
 
-impl<Receiver> Deref for Queryable<'_, Receiver> {
-    type Target = Receiver;
+impl<Handler> Deref for Queryable<'_, Handler> {
+    type Target = Handler;
 
     fn deref(&self) -> &Self::Target {
-        &self.receiver
+        self.handler()
+    }
+}
+
+impl<Handler> DerefMut for Queryable<'_, Handler> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.handler_mut()
     }
 }
 
@@ -916,7 +936,7 @@ where
                     state: qable_state,
                     alive: true,
                 },
-                receiver,
+                handler: receiver,
             })
     }
 }
