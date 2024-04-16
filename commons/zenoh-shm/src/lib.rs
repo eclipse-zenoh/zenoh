@@ -119,14 +119,6 @@ impl SharedMemoryBuf {
         self.len() == 0
     }
 
-    pub fn is_valid(&self) -> bool {
-        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
-    }
-
-    pub fn is_unique(&self) -> bool {
-        self.ref_count() == 1
-    }
-
     pub fn ref_count(&self) -> u32 {
         self.header.header().refcount.load(Ordering::SeqCst)
     }
@@ -222,3 +214,43 @@ impl ZSliceBuffer for SharedMemoryBuf {
         self
     }
 }
+
+pub trait SHMBuf<'a>: AsRef<[u8]> + 'a {
+    fn is_valid(&self) -> bool;
+    fn is_unique(&self) -> bool;
+}
+
+impl SHMBuf<'static> for SharedMemoryBuf {
+    fn is_valid(&self) -> bool {
+        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
+    }
+
+    fn is_unique(&self) -> bool {
+        self.ref_count() == 1
+    }
+}
+
+impl<'a> SHMBuf<'a> for &'a SharedMemoryBuf {
+    fn is_valid(&self) -> bool {
+        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
+    }
+
+    fn is_unique(&self) -> bool {
+        self.ref_count() == 1
+    }
+}
+
+impl<'a> SHMBuf<'a> for &'a mut SharedMemoryBuf {
+    fn is_valid(&self) -> bool {
+        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
+    }
+
+    fn is_unique(&self) -> bool {
+        self.ref_count() == 1
+    }
+}
+
+pub trait SHMBufMut<'a>: SHMBuf<'a> + AsMut<[u8]> + 'a {}
+
+impl SHMBufMut<'static> for SharedMemoryBuf {}
+impl<'a> SHMBufMut<'a> for &'a mut SharedMemoryBuf {}

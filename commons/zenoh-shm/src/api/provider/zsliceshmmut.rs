@@ -13,73 +13,95 @@
 //
 
 use core::ops::{Deref, DerefMut};
+use std::marker::PhantomData;
 
-use zenoh_buffers::{ZBuf, ZSlice};
+use zenoh_buffers::{ZBuf, ZSlice, ZSliceBuffer};
 
-use crate::SharedMemoryBuf;
+use crate::SHMBufMut;
 
 use super::zsliceshm::ZSliceShm;
 
-/// A mutable SHM slice
+/// An immutable SHM slice
 #[zenoh_macros::unstable_doc]
-#[derive(Debug)]
-pub struct ZSliceShmMut {
-    slice: SharedMemoryBuf,
+#[derive(Clone, Debug)]
+pub struct ZSliceShmMut<'a, T: SHMBufMut<'a>> {
+    data: T,
+    _phantom: PhantomData<&'a T>,
 }
 
-impl ZSliceShmMut {
-    pub(crate) unsafe fn new_unchecked(slice: SharedMemoryBuf) -> Self {
-        Self { slice }
+impl<'a, T: SHMBufMut<'a>> ZSliceShmMut<'a, T> {
+    pub(crate) unsafe fn new_unchecked(data: T) -> Self {
+        Self {
+            data,
+            _phantom: Default::default(),
+        }
     }
 
-    //pub(crate) fn try_new(slice: SharedMemoryBuf) -> Option<Self> {
-    //    match slice.is_unique() && slice.is_valid() {
-    //        true => Some(Self { slice }),
-    //        false => None,
-    //    }
-    //}
+    pub(crate) fn try_new(data: T) -> Result<Self, T> {
+        match data.is_unique() && data.is_valid() {
+            true => Ok(Self {
+                data,
+                _phantom: Default::default(),
+            }),
+            false => Err(data),
+        }
+    }
 }
 
-impl Deref for ZSliceShmMut {
+//impl<'a, T: SHMBufMut<'a>> TryFrom<T> for ZSliceShmMut<'a, T> {
+//    type Error = T;
+//
+//    fn try_from(value: T) -> Result<Self, Self::Error> {
+//        match value.is_unique() && value.is_valid() {
+//            true => Ok(Self {
+//                data: value,
+//                _phantom: Default::default(),
+//            }),
+//            false => Err(value),
+//        }
+//    }
+//}
+
+impl<'a, T: SHMBufMut<'a>> Deref for ZSliceShmMut<'a, T> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.slice.as_ref()
+        self.data.as_ref()
     }
 }
 
-impl DerefMut for ZSliceShmMut {
+impl<'a, T: SHMBufMut<'a>> DerefMut for ZSliceShmMut<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.slice.as_mut()
+        self.data.as_mut()
     }
 }
 
-impl AsRef<[u8]> for ZSliceShmMut {
+impl<'a, T: SHMBufMut<'a>> AsRef<[u8]> for ZSliceShmMut<'a, T> {
     fn as_ref(&self) -> &[u8] {
         self
     }
 }
 
-impl AsMut<[u8]> for ZSliceShmMut {
+impl<'a, T: SHMBufMut<'a>> AsMut<[u8]> for ZSliceShmMut<'a, T> {
     fn as_mut(&mut self) -> &mut [u8] {
         self
     }
 }
 
-impl From<ZSliceShmMut> for ZBuf {
-    fn from(val: ZSliceShmMut) -> Self {
-        val.slice.into()
+impl<'a, T: SHMBufMut<'a>> From<ZSliceShmMut<'a, T>> for ZSliceShm<'a, T> {
+    fn from(value: ZSliceShmMut<'a, T>) -> Self {
+        value.data.into()
     }
 }
 
-impl From<ZSliceShmMut> for ZSlice {
-    fn from(val: ZSliceShmMut) -> Self {
-        val.slice.into()
+impl<'a, T: SHMBufMut<'a> + ZSliceBuffer> From<ZSliceShmMut<'a, T>> for ZSlice {
+    fn from(value: ZSliceShmMut<'a, T>) -> Self {
+        value.data.into()
     }
 }
 
-impl From<ZSliceShmMut> for ZSliceShm {
-    fn from(val: ZSliceShmMut) -> Self {
-        ZSliceShm::new(val.slice)
+impl<'a, T: SHMBufMut<'a> + ZSliceBuffer> From<ZSliceShmMut<'a, T>> for ZBuf {
+    fn from(value: ZSliceShmMut<'a, T>) -> Self {
+        value.data.into()
     }
 }

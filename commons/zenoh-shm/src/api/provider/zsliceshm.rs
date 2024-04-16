@@ -13,52 +13,61 @@
 //
 
 use core::ops::Deref;
+use std::marker::PhantomData;
 
-use zenoh_buffers::{ZBuf, ZSlice};
+use zenoh_buffers::{ZBuf, ZSlice, ZSliceBuffer};
 
-use crate::SharedMemoryBuf;
+use crate::{SHMBuf, SHMBufMut};
+
+use super::zsliceshmmut::ZSliceShmMut;
 
 /// An immutable SHM slice
 #[zenoh_macros::unstable_doc]
 #[derive(Clone, Debug)]
-pub struct ZSliceShm {
-    slice: SharedMemoryBuf,
+pub struct ZSliceShm<'a, T: SHMBuf<'a>> {
+    data: T,
+    _phantom: PhantomData<&'a T>,
 }
 
-impl ZSliceShm {
-    pub(crate) fn new(slice: SharedMemoryBuf) -> Self {
-        Self { slice }
-    }
-}
-
-impl ZSliceShm {
-    pub fn as_slice(&self) -> &[u8] {
-        self.slice.as_slice()
-    }
-}
-
-impl Deref for ZSliceShm {
+impl<'a, T: SHMBuf<'a>> Deref for ZSliceShm<'a, T> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.slice.as_ref()
+        self.data.as_ref()
     }
 }
 
-impl AsRef<[u8]> for ZSliceShm {
+impl<'a, T: SHMBuf<'a>> AsRef<[u8]> for ZSliceShm<'a, T> {
     fn as_ref(&self) -> &[u8] {
         self
     }
 }
 
-impl From<ZSliceShm> for ZBuf {
-    fn from(val: ZSliceShm) -> Self {
-        val.slice.into()
+impl<'a, T: SHMBuf<'a>> From<T> for ZSliceShm<'a, T> {
+    fn from(value: T) -> Self {
+        Self {
+            data: value,
+            _phantom: Default::default(),
+        }
     }
 }
 
-impl From<ZSliceShm> for ZSlice {
-    fn from(val: ZSliceShm) -> Self {
-        val.slice.into()
+impl<'a, T: SHMBufMut<'a>> TryFrom<ZSliceShm<'a, T>> for ZSliceShmMut<'a, T> {
+    type Error = T;
+
+    fn try_from(value: ZSliceShm<'a, T>) -> Result<Self, Self::Error> {
+        Self::try_new(value.data)
+    }
+}
+
+impl<'a, T: SHMBuf<'a> + ZSliceBuffer> From<ZSliceShm<'a, T>> for ZSlice {
+    fn from(value: ZSliceShm<'a, T>) -> Self {
+        value.data.into()
+    }
+}
+
+impl<'a, T: SHMBuf<'a> + ZSliceBuffer> From<ZSliceShm<'a, T>> for ZBuf {
+    fn from(value: ZSliceShm<'a, T>) -> Self {
+        value.data.into()
     }
 }

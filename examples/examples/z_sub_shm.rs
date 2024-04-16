@@ -37,7 +37,7 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        match sample.payload().deserialize::<ZSliceShm>() {
+        match sample.payload().deserialize::<ZSliceShm<'_, _>>() {
             Ok(payload) => println!(
                 ">> [Subscriber] Received {} ('{}': '{:02x?}')",
                 sample.kind(),
