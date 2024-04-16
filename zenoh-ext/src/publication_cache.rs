@@ -160,8 +160,8 @@ impl<'a> PublicationCache<'a> {
         let queryable = queryable.res_sync()?;
 
         // take local ownership of stuff to be moved into task
-        let sub_recv = local_sub.receiver.clone();
-        let quer_recv = queryable.receiver.clone();
+        let sub_recv = local_sub.handler().clone();
+        let quer_recv = queryable.handler().clone();
         let pub_key_expr = key_expr.into_owned();
         let resources_limit = conf.resources_limit;
         let history = conf.history;
@@ -202,7 +202,7 @@ impl<'a> PublicationCache<'a> {
                             }
                         },
 
-                        // on query, reply with cach content
+                        // on query, reply with cache content
                         query = quer_recv.recv_async() => {
                             if let Ok(query) = query {
                                 if !query.selector().key_expr().as_str().contains('*') {
