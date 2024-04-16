@@ -12,9 +12,5 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod client;
-pub mod client_storage;
-pub mod common;
-pub mod protocol_implementations;
-pub mod provider;
-pub mod slice;
+pub mod zsliceshm;
+pub mod zsliceshmmut;

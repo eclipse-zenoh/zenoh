@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use zenoh_result::ZResult;
 
 use crate::{
-    api::common::types::ProtocolID,
+    api::{common::types::ProtocolID, slice::zsliceshmmut::ZSliceShmMut},
     header::{
         allocated_descriptor::AllocatedHeaderDescriptor, descriptor::HeaderDescriptor,
         storage::GLOBAL_HEADER_STORAGE,
@@ -42,7 +42,6 @@ use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
     shared_memory_provider_backend::SharedMemoryProviderBackend,
     types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
-    zsliceshmmut::ZSliceShmMut,
 };
 
 #[derive(Debug)]

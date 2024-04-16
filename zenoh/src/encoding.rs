@@ -17,7 +17,7 @@ use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
 use zenoh_buffers::{ZBuf, ZSlice};
 use zenoh_protocol::core::EncodingId;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::provider::{zsliceshm::ZSliceShm, zsliceshmmut::ZSliceShmMut};
+use zenoh_shm::api::slice::{zsliceshm::ZSliceShm, zsliceshmmut::ZSliceShmMut};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::{SHMBuf, SHMBufMut};
 

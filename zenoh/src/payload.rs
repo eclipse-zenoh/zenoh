@@ -32,7 +32,7 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::provider::{zsliceshm::ZSliceShm, zsliceshmmut::ZSliceShmMut};
+use zenoh_shm::api::slice::{zsliceshm::ZSliceShm, zsliceshmmut::ZSliceShmMut};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
 #[cfg(feature = "shared-memory")]
