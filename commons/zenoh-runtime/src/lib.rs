@@ -140,7 +140,9 @@ impl Deref for ZRuntime {
 
 lazy_static! {
     pub static ref ZRUNTIME_POOL: ZRuntimePool = ZRuntimePool::new();
-    pub static ref ZRUNTIME_INDEX: HashMap<ZRuntime, AtomicUsize> = ZRuntime::iter().map(|zrt| (zrt, AtomicUsize::new(0))).collect();
+    pub static ref ZRUNTIME_INDEX: HashMap<ZRuntime, AtomicUsize> = ZRuntime::iter()
+        .map(|zrt| (zrt, AtomicUsize::new(0)))
+        .collect();
 }
 
 // To drop the data mannually since Rust does not drop static variables.
