@@ -25,13 +25,15 @@ use super::{
     query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
-    selector::{Parameters, Selector, TIME_RANGE_KEY},
+    selector::{Selector, TIME_RANGE_KEY},
     subscriber::{SubscriberBuilder, SubscriberState},
     value::Value,
     Id,
 };
-use crate::net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime};
-use log::{error, trace, warn};
+use crate::{
+    api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM,
+    net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime},
+};
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -44,6 +46,7 @@ use std::{
     },
     time::Duration,
 };
+use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
@@ -79,11 +82,11 @@ use zenoh_util::core::AsyncResolve;
 
 #[cfg(feature = "unstable")]
 use super::{
-        liveliness::{Liveliness, LivelinessTokenState},
-        publication::Publisher,
-        publication::{MatchingListenerState, MatchingStatus},
-        sample::{Attachment, SourceInfo},
-    };
+    liveliness::{Liveliness, LivelinessTokenState},
+    publication::Publisher,
+    publication::{MatchingListenerState, MatchingStatus},
+    sample::{Attachment, SourceInfo},
+};
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;

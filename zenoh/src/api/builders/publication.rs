@@ -376,7 +376,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             is_express: self.is_express,
             destination: self.destination,
         };
-        log::trace!("publish({:?})", publisher.key_expr);
+        tracing::trace!("publish({:?})", publisher.key_expr);
         Ok(publisher)
     }
 }

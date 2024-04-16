@@ -22,7 +22,6 @@ use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
 use zenoh::queryable::{Query, Queryable};
 use zenoh::runtime::ZRuntime;
 use zenoh::sample::{Locality, Sample};
-use zenoh::selector::Parameters;
 use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::{core::Result as ZResult, internal::bail};

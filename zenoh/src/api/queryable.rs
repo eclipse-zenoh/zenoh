@@ -25,7 +25,12 @@ use super::{
     Id,
 };
 use crate::net::primitives::Primitives;
-use std::{fmt, future::Ready, ops::Deref, sync::Arc};
+use std::{
+    fmt,
+    future::Ready,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 use uhlc::Timestamp;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::{
@@ -213,7 +218,7 @@ impl Query {
     }
     #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
         Ok(self
             .parameters()

@@ -540,7 +540,7 @@ impl Publisher<'_> {
         #[cfg(feature = "unstable")] source_info: SourceInfo,
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) -> ZResult<()> {
-        log::trace!("write({:?}, [...])", &self.key_expr);
+        tracing::trace!("write({:?}, [...])", &self.key_expr);
         let primitives = zread!(self.session.state)
             .primitives
             .as_ref()

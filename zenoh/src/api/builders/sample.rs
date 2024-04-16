@@ -18,8 +18,6 @@ use crate::api::encoding::Encoding;
 use crate::api::key_expr::KeyExpr;
 use crate::api::payload::Payload;
 use crate::api::publication::Priority;
-#[cfg(feature = "unstable")]
-use crate::api::sample::Attachment;
 use crate::api::sample::QoS;
 use crate::api::sample::QoSBuilder;
 use crate::api::sample::Sample;

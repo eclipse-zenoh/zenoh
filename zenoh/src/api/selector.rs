@@ -20,7 +20,10 @@ use std::{
     ops::{Deref, DerefMut},
     str::FromStr,
 };
-use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
+use zenoh_protocol::core::{
+    key_expr::{keyexpr, OwnedKeyExpr},
+    Properties,
+};
 #[cfg(feature = "unstable")]
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]

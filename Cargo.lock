@@ -5122,6 +5122,7 @@ dependencies = [
  "tokio",
  "tracing",
  "zenoh",
+ "zenoh-util",
 ]
 
 [[package]]
@@ -5471,6 +5472,7 @@ dependencies = [
  "urlencoding",
  "zenoh",
  "zenoh-plugin-trait",
+ "zenoh-util",
  "zenoh_backend_traits",
 ]
 

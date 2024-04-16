@@ -239,10 +239,10 @@ pub mod payload {
 
 /// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 pub mod selector {
-    pub use crate::api::selector::Parameter;
     pub use crate::api::selector::Parameters;
     pub use crate::api::selector::Selector;
     pub use crate::api::selector::TIME_RANGE_KEY;
+    pub use zenoh_protocol::core::Properties;
     pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 }
 
@@ -351,6 +351,7 @@ pub mod internal {
     pub use zenoh_macros::unstable;
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
+    pub use zenoh_task::TaskController;
     pub use zenoh_task::TerminatableTask;
     pub use zenoh_util::core::ResolveFuture;
     pub use zenoh_util::LibLoader;
