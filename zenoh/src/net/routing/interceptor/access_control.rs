@@ -143,6 +143,7 @@ impl InterceptorTrait for IngressAclEnforcer {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(key_expr.to_string()))
     }
+
     fn intercept<'a>(
         &self,
         ctx: RoutingContext<NetworkMessage>,
