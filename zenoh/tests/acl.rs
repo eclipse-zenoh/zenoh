@@ -1,3 +1,4 @@
+#![cfg(not(target_os = "windows"))]
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::runtime::Handle;
