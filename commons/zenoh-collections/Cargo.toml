@@ -31,5 +31,7 @@ description = "Internal crate for zenoh."
 [features]
 default = ["std"]
 std = []
+test = ["rand"]
 
 [dependencies]
+rand = { workspace = true, optional = true }

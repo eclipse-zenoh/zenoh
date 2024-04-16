@@ -36,6 +36,7 @@ rustls-webpki = { workspace = true }
 secrecy = {workspace = true }
 tokio = { workspace = true, features = ["io-util", "net", "fs", "sync", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
+zenoh-collections = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }

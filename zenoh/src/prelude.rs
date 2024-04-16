@@ -38,7 +38,7 @@ pub(crate) mod common {
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoHandler;
-    pub use crate::selector::{Parameter, Parameters, Selector};
+    pub use crate::selector::Selector;
     pub use crate::session::{Session, SessionDeclarations};
 
     pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};

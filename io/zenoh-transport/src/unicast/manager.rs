@@ -45,7 +45,7 @@ use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{endpoint, ZenohId},
+    core::{Parameters, ZenohId},
     transport::{close, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -381,7 +381,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(Parameters::iter(config))?;
         };
         manager.new_listener(endpoint).await
     }
@@ -692,7 +692,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(Parameters::iter(config))?;
         };
 
         // Create a new link associated by calling the Link Manager

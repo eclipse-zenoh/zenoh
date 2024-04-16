@@ -56,8 +56,7 @@ impl ConfigurationInspector<Config> for UnixPipeConfigurator {
             properties.push((config::FILE_ACCESS_MASK, &file_access_mask_));
         }
 
-        let mut s = String::new();
-        Parameters::extend(properties.drain(..), &mut s);
+        let s = Parameters::from_iter(properties.drain(..));
 
         Ok(s)
     }

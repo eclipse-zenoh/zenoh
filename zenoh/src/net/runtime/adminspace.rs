@@ -426,11 +426,10 @@ impl Primitives for AdminSpace {
                 };
 
                 let zid = self.zid;
-                let parameters = query.parameters.to_owned();
                 let query = Query {
                     inner: Arc::new(QueryInner {
                         key_expr: key_expr.clone(),
-                        parameters,
+                        parameters: query.parameters.into(),
                         value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
                         qid: msg.id,
                         zid,
@@ -533,8 +532,11 @@ fn router_data(context: &AdminContext, query: Query) {
         });
         #[cfg(feature = "stats")]
         {
-            let stats = crate::prelude::Parameters::decode(&query.selector())
-                .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+            let stats = query
+                .selector()
+                .parameters()
+                .iter()
+                .any(|(k, v)| k == "_stats" && v != "false");
             if stats {
                 json.as_object_mut().unwrap().insert(
                     "stats".to_string(),
@@ -564,8 +566,11 @@ fn router_data(context: &AdminContext, query: Query) {
 
     #[cfg(feature = "stats")]
     {
-        let stats = crate::prelude::Parameters::decode(&query.selector())
-            .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+        let stats = query
+            .selector()
+            .parameters()
+            .iter()
+            .any(|(k, v)| k == "_stats" && v != "false");
         if stats {
             json.as_object_mut().unwrap().insert(
                 "stats".to_string(),

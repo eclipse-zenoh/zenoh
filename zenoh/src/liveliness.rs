@@ -554,7 +554,7 @@ where
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
-        let (callback, receiver) = self.handler.into_handler();
+        let (callback, handler) = self.handler.into_handler();
         session
             .declare_subscriber_inner(
                 &key_expr,
@@ -569,7 +569,7 @@ where
                     state: sub_state,
                     alive: true,
                 },
-                receiver,
+                handler,
             })
     }
 }

@@ -26,8 +26,10 @@ use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
-use zenoh_protocol::core::ZenohId;
-use zenoh_protocol::{core::endpoint, transport::close};
+use zenoh_protocol::{
+    core::{Parameters, ZenohId},
+    transport::close,
+};
 use zenoh_result::{bail, zerror, ZResult};
 
 pub struct TransportManagerConfigMulticast {
@@ -261,7 +263,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(Parameters::iter(config))?;
         }
 
         // Open the link

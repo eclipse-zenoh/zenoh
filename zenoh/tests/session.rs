@@ -148,7 +148,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             .declare_queryable(key_expr)
             .callback(move |query| {
                 c_msgs.fetch_add(1, Ordering::Relaxed);
-                match query.parameters() {
+                match query.parameters().as_str() {
                     "ok_put" => {
                         tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async {

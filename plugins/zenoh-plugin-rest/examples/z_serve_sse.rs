@@ -46,7 +46,7 @@ async fn main() {
     let queryable = session.declare_queryable(key).res().await.unwrap();
 
     async_std::task::spawn({
-        let receiver = queryable.receiver.clone();
+        let receiver = queryable.handler().clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
                 request.reply(key, HTML).res().await.unwrap();
