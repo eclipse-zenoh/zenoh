@@ -165,7 +165,7 @@ impl ZRuntimePool {
     }
 
     pub fn get(&self, zrt: &ZRuntime) -> &Handle {
-        // Although the ZRuntime is called to use `zrt`, it may be handover to another one
+        // Although the ZRuntime is called to use `zrt`, it may be handed over to another one
         // specified via the environmental variable.
         let param: &RuntimeParam = zrt.borrow();
         let zrt = match param.handover {
