@@ -53,18 +53,12 @@ pub trait Deserialize<'a, T> {
     fn deserialize(self, t: &'a Payload) -> Result<T, Self::Error>;
 }
 
+#[cfg(feature = "shared-memory")]
 pub trait DeserializeMut<'a, T> {
     type Error;
 
     /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
     fn deserialize_mut(self, t: &'a mut Payload) -> Result<T, Self::Error>;
-}
-
-pub trait DeserializeOwned<'a, T> {
-    type Error;
-
-    /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
-    fn deserialize_owned(self, t: Payload) -> Result<T, (Payload, Self::Error)>;
 }
 
 /// A payload contains the serialized bytes of user data.
@@ -1137,6 +1131,25 @@ impl<'a> Deserialize<'a, ZSliceShm<'a, &'a SharedMemoryBuf>> for ZSerde {
 }
 
 #[cfg(feature = "shared-memory")]
+impl<'a> DeserializeMut<'a, ZSliceShm<'a, &'a mut SharedMemoryBuf>> for ZSerde {
+    type Error = ZDeserializeError;
+
+    fn deserialize_mut(
+        self,
+        v: &'a mut Payload,
+    ) -> Result<ZSliceShm<'a, &'a mut SharedMemoryBuf>, Self::Error> {
+        // A ZSliceShmBorrowMut is expected to have only one slice
+        let mut zslices = v.0.zslices_mut();
+        if let Some(zs) = zslices.next() {
+            if let Some(shmb) = zs.downcast_mut::<SharedMemoryBuf>() {
+                return Ok(shmb.into());
+            }
+        }
+        Err(ZDeserializeError)
+    }
+}
+
+#[cfg(feature = "shared-memory")]
 impl<'a> DeserializeMut<'a, ZSliceShmMut<'a, &'a mut SharedMemoryBuf>> for ZSerde {
     type Error = ZDeserializeError;
 
@@ -1162,6 +1175,15 @@ impl<'a> TryFrom<&'a Payload> for ZSliceShm<'a, &'a SharedMemoryBuf> {
 
     fn try_from(value: &'a Payload) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl<'a> TryFrom<&'a mut Payload> for ZSliceShm<'a, &'a mut SharedMemoryBuf> {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: &'a mut Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize_mut(value)
     }
 }
 
