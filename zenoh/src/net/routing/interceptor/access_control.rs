@@ -304,7 +304,7 @@ pub trait AclActionMethods {
                     break;
                 }
                 Ok(Permission::Deny) => {
-                    tracing::trace!(
+                    tracing::debug!(
                         "{} on {} is unauthorized to {} on {}",
                         zid,
                         subject.name,
