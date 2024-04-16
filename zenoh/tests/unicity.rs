@@ -234,7 +234,7 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
         for _ in 0..msg_count {
             let rs = ztimeout!(s03.get(cke.clone()).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.sample.unwrap().payload().len(), size);
+                assert_eq!(s.result().unwrap().payload().len(), size);
                 cnt += 1;
             }
         }

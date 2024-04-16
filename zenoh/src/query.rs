@@ -77,10 +77,31 @@ impl Default for QueryConsolidation {
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
-    /// The result of this Reply.
-    pub sample: Result<Sample, Value>,
-    /// The id of the zenoh instance that answered this Reply.
-    pub replier_id: ZenohId,
+    pub(crate) result: Result<Sample, Value>,
+    pub(crate) replier_id: ZenohId,
+}
+
+impl Reply {
+    /// Gets the a borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
+    pub fn result(&self) -> Result<&Sample, &Value> {
+        self.result.as_ref()
+    }
+
+    /// Converts this `Reply` into the its result. Use [`Reply::result`] it you don't want to take ownership.
+    pub fn into_result(self) -> Result<Sample, Value> {
+        self.result
+    }
+
+    /// Gets the id of the zenoh instance that answered this Reply.
+    pub fn replier_id(&self) -> ZenohId {
+        self.replier_id
+    }
+}
+
+impl From<Reply> for Result<Sample, Value> {
+    fn from(value: Reply) -> Self {
+        value.into_result()
+    }
 }
 
 pub(crate) struct QueryState {
@@ -110,7 +131,7 @@ pub(crate) struct QueryState {
 ///     .await
 ///     .unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
-///     println!("Received {:?}", reply.sample)
+///     println!("Received {:?}", reply.result())
 /// }
 /// # }
 /// ```
@@ -209,7 +230,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
-    ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
+    ///     .callback(|reply| {println!("Received {:?}", reply.result());})
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -302,7 +323,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!("Received {:?}", reply.sample);
+    ///     println!("Received {:?}", reply.result());
     /// }
     /// # }
     /// ```

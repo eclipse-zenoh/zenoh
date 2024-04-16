@@ -53,7 +53,10 @@ async fn zenoh_liveliness() {
         .get("zenoh_liveliness_test")
         .res_async())
     .unwrap();
-    let sample = ztimeout!(replies.recv_async()).unwrap().sample.unwrap();
+    let sample: Sample = ztimeout!(replies.recv_async())
+        .unwrap()
+        .into_result()
+        .unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == "zenoh_liveliness_test");
 

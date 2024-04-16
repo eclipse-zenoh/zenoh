@@ -784,7 +784,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session.get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!(">> Received {:?}", reply.sample);
+    ///     println!(">> Received {:?}", reply.result());
     /// }
     /// # }
     /// ```
@@ -1653,7 +1653,7 @@ impl Session {
                                     }
                                 }
                                 (query.callback)(Reply {
-                                    sample: Err("Timeout".into()),
+                                    result: Err("Timeout".into()),
                                     replier_id: zid,
                                 });
                             }
@@ -2171,7 +2171,7 @@ impl Primitives for Session {
                         };
                         let new_reply = Reply {
                             replier_id,
-                            sample: Err(value),
+                            result: Err(value),
                         };
                         callback(new_reply);
                     }
@@ -2292,7 +2292,7 @@ impl Primitives for Session {
                             attachment,
                         );
                         let new_reply = Reply {
-                            sample: Ok(sample),
+                            result: Ok(sample),
                             replier_id: ZenohId::rand(), // TODO
                         };
                         let callback =
@@ -2302,15 +2302,15 @@ impl Primitives for Session {
                                 }
                                 ConsolidationMode::Monotonic => {
                                     match query.replies.as_ref().unwrap().get(
-                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                        new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
                                         Some(reply) => {
-                                            if new_reply.sample.as_ref().unwrap().timestamp
-                                                > reply.sample.as_ref().unwrap().timestamp
+                                            if new_reply.result.as_ref().unwrap().timestamp
+                                                > reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
-                                                        .sample
+                                                        .result
                                                         .as_ref()
                                                         .unwrap()
                                                         .key_expr
@@ -2326,7 +2326,7 @@ impl Primitives for Session {
                                         None => {
                                             query.replies.as_mut().unwrap().insert(
                                                 new_reply
-                                                    .sample
+                                                    .result
                                                     .as_ref()
                                                     .unwrap()
                                                     .key_expr
@@ -2340,15 +2340,15 @@ impl Primitives for Session {
                                 }
                                 Consolidation::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
-                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                        new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
                                         Some(reply) => {
-                                            if new_reply.sample.as_ref().unwrap().timestamp
-                                                > reply.sample.as_ref().unwrap().timestamp
+                                            if new_reply.result.as_ref().unwrap().timestamp
+                                                > reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
-                                                        .sample
+                                                        .result
                                                         .as_ref()
                                                         .unwrap()
                                                         .key_expr
@@ -2361,7 +2361,7 @@ impl Primitives for Session {
                                         None => {
                                             query.replies.as_mut().unwrap().insert(
                                                 new_reply
-                                                    .sample
+                                                    .result
                                                     .as_ref()
                                                     .unwrap()
                                                     .key_expr
