@@ -34,6 +34,7 @@ use zenoh::Result as ZResult;
 use zenoh::Session;
 use zenoh_result::bail;
 use zenoh_sync::Condition;
+use zenoh_task::TaskController;
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";
 const EVENT_POSTFIX: &str = "evt";
@@ -164,17 +165,13 @@ struct GroupState {
 
 pub struct Group {
     state: Arc<GroupState>,
-    tasks: Vec<JoinHandle<()>>,
+    task_controller: TaskController,
 }
 
 impl Drop for Group {
     fn drop(&mut self) {
         // cancel background tasks
-        tokio::runtime::Handle::current().block_on(async {
-            while let Some(handle) = self.tasks.pop() {
-                handle.abort();
-            }
-        });
+        self.task_controller.terminate_all(Duration::from_secs(10));
     }
 }
 
@@ -193,36 +190,33 @@ async fn keep_alive_task(state: Arc<GroupState>) {
     }
 }
 
-fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
-    let watch_dog = async move {
-        loop {
-            tokio::time::sleep(period).await;
-            let now = Instant::now();
-            let mut ms = s.members.lock().await;
-            let expired_members: Vec<OwnedKeyExpr> = ms
-                .iter()
-                .filter(|e| e.1 .1 < now)
-                .map(|e| e.0.clone())
-                .collect();
+async fn watchdog_task(s: Arc<GroupState>, period: Duration) {
+    loop {
+        tokio::time::sleep(period).await;
+        let now = Instant::now();
+        let mut ms = s.members.lock().await;
+        let expired_members: Vec<OwnedKeyExpr> = ms
+            .iter()
+            .filter(|e| e.1 .1 < now)
+            .map(|e| e.0.clone())
+            .collect();
 
-            for e in &expired_members {
-                tracing::debug!("Member with lease expired: {}", e);
-                ms.remove(e);
-            }
-            if !expired_members.is_empty() {
-                tracing::debug!("Other members list: {:?}", ms.keys());
-                drop(ms);
-                let u_evt = &*s.user_events_tx.lock().await;
-                for e in expired_members {
-                    if let Some(tx) = u_evt {
-                        tx.send(GroupEvent::LeaseExpired(LeaseExpiredEvent { mid: e }))
-                            .unwrap()
-                    }
+        for e in &expired_members {
+            tracing::debug!("Member with lease expired: {}", e);
+            ms.remove(e);
+        }
+        if !expired_members.is_empty() {
+            tracing::debug!("Other members list: {:?}", ms.keys());
+            drop(ms);
+            let u_evt = &*s.user_events_tx.lock().await;
+            for e in expired_members {
+                if let Some(tx) = u_evt {
+                    tx.send(GroupEvent::LeaseExpired(LeaseExpiredEvent { mid: e }))
+                        .unwrap()
                 }
             }
         }
-    };
-    tokio::task::spawn(watch_dog)
+    }
 }
 
 async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
@@ -392,16 +386,17 @@ impl Group {
         let buf = bincode::serialize(&join_evt).unwrap();
         let _ = state.group_publisher.put(buf).res().await;
 
+        let task_controller = TaskController::default();
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {
-            tokio::task::spawn(keep_alive_task(state.clone()));
+            task_controller.spawn_abortable(keep_alive_task(state.clone()));
         }
-        let events_task = tokio::task::spawn(net_event_handler(z.clone(), state.clone()));
-        let queries_task = tokio::task::spawn(query_handler(z.clone(), state.clone()));
-        let watchdog_task = spawn_watchdog(state.clone(), Duration::from_secs(1));
+        task_controller.spawn_abortable(net_event_handler(z.clone(), state.clone()));
+        task_controller.spawn_abortable(query_handler(z.clone(), state.clone()));
+        task_controller.spawn_abortable(watchdog_task(state.clone(), Duration::from_secs(1)));
         Ok(Group {
             state,
-            tasks: Vec::from([events_task, queries_task, watchdog_task]),
+            task_controller,
         })
     }
 
