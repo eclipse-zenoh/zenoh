@@ -56,18 +56,15 @@ pub(crate) fn acl_interceptor_factories(
         let mut policy_enforcer = PolicyEnforcer::new();
         match policy_enforcer.init(acl_config) {
             Ok(_) => {
-                tracing::info!("Access control is enabled and initialized");
+                tracing::debug!("Access control is enabled");
                 res.push(Box::new(AclEnforcer {
                     enforcer: Arc::new(policy_enforcer),
                 }))
             }
-            Err(e) => tracing::error!(
-                "Access control enabled but not initialized with error {}!",
-                e
-            ),
+            Err(e) => tracing::error!("Access control inizialization error: {}", e),
         }
     } else {
-        tracing::info!("Access Control is disabled in config!");
+        tracing::debug!("Access control is disabled");
     }
 
     Ok(res)
@@ -285,17 +282,23 @@ pub trait AclActionMethods {
                     continue;
                 }
                 Err(e) => {
-                    tracing::debug!("Authorization incomplete due to error {}", e);
+                    tracing::debug!(
+                        "{} has an authorization error to {} on {}: {}",
+                        zid,
+                        log_msg,
+                        key_expr,
+                        e
+                    );
                     return Permission::Deny;
                 }
             }
         }
 
         if decision == Permission::Deny {
-            tracing::debug!("{} is unauthorized to {}", zid, log_msg);
+            tracing::debug!("{} is unauthorized to {} on {}", zid, log_msg, key_expr);
             return Permission::Deny;
         }
-        tracing::trace!("{} is authorized to {}", zid, log_msg);
+        tracing::trace!("{} is authorized to {} on {}", zid, log_msg, key_expr);
         Permission::Allow
     }
 }
