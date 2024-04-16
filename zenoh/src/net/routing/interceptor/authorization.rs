@@ -63,18 +63,18 @@ struct ActionPolicy {
 impl ActionPolicy {
     fn action(&self, action: Action) -> &PermissionPolicy {
         match action {
-            Action::DeclareQueryable => &self.declare_queryable,
             Action::Get => &self.get,
             Action::Put => &self.put,
             Action::DeclareSubscriber => &self.declare_subscriber,
+            Action::DeclareQueryable => &self.declare_queryable,
         }
     }
     fn action_mut(&mut self, action: Action) -> &mut PermissionPolicy {
         match action {
-            Action::DeclareQueryable => &mut self.declare_queryable,
             Action::Get => &mut self.get,
             Action::Put => &mut self.put,
             Action::DeclareSubscriber => &mut self.declare_subscriber,
+            Action::DeclareQueryable => &mut self.declare_queryable,
         }
     }
 }
