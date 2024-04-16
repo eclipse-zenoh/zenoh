@@ -77,32 +77,30 @@ impl Default for QueryConsolidation {
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
-    pub(crate) sample: Result<Sample, Value>,
+    pub(crate) result: Result<Sample, Value>,
     pub(crate) replier_id: ZenohId,
 }
 
 impl Reply {
-    /// Gets the result of this Reply.
-    pub fn sample(&self) -> Result<&Sample, &Value> {
-        self.sample.as_ref()
+    /// Gets the a borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
+    pub fn result(&self) -> Result<&Sample, &Value> {
+        self.result.as_ref()
+    }
+
+    /// Converts this `Reply` into the its result. Use [`Reply::result`] it you don't want to take ownership.
+    pub fn into_result(self) -> Result<Sample, Value> {
+        self.result
     }
 
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> ZenohId {
         self.replier_id
     }
-
-    /// Attempts to convert reply into sample.
-    pub fn try_into_sample(self) -> Result<Sample, Value> {
-        self.try_into()
-    }
 }
 
-impl TryFrom<Reply> for Sample {
-    type Error = Value;
-
-    fn try_from(value: Reply) -> Result<Self, Self::Error> {
-        value.sample
+impl From<Reply> for Result<Sample, Value> {
+    fn from(value: Reply) -> Self {
+        value.into_result()
     }
 }
 

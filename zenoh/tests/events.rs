@@ -75,8 +75,8 @@ async fn zenoh_events() {
     .into_iter()
     .collect();
     assert!(replies.len() == 1);
-    assert!(replies[0].sample().is_ok());
-    let key_expr = replies[0].sample().unwrap().key_expr().as_str();
+    assert!(replies[0].result().is_ok());
+    let key_expr = replies[0].result().unwrap().key_expr().as_str();
     assert!(key_expr.eq(&format!("@/session/{zid}/transport/unicast/{zid2}")));
 
     let replies: Vec<Reply> = ztimeout!(session
@@ -86,8 +86,8 @@ async fn zenoh_events() {
     .into_iter()
     .collect();
     assert!(replies.len() == 1);
-    assert!(replies[0].sample().is_ok());
-    let key_expr = replies[0].sample().unwrap().key_expr().as_str();
+    assert!(replies[0].result().is_ok());
+    let key_expr = replies[0].result().unwrap().key_expr().as_str();
     assert!(key_expr.starts_with(&format!("@/session/{zid}/transport/unicast/{zid2}/link/")));
 
     close_session(session2).await;

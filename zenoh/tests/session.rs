@@ -193,7 +193,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             let selector = format!("{}?ok_put", key_expr);
             let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                let s = s.sample().unwrap();
+                let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Put);
                 assert_eq!(s.payload().len(), size);
                 cnt += 1;
@@ -211,7 +211,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             let selector = format!("{}?ok_del", key_expr);
             let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                let s = s.sample().unwrap();
+                let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Delete);
                 assert_eq!(s.payload().len(), 0);
                 cnt += 1;
@@ -229,7 +229,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
             let selector = format!("{}?err", key_expr);
             let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                let e = s.sample().unwrap_err();
+                let e = s.result().unwrap_err();
                 assert_eq!(e.payload().len(), size);
                 cnt += 1;
             }

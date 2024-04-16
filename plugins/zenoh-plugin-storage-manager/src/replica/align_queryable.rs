@@ -231,7 +231,7 @@ impl AlignQueryable {
         // get corresponding key from log
         let replies = self.session.get(&logentry.key).res().await.unwrap();
         if let Ok(reply) = replies.recv_async().await {
-            match reply.try_into_sample() {
+            match reply.into_result() {
                 Ok(sample) => {
                     log::trace!(
                         "[ALIGN QUERYABLE] Received ('{}': '{}')",

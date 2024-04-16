@@ -107,7 +107,7 @@ fn result_to_json(sample: Result<&Sample, &Value>) -> JSONSample {
 async fn to_json(results: flume::Receiver<Reply>) -> String {
     let values = results
         .stream()
-        .filter_map(move |reply| async move { Some(result_to_json(reply.sample())) })
+        .filter_map(move |reply| async move { Some(result_to_json(reply.result())) })
         .collect::<Vec<JSONSample>>()
         .await;
 
@@ -148,7 +148,7 @@ fn result_to_html(sample: Result<&Sample, &Value>) -> String {
 async fn to_html(results: flume::Receiver<Reply>) -> String {
     let values = results
         .stream()
-        .filter_map(move |reply| async move { Some(result_to_html(reply.sample())) })
+        .filter_map(move |reply| async move { Some(result_to_html(reply.result())) })
         .collect::<Vec<String>>()
         .await
         .join("\n");
@@ -161,7 +161,7 @@ async fn to_html_response(results: flume::Receiver<Reply>) -> Response {
 
 async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
     match results.recv_async().await {
-        Ok(reply) => match reply.sample() {
+        Ok(reply) => match reply.result() {
             Ok(sample) => response(
                 StatusCode::Ok,
                 Cow::from(sample.encoding()).as_ref(),
