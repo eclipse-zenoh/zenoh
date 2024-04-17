@@ -20,19 +20,6 @@ use zenoh::prelude::r#async::*;
 async fn main() {
     zenoh_util::init_log_test();
 
-    /// This is an utility function to enables the default tracing subscriber with INFO level
-    pub fn init_log_level(level: tracing::Level) {
-        let subscriber = tracing_subscriber::fmt()
-            .with_max_level(level)
-            .with_thread_ids(true)
-            .with_thread_names(true)
-            .with_level(true)
-            .with_target(true);
-
-        let subscriber = subscriber.finish();
-        let _ = tracing::subscriber::set_global_default(subscriber);
-    }
-
     let _z = zenoh_runtime::ZRuntimePoolGuard;
 
     let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
