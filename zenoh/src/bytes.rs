@@ -20,12 +20,11 @@ use std::{
     string::FromUtf8Error, sync::Arc,
 };
 use unwrap_infallible::UnwrapInfallible;
-use zenoh_buffers::ZBufWriter;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     writer::HasWriter,
-    ZBufReader, ZSlice,
+    ZBufReader, ZBufWriter, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{core::Properties, zenoh::ext::AttachmentType};
