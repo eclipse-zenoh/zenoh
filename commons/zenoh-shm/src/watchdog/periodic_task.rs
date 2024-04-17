@@ -88,7 +88,7 @@ impl PeriodicTask {
                     } else {
                         let err = format!("{:?}: timer overrun", std::thread::current().name());
                         #[cfg(not(feature = "test"))]
-                        error!("{err}");
+                        tracing::error!("{err}");
                         #[cfg(feature = "test")]
                         panic!("{err}");
                     }
