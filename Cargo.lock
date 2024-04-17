@@ -4957,6 +4957,7 @@ dependencies = [
  "futures",
  "git-version",
  "lazy_static",
+ "lz4_flex",
  "ordered-float",
  "paste",
  "petgraph",

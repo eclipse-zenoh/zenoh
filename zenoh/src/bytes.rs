@@ -144,6 +144,27 @@ impl ZBytes {
     {
         ZSerde.deserialize(self).unwrap_infallible()
     }
+
+    #[cfg(all(feature = "unstable", feature = "compression"))]
+    /// *This API is marked unstable because it's still unclear how to efficiently support compression cross-languages.*
+    ///
+    /// Compress ZBytes.
+    pub fn compress(&mut self) {
+        let input: Cow<[u8]> = Cow::from(&*self);
+        *self = Self::new(lz4_flex::compress_prepend_size(input.as_ref()));
+    }
+
+    #[cfg(all(feature = "unstable", feature = "compression"))]
+    /// *This API is marked unstable because it's still unclear how to efficiently support compression cross-languages.*
+    ///
+    /// Decompress ZBytes.
+    pub fn decompress(&mut self) -> ZResult<()> {
+        let input: Cow<[u8]> = Cow::from(&*self);
+        *self = Self::new(
+            lz4_flex::decompress_size_prepended(input.as_ref()).map_err(|e| zerror!("{:?}", e))?,
+        );
+        Ok(())
+    }
 }
 
 /// A reader that implements [`std::io::Read`] trait to read from a [`ZBytes`].
@@ -1493,6 +1514,7 @@ mod tests {
             assert_eq!(i, t);
         }
 
+        // - Vec
         let mut v = vec![[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
         println!("Serialize:\t{:?}", v);
         let p = ZBytes::from_iter(v.drain(..));
@@ -1504,6 +1526,7 @@ mod tests {
         assert_eq!(iter.next().unwrap(), [12, 13, 14, 15]);
         assert!(iter.next().is_none());
 
+        // - HashMap
         use std::collections::HashMap;
         let mut hm: HashMap<usize, usize> = HashMap::new();
         hm.insert(0, 0);
@@ -1567,5 +1590,25 @@ mod tests {
         println!("Deserialize:\t{:?}\n", p);
         let o = HashMap::from_iter(p.iter::<(String, String)>());
         assert_eq!(hm, o);
+    }
+
+    #[cfg(all(feature = "unstable", feature = "compression"))]
+    #[test]
+    fn serializer_compression() {
+        use super::ZBytes;
+        use std::borrow::Cow;
+
+        let  i = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi. Proin porttitor, orci nec nonummy molestie, enim est eleifend mi, non fermentum diam nisl sit amet erat. Duis semper. Duis arcu massa, scelerisque vitae, consequat in, pretium a, enim. Pellentesque congue. Ut in risus volutpat libero pharetra tempor. Cras vestibulum bibendum augue. Praesent egestas leo in pede. Praesent blandit odio eu enim. Pellentesque sed dui ut augue blandit sodales. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Aliquam nibh. Mauris ac mauris sed pede pellentesque fermentum. Maecenas adipiscing ante non diam sodales hendrerit. Ut velit mauris, egestas sed, gravida nec, ornare ut, mi. Aenean ut orci vel massa suscipit pulvinar. Nulla sollicitudin. Fusce varius, ligula non tempus aliquam, nunc turpis ullamcorper nibh, in tempus sapien eros vitae ligula. Pellentesque rhoncus nunc et augue. Integer id felis. Curabitur aliquet pellentesque diam. Integer quis metus vitae elit lobortis egestas. Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Morbi vel erat non mauris convallis vehicula. Nulla et sapien. Integer tortor tellus, aliquam faucibus, convallis id, congue eu, quam. Mauris ullamcorper felis vitae erat. Proin feugiat, augue non elementum posuere, metus purus iaculis lectus, et tristique ligula justo vitae magna. Aliquam convallis sollicitudin purus. Praesent aliquam, enim at fermentum mollis, ligula massa adipiscing nisl, ac euismod nibh nisl eu lectus. Fusce vulputate sem at sapien. Vivamus leo. Aliquam euismod libero eu enim. Nulla nec felis sed leo placerat imperdiet. Aenean suscipit nulla in justo. Suspendisse cursus rutrum augue. Nulla tincidunt tincidunt mi. Curabitur iaculis, lorem vel rhoncus faucibus, felis magna fermentum augue, et ultricies lacus lorem varius purus. Curabitur eu amet. ";
+
+        println!("Serialize: {}", i);
+        let mut v = ZBytes::serialize(i);
+        println!("Compress:\t{:?}", v);
+        v.compress();
+        println!("Decompress:\t{:?}", v);
+        v.decompress().unwrap();
+        println!("Deserialize:\t{:?}", v);
+        let o = v.deserialize::<Cow<str>>().unwrap();
+        assert_eq!(i, o);
+        println!("Deserialized: {}", o);
     }
 }
