@@ -22,6 +22,7 @@ use super::{
     key_expr::{KeyExpr, KeyExprInner},
     payload::Payload,
     publication::Priority,
+    query::_REPLY_KEY_EXPR_ANY_SEL_PARAM,
     query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
@@ -30,9 +31,7 @@ use super::{
     value::Value,
     Id,
 };
-use crate::{
-    net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime},
-};
+use crate::net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime};
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
