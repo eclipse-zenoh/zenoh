@@ -23,7 +23,7 @@ use super::{
     InterceptorFactoryTrait, InterceptorTrait,
 };
 use crate::net::routing::RoutingContext;
-use crate::KeyExpr;
+use crate::api::key_expr::KeyExpr;
 use std::any::Any;
 use std::sync::Arc;
 use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject, ZenohId};
