@@ -48,13 +48,13 @@ pub trait Deserialize<'a, T> {
     fn deserialize(self, t: &'a ZBytes) -> Result<T, Self::Error>;
 }
 
-/// A payload contains the serialized bytes of user data.
+/// ZBytes contains the serialized bytes of user data.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZBytes(ZBuf);
 
 impl ZBytes {
-    /// Create an empty payload.
+    /// Create an empty ZBytes.
     pub const fn empty() -> Self {
         Self(ZBuf::empty())
     }
@@ -67,12 +67,12 @@ impl ZBytes {
         Self(t.into())
     }
 
-    /// Returns wether the payload is empty or not.
+    /// Returns wether the ZBytes is empty or not.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    /// Returns the length of the payload.
+    /// Returns the length of the ZBytes.
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -113,11 +113,11 @@ impl ZBytes {
     /// Serialize an object of type `T` as a [`Value`] using the [`ZSerde`].
     ///
     /// ```rust
-    /// use zenoh::payload::ZBytes;
+    /// use zenoh::bytes::ZBytes;
     ///
     /// let start = String::from("abc");
-    /// let payload = ZBytes::serialize(start.clone());
-    /// let end: String = payload.deserialize().unwrap();
+    /// let bytes = ZBytes::serialize(start.clone());
+    /// let end: String = bytes.deserialize().unwrap();
     /// assert_eq!(start, end);
     /// ```
     pub fn serialize<T>(t: T) -> Self
@@ -276,7 +276,7 @@ impl From<OptionZBytes> for Option<ZBytes> {
     }
 }
 
-/// The default serializer for Zenoh payload. It supports primitives types, such as: vec<u8>, int, uint, float, string, bool.
+/// The default serializer for ZBytes. It supports primitives types, such as: Vec<u8>, int, uint, float, string, bool.
 /// It also supports common Rust serde values.
 #[derive(Clone, Copy, Debug)]
 pub struct ZSerde;
@@ -921,9 +921,9 @@ impl Serialize<&serde_json::Value> for ZSerde {
     type Output = Result<ZBytes, serde_json::Error>;
 
     fn serialize(self, t: &serde_json::Value) -> Self::Output {
-        let mut payload = ZBytes::empty();
-        serde_json::to_writer(payload.writer(), t)?;
-        Ok(payload)
+        let mut bytes = ZBytes::empty();
+        serde_json::to_writer(bytes.writer(), t)?;
+        Ok(bytes)
     }
 }
 
@@ -980,9 +980,9 @@ impl Serialize<&serde_yaml::Value> for ZSerde {
     type Output = Result<ZBytes, serde_yaml::Error>;
 
     fn serialize(self, t: &serde_yaml::Value) -> Self::Output {
-        let mut payload = ZBytes::empty();
-        serde_yaml::to_writer(payload.writer(), t)?;
-        Ok(payload)
+        let mut bytes = ZBytes::empty();
+        serde_yaml::to_writer(bytes.writer(), t)?;
+        Ok(bytes)
     }
 }
 
@@ -1039,9 +1039,9 @@ impl Serialize<&serde_cbor::Value> for ZSerde {
     type Output = Result<ZBytes, serde_cbor::Error>;
 
     fn serialize(self, t: &serde_cbor::Value) -> Self::Output {
-        let mut payload = ZBytes::empty();
-        serde_cbor::to_writer(payload.0.writer(), t)?;
-        Ok(payload)
+        let mut bytes = ZBytes::empty();
+        serde_cbor::to_writer(bytes.0.writer(), t)?;
+        Ok(bytes)
     }
 }
 
@@ -1098,13 +1098,13 @@ impl Serialize<&serde_pickle::Value> for ZSerde {
     type Output = Result<ZBytes, serde_pickle::Error>;
 
     fn serialize(self, t: &serde_pickle::Value) -> Self::Output {
-        let mut payload = ZBytes::empty();
+        let mut bytes = ZBytes::empty();
         serde_pickle::value_to_writer(
-            &mut payload.0.writer(),
+            &mut bytes.0.writer(),
             t,
             serde_pickle::SerOptions::default(),
         )?;
-        Ok(payload)
+        Ok(bytes)
     }
 }
 
@@ -1279,9 +1279,9 @@ where
 {
     type Error = ZError;
 
-    fn deserialize(self, payload: &ZBytes) -> Result<(A, B), Self::Error> {
+    fn deserialize(self, bytes: &ZBytes) -> Result<(A, B), Self::Error> {
         let codec = Zenoh080::new();
-        let mut reader = payload.0.reader();
+        let mut reader = bytes.0.reader();
 
         let abuf: ZBuf = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
         let apld = ZBytes::new(abuf);
