@@ -20,8 +20,8 @@ use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
+    bytes::OptionZBytes,
     handlers::{Callback, DefaultHandler, IntoHandler},
-    payload::OptionPayload,
     sample::Attachment,
     Id,
 };
@@ -40,7 +40,7 @@ pub use zenoh_protocol::core::CongestionControl;
 
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderPut {
-    pub(crate) payload: Payload,
+    pub(crate) payload: ZBytes,
     pub(crate) encoding: Encoding,
 }
 #[derive(Debug, Clone)]
@@ -138,7 +138,7 @@ impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
 
     fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
     where
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         Self {
             kind: PublicationBuilderPut {
@@ -167,8 +167,8 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
         }
     }
     #[cfg(feature = "unstable")]
-    fn attachment<TA: Into<OptionPayload>>(self, attachment: TA) -> Self {
-        let attachment: OptionPayload = attachment.into();
+    fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
+        let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
@@ -213,7 +213,7 @@ impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBui
         let publisher = self.publisher.create_one_shot_publisher()?;
         resolve_put(
             &publisher,
-            Payload::empty(),
+            ZBytes::empty(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
             self.timestamp,
@@ -421,7 +421,7 @@ impl<'a> Publisher<'a> {
     #[inline]
     pub fn put<IntoPayload>(&self, payload: IntoPayload) -> PublisherPutBuilder<'_>
     where
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         PublicationBuilder {
             publisher: self,
@@ -708,7 +708,7 @@ impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete
     fn res_sync(self) -> <Self as Resolvable>::To {
         resolve_put(
             self.publisher,
-            Payload::empty(),
+            ZBytes::empty(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
             self.timestamp,
@@ -941,7 +941,7 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
 
 fn resolve_put(
     publisher: &Publisher<'_>,
-    payload: Payload,
+    payload: ZBytes,
     kind: SampleKind,
     encoding: Encoding,
     timestamp: Option<uhlc::Timestamp>,

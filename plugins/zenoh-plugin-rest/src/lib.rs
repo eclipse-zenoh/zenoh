@@ -29,7 +29,7 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::payload::StringOrBase64;
+use zenoh::bytes::StringOrBase64;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
@@ -61,7 +61,7 @@ pub fn base64_encode(data: &[u8]) -> String {
     general_purpose::STANDARD.encode(data)
 }
 
-fn payload_to_json(payload: &Payload, encoding: &Encoding) -> serde_json::Value {
+fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
     match payload.is_empty() {
         // If the value is empty return a JSON null
         true => serde_json::Value::Null,

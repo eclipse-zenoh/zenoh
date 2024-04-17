@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::admin;
+use crate::bytes::ZBytes;
 use crate::config::Config;
 use crate::config::Notifier;
 use crate::encoding::Encoding;
@@ -23,7 +24,6 @@ use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
-use crate::payload::Payload;
 use crate::prelude::KeyExpr;
 use crate::prelude::Locality;
 use crate::publication::*;
@@ -715,7 +715,7 @@ impl Session {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         PublicationBuilder {
             publisher: self.declare_publisher(key_expr),

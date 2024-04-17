@@ -26,7 +26,7 @@ use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
-    payload::OptionPayload,
+    bytes::OptionZBytes,
     query::ReplyKeyExpr,
     sample::{Attachment, SourceInfo},
 };
@@ -105,7 +105,7 @@ impl Query {
 
     /// This Query's payload.
     #[inline(always)]
-    pub fn payload(&self) -> Option<&Payload> {
+    pub fn payload(&self) -> Option<&ZBytes> {
         self.inner.value.as_ref().map(|v| &v.payload)
     }
 
@@ -150,7 +150,7 @@ impl Query {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         ReplyBuilder {
             query: self,
@@ -275,7 +275,7 @@ impl AsyncResolve for ReplySample<'_> {
 
 #[derive(Debug)]
 pub struct ReplyBuilderPut {
-    payload: super::Payload,
+    payload: super::ZBytes,
     encoding: super::Encoding,
 }
 #[derive(Debug)]
@@ -314,8 +314,8 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 #[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     #[cfg(feature = "unstable")]
-    fn attachment<U: Into<OptionPayload>>(self, attachment: U) -> Self {
-        let attachment: OptionPayload = attachment.into();
+    fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
+        let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
@@ -359,7 +359,7 @@ impl ValueBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
         }
     }
 
-    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
         Self {
             kind: ReplyBuilderPut {
                 payload: payload.into(),
@@ -501,7 +501,7 @@ impl ValueBuilderTrait for ReplyErrBuilder<'_> {
         Self { value, ..self }
     }
 
-    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
         let mut value = self.value.clone();
         value.payload = payload.into();
         Self { value, ..self }

@@ -134,12 +134,12 @@ pub use net::runtime;
 pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
+pub mod bytes;
 pub(crate) mod encoding;
 pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
-pub mod payload;
 pub mod plugins;
 pub mod prelude;
 pub mod publication;

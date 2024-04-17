@@ -13,8 +13,8 @@
 //
 
 //! Sample primitives
+use crate::bytes::ZBytes;
 use crate::encoding::Encoding;
-use crate::payload::Payload;
 use crate::prelude::{KeyExpr, Value};
 use crate::sample::builder::QoSBuilderTrait;
 use crate::time::Timestamp;
@@ -67,7 +67,7 @@ pub(crate) trait DataInfoIntoSample {
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<Payload>;
+        IntoPayload: Into<ZBytes>;
 }
 
 impl DataInfoIntoSample for DataInfo {
@@ -84,7 +84,7 @@ impl DataInfoIntoSample for DataInfo {
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         Sample {
             key_expr: key_expr.into(),
@@ -114,7 +114,7 @@ impl DataInfoIntoSample for Option<DataInfo> {
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         if let Some(data_info) = self {
             data_info.into_sample(
@@ -213,12 +213,12 @@ impl From<Option<DataInfo>> for SourceInfo {
 
 mod attachment {
     #[cfg(feature = "unstable")]
-    use crate::payload::Payload;
+    use crate::bytes::ZBytes;
     #[cfg(feature = "unstable")]
     use zenoh_protocol::zenoh::ext::AttachmentType;
 
     #[zenoh_macros::unstable]
-    pub type Attachment = Payload;
+    pub type Attachment = ZBytes;
 
     #[zenoh_macros::unstable]
     impl<const ID: u8> From<Attachment> for AttachmentType<ID> {
@@ -274,7 +274,7 @@ pub use attachment::Attachment;
 /// Structure with public fields for sample. It's convenient if it's necessary to decompose a sample into its fields.
 pub struct SampleFields {
     pub key_expr: KeyExpr<'static>,
-    pub payload: Payload,
+    pub payload: ZBytes,
     pub kind: SampleKind,
     pub encoding: Encoding,
     pub timestamp: Option<Timestamp>,
@@ -311,7 +311,7 @@ impl From<Sample> for SampleFields {
 #[derive(Clone, Debug)]
 pub struct Sample {
     pub(crate) key_expr: KeyExpr<'static>,
-    pub(crate) payload: Payload,
+    pub(crate) payload: ZBytes,
     pub(crate) kind: SampleKind,
     pub(crate) encoding: Encoding,
     pub(crate) timestamp: Option<Timestamp>,
@@ -333,7 +333,7 @@ impl Sample {
 
     /// Gets the payload of this Sample.
     #[inline]
-    pub fn payload(&self) -> &Payload {
+    pub fn payload(&self) -> &ZBytes {
         &self.payload
     }
 
