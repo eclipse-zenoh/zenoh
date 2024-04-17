@@ -14,9 +14,8 @@
 
 //! ZBytes primitives.
 use crate::buffers::ZBuf;
-use std::str::Utf8Error;
 use std::{
-    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref,
+    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref, str::Utf8Error,
     string::FromUtf8Error, sync::Arc,
 };
 use unwrap_infallible::UnwrapInfallible;
