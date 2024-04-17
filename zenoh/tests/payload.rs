@@ -44,13 +44,24 @@ fn shm_payload_single_buf() {
     let layout = provider.alloc_layout().size(1024).res().unwrap();
 
     // allocate an SHM buffer
-    let owned_shm_buf_mut = layout.alloc().res().unwrap();
+    let mut owned_shm_buf_mut = layout.alloc().res().unwrap();
+
+    // get data
+    let _data: &[u8] = &owned_shm_buf_mut;
+    let _data_mut: &mut [u8] = &mut owned_shm_buf_mut;
 
     // convert into immutable owned buffer
     let owned_shm_buf: ZSliceShm = owned_shm_buf_mut.into();
 
+    // get data
+    let _data: &[u8] = &owned_shm_buf;
+
     // convert again into mutable owned buffer
-    let owned_shm_buf_mut: ZSliceShmMut = owned_shm_buf.try_into().unwrap();
+    let mut owned_shm_buf_mut: ZSliceShmMut = owned_shm_buf.try_into().unwrap();
+
+    // get data
+    let _data: &[u8] = &owned_shm_buf_mut;
+    let _data_mut: &mut [u8] = &mut owned_shm_buf_mut;
 
     // build a Payload from an SHM buffer
     let mut payload: Payload = owned_shm_buf_mut.into();
@@ -58,14 +69,29 @@ fn shm_payload_single_buf() {
     {
         // deserialize Payload as borrowed zsliceshm
         let borrowed_shm_buf: &zsliceshm = payload.deserialize().unwrap();
+
+        // get data
+        let _data: &[u8] = borrowed_shm_buf;
+
         // construct owned buffer from borrowed type
-        let _owned = borrowed_shm_buf.to_owned();
+        let owned = borrowed_shm_buf.to_owned();
+
+        // get data
+        let _data: &[u8] = &owned;
     }
 
     {
         // deserialize Payload as mutably borrowed zsliceshm
         let borrowed_shm_buf: &mut zsliceshm = payload.deserialize_mut().unwrap();
-        // convert ZSliceShm to ZSliceShmMut
-        let _borrowed_shm_buf_mut: &mut zsliceshmmut = borrowed_shm_buf.try_into().unwrap();
+
+        // get data
+        let _data: &[u8] = borrowed_shm_buf;
+
+        // convert zsliceshm to zsliceshmmut
+        let borrowed_shm_buf_mut: &mut zsliceshmmut = borrowed_shm_buf.try_into().unwrap();
+
+        // get data
+        let _data: &[u8] = borrowed_shm_buf_mut;
+        let _data_mut: &mut [u8] = borrowed_shm_buf_mut;
     }
 }

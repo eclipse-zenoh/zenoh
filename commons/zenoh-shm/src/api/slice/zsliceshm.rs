@@ -22,13 +22,19 @@ use zenoh_buffers::{ZBuf, ZSlice};
 
 use crate::SharedMemoryBuf;
 
-use super::zsliceshmmut::zsliceshmmut;
+use super::{traits::SHMBuf, zsliceshmmut::zsliceshmmut};
 
 /// An immutable SHM slice
 #[zenoh_macros::unstable_doc]
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZSliceShm(pub(crate) SharedMemoryBuf);
+
+impl SHMBuf for ZSliceShm {
+    fn is_valid(&self) -> bool {
+        self.0.is_valid()
+    }
+}
 
 impl PartialEq<&zsliceshm> for ZSliceShm {
     fn eq(&self, other: &&zsliceshm) -> bool {

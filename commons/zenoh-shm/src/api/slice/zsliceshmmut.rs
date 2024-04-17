@@ -19,13 +19,24 @@ use zenoh_buffers::{ZBuf, ZSlice};
 
 use crate::SharedMemoryBuf;
 
-use super::zsliceshm::{zsliceshm, ZSliceShm};
+use super::{
+    traits::{SHMBuf, SHMBufMut},
+    zsliceshm::{zsliceshm, ZSliceShm},
+};
 
 /// A mutable SHM slice
 #[zenoh_macros::unstable_doc]
 #[derive(Debug, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct ZSliceShmMut(SharedMemoryBuf);
+
+impl SHMBuf for ZSliceShmMut {
+    fn is_valid(&self) -> bool {
+        self.0.is_valid()
+    }
+}
+
+impl SHMBufMut for ZSliceShmMut {}
 
 impl ZSliceShmMut {
     pub(crate) unsafe fn new_unchecked(data: SharedMemoryBuf) -> Self {
@@ -147,6 +158,12 @@ impl Deref for zsliceshmmut {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for zsliceshmmut {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

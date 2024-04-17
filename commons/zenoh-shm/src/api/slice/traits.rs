@@ -12,6 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod traits;
-pub mod zsliceshm;
-pub mod zsliceshmmut;
+use std::ops::{Deref, DerefMut};
+
+pub trait SHMBuf: Deref<Target = [u8]> + AsRef<[u8]> {
+    fn is_valid(&self) -> bool;
+}
+
+pub trait SHMBufMut: SHMBuf + DerefMut + AsMut<[u8]> {}
