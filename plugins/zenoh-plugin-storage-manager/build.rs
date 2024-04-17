@@ -21,16 +21,8 @@ fn main() {
         "cargo:rustc-env=RUSTC_VERSION={}",
         version_meta.short_version_string
     );
-    // Generate default config schema
-    let schema = schema_for!(PluginConfig);
-    std::fs::write(
-        "config_schema.json5",
-        serde_json::to_string_pretty(&schema).unwrap(),
-    )
-    .unwrap();
-    // Check that the example config matches the schema
-    let schema = std::fs::read_to_string("config_schema.json5").unwrap();
-    let schema: serde_json::Value = serde_json::from_str(&schema).unwrap();
+
+    let schema = serde_json::to_value(schema_for!(PluginConfig)).unwrap();
     let schema = jsonschema::JSONSchema::compile(&schema).unwrap();
     let config = std::fs::read_to_string("config.json5").unwrap();
     let config: serde_json::Value = serde_json::from_str(&config).unwrap();
