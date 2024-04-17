@@ -358,7 +358,7 @@ use syn::DeriveInput;
 use zenoh_runtime_derive::{derive_generic_runtime_param, derive_register_param};
 
 /// Make the underlying struct `Param` be generic over any `T` satifying a generated `trait DefaultParam { fn param() -> Param; }`
-/// ```rust
+/// ```rust,ignore
 /// #[derive(GenericRuntimeParam)]
 /// struct Param {
 ///    ...
@@ -373,7 +373,7 @@ pub fn generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro::Toke
 }
 
 /// Register the input `Enum` with the struct `Param` specified in the param attribute
-/// ```rust
+/// ```rust,ignore
 /// #[derive(RegisterParam)]
 /// #[param(Param)]
 /// enum Enum {
