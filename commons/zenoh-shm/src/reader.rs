@@ -25,7 +25,7 @@ use crate::{
     },
     header::subscription::GLOBAL_HEADER_SUBSCRIPTION,
     watchdog::confirmator::GLOBAL_CONFIRMATOR,
-    SHMBuf, SharedMemoryBuf, SharedMemoryBufInfo,
+    SharedMemoryBuf, SharedMemoryBufInfo,
 };
 
 #[derive(Debug, Clone, Eq, PartialEq)]

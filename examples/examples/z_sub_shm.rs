@@ -14,7 +14,7 @@
 use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::shm::slice::zsliceshm::ZSliceShm;
+use zenoh::shm::slice::zsliceshm::zsliceshm;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -37,7 +37,7 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        match sample.payload().deserialize::<ZSliceShm<'_, _>>() {
+        match sample.payload().deserialize::<&zsliceshm>() {
             Ok(payload) => println!(
                 ">> [Subscriber] Received {} ('{}': '{:02x?}')",
                 sample.kind(),

@@ -100,6 +100,16 @@ pub struct SharedMemoryBuf {
     pub(crate) watchdog: Arc<ConfirmedDescriptor>,
 }
 
+impl PartialEq for SharedMemoryBuf {
+    fn eq(&self, other: &Self) -> bool {
+        // currently there is no API to resize an SHM buffer, but it is intended in the future,
+        // so I add size comparsion here to avoid future bugs :)
+        self.buf.load(Ordering::Relaxed) == other.buf.load(Ordering::Relaxed)
+            && self.info.data_len == other.info.data_len
+    }
+}
+impl Eq for SharedMemoryBuf {}
+
 impl std::fmt::Debug for SharedMemoryBuf {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SharedMemoryBuf")
@@ -117,6 +127,14 @@ impl SharedMemoryBuf {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    fn is_valid(&self) -> bool {
+        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
+    }
+
+    fn is_unique(&self) -> bool {
+        self.ref_count() == 1
     }
 
     pub fn ref_count(&self) -> u32 {
@@ -214,43 +232,3 @@ impl ZSliceBuffer for SharedMemoryBuf {
         self
     }
 }
-
-pub trait SHMBuf<'a>: AsRef<[u8]> + 'a {
-    fn is_valid(&self) -> bool;
-    fn is_unique(&self) -> bool;
-}
-
-impl SHMBuf<'static> for SharedMemoryBuf {
-    fn is_valid(&self) -> bool {
-        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
-    }
-
-    fn is_unique(&self) -> bool {
-        self.ref_count() == 1
-    }
-}
-
-impl<'a> SHMBuf<'a> for &'a SharedMemoryBuf {
-    fn is_valid(&self) -> bool {
-        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
-    }
-
-    fn is_unique(&self) -> bool {
-        self.ref_count() == 1
-    }
-}
-
-impl<'a> SHMBuf<'a> for &'a mut SharedMemoryBuf {
-    fn is_valid(&self) -> bool {
-        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
-    }
-
-    fn is_unique(&self) -> bool {
-        self.ref_count() == 1
-    }
-}
-
-pub trait SHMBufMut<'a>: SHMBuf<'a> + AsMut<[u8]> + 'a {}
-
-impl SHMBufMut<'static> for SharedMemoryBuf {}
-impl<'a> SHMBufMut<'a> for &'a mut SharedMemoryBuf {}

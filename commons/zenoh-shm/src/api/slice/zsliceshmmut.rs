@@ -13,95 +13,154 @@
 //
 
 use core::ops::{Deref, DerefMut};
-use std::marker::PhantomData;
+use std::borrow::{Borrow, BorrowMut};
 
-use zenoh_buffers::{ZBuf, ZSlice, ZSliceBuffer};
+use zenoh_buffers::{ZBuf, ZSlice};
 
-use crate::SHMBufMut;
+use crate::SharedMemoryBuf;
 
-use super::zsliceshm::ZSliceShm;
+use super::zsliceshm::{zsliceshm, ZSliceShm};
 
-/// An immutable SHM slice
+/// A mutable SHM slice
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Debug)]
-pub struct ZSliceShmMut<'a, T: SHMBufMut<'a>> {
-    data: T,
-    _phantom: PhantomData<&'a T>,
-}
+#[derive(Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct ZSliceShmMut(SharedMemoryBuf);
 
-impl<'a, T: SHMBufMut<'a>> ZSliceShmMut<'a, T> {
-    pub(crate) unsafe fn new_unchecked(data: T) -> Self {
-        Self {
-            data,
-            _phantom: Default::default(),
-        }
-    }
-
-    pub(crate) fn try_new(data: T) -> Result<Self, T> {
-        match data.is_unique() && data.is_valid() {
-            true => Ok(Self {
-                data,
-                _phantom: Default::default(),
-            }),
-            false => Err(data),
-        }
+impl ZSliceShmMut {
+    pub(crate) unsafe fn new_unchecked(data: SharedMemoryBuf) -> Self {
+        Self(data)
     }
 }
 
-//impl<'a, T: SHMBufMut<'a>> TryFrom<T> for ZSliceShmMut<'a, T> {
-//    type Error = T;
-//
-//    fn try_from(value: T) -> Result<Self, Self::Error> {
-//        match value.is_unique() && value.is_valid() {
-//            true => Ok(Self {
-//                data: value,
-//                _phantom: Default::default(),
-//            }),
-//            false => Err(value),
-//        }
-//    }
-//}
+impl PartialEq<zsliceshmmut> for &ZSliceShmMut {
+    fn eq(&self, other: &zsliceshmmut) -> bool {
+        self == other
+    }
+}
 
-impl<'a, T: SHMBufMut<'a>> Deref for ZSliceShmMut<'a, T> {
+impl TryFrom<SharedMemoryBuf> for ZSliceShmMut {
+    type Error = SharedMemoryBuf;
+
+    fn try_from(value: SharedMemoryBuf) -> Result<Self, Self::Error> {
+        match value.is_unique() && value.is_valid() {
+            true => Ok(Self(value)),
+            false => Err(value),
+        }
+    }
+}
+
+impl TryFrom<ZSliceShm> for ZSliceShmMut {
+    type Error = ZSliceShm;
+
+    fn try_from(value: ZSliceShm) -> Result<Self, Self::Error> {
+        match value.0.is_unique() && value.0.is_valid() {
+            true => Ok(Self(value.0)),
+            false => Err(value),
+        }
+    }
+}
+
+impl Borrow<zsliceshm> for ZSliceShmMut {
+    fn borrow(&self) -> &zsliceshm {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+
+impl BorrowMut<zsliceshm> for ZSliceShmMut {
+    fn borrow_mut(&mut self) -> &mut zsliceshm {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+
+impl Borrow<zsliceshmmut> for ZSliceShmMut {
+    fn borrow(&self) -> &zsliceshmmut {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+
+impl BorrowMut<zsliceshmmut> for ZSliceShmMut {
+    fn borrow_mut(&mut self) -> &mut zsliceshmmut {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+
+impl Deref for ZSliceShmMut {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.data.as_ref()
+        self.0.as_ref()
     }
 }
 
-impl<'a, T: SHMBufMut<'a>> DerefMut for ZSliceShmMut<'a, T> {
+impl DerefMut for ZSliceShmMut {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.data.as_mut()
+        self.0.as_mut()
     }
 }
 
-impl<'a, T: SHMBufMut<'a>> AsRef<[u8]> for ZSliceShmMut<'a, T> {
+impl AsRef<[u8]> for ZSliceShmMut {
     fn as_ref(&self) -> &[u8] {
         self
     }
 }
 
-impl<'a, T: SHMBufMut<'a>> AsMut<[u8]> for ZSliceShmMut<'a, T> {
+impl AsMut<[u8]> for ZSliceShmMut {
     fn as_mut(&mut self) -> &mut [u8] {
         self
     }
 }
 
-impl<'a, T: SHMBufMut<'a>> From<ZSliceShmMut<'a, T>> for ZSliceShm<'a, T> {
-    fn from(value: ZSliceShmMut<'a, T>) -> Self {
-        value.data.into()
+impl From<ZSliceShmMut> for ZSliceShm {
+    fn from(value: ZSliceShmMut) -> Self {
+        value.0.into()
     }
 }
 
-impl<'a, T: SHMBufMut<'a> + ZSliceBuffer> From<ZSliceShmMut<'a, T>> for ZSlice {
-    fn from(value: ZSliceShmMut<'a, T>) -> Self {
-        value.data.into()
+impl From<ZSliceShmMut> for ZSlice {
+    fn from(value: ZSliceShmMut) -> Self {
+        value.0.into()
     }
 }
 
-impl<'a, T: SHMBufMut<'a> + ZSliceBuffer> From<ZSliceShmMut<'a, T>> for ZBuf {
-    fn from(value: ZSliceShmMut<'a, T>) -> Self {
-        value.data.into()
+impl From<ZSliceShmMut> for ZBuf {
+    fn from(value: ZSliceShmMut) -> Self {
+        value.0.into()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct zsliceshmmut(ZSliceShmMut);
+
+impl PartialEq<ZSliceShmMut> for &zsliceshmmut {
+    fn eq(&self, other: &ZSliceShmMut) -> bool {
+        self == other
+    }
+}
+
+impl Deref for zsliceshmmut {
+    type Target = ZSliceShmMut;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<&mut SharedMemoryBuf> for &mut zsliceshmmut {
+    type Error = ();
+
+    fn try_from(value: &mut SharedMemoryBuf) -> Result<Self, Self::Error> {
+        match value.is_unique() && value.is_valid() {
+            true => Ok(unsafe { core::mem::transmute(value) }),
+            false => Err(()),
+        }
+    }
+}
+
+impl From<&mut zsliceshmmut> for &mut zsliceshm {
+    fn from(value: &mut zsliceshmmut) -> Self {
+        unsafe { core::mem::transmute(value) }
     }
 }

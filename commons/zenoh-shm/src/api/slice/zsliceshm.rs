@@ -13,61 +13,136 @@
 //
 
 use core::ops::Deref;
-use std::marker::PhantomData;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    ops::DerefMut,
+};
 
-use zenoh_buffers::{ZBuf, ZSlice, ZSliceBuffer};
+use zenoh_buffers::{ZBuf, ZSlice};
 
-use crate::{SHMBuf, SHMBufMut};
+use crate::SharedMemoryBuf;
 
-use super::zsliceshmmut::ZSliceShmMut;
+use super::zsliceshmmut::zsliceshmmut;
 
 /// An immutable SHM slice
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Debug)]
-pub struct ZSliceShm<'a, T: SHMBuf<'a>> {
-    data: T,
-    _phantom: PhantomData<&'a T>,
-}
+#[repr(transparent)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZSliceShm(pub(crate) SharedMemoryBuf);
 
-impl<'a, T: SHMBuf<'a>> Deref for ZSliceShm<'a, T> {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.data.as_ref()
+impl PartialEq<&zsliceshm> for ZSliceShm {
+    fn eq(&self, other: &&zsliceshm) -> bool {
+        self == other
     }
 }
 
-impl<'a, T: SHMBuf<'a>> AsRef<[u8]> for ZSliceShm<'a, T> {
+impl Borrow<zsliceshm> for ZSliceShm {
+    fn borrow(&self) -> &zsliceshm {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+
+impl BorrowMut<zsliceshm> for ZSliceShm {
+    fn borrow_mut(&mut self) -> &mut zsliceshm {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+
+impl Deref for ZSliceShm {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<[u8]> for ZSliceShm {
     fn as_ref(&self) -> &[u8] {
         self
     }
 }
 
-impl<'a, T: SHMBuf<'a>> From<T> for ZSliceShm<'a, T> {
-    fn from(value: T) -> Self {
-        Self {
-            data: value,
-            _phantom: Default::default(),
+impl From<SharedMemoryBuf> for ZSliceShm {
+    fn from(value: SharedMemoryBuf) -> Self {
+        Self(value)
+    }
+}
+
+impl From<ZSliceShm> for ZSlice {
+    fn from(value: ZSliceShm) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<ZSliceShm> for ZBuf {
+    fn from(value: ZSliceShm) -> Self {
+        value.0.into()
+    }
+}
+
+impl TryFrom<&mut ZSliceShm> for &mut zsliceshmmut {
+    type Error = ();
+
+    fn try_from(value: &mut ZSliceShm) -> Result<Self, Self::Error> {
+        match value.0.is_unique() && value.0.is_valid() {
+            true => Ok(unsafe { core::mem::transmute(value) }),
+            false => Err(()),
         }
     }
 }
 
-impl<'a, T: SHMBufMut<'a>> TryFrom<ZSliceShm<'a, T>> for ZSliceShmMut<'a, T> {
-    type Error = T;
+#[derive(Debug, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct zsliceshm(ZSliceShm);
 
-    fn try_from(value: ZSliceShm<'a, T>) -> Result<Self, Self::Error> {
-        Self::try_new(value.data)
+impl ToOwned for zsliceshm {
+    type Owned = ZSliceShm;
+
+    fn to_owned(&self) -> Self::Owned {
+        self.0.clone()
     }
 }
 
-impl<'a, T: SHMBuf<'a> + ZSliceBuffer> From<ZSliceShm<'a, T>> for ZSlice {
-    fn from(value: ZSliceShm<'a, T>) -> Self {
-        value.data.into()
+impl PartialEq<ZSliceShm> for &zsliceshm {
+    fn eq(&self, other: &ZSliceShm) -> bool {
+        self == other
     }
 }
 
-impl<'a, T: SHMBuf<'a> + ZSliceBuffer> From<ZSliceShm<'a, T>> for ZBuf {
-    fn from(value: ZSliceShm<'a, T>) -> Self {
-        value.data.into()
+impl Deref for zsliceshm {
+    type Target = ZSliceShm;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for zsliceshm {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl From<&SharedMemoryBuf> for &zsliceshm {
+    fn from(value: &SharedMemoryBuf) -> Self {
+        unsafe { core::mem::transmute(value) }
+    }
+}
+
+impl From<&mut SharedMemoryBuf> for &mut zsliceshm {
+    fn from(value: &mut SharedMemoryBuf) -> Self {
+        unsafe { core::mem::transmute(value) }
+    }
+}
+
+impl TryFrom<&mut zsliceshm> for &mut zsliceshmmut {
+    type Error = ();
+
+    fn try_from(value: &mut zsliceshm) -> Result<Self, Self::Error> {
+        match value.0 .0.is_unique() && value.0 .0.is_valid() {
+            true => Ok(unsafe { core::mem::transmute(value) }),
+            false => Err(()),
+        }
     }
 }

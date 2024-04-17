@@ -21,8 +21,6 @@ use std::{
 };
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::ZBufWriter;
-#[cfg(feature = "shared-memory")]
-use zenoh_buffers::ZSliceBuffer;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
@@ -31,12 +29,13 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_result::{ZError, ZResult};
-#[cfg(feature = "shared-memory")]
-use zenoh_shm::api::slice::{zsliceshm::ZSliceShm, zsliceshmmut::ZSliceShmMut};
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+use zenoh_shm::api::slice::{
+    zsliceshm::zsliceshm, zsliceshm::ZSliceShm, zsliceshmmut::zsliceshmmut,
+    zsliceshmmut::ZSliceShmMut,
+};
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh_shm::SharedMemoryBuf;
-#[cfg(feature = "shared-memory")]
-use zenoh_shm::{SHMBuf, SHMBufMut};
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
@@ -53,7 +52,7 @@ pub trait Deserialize<'a, T> {
     fn deserialize(self, t: &'a Payload) -> Result<T, Self::Error>;
 }
 
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
 pub trait DeserializeMut<'a, T> {
     type Error;
 
@@ -148,6 +147,18 @@ impl Payload {
     {
         ZSerde
             .deserialize(self)
+            .map_err(|e| zerror!("{:?}", e).into())
+    }
+
+    #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    pub fn deserialize_mut<'a, T>(&'a mut self) -> ZResult<T>
+    where
+        ZSerde: DeserializeMut<'a, T>,
+        <ZSerde as DeserializeMut<'a, T>>::Error: Debug,
+    {
+        ZSerde
+            .deserialize_mut(self)
             .map_err(|e| zerror!("{:?}", e).into())
     }
 
@@ -1076,49 +1087,46 @@ impl TryFrom<&Payload> for serde_pickle::Value {
 }
 
 // Shared memory conversion
-#[cfg(feature = "shared-memory")]
-impl<'a, T: SHMBuf<'a> + ZSliceBuffer> Serialize<ZSliceShm<'a, T>> for ZSerde {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl Serialize<ZSliceShm> for ZSerde {
     type Output = Payload;
 
-    fn serialize(self, t: ZSliceShm<'a, T>) -> Self::Output {
+    fn serialize(self, t: ZSliceShm) -> Self::Output {
         let slice: ZSlice = t.into();
         Payload::new(slice)
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl<'a, T: SHMBuf<'a> + ZSliceBuffer> From<ZSliceShm<'a, T>> for Payload {
-    fn from(t: ZSliceShm<'a, T>) -> Self {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl From<ZSliceShm> for Payload {
+    fn from(t: ZSliceShm) -> Self {
         ZSerde.serialize(t)
     }
 }
 
 // Shared memory conversion
-#[cfg(feature = "shared-memory")]
-impl<'a, T: SHMBufMut<'a> + ZSliceBuffer> Serialize<ZSliceShmMut<'a, T>> for ZSerde {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl Serialize<ZSliceShmMut> for ZSerde {
     type Output = Payload;
 
-    fn serialize(self, t: ZSliceShmMut<'a, T>) -> Self::Output {
+    fn serialize(self, t: ZSliceShmMut) -> Self::Output {
         let slice: ZSlice = t.into();
         Payload::new(slice)
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl<'a, T: SHMBufMut<'a> + ZSliceBuffer> From<ZSliceShmMut<'a, T>> for Payload {
-    fn from(t: ZSliceShmMut<'a, T>) -> Self {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl From<ZSliceShmMut> for Payload {
+    fn from(t: ZSliceShmMut) -> Self {
         ZSerde.serialize(t)
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl<'a> Deserialize<'a, ZSliceShm<'a, &'a SharedMemoryBuf>> for ZSerde {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl<'a> Deserialize<'a, &'a zsliceshm> for ZSerde {
     type Error = ZDeserializeError;
 
-    fn deserialize(
-        self,
-        v: &'a Payload,
-    ) -> Result<ZSliceShm<'a, &'a SharedMemoryBuf>, Self::Error> {
+    fn deserialize(self, v: &'a Payload) -> Result<&'a zsliceshm, Self::Error> {
         // A ZSliceShm is expected to have only one slice
         let mut zslices = v.0.zslices();
         if let Some(zs) = zslices.next() {
@@ -1130,14 +1138,11 @@ impl<'a> Deserialize<'a, ZSliceShm<'a, &'a SharedMemoryBuf>> for ZSerde {
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl<'a> DeserializeMut<'a, ZSliceShm<'a, &'a mut SharedMemoryBuf>> for ZSerde {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl<'a> DeserializeMut<'a, &'a mut zsliceshm> for ZSerde {
     type Error = ZDeserializeError;
 
-    fn deserialize_mut(
-        self,
-        v: &'a mut Payload,
-    ) -> Result<ZSliceShm<'a, &'a mut SharedMemoryBuf>, Self::Error> {
+    fn deserialize_mut(self, v: &'a mut Payload) -> Result<&'a mut zsliceshm, Self::Error> {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
@@ -1149,28 +1154,24 @@ impl<'a> DeserializeMut<'a, ZSliceShm<'a, &'a mut SharedMemoryBuf>> for ZSerde {
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl<'a> DeserializeMut<'a, ZSliceShmMut<'a, &'a mut SharedMemoryBuf>> for ZSerde {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl<'a> DeserializeMut<'a, &'a mut zsliceshmmut> for ZSerde {
     type Error = ZDeserializeError;
 
-    fn deserialize_mut(
-        self,
-        v: &'a mut Payload,
-    ) -> Result<ZSliceShmMut<'a, &'a mut SharedMemoryBuf>, Self::Error> {
+    fn deserialize_mut(self, v: &'a mut Payload) -> Result<&'a mut zsliceshmmut, Self::Error> {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
             if let Some(shmb) = zs.downcast_mut::<SharedMemoryBuf>() {
-                let slice = ZSliceShm::from(shmb);
-                return slice.try_into().map_err(|_| ZDeserializeError);
+                return shmb.try_into().map_err(|_| ZDeserializeError);
             }
         }
         Err(ZDeserializeError)
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl<'a> TryFrom<&'a Payload> for ZSliceShm<'a, &'a SharedMemoryBuf> {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl<'a> TryFrom<&'a Payload> for &'a zsliceshm {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'a Payload) -> Result<Self, Self::Error> {
@@ -1178,8 +1179,8 @@ impl<'a> TryFrom<&'a Payload> for ZSliceShm<'a, &'a SharedMemoryBuf> {
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl<'a> TryFrom<&'a mut Payload> for ZSliceShm<'a, &'a mut SharedMemoryBuf> {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl<'a> TryFrom<&'a mut Payload> for &'a mut zsliceshm {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'a mut Payload) -> Result<Self, Self::Error> {
@@ -1187,8 +1188,8 @@ impl<'a> TryFrom<&'a mut Payload> for ZSliceShm<'a, &'a mut SharedMemoryBuf> {
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl<'a> TryFrom<&'a mut Payload> for ZSliceShmMut<'a, &'a mut SharedMemoryBuf> {
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+impl<'a> TryFrom<&'a mut Payload> for &'a mut zsliceshmmut {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'a mut Payload) -> Result<Self, Self::Error> {
@@ -1354,6 +1355,16 @@ mod tests {
         use std::borrow::Cow;
         use zenoh_buffers::{ZBuf, ZSlice};
 
+        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        use zenoh_shm::api::{
+            protocol_implementations::posix::{
+                posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+                protocol_id::POSIX_PROTOCOL_ID,
+            },
+            provider::shared_memory_provider::SharedMemoryProviderBuilder,
+            slice::zsliceshm::{zsliceshm, ZSliceShm},
+        };
+
         const NUM: usize = 1_000;
 
         macro_rules! serialize_deserialize {
@@ -1444,6 +1455,33 @@ mod tests {
         // ZBuf
         serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 0]));
         serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 64]));
+
+        // SHM
+        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        {
+            // create an SHM backend...
+            let backend = PosixSharedMemoryProviderBackend::builder()
+                .with_size(4096)
+                .unwrap()
+                .res()
+                .unwrap();
+            // ...and an SHM provider
+            let provider = SharedMemoryProviderBuilder::builder()
+                .protocol_id::<POSIX_PROTOCOL_ID>()
+                .backend(backend)
+                .res();
+
+            // Prepare a layout for allocations
+            let layout = provider.alloc_layout().size(1024).res().unwrap();
+
+            // allocate an SHM buffer
+            let mutable_shm_buf = layout.alloc().res().unwrap();
+
+            // convert to immutable SHM buffer
+            let immutable_shm_buf: ZSliceShm = mutable_shm_buf.into();
+
+            serialize_deserialize!(&zsliceshm, immutable_shm_buf);
+        }
 
         // Tuple
         serialize_deserialize!((usize, usize), (0, 1));
