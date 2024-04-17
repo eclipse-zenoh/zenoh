@@ -147,6 +147,7 @@ impl ZBytes {
 
     #[cfg(all(feature = "unstable", feature = "compression"))]
     /// *This API is marked unstable because it's still unclear how to efficiently support compression cross-languages.*
+    /// *At the moment it is only meant to be used from two applications using the Rust Zenoh API*
     ///
     /// Compress ZBytes.
     pub fn compress(&mut self) {
@@ -156,6 +157,7 @@ impl ZBytes {
 
     #[cfg(all(feature = "unstable", feature = "compression"))]
     /// *This API is marked unstable because it's still unclear how to efficiently support compression cross-languages.*
+    /// *At the moment it is only meant to be used from two applications using the Rust Zenoh API*
     ///
     /// Decompress ZBytes.
     pub fn decompress(&mut self) -> ZResult<()> {
