@@ -353,7 +353,11 @@ impl Aligner {
                 }
             }
             Err(err) => {
-                tracing::error!("[ALIGNER] Query failed on selector `{}`: {:?}", selector, err);
+                tracing::error!(
+                    "[ALIGNER] Query failed on selector `{}`: {:?}",
+                    selector,
+                    err
+                );
                 no_err = false;
             }
         };
