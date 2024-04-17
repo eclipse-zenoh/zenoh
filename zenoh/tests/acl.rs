@@ -97,7 +97,7 @@ mod test {
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.value.to_string();
+                    *temp_value = sample.payload().deserialize::<String>().unwrap();
                 })
                 .res_async()
                 .await
@@ -142,7 +142,7 @@ mod test {
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.value.to_string();
+                    *temp_value = sample.payload().deserialize::<String>().unwrap();
                 })
                 .res_async())
             .unwrap();
@@ -203,7 +203,7 @@ mod test {
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.value.to_string();
+                    *temp_value = sample.payload().deserialize::<String>().unwrap();
                 })
                 .res_async())
             .unwrap();
@@ -263,7 +263,7 @@ mod test {
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.value.to_string();
+                    *temp_value = sample.payload().deserialize::<String>().unwrap();
                 })
                 .res_async())
             .unwrap();
@@ -307,10 +307,9 @@ mod test {
             let qbl = ztimeout!(qbl_session
                 .declare_queryable(KEY_EXPR)
                 .callback(move |sample| {
-                    let rep = Sample::try_from(KEY_EXPR, VALUE).unwrap();
                     tokio::task::block_in_place(move || {
                         Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE).res_async()).unwrap()
                         });
                     });
                 })
@@ -320,12 +319,12 @@ mod test {
             tokio::time::sleep(SLEEP).await;
             let recv_reply = ztimeout!(get_session.get(KEY_EXPR).res_async()).unwrap();
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.sample {
+                match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.value.to_string();
+                        received_value = sample.payload().deserialize::<String>().unwrap();
                         break;
                     }
-                    Err(e) => println!("Error : {}", e),
+                    Err(e) => println!("Error : {:?}", e),
                 }
             }
             tokio::time::sleep(SLEEP).await;
@@ -363,10 +362,9 @@ mod test {
             let qbl = ztimeout!(qbl_session
                 .declare_queryable(KEY_EXPR)
                 .callback(move |sample| {
-                    let rep = Sample::try_from(KEY_EXPR, VALUE).unwrap();
                     tokio::task::block_in_place(move || {
                         Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE).res_async()).unwrap()
                         });
                     });
                 })
@@ -376,12 +374,12 @@ mod test {
             tokio::time::sleep(SLEEP).await;
             let recv_reply = ztimeout!(get_session.get(KEY_EXPR).res_async()).unwrap();
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.sample {
+                match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.value.to_string();
+                        received_value = sample.payload().deserialize::<String>().unwrap();
                         break;
                     }
-                    Err(e) => println!("Error : {}", e),
+                    Err(e) => println!("Error : {:?}", e),
                 }
             }
             tokio::time::sleep(SLEEP).await;
@@ -434,10 +432,9 @@ mod test {
             let qbl = ztimeout!(qbl_session
                 .declare_queryable(KEY_EXPR)
                 .callback(move |sample| {
-                    let rep = Sample::try_from(KEY_EXPR, VALUE).unwrap();
                     tokio::task::block_in_place(move || {
                         Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE).res_async()).unwrap()
                         });
                     });
                 })
@@ -447,12 +444,12 @@ mod test {
             tokio::time::sleep(SLEEP).await;
             let recv_reply = ztimeout!(get_session.get(KEY_EXPR).res_async()).unwrap();
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.sample {
+                match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.value.to_string();
+                        received_value = sample.payload().deserialize::<String>().unwrap();
                         break;
                     }
-                    Err(e) => println!("Error : {}", e),
+                    Err(e) => println!("Error : {:?}", e),
                 }
             }
             tokio::time::sleep(SLEEP).await;
@@ -504,10 +501,9 @@ mod test {
             let qbl = ztimeout!(qbl_session
                 .declare_queryable(KEY_EXPR)
                 .callback(move |sample| {
-                    let rep = Sample::try_from(KEY_EXPR, VALUE).unwrap();
                     tokio::task::block_in_place(move || {
                         Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE).res_async()).unwrap()
                         });
                     });
                 })
@@ -517,12 +513,12 @@ mod test {
             tokio::time::sleep(SLEEP).await;
             let recv_reply = ztimeout!(get_session.get(KEY_EXPR).res_async()).unwrap();
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.sample {
+                match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.value.to_string();
+                        received_value = sample.payload().deserialize::<String>().unwrap();
                         break;
                     }
-                    Err(e) => println!("Error : {}", e),
+                    Err(e) => println!("Error : {:?}", e),
                 }
             }
             tokio::time::sleep(SLEEP).await;

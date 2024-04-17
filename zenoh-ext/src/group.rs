@@ -24,7 +24,6 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
 use zenoh::payload::PayloadReader;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::Publisher;
