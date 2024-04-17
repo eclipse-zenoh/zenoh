@@ -27,8 +27,8 @@ use zenoh::shm::provider::types::MemoryLayout;
 use zenoh_examples::CommonArgs;
 
 fn main() {
-    // initiate logging
-    env_logger::init();
+    // Initiate logging
+    zenoh_util::init_log_from_env();
 
     let (mut config, warmup, size, n) = parse_args();
 

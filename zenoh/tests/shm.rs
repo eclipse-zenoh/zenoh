@@ -179,7 +179,8 @@ mod tests {
     #[test]
     fn zenoh_shm_unicast() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
-            let _ = env_logger::try_init();
+            // Initiate logging
+            zenoh_util::init_log_from_env();
 
             let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
             test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
@@ -191,7 +192,8 @@ mod tests {
     #[test]
     fn zenoh_shm_multicast() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
-            let _ = env_logger::try_init();
+            // Initiate logging
+            zenoh_util::init_log_from_env();
 
             let (peer01, peer02) =
                 open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;

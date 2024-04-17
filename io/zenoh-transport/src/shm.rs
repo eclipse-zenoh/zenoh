@@ -76,7 +76,10 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
             ResponseBody::Reply(b) => b.map_to_partner(partner_shm_cfg),
             ResponseBody::Err(b) => b.map_to_partner(partner_shm_cfg),
         },
-        NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(()),
+        NetworkBody::ResponseFinal(_)
+        | NetworkBody::Interest(_)
+        | NetworkBody::Declare(_)
+        | NetworkBody::OAM(_) => Ok(()),
     }
 }
 
@@ -93,7 +96,10 @@ pub fn map_zmsg_to_shmbuf(msg: &mut NetworkMessage, shmr: &SharedMemoryReader) -
             ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
         },
-        NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(()),
+        NetworkBody::ResponseFinal(_)
+        | NetworkBody::Interest(_)
+        | NetworkBody::Declare(_)
+        | NetworkBody::OAM(_) => Ok(()),
     }
 }
 
