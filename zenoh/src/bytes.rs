@@ -696,10 +696,9 @@ macro_rules! impl_int {
 
             fn serialize(self, t: $t) -> Self::Output {
                 let bs = t.to_le_bytes();
-                let end = if t == 0 as $t {
-                    0
-                } else {
-                    1 + bs.iter().rposition(|b| *b != 0).unwrap_or(bs.len() - 1)
+                let mut end = 1;
+                if t != 0 as $t {
+                    end += bs.iter().rposition(|b| *b != 0).unwrap_or(bs.len() - 1);
                 };
                 // SAFETY:
                 // - 0 is a valid start index because bs is guaranteed to always have a length greater or equal than 1
@@ -1223,7 +1222,10 @@ macro_rules! impl_tuple {
         let mut buffer: ZBuf = ZBuf::empty();
         let mut writer = buffer.writer();
         let apld: ZBytes = a.into();
+        println!("Write A: {:?}", apld.0);
+
         let bpld: ZBytes = b.into();
+        println!("Write B: {:?}", bpld.0);
 
         // SAFETY: we are serializing slices on a ZBuf, so serialization will never
         //         fail unless we run out of memory. In that case, Rust memory allocator
