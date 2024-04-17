@@ -224,7 +224,6 @@ pub mod value {
 /// Encoding support
 pub mod encoding {
     pub use crate::api::encoding::Encoding;
-    pub use crate::api::encoding::EncodingBuilder;
 }
 
 /// Payload primitives
