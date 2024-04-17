@@ -20,7 +20,7 @@ use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (config, warmup, size, n, express) = parse_args();
     let session = zenoh::open(config).res().unwrap();

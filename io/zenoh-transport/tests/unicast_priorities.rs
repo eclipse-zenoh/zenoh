@@ -332,7 +332,7 @@ async fn run(endpoints: &[EndPoint]) {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn priorities_tcp_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 10000).parse().unwrap()];
     // Run
@@ -343,7 +343,7 @@ async fn priorities_tcp_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn conduits_unixpipe_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     // Define the locators
     let endpoints: Vec<EndPoint> = vec!["unixpipe/conduits_unixpipe_only"
         .to_string()
@@ -356,7 +356,7 @@ async fn conduits_unixpipe_only() {
 #[cfg(feature = "transport_ws")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn priorities_ws_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 10010).parse().unwrap()];
     // Run
