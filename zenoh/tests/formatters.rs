@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[test]
-fn reuse() {
+fn kedefine_reuse() {
     zenoh::key_expr::kedefine!(
         pub gkeys: "zenoh/${group:*}/${member:*}",
     );

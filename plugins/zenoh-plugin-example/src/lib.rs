@@ -144,7 +144,7 @@ impl Drop for RunningPlugin {
 }
 
 async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     // create a zenoh Session that shares the same Runtime than zenohd
     let session = zenoh::session::init(runtime).res().await.unwrap();

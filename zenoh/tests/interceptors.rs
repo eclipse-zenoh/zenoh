@@ -60,7 +60,7 @@ impl IntervalCounter {
 }
 
 fn downsampling_by_keyexpr_impl(egress: bool) {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let ds_cfg = format!(
         r#"
@@ -175,7 +175,7 @@ fn downsampling_by_keyexpr() {
 
 #[cfg(unix)]
 fn downsampling_by_interface_impl(egress: bool) {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let ds_cfg = format!(
         r#"
@@ -275,7 +275,7 @@ fn downsampling_by_interface() {
 #[test]
 #[should_panic(expected = "unknown variant `down`")]
 fn downsampling_config_error_wrong_strategy() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let mut config = Config::default();
     config

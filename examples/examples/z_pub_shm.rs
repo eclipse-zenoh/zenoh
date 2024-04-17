@@ -22,7 +22,7 @@ const K: u32 = 3;
 #[tokio::main]
 async fn main() -> Result<(), ZError> {
     // Initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (mut config, path, value) = parse_args();
 

@@ -73,9 +73,9 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-pub enum DownsamplingFlow {
+pub enum InterceptorFlow {
     Egress,
     Ingress,
 }
@@ -97,7 +97,48 @@ pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied.
     pub rules: Vec<DownsamplingRuleConf>,
     /// Downsampling flow direction: egress, ingress
-    pub flow: DownsamplingFlow,
+    pub flow: InterceptorFlow,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigRules {
+    pub interfaces: Vec<String>,
+    pub key_exprs: Vec<String>,
+    pub actions: Vec<Action>,
+    pub flows: Vec<InterceptorFlow>,
+    pub permission: Permission,
+}
+
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub struct PolicyRule {
+    pub subject: Subject,
+    pub key_expr: String,
+    pub action: Action,
+    pub permission: Permission,
+    pub flow: InterceptorFlow,
+}
+
+#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[serde(untagged)]
+#[serde(rename_all = "snake_case")]
+pub enum Subject {
+    Interface(String),
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Action {
+    Put,
+    DeclareSubscriber,
+    Get,
+    DeclareQueryable,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Permission {
+    Allow,
+    Deny,
 }
 
 pub trait ConfigValidator: Send + Sync {
@@ -431,6 +472,7 @@ validated_struct::validator! {
                     known_keys_file: Option<String>,
                 },
             },
+
         },
         /// Configuration of the admin space.
         pub adminspace: #[derive(Default)]
@@ -455,6 +497,13 @@ validated_struct::validator! {
 
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
+
+        ///Configuration of the access control (ACL)
+        pub access_control: AclConfig {
+            pub enabled: bool,
+            pub default_permission: Permission,
+            pub rules: Option<Vec<AclConfigRules>>
+        },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
