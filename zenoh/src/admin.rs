@@ -72,7 +72,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         Ok(zbuf) => {
                             let _ = query.reply(key_expr, zbuf).res_sync();
                         }
-                        Err(e) => log::debug!("Admin query error: {}", e),
+                        Err(e) => tracing::debug!("Admin query error: {}", e),
                     }
                 }
             }
@@ -89,7 +89,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                                 Ok(zbuf) => {
                                     let _ = query.reply(key_expr, zbuf).res_sync();
                                 }
-                                Err(e) => log::debug!("Admin query error: {}", e),
+                                Err(e) => tracing::debug!("Admin query error: {}", e),
                             }
                         }
                     }

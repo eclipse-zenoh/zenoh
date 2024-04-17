@@ -20,7 +20,7 @@ use zenoh_examples::CommonArgs;
 #[tokio::main]
 async fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::init_log_from_env();
 
     let (config, selector, value, target, timeout) = parse_args();
 
@@ -30,6 +30,10 @@ async fn main() {
     println!("Sending Query '{selector}'...");
     let replies = session
         .get(&selector)
+        // // By default get receives replies from a FIFO. 
+        // // Uncomment this line to use a ring channel instead. 
+        // // More information on the ring channel are available in the z_pull example.
+        .with(zenoh::handlers::RingChannel::default())
         .value(value)
         .target(target)
         .timeout(timeout)
@@ -37,7 +41,7 @@ async fn main() {
         .await
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
-        match reply.sample {
+        match reply.result() {
             Ok(sample) => {
                 let payload = sample
                     .payload()
@@ -51,7 +55,7 @@ async fn main() {
             }
             Err(err) => {
                 let payload = err
-                    .payload
+                    .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(">> Received (ERROR: '{}')", payload);

@@ -55,7 +55,7 @@ pub(crate) fn declare_queryable(
         .cloned()
     {
         Some(mut prefix) => {
-            log::debug!(
+            tracing::debug!(
                 "{} Declare queryable {} ({}{})",
                 face,
                 id,
@@ -100,7 +100,7 @@ pub(crate) fn declare_queryable(
             }
             drop(wtables);
         }
-        None => log::error!(
+        None => tracing::error!(
             "{} Declare queryable {} for unknown scope {}!",
             face,
             id,
@@ -125,7 +125,7 @@ pub(crate) fn undeclare_queryable(
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    log::error!(
+                    tracing::error!(
                         "{} Undeclare unknown queryable {}{}!",
                         face,
                         prefix.expr(),
@@ -135,7 +135,7 @@ pub(crate) fn undeclare_queryable(
                 }
             },
             None => {
-                log::error!(
+                tracing::error!(
                     "{} Undeclare queryable with unknown scope {}",
                     face,
                     expr.scope
@@ -146,7 +146,7 @@ pub(crate) fn undeclare_queryable(
     };
     let mut wtables = zwrite!(tables.tables);
     if let Some(mut res) = hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id) {
-        log::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
+        tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
         disable_matches_query_routes(&mut wtables, &mut res);
         drop(wtables);
 
@@ -163,7 +163,7 @@ pub(crate) fn undeclare_queryable(
         Resource::clean(&mut res);
         drop(wtables);
     } else {
-        log::error!("{} Undeclare unknown queryable {}", face, id);
+        tracing::error!("{} Undeclare unknown queryable {}", face, id);
     }
 }
 
@@ -379,7 +379,7 @@ impl Timed for QueryCleanup {
                 .remove(&self.qid)
             {
                 drop(tables_lock);
-                log::warn!(
+                tracing::warn!(
                     "Didn't receive final reply {}:{} from {}: Timeout!",
                     query.0.src_face,
                     self.qid,
@@ -503,7 +503,7 @@ pub fn route_query(
     let rtables = zread!(tables_ref.tables);
     match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => {
-            log::debug!(
+            tracing::debug!(
                 "Route query {}:{} for res {}{}",
                 face,
                 qid,
@@ -587,7 +587,7 @@ pub fn route_query(
                 }
 
                 if route.is_empty() {
-                    log::debug!(
+                    tracing::debug!(
                         "Send final reply {}:{} (no matching queryables or not master)",
                         face,
                         qid
@@ -612,7 +612,7 @@ pub fn route_query(
                             inc_req_stats!(outface, tx, admin, body)
                         }
 
-                        log::trace!("Propagate query {}:{} to {}", face, qid, outface);
+                        tracing::trace!("Propagate query {}:{} to {}", face, qid, outface);
                         outface.primitives.send_request(RoutingContext::with_expr(
                             Request {
                                 id: *qid,
@@ -630,7 +630,7 @@ pub fn route_query(
                     }
                 }
             } else {
-                log::debug!("Send final reply {}:{} (not master)", face, qid);
+                tracing::debug!("Send final reply {}:{} (not master)", face, qid);
                 drop(rtables);
                 face.primitives
                     .clone()
@@ -645,7 +645,7 @@ pub fn route_query(
             }
         }
         None => {
-            log::error!(
+            tracing::error!(
                 "{} Route query with unknown scope {}! Send final reply.",
                 face,
                 expr.scope,
@@ -710,7 +710,7 @@ pub(crate) fn route_send_response(
                     "".to_string(), // @TODO provide the proper key expression of the response for interceptors
                 ));
         }
-        None => log::warn!(
+        None => tracing::warn!(
             "Route reply {}:{} from {}: Query nof found!",
             face,
             qid,
@@ -728,7 +728,7 @@ pub(crate) fn route_send_response_final(
     match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
             drop(queries_lock);
-            log::debug!(
+            tracing::debug!(
                 "Received final reply {}:{} from {}",
                 query.0.src_face,
                 qid,
@@ -736,7 +736,7 @@ pub(crate) fn route_send_response_final(
             );
             finalize_pending_query(query);
         }
-        None => log::warn!(
+        None => tracing::warn!(
             "Route final reply {}:{} from {}: Query nof found!",
             face,
             qid,
@@ -757,7 +757,7 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
     let (query, cancellation_token) = query;
     cancellation_token.cancel();
     if let Some(query) = Arc::into_inner(query) {
-        log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
+        tracing::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
         query
             .src_face
             .primitives

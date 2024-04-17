@@ -614,38 +614,38 @@ where
 /// }
 /// # }
 /// ```
-pub struct FetchingSubscriber<'a, Receiver> {
+pub struct FetchingSubscriber<'a, Handler> {
     subscriber: Subscriber<'a, ()>,
     callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
     state: Arc<Mutex<InnerState>>,
-    receiver: Receiver,
+    handler: Handler,
 }
 
-impl<Receiver> std::ops::Deref for FetchingSubscriber<'_, Receiver> {
-    type Target = Receiver;
+impl<Handler> std::ops::Deref for FetchingSubscriber<'_, Handler> {
+    type Target = Handler;
     fn deref(&self) -> &Self::Target {
-        &self.receiver
+        &self.handler
     }
 }
 
-impl<Receiver> std::ops::DerefMut for FetchingSubscriber<'_, Receiver> {
+impl<Handler> std::ops::DerefMut for FetchingSubscriber<'_, Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.receiver
+        &mut self.handler
     }
 }
 
-impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
+impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     fn new<
         KeySpace,
-        Handler,
+        InputHandler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
     >(
-        conf: FetchingSubscriberBuilder<'a, 'a, KeySpace, Handler, Fetch, TryIntoSample>,
+        conf: FetchingSubscriberBuilder<'a, 'a, KeySpace, InputHandler, Fetch, TryIntoSample>,
     ) -> ZResult<Self>
     where
         KeySpace: Into<crate::KeySpace>,
-        Handler: IntoHandler<'static, Sample, Handler = Receiver> + Send,
+        InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
         let state = Arc::new(Mutex::new(InnerState {
@@ -662,7 +662,9 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
                 if state.pending_fetches == 0 {
                     callback(s);
                 } else {
-                    log::trace!("Sample received while fetch in progress: push it to merge_queue");
+                    tracing::trace!(
+                        "Sample received while fetch in progress: push it to merge_queue"
+                    );
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
                     let timestamp = s.timestamp().cloned().unwrap_or(new_reception_timestamp());
@@ -698,7 +700,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
             subscriber,
             callback,
             state,
-            receiver,
+            handler: receiver,
         };
 
         // run fetch
@@ -788,12 +790,12 @@ impl Drop for RepliesHandler {
     fn drop(&mut self) {
         let mut state = zlock!(self.state);
         state.pending_fetches -= 1;
-        log::trace!(
+        tracing::trace!(
             "Fetch done - {} fetches still in progress",
             state.pending_fetches
         );
         if state.pending_fetches == 0 {
-            log::debug!(
+            tracing::debug!(
                 "All fetches done. Replies and live publications merged - {} samples to propagate",
                 state.merge_queue.len()
             );
@@ -903,13 +905,13 @@ fn run_fetch<
 where
     TryIntoSample: ExtractSample,
 {
-    log::debug!("Fetch data for FetchingSubscriber");
+    tracing::debug!("Fetch data for FetchingSubscriber");
     (fetch)(Box::new(move |s: TryIntoSample| match s.extract() {
         Ok(s) => {
             let mut state = zlock!(handler.state);
-            log::trace!("Fetched sample received: push it to merge_queue");
+            tracing::trace!("Fetched sample received: push it to merge_queue");
             state.merge_queue.push(s);
         }
-        Err(e) => log::debug!("Received error fetching data: {}", e),
+        Err(e) => tracing::debug!("Received error fetching data: {}", e),
     }))
 }

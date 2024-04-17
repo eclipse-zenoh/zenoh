@@ -518,7 +518,7 @@ impl<'a> Publisher<'a> {
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Borrow(self),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -623,7 +623,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Shared(self.clone()),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 }
@@ -926,7 +926,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             is_express: self.is_express,
             destination: self.destination,
         };
-        log::trace!("publish({:?})", publisher.key_expr);
+        tracing::trace!("publish({:?})", publisher.key_expr);
         Ok(publisher)
     }
 }
@@ -948,7 +948,7 @@ fn resolve_put(
     #[cfg(feature = "unstable")] source_info: SourceInfo,
     #[cfg(feature = "unstable")] attachment: Option<Attachment>,
 ) -> ZResult<()> {
-    log::trace!("write({:?}, [...])", &publisher.key_expr);
+    tracing::trace!("write({:?}, [...])", &publisher.key_expr);
     let primitives = zread!(publisher.session.state)
         .primitives
         .as_ref()
@@ -1402,7 +1402,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 #[zenoh_macros::unstable]
 pub struct MatchingListener<'a, Receiver> {
     pub(crate) listener: MatchingListenerInner<'a>,
-    pub receiver: Receiver,
+    pub(crate) receiver: Receiver,
 }
 
 #[zenoh_macros::unstable]

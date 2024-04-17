@@ -25,7 +25,7 @@ use std::{
     time::Duration,
 };
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
-use zenoh_collections::Properties;
+use zenoh_protocol::core::Properties;
 use zenoh_result::ZResult as Result;
 
 const ZENOH_RUNTIME_THREADS_ENV: &str = "ZENOH_RUNTIME_THREADS";

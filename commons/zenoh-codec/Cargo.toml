@@ -31,7 +31,7 @@ description = "Internal crate for zenoh."
 [features]
 default = ["std"]
 std = [
-    "log",
+    "tracing",
     "serde/std",
     "uhlc/std",
     "zenoh-protocol/std"
@@ -44,7 +44,7 @@ shared-memory = [
 ]
 
 [dependencies]
-log = { workspace = true, optional = true }
+tracing = {workspace = true, optional = true }
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true }
 zenoh-buffers = { workspace = true, default-features = false }
@@ -54,9 +54,10 @@ zenoh-shm = { workspace = true, optional = true }
 # INFO: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]
 criterion = { workspace = true }
-env_logger = { workspace = true }
+
 rand = { workspace = true, features = ["default"] }
 zenoh-protocol = { workspace = true, features = ["test"] }
+zenoh-util = {workspace = true }
 
 [[bench]]
 name = "codec"

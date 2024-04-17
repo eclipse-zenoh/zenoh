@@ -45,7 +45,7 @@ use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{endpoint, ZenohId},
+    core::{Parameters, ZenohId},
     transport::{close, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -298,7 +298,7 @@ impl TransportManager {
     }
 
     pub async fn close_unicast(&self) {
-        log::trace!("TransportManagerUnicast::clear())");
+        tracing::trace!("TransportManagerUnicast::clear())");
 
         let mut pl_guard = zasynclock!(self.state.unicast.protocols)
             .drain()
@@ -385,7 +385,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(Parameters::iter(config))?;
         };
         manager.new_listener(endpoint).await
     }
@@ -439,7 +439,7 @@ impl TransportManager {
                 config,
                 existing_config
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             return Err(InitTransportError::Link((
                 e.into(),
                 link.fail(),
@@ -528,7 +528,7 @@ impl TransportManager {
                 self.config.unicast.max_sessions,
                 config.zid
             );
-            log::trace!("{e}");
+            tracing::trace!("{e}");
             return Err(InitTransportError::Link((
                 e.into(),
                 link.fail(),
@@ -541,10 +541,10 @@ impl TransportManager {
 
         // Select and create transport implementation depending on the cfg and enabled features
         let t = if config.is_lowlatency {
-            log::debug!("Will use LowLatency transport!");
+            tracing::debug!("Will use LowLatency transport!");
             TransportUnicastLowlatency::make(self.clone(), config.clone())
         } else {
-            log::debug!("Will use Universal transport!");
+            tracing::debug!("Will use Universal transport!");
             link_error!(
                 TransportUnicastUniversal::make(self.clone(), config.clone()),
                 close::reason::INVALID
@@ -593,7 +593,7 @@ impl TransportManager {
         zcondfeat!(
             "shared-memory",
             {
-                log::debug!(
+                tracing::debug!(
             "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {:?}, multilink: {}, lowlatency: {}",
             self.config.zid,
             config.zid,
@@ -607,7 +607,7 @@ impl TransportManager {
         );
             },
             {
-                log::debug!(
+                tracing::debug!(
             "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}, lowlatency: {}",
             self.config.zid,
             config.zid,
@@ -696,7 +696,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(Parameters::iter(config))?;
         };
 
         // Create a new link associated by calling the Link Manager
@@ -723,7 +723,7 @@ impl TransportManager {
             .remove(peer)
             .ok_or_else(|| {
                 let e = zerror!("Can not delete the transport of peer: {}", peer);
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 e
             })?;
         Ok(())
@@ -737,13 +737,13 @@ impl TransportManager {
             //   are too small for the scenario zenoh is deployed in;
             // - there is a tentative of DoS attack.
             // In both cases, let's close the link straight away with no additional notification
-            log::trace!("Closing link for preventing potential DoS: {}", link);
+            tracing::trace!("Closing link for preventing potential DoS: {}", link);
             let _ = link.close().await;
             return;
         }
 
         // A new link is available
-        log::trace!("Accepting link... {}", link);
+        tracing::trace!("Accepting link... {}", link);
         self.state.unicast.incoming.fetch_add(1, SeqCst);
 
         // Spawn a task to accept the link
@@ -756,7 +756,7 @@ impl TransportManager {
                 )
                 .await
                 {
-                    log::debug!("{}", e);
+                    tracing::debug!("{}", e);
                 }
                 incoming_counter.fetch_sub(1, SeqCst);
             });

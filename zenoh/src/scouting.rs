@@ -269,7 +269,7 @@ impl fmt::Debug for ScoutInner {
 #[derive(Debug)]
 pub struct Scout<Receiver> {
     pub(crate) scout: ScoutInner,
-    pub receiver: Receiver,
+    pub(crate) receiver: Receiver,
 }
 
 impl<Receiver> Deref for Scout<Receiver> {
@@ -309,7 +309,7 @@ fn scout(
     config: zenoh_config::Config,
     callback: Callback<'static, Hello>,
 ) -> ZResult<ScoutInner> {
-    log::trace!("scout({}, {})", what, &config);
+    tracing::trace!("scout({}, {})", what, &config);
     let default_addr = SocketAddr::from(zenoh_config::defaults::scouting::multicast::address);
     let addr = config.scouting.multicast.address().unwrap_or(default_addr);
     let ifaces = config.scouting.multicast.interface().as_ref().map_or(
@@ -337,7 +337,7 @@ fn scout(
                     });
                     tokio::select! {
                         _ = scout => {},
-                        _ = cancellation_token_clone.cancelled() => { log::trace!("stop scout({}, {})", what, &config); },
+                        _ = cancellation_token_clone.cancelled() => { tracing::trace!("stop scout({}, {})", what, &config); },
                     }
                 },
                 cancellation_token.clone(),

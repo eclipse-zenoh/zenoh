@@ -33,7 +33,7 @@ async-std = { workspace = true, features = ["default"] }
 const_format = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 serde_json = { workspace = true }
 zenoh = { workspace = true }
 zenoh-core = { workspace = true }

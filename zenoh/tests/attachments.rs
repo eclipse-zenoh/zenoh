@@ -66,7 +66,7 @@ fn attachment_queries() {
         .callback(|query| {
             let s = query
                 .value()
-                .map(|q| q.payload.deserialize::<String>().unwrap())
+                .map(|q| q.payload().deserialize::<String>().unwrap())
                 .unwrap_or_default();
             println!("Query value: {}", s);
 
@@ -82,7 +82,7 @@ fn attachment_queries() {
             query
                 .reply(
                     query.key_expr().clone(),
-                    query.value().unwrap().payload.clone(),
+                    query.value().unwrap().payload().clone(),
                 )
                 .attachment(Attachment::from_iter(
                     attachment
@@ -113,7 +113,7 @@ fn attachment_queries() {
             .res()
             .unwrap();
         while let Ok(reply) = get.recv() {
-            let response = reply.sample.as_ref().unwrap();
+            let response = reply.result().unwrap();
             for (k, v) in response.attachment().unwrap().iter::<(
                 [u8; std::mem::size_of::<usize>()],
                 [u8; std::mem::size_of::<usize>()],

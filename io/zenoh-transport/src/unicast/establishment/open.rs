@@ -234,8 +234,8 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
                     link,
                 );
                 match reason {
-                    close::reason::MAX_LINKS => log::debug!("{}", e),
-                    _ => log::error!("{}", e),
+                    close::reason::MAX_LINKS => tracing::debug!("{}", e),
+                    _ => tracing::error!("{}", e),
                 }
                 return Err((e.into(), None));
             }
@@ -245,7 +245,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
                     link,
                     msg.body
                 );
-                log::error!("{}", e);
+                tracing::error!("{}", e);
                 return Err((e.into(), Some(close::reason::INVALID)));
             }
         };
@@ -265,7 +265,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
                     i_fsn_res,
                     m_fsn_res
                 );
-                log::error!("{}", e);
+                tracing::error!("{}", e);
                 return Err((e.into(), Some(close::reason::INVALID)));
             }
             res.set(Field::FrameSN, i_fsn_res);
@@ -281,7 +281,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
                     i_rid_res,
                     m_rid_res
                 );
-                log::error!("{}", e);
+                tracing::error!("{}", e);
                 return Err((e.into(), Some(close::reason::INVALID)));
             }
             res.set(Field::RequestID, i_rid_res);
@@ -459,8 +459,8 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
                     link,
                 );
                 match reason {
-                    close::reason::MAX_LINKS => log::debug!("{}", e),
-                    _ => log::error!("{}", e),
+                    close::reason::MAX_LINKS => tracing::debug!("{}", e),
+                    _ => tracing::error!("{}", e),
                 }
                 return Err((e.into(), None));
             }
@@ -470,7 +470,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
                     link,
                     msg.body
                 );
-                log::error!("{}", e);
+                tracing::error!("{}", e);
                 return Err((e.into(), Some(close::reason::INVALID)));
             }
         };
@@ -665,7 +665,7 @@ pub(crate) async fn open_link(
         )
         .await?;
 
-    log::debug!(
+    tracing::debug!(
         "New transport link opened from {} to {}: {}.",
         manager.config.zid,
         iack_out.other_zid,

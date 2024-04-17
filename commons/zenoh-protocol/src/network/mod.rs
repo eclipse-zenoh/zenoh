@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod declare;
+pub mod interest;
 pub mod oam;
 pub mod push;
 pub mod request;
@@ -20,10 +21,10 @@ pub mod response;
 use core::fmt;
 
 pub use declare::{
-    Declare, DeclareBody, DeclareFinal, DeclareInterest, DeclareKeyExpr, DeclareMode,
-    DeclareQueryable, DeclareSubscriber, DeclareToken, UndeclareKeyExpr, UndeclareQueryable,
-    UndeclareSubscriber, UndeclareToken,
+    Declare, DeclareBody, DeclareFinal, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber,
+    DeclareToken, UndeclareKeyExpr, UndeclareQueryable, UndeclareSubscriber, UndeclareToken,
 };
+pub use interest::Interest;
 pub use oam::Oam;
 pub use push::Push;
 pub use request::{AtomicRequestId, Request, RequestId};
@@ -40,6 +41,7 @@ pub mod id {
     pub const REQUEST: u8 = 0x1c;
     pub const RESPONSE: u8 = 0x1b;
     pub const RESPONSE_FINAL: u8 = 0x1a;
+    pub const INTEREST: u8 = 0x19;
 }
 
 #[repr(u8)]
@@ -73,6 +75,7 @@ pub enum NetworkBody {
     Request(Request),
     Response(Response),
     ResponseFinal(ResponseFinal),
+    Interest(Interest),
     Declare(Declare),
     OAM(Oam),
 }
@@ -117,6 +120,7 @@ impl NetworkMessage {
             NetworkBody::Request(msg) => msg.ext_qos.is_express(),
             NetworkBody::Response(msg) => msg.ext_qos.is_express(),
             NetworkBody::ResponseFinal(msg) => msg.ext_qos.is_express(),
+            NetworkBody::Interest(msg) => msg.ext_qos.is_express(),
             NetworkBody::Declare(msg) => msg.ext_qos.is_express(),
             NetworkBody::OAM(msg) => msg.ext_qos.is_express(),
         }
@@ -133,6 +137,7 @@ impl NetworkMessage {
             NetworkBody::Request(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::Response(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::ResponseFinal(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBody::Interest(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::Declare(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBody::OAM(msg) => msg.ext_qos.get_congestion_control(),
         };
@@ -147,6 +152,7 @@ impl NetworkMessage {
             NetworkBody::Request(msg) => msg.ext_qos.get_priority(),
             NetworkBody::Response(msg) => msg.ext_qos.get_priority(),
             NetworkBody::ResponseFinal(msg) => msg.ext_qos.get_priority(),
+            NetworkBody::Interest(msg) => msg.ext_qos.get_priority(),
             NetworkBody::Declare(msg) => msg.ext_qos.get_priority(),
             NetworkBody::OAM(msg) => msg.ext_qos.get_priority(),
         }
@@ -162,6 +168,7 @@ impl fmt::Display for NetworkMessage {
             Request(_) => write!(f, "Request"),
             Response(_) => write!(f, "Response"),
             ResponseFinal(_) => write!(f, "ResponseFinal"),
+            Interest(_) => write!(f, "Interest"),
             Declare(_) => write!(f, "Declare"),
         }
     }

@@ -70,7 +70,7 @@
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
 //!     let replies = session.get("key/expression").res().await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
-//!         println!(">> Received {:?}", reply.sample);
+//!         println!(">> Received {:?}", reply.result());
 //!     }
 //! }
 //! ```
@@ -218,7 +218,7 @@ where
     ScoutBuilder {
         what: what.into(),
         config: config.try_into().map_err(|e| e.into()),
-        handler: DefaultHandler,
+        handler: DefaultHandler::default(),
     }
 }
 

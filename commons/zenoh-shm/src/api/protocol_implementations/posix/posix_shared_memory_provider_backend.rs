@@ -141,7 +141,7 @@ impl PosixSharedMemoryProviderBackend {
         };
         free_list.push(root_chunk);
 
-        log::trace!(
+        tracing::trace!(
             "Created PosixSharedMemoryProviderBackend id {}, layout {:?}",
             segment.segment.id(),
             layout
@@ -158,7 +158,7 @@ impl PosixSharedMemoryProviderBackend {
 
 impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
     fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult {
-        log::trace!("PosixSharedMemoryProviderBackend::alloc({:?})", layout);
+        tracing::trace!("PosixSharedMemoryProviderBackend::alloc({:?})", layout);
 
         let required_len = layout.size();
 
@@ -170,13 +170,16 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
             match guard.pop() {
                 Some(mut chunk) if chunk.size >= required_len => {
                     // NOTE: don't loose any chunks here, as it will lead to memory leak
-                    log::trace!("Allocator selected Chunk ({:?})", &chunk);
+                    tracing::trace!("Allocator selected Chunk ({:?})", &chunk);
                     if chunk.size - required_len >= MIN_FREE_CHUNK_SIZE {
                         let free_chunk = Chunk {
                             offset: chunk.offset + required_len as ChunkID,
                             size: chunk.size - required_len,
                         };
-                        log::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
+                        tracing::trace!(
+                            "The allocation will leave a Free Chunk: {:?}",
+                            &free_chunk
+                        );
                         guard.push(free_chunk);
                         chunk.size = required_len;
                     }
@@ -193,7 +196,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                     })
                 }
                 Some(c) => {
-                    log::trace!("PosixSharedMemoryProviderBackend::alloc({:?}) cannot find any big enough chunk\nSharedMemoryManager::free_list = {:?}", layout, self.free_list);
+                    tracing::trace!("PosixSharedMemoryProviderBackend::alloc({:?}) cannot find any big enough chunk\nSharedMemoryManager::free_list = {:?}", layout, self.free_list);
                     guard.push(c);
                     Err(ZAllocError::NeedDefragment)
                 }
@@ -204,13 +207,13 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                     panic!("{err}");
                     #[cfg(not(feature = "test"))]
                     {
-                        log::error!("{err}");
+                        tracing::error!("{err}");
                         Err(ZAllocError::OutOfMemory)
                     }
                 }
             }
         } else {
-            log::trace!( "PosixSharedMemoryProviderBackend does not have sufficient free memory to allocate {:?}, try de-fragmenting!", layout);
+            tracing::trace!( "PosixSharedMemoryProviderBackend does not have sufficient free memory to allocate {:?}, try de-fragmenting!", layout);
             Err(ZAllocError::OutOfMemory)
         }
     }

@@ -409,8 +409,8 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
                     self.link,
                 );
                 match reason {
-                    close::reason::MAX_LINKS => log::debug!("{}", e),
-                    _ => log::error!("{}", e),
+                    close::reason::MAX_LINKS => tracing::debug!("{}", e),
+                    _ => tracing::error!("{}", e),
                 }
                 return Err((e.into(), None));
             }
@@ -420,7 +420,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
                     self.link,
                     msg.body
                 );
-                log::error!("{}", e);
+                tracing::error!("{}", e);
                 return Err((e.into(), Some(close::reason::INVALID)));
             }
         };
@@ -644,7 +644,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             match $res {
                 Ok(output) => output,
                 Err((e, reason)) => {
-                    log::debug!("{}", e);
+                    tracing::debug!("{}", e);
                     let _ = link.close(reason).await;
                     return Err(e);
                 }
@@ -757,7 +757,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         )
         .await?;
 
-    log::debug!(
+    tracing::debug!(
         "New transport link accepted from {} to {}: {}.",
         osyn_out.other_zid,
         manager.config.zid,

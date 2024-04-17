@@ -174,7 +174,7 @@ impl TransportMulticastInner {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) -> ZResult<()> {
-        log::debug!("Closing multicast transport on {:?}", self.locator);
+        tracing::debug!("Closing multicast transport on {:?}", self.locator);
 
         // Notify the callback that we are going to close the transport
         let callback = zwrite!(self.callback).take();
@@ -204,7 +204,7 @@ impl TransportMulticastInner {
     }
 
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!(
+        tracing::trace!(
             "Closing multicast transport of peer {}: {}",
             self.manager.config.zid,
             self.locator
@@ -367,7 +367,7 @@ impl TransportMulticastInner {
         }
         let priority_rx = priority_rx.into_boxed_slice();
 
-        log::debug!(
+        tracing::debug!(
                 "New transport joined on {}: zid {}, whatami {}, resolution {:?}, locator {}, is_qos {}, is_shm {}, initial sn: {:?}",
                 self.locator,
                 peer.zid,
@@ -428,7 +428,7 @@ impl TransportMulticastInner {
     pub(super) fn del_peer(&self, locator: &Locator, reason: u8) -> ZResult<()> {
         let mut guard = zwrite!(self.peers);
         if let Some(peer) = guard.remove(locator) {
-            log::debug!(
+            tracing::debug!(
                 "Peer {}/{}/{} has left multicast {} with reason: {}",
                 peer.zid,
                 peer.whatami,

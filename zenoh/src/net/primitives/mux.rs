@@ -19,7 +19,8 @@ use crate::net::routing::{
 };
 use std::sync::OnceLock;
 use zenoh_protocol::network::{
-    Declare, NetworkBody, NetworkMessage, Push, Request, Response, ResponseFinal,
+    interest::Interest, Declare, NetworkBody, NetworkMessage, Push, Request, Response,
+    ResponseFinal,
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
@@ -40,6 +41,34 @@ impl Mux {
 }
 
 impl Primitives for Mux {
+    fn send_interest(&self, msg: Interest) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Interest(msg),
+            #[cfg(feature = "stats")]
+            size: None,
+        };
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let Some(face) = face.upgrade() else {
+                tracing::debug!("Invalid face: {:?}. Interest not sent: {:?}", face, msg);
+                return;
+            };
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::debug!("Uninitialized multiplexer. Interest not sent: {:?}", msg);
+        }
+    }
+
     fn send_declare(&self, msg: Declare) {
         let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
@@ -60,7 +89,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -84,7 +113,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -108,7 +137,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -132,7 +161,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -156,7 +185,7 @@ impl Primitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -211,7 +240,7 @@ impl EPrimitives for Mux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -316,6 +345,30 @@ impl McastMux {
 }
 
 impl Primitives for McastMux {
+    fn send_interest(&self, msg: Interest) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Interest(msg),
+            #[cfg(feature = "stats")]
+            size: None,
+        };
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::error!("Uninitialized multiplexer!");
+        }
+    }
+
     fn send_declare(&self, msg: Declare) {
         let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
@@ -336,7 +389,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -360,7 +413,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -384,7 +437,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -408,7 +461,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -432,7 +485,7 @@ impl Primitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -487,7 +540,7 @@ impl EPrimitives for McastMux {
                 let _ = self.handler.schedule(ctx.msg);
             }
         } else {
-            log::error!("Uninitialized multiplexer!");
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 

@@ -40,7 +40,7 @@ impl TransportMulticastInner {
                 }
             }
             None => {
-                log::trace!(
+                tracing::trace!(
                     "Message dropped because the transport has no links: {}",
                     msg
                 );
@@ -57,7 +57,7 @@ impl TransportMulticastInner {
         #[cfg(feature = "shared-memory")]
         {
             if let Err(e) = map_zmsg_to_partner(&mut msg, &self.shm) {
-                log::trace!("Failed SHM conversion: {}", e);
+                tracing::trace!("Failed SHM conversion: {}", e);
                 return false;
             }
         }

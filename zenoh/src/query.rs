@@ -77,10 +77,31 @@ impl Default for QueryConsolidation {
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
-    /// The result of this Reply.
-    pub sample: Result<Sample, Value>,
-    /// The id of the zenoh instance that answered this Reply.
-    pub replier_id: ZenohId,
+    pub(crate) result: Result<Sample, Value>,
+    pub(crate) replier_id: ZenohId,
+}
+
+impl Reply {
+    /// Gets the a borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
+    pub fn result(&self) -> Result<&Sample, &Value> {
+        self.result.as_ref()
+    }
+
+    /// Converts this `Reply` into the its result. Use [`Reply::result`] it you don't want to take ownership.
+    pub fn into_result(self) -> Result<Sample, Value> {
+        self.result
+    }
+
+    /// Gets the id of the zenoh instance that answered this Reply.
+    pub fn replier_id(&self) -> ZenohId {
+        self.replier_id
+    }
+}
+
+impl From<Reply> for Result<Sample, Value> {
+    fn from(value: Reply) -> Self {
+        value.into_result()
+    }
 }
 
 pub(crate) struct QueryState {
@@ -110,7 +131,7 @@ pub(crate) struct QueryState {
 ///     .await
 ///     .unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
-///     println!("Received {:?}", reply.sample)
+///     println!("Received {:?}", reply.result())
 /// }
 /// # }
 /// ```
@@ -172,13 +193,21 @@ impl QoSBuilderTrait for GetBuilder<'_, '_, DefaultHandler> {
 
 impl<Handler> ValueBuilderTrait for GetBuilder<'_, '_, Handler> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        let value = Some(self.value.unwrap_or_default().encoding(encoding));
-        Self { value, ..self }
+        let mut value = self.value.unwrap_or_default();
+        value.encoding = encoding.into();
+        Self {
+            value: Some(value),
+            ..self
+        }
     }
 
     fn payload<T: Into<Payload>>(self, payload: T) -> Self {
-        let value = Some(self.value.unwrap_or_default().payload(payload));
-        Self { value, ..self }
+        let mut value = self.value.unwrap_or_default();
+        value.payload = payload.into();
+        Self {
+            value: Some(value),
+            ..self
+        }
     }
     fn value<T: Into<Value>>(self, value: T) -> Self {
         let value: Value = value.into();
@@ -201,7 +230,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
-    ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
+    ///     .callback(|reply| {println!("Received {:?}", reply.result());})
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -294,7 +323,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!("Received {:?}", reply.sample);
+    ///     println!("Received {:?}", reply.result());
     /// }
     /// # }
     /// ```
@@ -378,9 +407,12 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
-            selector: self
-                .selector
-                .and_then(|s| s.accept_any_keyexpr(accept == ReplyKeyExpr::Any)),
+            selector: self.selector.map(|mut s| {
+                if accept == ReplyKeyExpr::Any {
+                    s.parameters_mut().insert(_REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
+                }
+                s
+            }),
             ..self
         }
     }

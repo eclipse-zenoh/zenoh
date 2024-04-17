@@ -28,6 +28,7 @@ use zenoh_buffers::{
     ZBufReader, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_protocol::core::Properties;
 use zenoh_result::{ZError, ZResult};
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh_shm::api::slice::{
@@ -568,6 +569,15 @@ impl<'a> Deserialize<'a, Cow<'a, [u8]>> for ZSerde {
     }
 }
 
+impl From<Payload> for Cow<'static, [u8]> {
+    fn from(v: Payload) -> Self {
+        match v.0.contiguous() {
+            Cow::Borrowed(s) => Cow::Owned(s.to_vec()),
+            Cow::Owned(s) => Cow::Owned(s),
+        }
+    }
+}
+
 impl<'a> From<&'a Payload> for Cow<'a, [u8]> {
     fn from(value: &'a Payload) -> Self {
         ZSerde.deserialize(value).unwrap_infallible()
@@ -675,7 +685,15 @@ impl<'a> Deserialize<'a, Cow<'a, str>> for ZSerde {
     type Error = Utf8Error;
 
     fn deserialize(self, v: &'a Payload) -> Result<Cow<'a, str>, Self::Error> {
-        let v: Cow<[u8]> = Self.deserialize(v).unwrap_infallible();
+        Cow::try_from(v)
+    }
+}
+
+impl TryFrom<Payload> for Cow<'static, str> {
+    type Error = Utf8Error;
+
+    fn try_from(v: Payload) -> Result<Self, Self::Error> {
+        let v: Cow<'static, [u8]> = Cow::from(v);
         let _ = core::str::from_utf8(v.as_ref())?;
         // SAFETY: &str is &[u8] with the guarantee that every char is UTF-8
         //         As implemented internally https://doc.rust-lang.org/std/str/fn.from_utf8_unchecked.html.
@@ -686,8 +704,12 @@ impl<'a> Deserialize<'a, Cow<'a, str>> for ZSerde {
 impl<'a> TryFrom<&'a Payload> for Cow<'a, str> {
     type Error = Utf8Error;
 
-    fn try_from(value: &'a Payload) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
+    fn try_from(v: &'a Payload) -> Result<Self, Self::Error> {
+        let v: Cow<'a, [u8]> = Cow::from(v);
+        let _ = core::str::from_utf8(v.as_ref())?;
+        // SAFETY: &str is &[u8] with the guarantee that every char is UTF-8
+        //         As implemented internally https://doc.rust-lang.org/std/str/fn.from_utf8_unchecked.html.
+        Ok(unsafe { core::mem::transmute(v) })
     }
 }
 
@@ -846,6 +868,63 @@ impl TryFrom<&Payload> for bool {
 }
 
 // - Zenoh advanced types encoders/decoders
+// Properties
+impl Serialize<Properties<'_>> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: Properties<'_>) -> Self::Output {
+        Self.serialize(t.as_str())
+    }
+}
+
+impl From<Properties<'_>> for Payload {
+    fn from(t: Properties<'_>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&Properties<'_>> for ZSerde {
+    type Output = Payload;
+
+    fn serialize(self, t: &Properties<'_>) -> Self::Output {
+        Self.serialize(t.as_str())
+    }
+}
+
+impl<'s> From<&'s Properties<'s>> for Payload {
+    fn from(t: &'s Properties<'s>) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl<'s> Deserialize<'s, Properties<'s>> for ZSerde {
+    type Error = ZDeserializeError;
+
+    fn deserialize(self, v: &'s Payload) -> Result<Properties<'s>, Self::Error> {
+        let s = v
+            .deserialize::<Cow<'s, str>>()
+            .map_err(|_| ZDeserializeError)?;
+        Ok(Properties::from(s))
+    }
+}
+
+impl TryFrom<Payload> for Properties<'static> {
+    type Error = ZDeserializeError;
+
+    fn try_from(v: Payload) -> Result<Self, Self::Error> {
+        let s = v.deserialize::<Cow<str>>().map_err(|_| ZDeserializeError)?;
+        Ok(Properties::from(s.into_owned()))
+    }
+}
+
+impl<'s> TryFrom<&'s Payload> for Properties<'s> {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: &'s Payload) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
 // JSON
 impl Serialize<serde_json::Value> for ZSerde {
     type Output = Result<Payload, serde_json::Error>;
@@ -1354,6 +1433,7 @@ mod tests {
         use rand::Rng;
         use std::borrow::Cow;
         use zenoh_buffers::{ZBuf, ZSlice};
+        use zenoh_protocol::core::Properties;
 
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
         use zenoh_shm::api::{
@@ -1482,6 +1562,10 @@ mod tests {
 
             serialize_deserialize!(&zsliceshm, immutable_shm_buf);
         }
+
+        // Properties
+        serialize_deserialize!(Properties, Properties::from(""));
+        serialize_deserialize!(Properties, Properties::from("a=1;b=2;c3"));
 
         // Tuple
         serialize_deserialize!((usize, usize), (0, 1));

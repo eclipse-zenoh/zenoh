@@ -153,7 +153,7 @@ impl SharedMemoryBuf {
 
     // PRIVATE:
     fn as_slice(&self) -> &[u8] {
-        log::trace!(
+        tracing::trace!(
             "SharedMemoryBuf::as_slice() == len = {:?}",
             self.info.data_len
         );

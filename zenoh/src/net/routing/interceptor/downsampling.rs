@@ -21,7 +21,7 @@
 use crate::net::routing::interceptor::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use zenoh_config::{DownsamplingFlow, DownsamplingItemConf, DownsamplingRuleConf};
+use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
 use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
 use zenoh_keyexpr::keyexpr_tree::{support::UnknownWildness, KeBoxTree};
@@ -44,7 +44,7 @@ pub(crate) fn downsampling_interceptor_factories(
 pub struct DownsamplingInterceptorFactory {
     interfaces: Option<Vec<String>>,
     rules: Vec<DownsamplingRuleConf>,
-    flow: DownsamplingFlow,
+    flow: InterceptorFlow,
 }
 
 impl DownsamplingInterceptorFactory {
@@ -62,15 +62,15 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        log::debug!("New downsampler transport unicast {:?}", transport);
+        tracing::debug!("New downsampler transport unicast {:?}", transport);
         if let Some(interfaces) = &self.interfaces {
-            log::debug!(
+            tracing::debug!(
                 "New downsampler transport unicast config interfaces: {:?}",
                 interfaces
             );
             if let Ok(links) = transport.get_links() {
                 for link in links {
-                    log::debug!(
+                    tracing::debug!(
                         "New downsampler transport unicast link interfaces: {:?}",
                         link.interfaces
                     );
@@ -82,13 +82,13 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         };
 
         match self.flow {
-            DownsamplingFlow::Ingress => (
+            InterceptorFlow::Ingress => (
                 Some(Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
                     self.rules.clone(),
                 )))),
                 None,
             ),
-            DownsamplingFlow::Egress => (
+            InterceptorFlow::Egress => (
                 None,
                 Some(Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
                     self.rules.clone(),
@@ -149,11 +149,11 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 return None;
                             }
                         } else {
-                            log::debug!("unxpected cache ID {}", id);
+                            tracing::debug!("unxpected cache ID {}", id);
                         }
                     }
                 } else {
-                    log::debug!("unxpected cache type {:?}", ctx.full_expr());
+                    tracing::debug!("unxpected cache type {:?}", ctx.full_expr());
                 }
             }
         }

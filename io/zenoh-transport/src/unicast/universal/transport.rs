@@ -128,7 +128,7 @@ impl TransportUnicastUniversal {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) -> ZResult<()> {
-        log::debug!(
+        tracing::debug!(
             "[{}] Closing transport with peer: {}",
             self.manager.config.zid,
             self.config.zid
@@ -217,7 +217,7 @@ impl TransportUnicastUniversal {
         let mut a_guard = zasynclock!(self.alive);
         if *a_guard {
             let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             return Err(e.into());
         }
 
@@ -357,7 +357,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*           TERMINATION             */
     /*************************************/
     async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
-        log::trace!("Closing link {} with peer: {}", link, self.config.zid);
+        tracing::trace!("Closing link {} with peer: {}", link, self.config.zid);
 
         let transport_link_pipeline = zlinkget!(zread!(self.links), link)
             .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?
@@ -378,7 +378,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing transport with peer: {}", self.config.zid);
+        tracing::trace!("Closing transport with peer: {}", self.config.zid);
 
         let mut pipelines = zread!(self.links)
             .iter()

@@ -19,7 +19,7 @@ use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::init_log_from_env();
 
     let (mut config, express) = parse_args();
 

@@ -15,11 +15,13 @@ use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh_util::init_log;
 
 #[tokio::main]
 async fn main() {
+    init_log();
+
     let _z = zenoh_runtime::ZRuntimePoolGuard;
-    env_logger::init();
 
     let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();
@@ -33,8 +35,8 @@ async fn main() {
             zenoh_runtime::ZRuntime::Application.block_in_place(async move {
                 query
                     .reply(
-                        query.selector().key_expr,
-                        query.value().unwrap().payload.clone(),
+                        query.selector().key_expr(),
+                        query.value().unwrap().payload().clone(),
                     )
                     .res()
                     .await
@@ -60,7 +62,7 @@ async fn main() {
             .await
             .unwrap();
         while let Ok(reply) = replies.recv_async().await {
-            match reply.sample {
+            match reply.result() {
                 Ok(sample) => println!(
                     ">> Received ('{}': '{}')",
                     sample.key_expr().as_str(),
@@ -71,7 +73,7 @@ async fn main() {
                 ),
                 Err(err) => println!(
                     ">> Received (ERROR: '{}')",
-                    err.payload
+                    err.payload()
                         .deserialize::<String>()
                         .unwrap_or_else(|e| format!("{}", e))
                 ),

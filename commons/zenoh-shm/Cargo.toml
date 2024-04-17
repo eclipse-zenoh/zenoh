@@ -35,7 +35,7 @@ test = ["num_cpus"]
 async-trait = { workspace = true }
 bincode = { workspace = true }
 crc = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 serde = { workspace = true, features = ["default"] }
 shared_memory = { workspace = true }
 tokio = { workspace = true }

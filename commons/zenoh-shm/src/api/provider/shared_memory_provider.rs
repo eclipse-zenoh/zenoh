@@ -738,13 +738,13 @@ where
             true
         }
 
-        log::trace!("Running Garbage Collector");
+        tracing::trace!("Running Garbage Collector");
 
         let mut largest = 0usize;
         let mut guard = self.busy_list.lock().unwrap();
         guard.retain(|maybe_free| {
             if is_free_chunk(maybe_free) {
-                log::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
+                tracing::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
                 self.backend.free(&maybe_free.descriptor);
                 largest = largest.max(maybe_free.descriptor.len);
                 return false;

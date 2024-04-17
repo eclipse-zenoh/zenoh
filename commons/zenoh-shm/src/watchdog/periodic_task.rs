@@ -20,10 +20,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(not(feature = "test"))]
-use log::error;
-use log::warn;
-
 use thread_priority::ThreadBuilder;
 #[cfg(unix)]
 use thread_priority::{
@@ -62,14 +58,14 @@ impl PeriodicTask {
         let _ = builder.spawn(move |result| {
                 if let Err(e) = result {
                     #[cfg(windows)]
-                    warn!("{:?}: error setting scheduling priority for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
+                    tracing::warn!("{:?}: error setting scheduling priority for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
                     #[cfg(unix)]
                     {
-                        warn!("{:?}: error setting realtime FIFO scheduling policy for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
+                        tracing::warn!("{:?}: error setting realtime FIFO scheduling policy for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
                         for priotity in (ThreadPriorityValue::MIN..ThreadPriorityValue::MAX).rev() {
                             if let Ok(p) = priotity.try_into() {
                                 if set_current_thread_priority(ThreadPriority::Crossplatform(p)).is_ok() {
-                                    warn!("{:?}: will use priority {}", std::thread::current().name(), priotity);
+                                    tracing::warn!("{:?}: will use priority {}", std::thread::current().name(), priotity);
                                     break;
                                 }
                             }

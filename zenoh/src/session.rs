@@ -24,8 +24,8 @@ use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
 use crate::payload::Payload;
+use crate::prelude::KeyExpr;
 use crate::prelude::Locality;
-use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -44,7 +44,6 @@ use crate::Selector;
 #[cfg(feature = "unstable")]
 use crate::SourceInfo;
 use crate::Value;
-use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -54,6 +53,7 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
@@ -69,7 +69,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
-            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr, DeclareMode,
+            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
         request::{self, ext::TargetType, Request},
@@ -304,7 +304,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
     fn declare_queryable<'b, TryIntoKeyExpr>(
@@ -320,7 +320,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: false,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
     fn declare_publisher<'b, TryIntoKeyExpr>(
@@ -786,7 +786,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session.get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!(">> Received {:?}", reply.sample);
+    ///     println!(">> Received {:?}", reply.result());
     /// }
     /// # }
     /// ```
@@ -816,7 +816,7 @@ impl Session {
             value: None,
             #[cfg(feature = "unstable")]
             attachment: None,
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
         }
@@ -843,7 +843,7 @@ impl Session {
         >,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
-            log::debug!("Config: {:?}", &config);
+            tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::init(
@@ -906,7 +906,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -938,7 +938,7 @@ impl Session {
         _key_expr: KeyExpr<'a>,
     ) -> impl Resolve<Result<(), std::convert::Infallible>> + 'a {
         ResolveClosure::new(move || {
-            // log::trace!("declare_publication({:?})", key_expr);
+            // tracing::trace!("declare_publication({:?})", key_expr);
             // let mut state = zwrite!(self.state);
             // if !state.publications.iter().any(|p| **p == **key_expr) {
             //     let declared_pub = if let Some(join_pub) = state
@@ -1014,7 +1014,7 @@ impl Session {
         info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("subscribe({:?})", key_expr);
+        tracing::trace!("subscribe({:?})", key_expr);
         let id = self.runtime.next_id();
         let key_expr = match scope {
             Some(scope) => scope / key_expr,
@@ -1119,7 +1119,7 @@ impl Session {
             // };
 
             primitives.send_declare(Declare {
-                mode: DeclareMode::Push,
+                interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1176,7 +1176,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1208,7 +1208,7 @@ impl Session {
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("queryable({:?})", key_expr);
+        tracing::trace!("queryable({:?})", key_expr);
         let id = self.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
@@ -1228,7 +1228,7 @@ impl Session {
                 distance: 0,
             };
             primitives.send_declare(Declare {
-                mode: DeclareMode::Push,
+                interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1250,7 +1250,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1274,7 +1274,7 @@ impl Session {
         key_expr: &KeyExpr,
     ) -> ZResult<Arc<LivelinessTokenState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("declare_liveliness({:?})", key_expr);
+        tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
         let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
         let tok_state = Arc::new(LivelinessTokenState {
@@ -1286,7 +1286,7 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(Declare {
-            mode: DeclareMode::Push,
+            interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::DEFAULT,
@@ -1311,7 +1311,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -1335,7 +1335,7 @@ impl Session {
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
         let id = self.runtime.next_id();
-        log::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
+        tracing::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
             current: std::sync::Mutex::new(false),
@@ -1356,7 +1356,7 @@ impl Session {
                     (listener_state.callback)(MatchingStatus { matching: true });
                 }
             }
-            Err(e) => log::error!("Error trying to acquire MathginListener lock: {}", e),
+            Err(e) => tracing::error!("Error trying to acquire MathginListener lock: {}", e),
         }
         Ok(listener_state)
     }
@@ -1428,7 +1428,7 @@ impl Session {
                                     }
                                 }
                                 Err(e) => {
-                                    log::error!(
+                                    tracing::error!(
                                         "Error trying to acquire MathginListener lock: {}",
                                         e
                                     );
@@ -1466,7 +1466,7 @@ impl Session {
                                     }
                                 }
                                 Err(e) => {
-                                    log::error!(
+                                    tracing::error!(
                                         "Error trying to acquire MathginListener lock: {}",
                                         e
                                     );
@@ -1509,7 +1509,7 @@ impl Session {
                             match &sub.scope {
                                 Some(scope) => {
                                     if !res.key_expr.starts_with(&***scope) {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
                                             res.key_expr,
                                             scope,
@@ -1522,7 +1522,7 @@ impl Session {
                                                 key_expr.into_owned(),
                                             )),
                                             Err(e) => {
-                                                log::warn!(
+                                                tracing::warn!(
                                                     "Error unscoping received Data for `{}`: {}",
                                                     res.key_expr,
                                                     e,
@@ -1538,14 +1538,14 @@ impl Session {
                     }
                 }
                 Some(Resource::Prefix { prefix }) => {
-                    log::error!(
+                    tracing::error!(
                         "Received Data for `{}`, which isn't a key expression",
                         prefix
                     );
                     return;
                 }
                 None => {
-                    log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                    tracing::error!("Received Data for unknown expr_id: {}", key_expr.scope);
                     return;
                 }
             }
@@ -1560,7 +1560,7 @@ impl Session {
                             match &sub.scope {
                                 Some(scope) => {
                                     if !key_expr.starts_with(&***scope) {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
                                             key_expr,
                                             scope,
@@ -1572,7 +1572,7 @@ impl Session {
                                                 key_expr.into_owned(),
                                             )),
                                             Err(e) => {
-                                                log::warn!(
+                                                tracing::warn!(
                                                     "Error unscoping received Data for `{}`: {}",
                                                     key_expr,
                                                     e,
@@ -1588,7 +1588,7 @@ impl Session {
                     }
                 }
                 Err(err) => {
-                    log::error!("Received Data for unkown key_expr: {}", err);
+                    tracing::error!("Received Data for unkown key_expr: {}", err);
                     return;
                 }
             }
@@ -1630,11 +1630,11 @@ impl Session {
         #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
-        log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
+        tracing::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
             ConsolidationMode::Auto => {
-                if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
+                if selector.parameters().contains_key(TIME_RANGE_KEY) {
                     ConsolidationMode::None
                 } else {
                     ConsolidationMode::Latest
@@ -1659,14 +1659,14 @@ impl Session {
                             let mut state = zwrite!(state);
                             if let Some(query) = state.queries.remove(&qid) {
                                 std::mem::drop(state);
-                                log::debug!("Timeout on query {}! Send error and close.", qid);
+                                tracing::debug!("Timeout on query {}! Send error and close.", qid);
                                 if query.reception_mode == ConsolidationMode::Latest {
                                     for (_, reply) in query.replies.unwrap().into_iter() {
                                         (query.callback)(reply);
                                     }
                                 }
                                 (query.callback)(Reply {
-                                    sample: Err("Timeout".into()),
+                                    result: Err("Timeout".into()),
                                     replier_id: zid,
                                 });
                             }
@@ -1684,7 +1684,7 @@ impl Session {
             None => selector.clone(),
         };
 
-        log::trace!("Register query {} (nb_final = {})", qid, nb_final);
+        tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = selector.key_expr.to_wire(self).to_owned();
         state.queries.insert(
             qid,
@@ -1741,7 +1741,7 @@ impl Session {
             self.handle_query(
                 true,
                 &wexpr,
-                selector.parameters(),
+                selector.parameters().as_str(),
                 qid,
                 target,
                 consolidation,
@@ -1810,13 +1810,11 @@ impl Session {
             }
         };
 
-        let parameters = parameters.to_owned();
-
         let zid = self.runtime.zid();
 
         let query_inner = Arc::new(QueryInner {
             key_expr,
-            parameters,
+            parameters: parameters.to_owned().into(),
             value: body.map(|b| Value {
                 payload: b.payload.into(),
                 encoding: b.encoding.into(),
@@ -1878,7 +1876,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -1923,7 +1921,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: false,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -1997,6 +1995,9 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
 }
 
 impl Primitives for Session {
+    fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
+        trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
+    }
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
@@ -2055,7 +2056,10 @@ impl Primitives for Session {
                             }
                         }
                         Err(err) => {
-                            log::error!("Received DeclareSubscriber for unkown wire_expr: {}", err)
+                            tracing::error!(
+                                "Received DeclareSubscriber for unkown wire_expr: {}",
+                                err
+                            )
                         }
                     }
                 }
@@ -2087,7 +2091,7 @@ impl Primitives for Session {
                             );
                         }
                     } else {
-                        log::error!("Received Undeclare Subscriber for unkown id: {}", m.id);
+                        tracing::error!("Received Undeclare Subscriber for unkown id: {}", m.id);
                     }
                 }
             }
@@ -2099,7 +2103,6 @@ impl Primitives for Session {
             }
             DeclareBody::DeclareToken(_) => todo!(),
             DeclareBody::UndeclareToken(_) => todo!(),
-            DeclareBody::DeclareInterest(_) => todo!(),
             DeclareBody::DeclareFinal(_) => todo!(),
         }
     }
@@ -2182,12 +2185,12 @@ impl Primitives for Session {
                         };
                         let new_reply = Reply {
                             replier_id,
-                            sample: Err(value),
+                            result: Err(value),
                         };
                         callback(new_reply);
                     }
                     None => {
-                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                        tracing::warn!("Received ReplyData for unkown Query: {}", msg.rid);
                     }
                 }
             }
@@ -2202,15 +2205,16 @@ impl Primitives for Session {
                 };
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        if !matches!(
-                            query
+                        let c = zcondfeat!(
+                            "unstable",
+                            !query
                                 .selector
                                 .parameters()
-                                .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
-                            Ok([true])
-                        ) && !query.selector.key_expr.intersects(&key_expr)
-                        {
-                            log::warn!(
+                                .contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM),
+                            true
+                        );
+                        if c && !query.selector.key_expr.intersects(&key_expr) {
+                            tracing::warn!(
                                 "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
@@ -2221,7 +2225,7 @@ impl Primitives for Session {
                         let key_expr = match &query.scope {
                             Some(scope) => {
                                 if !key_expr.starts_with(&***scope) {
-                                    log::warn!(
+                                    tracing::warn!(
                                         "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
                                         key_expr,
                                         msg.ext_respid,
@@ -2232,7 +2236,7 @@ impl Primitives for Session {
                                 match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
                                     Ok(key_expr) => key_expr,
                                     Err(e) => {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Error unscoping received Reply for `{}` from `{:?}: {}",
                                             key_expr,
                                             msg.ext_respid,
@@ -2303,7 +2307,7 @@ impl Primitives for Session {
                             attachment,
                         );
                         let new_reply = Reply {
-                            sample: Ok(sample),
+                            result: Ok(sample),
                             replier_id: ZenohId::rand(), // TODO
                         };
                         let callback =
@@ -2313,15 +2317,15 @@ impl Primitives for Session {
                                 }
                                 ConsolidationMode::Monotonic => {
                                     match query.replies.as_ref().unwrap().get(
-                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                        new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
                                         Some(reply) => {
-                                            if new_reply.sample.as_ref().unwrap().timestamp
-                                                > reply.sample.as_ref().unwrap().timestamp
+                                            if new_reply.result.as_ref().unwrap().timestamp
+                                                > reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
-                                                        .sample
+                                                        .result
                                                         .as_ref()
                                                         .unwrap()
                                                         .key_expr
@@ -2337,7 +2341,7 @@ impl Primitives for Session {
                                         None => {
                                             query.replies.as_mut().unwrap().insert(
                                                 new_reply
-                                                    .sample
+                                                    .result
                                                     .as_ref()
                                                     .unwrap()
                                                     .key_expr
@@ -2351,15 +2355,15 @@ impl Primitives for Session {
                                 }
                                 Consolidation::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
-                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                        new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
                                         Some(reply) => {
-                                            if new_reply.sample.as_ref().unwrap().timestamp
-                                                > reply.sample.as_ref().unwrap().timestamp
+                                            if new_reply.result.as_ref().unwrap().timestamp
+                                                > reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
-                                                        .sample
+                                                        .result
                                                         .as_ref()
                                                         .unwrap()
                                                         .key_expr
@@ -2372,7 +2376,7 @@ impl Primitives for Session {
                                         None => {
                                             query.replies.as_mut().unwrap().insert(
                                                 new_reply
-                                                    .sample
+                                                    .result
                                                     .as_ref()
                                                     .unwrap()
                                                     .key_expr
@@ -2391,7 +2395,7 @@ impl Primitives for Session {
                         }
                     }
                     None => {
-                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                        tracing::warn!("Received ReplyData for unkown Query: {}", msg.rid);
                     }
                 }
             }

@@ -68,7 +68,7 @@ where
                 .create()
             {
                 Ok(shmem) => {
-                    log::debug!(
+                    tracing::debug!(
                         "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
                     );
                     unsafe { *(shmem.as_ptr() as *mut usize) = alloc_size };
@@ -98,7 +98,7 @@ where
             bail!("SHM segment too small")
         }
 
-        log::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
+        tracing::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
 
         Ok(Self { shmem, id })
     }

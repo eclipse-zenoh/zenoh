@@ -342,7 +342,7 @@ impl TransportLinkMulticastUniversal {
                 )
                 .await;
                 if let Err(e) = res {
-                    log::debug!("{}", e);
+                    tracing::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
                     zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
@@ -378,7 +378,7 @@ impl TransportLinkMulticastUniversal {
                 .await;
                 c_signal.trigger();
                 if let Err(e) = res {
-                    log::debug!("{}", e);
+                    tracing::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
                     zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
@@ -393,7 +393,7 @@ impl TransportLinkMulticastUniversal {
     }
 
     pub(super) async fn close(mut self) -> ZResult<()> {
-        log::trace!("{}: closing", self.link);
+        tracing::trace!("{}: closing", self.link);
         self.stop_rx();
         if let Some(handle) = self.handle_rx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link

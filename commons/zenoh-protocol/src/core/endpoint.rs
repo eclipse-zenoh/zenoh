@@ -11,28 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::locator::*;
-use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
-use core::{convert::TryFrom, fmt, str::FromStr};
+use super::{locator::*, parameters::Parameters};
+use alloc::{borrow::ToOwned, format, string::String};
+use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';
 pub const METADATA_SEPARATOR: char = '?';
-pub const LIST_SEPARATOR: char = ';';
-pub const FIELD_SEPARATOR: char = '=';
 pub const CONFIG_SEPARATOR: char = '#';
-pub const VALUE_SEPARATOR: char = '|';
-
-fn split_once(s: &str, c: char) -> (&str, &str) {
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s, ""),
-    }
-}
 
 // Parsing functions
 pub(super) fn protocol(s: &str) -> &str {
@@ -61,77 +48,6 @@ pub(super) fn config(s: &str) -> &str {
     match s.find(CONFIG_SEPARATOR) {
         Some(cidx) => &s[cidx + 1..],
         None => "",
-    }
-}
-
-pub struct Parameters;
-
-impl Parameters {
-    pub fn extend<'s, I>(iter: I, into: &mut String)
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let mut first = into.is_empty();
-        for (k, v) in iter {
-            if !first {
-                into.push(LIST_SEPARATOR);
-            }
-            into.push_str(k);
-            if !v.is_empty() {
-                into.push(FIELD_SEPARATOR);
-                into.push_str(v);
-            }
-            first = false;
-        }
-    }
-
-    pub fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> {
-        s.split(LIST_SEPARATOR).filter_map(|prop| {
-            if prop.is_empty() {
-                None
-            } else {
-                Some(split_once(prop, FIELD_SEPARATOR))
-            }
-        })
-    }
-
-    pub fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
-        Self::iter(s).find(|x| x.0 == k).map(|x| x.1)
-    }
-
-    pub fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s str> {
-        match Self::get(s, k) {
-            Some(v) => v.split(VALUE_SEPARATOR),
-            None => {
-                let mut i = "".split(VALUE_SEPARATOR);
-                i.next();
-                i
-            }
-        }
-    }
-
-    pub(super) fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> String
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let current = iter.filter(|x| x.0 != k);
-        let new = Some((k, v)).into_iter();
-        let iter = current.chain(new);
-
-        let mut into = String::new();
-        Parameters::extend(iter, &mut into);
-        into
-    }
-
-    pub(super) fn remove<'s, I>(iter: I, k: &'s str) -> String
-    where
-        I: Iterator<Item = (&'s str, &'s str)>,
-    {
-        let iter = iter.filter(|x| x.0 != k);
-
-        let mut into = String::new();
-        Parameters::extend(iter, &mut into);
-        into
     }
 }
 
@@ -277,7 +193,7 @@ impl<'a> Metadata<'a> {
         self.as_str().is_empty()
     }
 
-    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> {
+    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> + Clone {
         Parameters::iter(self.0)
     }
 
@@ -323,25 +239,19 @@ impl<'a> MetadataMut<'a> {
 }
 
 impl MetadataMut<'_> {
-    pub fn extend<I, K, V>(&mut self, iter: I) -> ZResult<()>
+    pub fn extend_from_iter<'s, I, K, V>(&mut self, iter: I) -> ZResult<()>
     where
-        I: Iterator<Item = (K, V)>,
-        K: AsRef<str>,
-        V: AsRef<str>,
+        I: Iterator<Item = (&'s K, &'s V)> + Clone,
+        K: Borrow<str> + 's + ?Sized,
+        V: Borrow<str> + 's + ?Sized,
     {
-        for (k, v) in iter {
-            let k: &str = k.as_ref();
-            let v: &str = v.as_ref();
-            self.insert(k, v)?
-        }
-        Ok(())
-    }
-
-    pub fn insert(&mut self, k: &str, v: &str) -> ZResult<()> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::insert(self.0.metadata().iter(), k, v),
+            Parameters::from_iter(Parameters::sort(Parameters::join(
+                self.0.metadata().iter(),
+                iter.map(|(k, v)| (k.borrow(), v.borrow())),
+            ))),
             self.0.config(),
         )?;
 
@@ -349,11 +259,30 @@ impl MetadataMut<'_> {
         Ok(())
     }
 
-    pub fn remove(&mut self, k: &str) -> ZResult<()> {
+    pub fn insert<K, V>(&mut self, k: K, v: V) -> ZResult<()>
+    where
+        K: Borrow<str>,
+        V: Borrow<str>,
+    {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::remove(self.0.metadata().iter(), k),
+            Parameters::insert_sort(self.0.metadata().as_str(), k.borrow(), v.borrow()).0,
+            self.0.config(),
+        )?;
+
+        self.0.inner = ep.inner;
+        Ok(())
+    }
+
+    pub fn remove<K>(&mut self, k: K) -> ZResult<()>
+    where
+        K: Borrow<str>,
+    {
+        let ep = EndPoint::new(
+            self.0.protocol(),
+            self.0.address(),
+            Parameters::remove(self.0.metadata().as_str(), k.borrow()).0,
             self.0.config(),
         )?;
 
@@ -394,7 +323,7 @@ impl<'a> Config<'a> {
         self.as_str().is_empty()
     }
 
-    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> {
+    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> + Clone {
         Parameters::iter(self.0)
     }
 
@@ -440,38 +369,51 @@ impl<'a> ConfigMut<'a> {
 }
 
 impl ConfigMut<'_> {
-    pub fn extend<I, K, V>(&mut self, iter: I) -> ZResult<()>
+    pub fn extend_from_iter<'s, I, K, V>(&mut self, iter: I) -> ZResult<()>
     where
-        I: Iterator<Item = (K, V)>,
-        K: AsRef<str>,
-        V: AsRef<str>,
+        I: Iterator<Item = (&'s K, &'s V)> + Clone,
+        K: Borrow<str> + 's + ?Sized,
+        V: Borrow<str> + 's + ?Sized,
     {
-        for (k, v) in iter {
-            let k: &str = k.as_ref();
-            let v: &str = v.as_ref();
-            self.insert(k, v)?
-        }
-        Ok(())
-    }
-
-    pub fn insert(&mut self, k: &str, v: &str) -> ZResult<()> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::insert(self.0.config().iter(), k, v),
+            Parameters::from_iter(Parameters::sort(Parameters::join(
+                self.0.config().iter(),
+                iter.map(|(k, v)| (k.borrow(), v.borrow())),
+            ))),
         )?;
 
         self.0.inner = ep.inner;
         Ok(())
     }
 
-    pub fn remove(&mut self, k: &str) -> ZResult<()> {
+    pub fn insert<K, V>(&mut self, k: K, v: V) -> ZResult<()>
+    where
+        K: Borrow<str>,
+        V: Borrow<str>,
+    {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::remove(self.0.config().iter(), k),
+            Parameters::insert_sort(self.0.config().as_str(), k.borrow(), v.borrow()).0,
+        )?;
+
+        self.0.inner = ep.inner;
+        Ok(())
+    }
+
+    pub fn remove<K>(&mut self, k: K) -> ZResult<()>
+    where
+        K: Borrow<str>,
+    {
+        let ep = EndPoint::new(
+            self.0.protocol(),
+            self.0.address(),
+            self.0.metadata(),
+            Parameters::remove(self.0.config().as_str(), k.borrow()).0,
         )?;
 
         self.0.inner = ep.inner;
@@ -621,27 +563,6 @@ impl TryFrom<String> for EndPoint {
         const ERR: &str =
             "Endpoints must be of the form <protocol>/<address>[?<metadata>][#<config>]";
 
-        fn sort_hashmap(from: &str, into: &mut String) {
-            let mut from = from
-                .split(LIST_SEPARATOR)
-                .map(|p| split_once(p, FIELD_SEPARATOR))
-                .collect::<Vec<(&str, &str)>>();
-            from.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
-
-            let mut first = true;
-            for (k, v) in from.iter() {
-                if !first {
-                    into.push(LIST_SEPARATOR);
-                }
-                into.push_str(k);
-                if !v.is_empty() {
-                    into.push(FIELD_SEPARATOR);
-                    into.push_str(v);
-                }
-                first = false;
-            }
-        }
-
         let pidx = s
             .find(PROTO_SEPARATOR)
             .and_then(|i| (!s[..i].is_empty() && !s[i + 1..].is_empty()).then_some(i))
@@ -654,14 +575,20 @@ impl TryFrom<String> for EndPoint {
             (Some(midx), None) if midx > pidx && !s[midx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
-                sort_hashmap(&s[midx + 1..], &mut inner);
+                Parameters::from_iter_into(
+                    Parameters::sort(Parameters::iter(&s[midx + 1..])),
+                    &mut inner,
+                );
                 Ok(EndPoint { inner })
             }
             // There is some config
             (None, Some(cidx)) if cidx > pidx && !s[cidx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..cidx + 1]); // Includes config separator
-                sort_hashmap(&s[cidx + 1..], &mut inner);
+                Parameters::from_iter_into(
+                    Parameters::sort(Parameters::iter(&s[cidx + 1..])),
+                    &mut inner,
+                );
                 Ok(EndPoint { inner })
             }
             // There is some metadata and some config
@@ -674,10 +601,16 @@ impl TryFrom<String> for EndPoint {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
 
-                sort_hashmap(&s[midx + 1..cidx], &mut inner);
+                Parameters::from_iter_into(
+                    Parameters::sort(Parameters::iter(&s[midx + 1..cidx])),
+                    &mut inner,
+                );
 
                 inner.push(CONFIG_SEPARATOR);
-                sort_hashmap(&s[cidx + 1..], &mut inner);
+                Parameters::from_iter_into(
+                    Parameters::sort(Parameters::iter(&s[cidx + 1..])),
+                    &mut inner,
+                );
 
                 Ok(EndPoint { inner })
             }
@@ -699,30 +632,11 @@ impl EndPoint {
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},
-            rngs::ThreadRng,
             Rng,
         };
 
         const MIN: usize = 2;
         const MAX: usize = 8;
-
-        fn gen_hashmap(rng: &mut ThreadRng, endpoint: &mut String) {
-            let num = rng.gen_range(MIN..MAX);
-            for i in 0..num {
-                if i != 0 {
-                    endpoint.push(LIST_SEPARATOR);
-                }
-                let len = rng.gen_range(MIN..MAX);
-                let key = Alphanumeric.sample_string(rng, len);
-                endpoint.push_str(key.as_str());
-
-                endpoint.push(FIELD_SEPARATOR);
-
-                let len = rng.gen_range(MIN..MAX);
-                let value = Alphanumeric.sample_string(rng, len);
-                endpoint.push_str(value.as_str());
-            }
-        }
 
         let mut rng = rand::thread_rng();
         let mut endpoint = String::new();
@@ -739,11 +653,11 @@ impl EndPoint {
 
         if rng.gen_bool(0.5) {
             endpoint.push(METADATA_SEPARATOR);
-            gen_hashmap(&mut rng, &mut endpoint);
+            Parameters::rand(&mut endpoint);
         }
         if rng.gen_bool(0.5) {
             endpoint.push(CONFIG_SEPARATOR);
-            gen_hashmap(&mut rng, &mut endpoint);
+            Parameters::rand(&mut endpoint);
         }
 
         endpoint.parse().unwrap()
@@ -915,14 +829,14 @@ fn endpoints() {
     let mut endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
     endpoint
         .metadata_mut()
-        .extend([("a", "1"), ("c", "3"), ("b", "2")].iter().copied())
+        .extend_from_iter([("a", "1"), ("c", "3"), ("b", "2")].iter().copied())
         .unwrap();
     assert_eq!(endpoint.as_str(), "udp/127.0.0.1:7447?a=1;b=2;c=3");
 
     let mut endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
     endpoint
         .config_mut()
-        .extend([("A", "1"), ("C", "3"), ("B", "2")].iter().copied())
+        .extend_from_iter([("A", "1"), ("C", "3"), ("B", "2")].iter().copied())
         .unwrap();
     assert_eq!(endpoint.as_str(), "udp/127.0.0.1:7447#A=1;B=2;C=3");
 

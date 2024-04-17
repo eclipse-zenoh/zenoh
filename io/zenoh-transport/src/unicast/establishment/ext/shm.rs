@@ -204,7 +204,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         let codec = Zenoh080::new();
         let mut reader = ext.value.reader();
         let Ok(init_ack): Result<InitAck, _> = codec.read(&mut reader) else {
-            log::trace!("{} Decoding error.", S);
+            tracing::trace!("{} Decoding error.", S);
             return Ok(None);
         };
 
@@ -213,7 +213,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
 
         // Verify that Bob has correctly read Alice challenge
         if challenge != init_ack.alice_challenge {
-            log::trace!(
+            tracing::trace!(
                 "{} Challenge mismatch: {} != {}.",
                 S,
                 init_ack.alice_challenge,
@@ -226,7 +226,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         let bob_segment = match AuthSegment::open(init_ack.bob_segment) {
             Ok(buff) => buff,
             Err(e) => {
-                log::trace!("{} {}", S, e);
+                tracing::trace!("{} {}", S, e);
                 return Ok(None);
             }
         };
@@ -262,7 +262,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         };
 
         if ext.value != 1 {
-            log::trace!("{} Invalid value.", S);
+            tracing::trace!("{} Invalid value.", S);
             return Ok(());
         }
 
@@ -326,7 +326,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         let codec = Zenoh080::new();
         let mut reader = ext.value.reader();
         let Ok(init_syn): Result<InitSyn, _> = codec.read(&mut reader) else {
-            log::trace!("{} Decoding error.", S);
+            tracing::trace!("{} Decoding error.", S);
             bail!("");
         };
 
@@ -383,7 +383,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         // Verify that Alice has correctly read Bob challenge
         let bob_challnge = ext.value;
         if challenge != bob_challnge {
-            log::trace!(
+            tracing::trace!(
                 "{} Challenge mismatch: {} != {}.",
                 S,
                 bob_challnge,
