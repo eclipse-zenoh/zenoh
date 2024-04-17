@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#[test]
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-mod shm_tests {
-    use zenoh::shm::slice::zsliceshm::zsliceshm;
-    use zenoh::shm::slice::zsliceshmmut::zsliceshmmut;
+fn shm_payload_single_buf() {
+    use zenoh::shm::slice::zsliceshm::{zsliceshm, ZSliceShm};
+    use zenoh::shm::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
     use zenoh::{
         payload::Payload,
         shm::{
@@ -26,41 +28,44 @@ mod shm_tests {
         },
     };
 
-    #[test]
-    fn shm_payload_single_buf() {
-        // create an SHM backend...
-        let backend = PosixSharedMemoryProviderBackend::builder()
-            .with_size(4096)
-            .unwrap()
-            .res()
-            .unwrap();
-        // ...and an SHM provider
-        let provider = SharedMemoryProviderBuilder::builder()
-            .protocol_id::<POSIX_PROTOCOL_ID>()
-            .backend(backend)
-            .res();
+    // create an SHM backend...
+    let backend = PosixSharedMemoryProviderBackend::builder()
+        .with_size(4096)
+        .unwrap()
+        .res()
+        .unwrap();
+    // ...and an SHM provider
+    let provider = SharedMemoryProviderBuilder::builder()
+        .protocol_id::<POSIX_PROTOCOL_ID>()
+        .backend(backend)
+        .res();
 
-        // Prepare a layout for allocations
-        let layout = provider.alloc_layout().size(1024).res().unwrap();
+    // Prepare a layout for allocations
+    let layout = provider.alloc_layout().size(1024).res().unwrap();
 
-        // allocate an SHM buffer
-        let shm_buf = layout.alloc().res().unwrap();
+    // allocate an SHM buffer
+    let owned_shm_buf_mut = layout.alloc().res().unwrap();
 
-        // build a Payload from an SHM buffer
-        let mut payload: Payload = shm_buf.into();
+    // convert into immutable owned buffer
+    let owned_shm_buf: ZSliceShm = owned_shm_buf_mut.into();
 
-        {
-            // deserialize Payload as borrowed ZSliceShm
-            let borrowed_shm_buf: &zsliceshm = payload.deserialize().unwrap();
-            // construct owned buffer from borrowed type
-            let _owned = borrowed_shm_buf.to_owned();
-        }
+    // convert again into mutable owned buffer
+    let owned_shm_buf_mut: ZSliceShmMut = owned_shm_buf.try_into().unwrap();
 
-        {
-            // deserialize Payload as mutably borrowed ZSliceShm
-            let borrowed_shm_buf: &mut zsliceshm = payload.deserialize_mut().unwrap();
-            // convert ZSliceShm to ZSliceShmMut
-            let _borrowed_shm_buf_mut: &mut zsliceshmmut = borrowed_shm_buf.try_into().unwrap();
-        }
+    // build a Payload from an SHM buffer
+    let mut payload: Payload = owned_shm_buf_mut.into();
+
+    {
+        // deserialize Payload as borrowed zsliceshm
+        let borrowed_shm_buf: &zsliceshm = payload.deserialize().unwrap();
+        // construct owned buffer from borrowed type
+        let _owned = borrowed_shm_buf.to_owned();
+    }
+
+    {
+        // deserialize Payload as mutably borrowed zsliceshm
+        let borrowed_shm_buf: &mut zsliceshm = payload.deserialize_mut().unwrap();
+        // convert ZSliceShm to ZSliceShmMut
+        let _borrowed_shm_buf_mut: &mut zsliceshmmut = borrowed_shm_buf.try_into().unwrap();
     }
 }
