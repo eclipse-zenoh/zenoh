@@ -15,11 +15,23 @@ use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh_util::init_log;
 
 #[tokio::main]
 async fn main() {
-    init_log();
+    zenoh_util::init_log_test();
+
+    /// This is an utility function to enables the default tracing subscriber with INFO level
+    pub fn init_log_level(level: tracing::Level) {
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(level)
+            .with_thread_ids(true)
+            .with_thread_names(true)
+            .with_level(true)
+            .with_target(true);
+
+        let subscriber = subscriber.finish();
+        let _ = tracing::subscriber::set_global_default(subscriber);
+    }
 
     let _z = zenoh_runtime::ZRuntimePoolGuard;
 
@@ -36,9 +48,9 @@ async fn main() {
                 queryable_key_expr.clone(),
                 query.value().unwrap().clone(),
             ));
-            zenoh_runtime::ZRuntime::Application.block_in_place(
-                async move { query.reply(reply).res().await.unwrap(); }
-            );
+            zenoh_runtime::ZRuntime::Application.block_in_place(async move {
+                query.reply(reply).res().await.unwrap();
+            });
         })
         .complete(true)
         .res()

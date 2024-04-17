@@ -33,6 +33,7 @@ maintenance = { status = "actively-developed" }
 
 [features]
 std = []
+test = []
 default = ["std"]
 
 [dependencies]
