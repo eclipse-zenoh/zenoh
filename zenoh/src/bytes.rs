@@ -150,9 +150,10 @@ impl ZBytes {
     /// *At the moment it is only meant to be used from two applications using the Rust Zenoh API*
     ///
     /// Compress ZBytes.
-    pub fn compress(&mut self) {
-        let input: Cow<[u8]> = Cow::from(&*self);
-        *self = Self::new(lz4_flex::compress_prepend_size(input.as_ref()));
+    pub fn compress(&self) -> Self {
+        let input: Cow<[u8]> = Cow::from(self);
+        let bytes = lz4_flex::compress_prepend_size(input.as_ref());
+        Self::new(bytes)
     }
 
     #[cfg(all(feature = "unstable", feature = "compression"))]
@@ -160,12 +161,11 @@ impl ZBytes {
     /// *At the moment it is only meant to be used from two applications using the Rust Zenoh API*
     ///
     /// Decompress ZBytes.
-    pub fn decompress(&mut self) -> ZResult<()> {
-        let input: Cow<[u8]> = Cow::from(&*self);
-        *self = Self::new(
-            lz4_flex::decompress_size_prepended(input.as_ref()).map_err(|e| zerror!("{:?}", e))?,
-        );
-        Ok(())
+    pub fn decompress(&self) -> ZResult<Self> {
+        let input: Cow<[u8]> = Cow::from(self);
+        let bytes =
+            lz4_flex::decompress_size_prepended(input.as_ref()).map_err(|e| zerror!("{:?}", e))?;
+        Ok(Self::new(bytes))
     }
 }
 
@@ -1605,9 +1605,9 @@ mod tests {
         println!("Serialize: {}", i);
         let mut v = ZBytes::serialize(i);
         println!("Compress:\t{:?}", v);
-        v.compress();
+        v = v.compress();
         println!("Decompress:\t{:?}", v);
-        v.decompress().unwrap();
+        v = v.decompress().unwrap();
         println!("Deserialize:\t{:?}", v);
         let o = v.deserialize::<Cow<str>>().unwrap();
         assert_eq!(i, o);
