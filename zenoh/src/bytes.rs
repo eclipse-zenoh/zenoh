@@ -28,7 +28,7 @@ use zenoh_buffers::{
     ZBufReader, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::core::Properties;
+use zenoh_protocol::{core::Properties, zenoh::ext::AttachmentType};
 use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
@@ -1361,6 +1361,20 @@ impl From<&ZBytes> for StringOrBase64 {
             Ok(s) => StringOrBase64::String(s),
             Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.into::<Vec<u8>>())),
         }
+    }
+}
+
+impl<const ID: u8> From<ZBytes> for AttachmentType<ID> {
+    fn from(this: ZBytes) -> Self {
+        AttachmentType {
+            buffer: this.into(),
+        }
+    }
+}
+
+impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
+    fn from(this: AttachmentType<ID>) -> Self {
+        this.buffer.into()
     }
 }
 

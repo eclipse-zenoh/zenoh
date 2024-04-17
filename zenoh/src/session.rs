@@ -29,8 +29,6 @@ use crate::prelude::Locality;
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
-#[cfg(feature = "unstable")]
-use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::sample::DataInfoIntoSample;
 use crate::sample::QoS;
@@ -1482,7 +1480,7 @@ impl Session {
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
@@ -1613,7 +1611,7 @@ impl Session {
         destination: Locality,
         timeout: Duration,
         value: Option<Value>,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
         #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
@@ -1755,7 +1753,7 @@ impl Session {
         _target: TargetType,
         _consolidation: Consolidation,
         body: Option<QueryBodyType>,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) {
         let (primitives, key_expr, queryables) = {
             let state = zread!(self.state);
@@ -2240,7 +2238,7 @@ impl Primitives for Session {
                             payload: ZBuf,
                             info: DataInfo,
                             #[cfg(feature = "unstable")]
-                            attachment: Option<Attachment>,
+                            attachment: Option<ZBytes>,
                         }
                         let Ret {
                             payload,

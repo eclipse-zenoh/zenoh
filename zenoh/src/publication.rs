@@ -20,9 +20,8 @@ use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
-    bytes::OptionZBytes,
+    bytes::{OptionZBytes, ZBytes},
     handlers::{Callback, DefaultHandler, IntoHandler},
-    sample::Attachment,
     Id,
 };
 use std::future::Ready;
@@ -76,7 +75,7 @@ pub struct PublicationBuilder<P, T> {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
+    pub(crate) attachment: Option<ZBytes>,
 }
 
 pub type SessionPutBuilder<'a, 'b> =
@@ -946,7 +945,7 @@ fn resolve_put(
     encoding: Encoding,
     timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")] source_info: SourceInfo,
-    #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+    #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
 ) -> ZResult<()> {
     tracing::trace!("write({:?}, [...])", &publisher.key_expr);
     let primitives = zread!(publisher.session.state)

@@ -13,12 +13,12 @@
 //
 
 //! Query primitives.
+#[cfg(feature = "unstable")]
+use crate::bytes::{OptionZBytes, ZBytes};
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
 use crate::sample::QoSBuilder;
 use crate::Session;
-#[cfg(feature = "unstable")]
-use crate::{bytes::OptionZBytes, sample::Attachment};
 use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
@@ -149,7 +149,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) handler: Handler,
     pub(crate) value: Option<Value>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
+    pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
 }

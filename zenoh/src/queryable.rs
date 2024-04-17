@@ -26,9 +26,9 @@ use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
-    bytes::OptionZBytes,
+    bytes::{OptionZBytes, ZBytes},
     query::ReplyKeyExpr,
-    sample::{Attachment, SourceInfo},
+    sample::SourceInfo,
 };
 use std::fmt;
 use std::future::Ready;
@@ -55,7 +55,7 @@ pub(crate) struct QueryInner {
     pub(crate) zid: ZenohId,
     pub(crate) primitives: Arc<dyn Primitives>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
+    pub(crate) attachment: Option<ZBytes>,
 }
 
 impl Drop for QueryInner {
@@ -116,7 +116,7 @@ impl Query {
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachment(&self) -> Option<&Attachment> {
+    pub fn attachment(&self) -> Option<&ZBytes> {
         self.inner.attachment.as_ref()
     }
 
@@ -295,7 +295,7 @@ pub struct ReplyBuilder<'a, 'b, T> {
     source_info: SourceInfo,
 
     #[cfg(feature = "unstable")]
-    attachment: Option<Attachment>,
+    attachment: Option<ZBytes>,
 }
 
 pub type ReplyPutBuilder<'a, 'b> = ReplyBuilder<'a, 'b, ReplyBuilderPut>;
