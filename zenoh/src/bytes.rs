@@ -1222,10 +1222,7 @@ macro_rules! impl_tuple {
         let mut buffer: ZBuf = ZBuf::empty();
         let mut writer = buffer.writer();
         let apld: ZBytes = a.into();
-        println!("Write A: {:?}", apld.0);
-
         let bpld: ZBytes = b.into();
-        println!("Write B: {:?}", bpld.0);
 
         // SAFETY: we are serializing slices on a ZBuf, so serialization will never
         //         fail unless we run out of memory. In that case, Rust memory allocator
