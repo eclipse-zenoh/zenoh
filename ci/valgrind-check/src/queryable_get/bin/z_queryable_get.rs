@@ -15,11 +15,10 @@ use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh_util::init_log;
 
 #[tokio::main]
 async fn main() {
-    init_log();
+    zenoh_util::init_log_test();
 
     let _z = zenoh_runtime::ZRuntimePoolGuard;
 
@@ -36,9 +35,9 @@ async fn main() {
                 queryable_key_expr.clone(),
                 query.value().unwrap().clone(),
             ));
-            zenoh_runtime::ZRuntime::Application.block_in_place(
-                async move { query.reply(reply).res().await.unwrap(); }
-            );
+            zenoh_runtime::ZRuntime::Application.block_in_place(async move {
+                query.reply(reply).res().await.unwrap();
+            });
         })
         .complete(true)
         .res()
