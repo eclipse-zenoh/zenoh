@@ -56,7 +56,9 @@ fn init_env_filter(env_filter: EnvFilter) {
 }
 
 #[cfg(feature = "test")]
-// Used to verify memory leaks for valgrind CI
+// Used to verify memory leaks for valgrind CI.
+// `EnvFilter` internally uses a static reference that is not cleaned up yielding to false positive in valgrind.
+// This function enables logging without calling `EnvFilter` for env configuration.
 pub fn init_log_test() {
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
