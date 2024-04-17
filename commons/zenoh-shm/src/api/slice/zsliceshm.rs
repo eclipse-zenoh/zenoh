@@ -32,7 +32,7 @@ pub struct ZSliceShm(pub(crate) SharedMemoryBuf);
 
 impl PartialEq<&zsliceshm> for ZSliceShm {
     fn eq(&self, other: &&zsliceshm) -> bool {
-        self == other
+        self.0 == other.0 .0
     }
 }
 
@@ -91,6 +91,8 @@ impl TryFrom<&mut ZSliceShm> for &mut zsliceshmmut {
     }
 }
 
+/// A borrowed immutable SHM slice
+#[zenoh_macros::unstable_doc]
 #[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
@@ -106,7 +108,7 @@ impl ToOwned for zsliceshm {
 
 impl PartialEq<ZSliceShm> for &zsliceshm {
     fn eq(&self, other: &ZSliceShm) -> bool {
-        self == other
+        self.0 .0 == other.0
     }
 }
 

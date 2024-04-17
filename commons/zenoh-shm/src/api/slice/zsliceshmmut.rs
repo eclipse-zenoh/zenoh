@@ -35,7 +35,7 @@ impl ZSliceShmMut {
 
 impl PartialEq<zsliceshmmut> for &ZSliceShmMut {
     fn eq(&self, other: &zsliceshmmut) -> bool {
-        self == other
+        self.0 == other.0 .0
     }
 }
 
@@ -129,6 +129,8 @@ impl From<ZSliceShmMut> for ZBuf {
     }
 }
 
+/// A borrowed mutable SHM slice
+#[zenoh_macros::unstable_doc]
 #[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
@@ -136,7 +138,7 @@ pub struct zsliceshmmut(ZSliceShmMut);
 
 impl PartialEq<ZSliceShmMut> for &zsliceshmmut {
     fn eq(&self, other: &ZSliceShmMut) -> bool {
-        self == other
+        self.0 .0 == other.0
     }
 }
 

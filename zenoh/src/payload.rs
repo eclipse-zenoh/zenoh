@@ -1460,81 +1460,91 @@ mod tests {
             };
         }
 
-        let mut rng = rand::thread_rng();
+        // WARN: test function body produces stack overflow, so I split it into subroutines
+        #[inline(never)]
+        fn numeric() {
+            let mut rng = rand::thread_rng();
 
-        // unsigned integer
-        serialize_deserialize!(u8, u8::MIN);
-        serialize_deserialize!(u16, u16::MIN);
-        serialize_deserialize!(u32, u32::MIN);
-        serialize_deserialize!(u64, u64::MIN);
-        serialize_deserialize!(usize, usize::MIN);
+            // unsigned integer
+            serialize_deserialize!(u8, u8::MIN);
+            serialize_deserialize!(u16, u16::MIN);
+            serialize_deserialize!(u32, u32::MIN);
+            serialize_deserialize!(u64, u64::MIN);
+            serialize_deserialize!(usize, usize::MIN);
 
-        serialize_deserialize!(u8, u8::MAX);
-        serialize_deserialize!(u16, u16::MAX);
-        serialize_deserialize!(u32, u32::MAX);
-        serialize_deserialize!(u64, u64::MAX);
-        serialize_deserialize!(usize, usize::MAX);
+            serialize_deserialize!(u8, u8::MAX);
+            serialize_deserialize!(u16, u16::MAX);
+            serialize_deserialize!(u32, u32::MAX);
+            serialize_deserialize!(u64, u64::MAX);
+            serialize_deserialize!(usize, usize::MAX);
 
-        for _ in 0..NUM {
-            serialize_deserialize!(u8, rng.gen::<u8>());
-            serialize_deserialize!(u16, rng.gen::<u16>());
-            serialize_deserialize!(u32, rng.gen::<u32>());
-            serialize_deserialize!(u64, rng.gen::<u64>());
-            serialize_deserialize!(usize, rng.gen::<usize>());
+            for _ in 0..NUM {
+                serialize_deserialize!(u8, rng.gen::<u8>());
+                serialize_deserialize!(u16, rng.gen::<u16>());
+                serialize_deserialize!(u32, rng.gen::<u32>());
+                serialize_deserialize!(u64, rng.gen::<u64>());
+                serialize_deserialize!(usize, rng.gen::<usize>());
+            }
+
+            // signed integer
+            serialize_deserialize!(i8, i8::MIN);
+            serialize_deserialize!(i16, i16::MIN);
+            serialize_deserialize!(i32, i32::MIN);
+            serialize_deserialize!(i64, i64::MIN);
+            serialize_deserialize!(isize, isize::MIN);
+
+            serialize_deserialize!(i8, i8::MAX);
+            serialize_deserialize!(i16, i16::MAX);
+            serialize_deserialize!(i32, i32::MAX);
+            serialize_deserialize!(i64, i64::MAX);
+            serialize_deserialize!(isize, isize::MAX);
+
+            for _ in 0..NUM {
+                serialize_deserialize!(i8, rng.gen::<i8>());
+                serialize_deserialize!(i16, rng.gen::<i16>());
+                serialize_deserialize!(i32, rng.gen::<i32>());
+                serialize_deserialize!(i64, rng.gen::<i64>());
+                serialize_deserialize!(isize, rng.gen::<isize>());
+            }
+
+            // float
+            serialize_deserialize!(f32, f32::MIN);
+            serialize_deserialize!(f64, f64::MIN);
+
+            serialize_deserialize!(f32, f32::MAX);
+            serialize_deserialize!(f64, f64::MAX);
+
+            for _ in 0..NUM {
+                serialize_deserialize!(f32, rng.gen::<f32>());
+                serialize_deserialize!(f64, rng.gen::<f64>());
+            }
         }
+        numeric();
 
-        // signed integer
-        serialize_deserialize!(i8, i8::MIN);
-        serialize_deserialize!(i16, i16::MIN);
-        serialize_deserialize!(i32, i32::MIN);
-        serialize_deserialize!(i64, i64::MIN);
-        serialize_deserialize!(isize, isize::MIN);
+        // WARN: test function body produces stack overflow, so I split it into subroutines
+        #[inline(never)]
+        fn basic() {
+            // String
+            serialize_deserialize!(String, "");
+            serialize_deserialize!(String, String::from("abcdef"));
 
-        serialize_deserialize!(i8, i8::MAX);
-        serialize_deserialize!(i16, i16::MAX);
-        serialize_deserialize!(i32, i32::MAX);
-        serialize_deserialize!(i64, i64::MAX);
-        serialize_deserialize!(isize, isize::MAX);
+            // Cow<str>
+            serialize_deserialize!(Cow<str>, Cow::from(""));
+            serialize_deserialize!(Cow<str>, Cow::from(String::from("abcdef")));
 
-        for _ in 0..NUM {
-            serialize_deserialize!(i8, rng.gen::<i8>());
-            serialize_deserialize!(i16, rng.gen::<i16>());
-            serialize_deserialize!(i32, rng.gen::<i32>());
-            serialize_deserialize!(i64, rng.gen::<i64>());
-            serialize_deserialize!(isize, rng.gen::<isize>());
+            // Vec
+            serialize_deserialize!(Vec<u8>, vec![0u8; 0]);
+            serialize_deserialize!(Vec<u8>, vec![0u8; 64]);
+
+            // Cow<[u8]>
+            serialize_deserialize!(Cow<[u8]>, Cow::from(vec![0u8; 0]));
+            serialize_deserialize!(Cow<[u8]>, Cow::from(vec![0u8; 64]));
+
+            // ZBuf
+            serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 0]));
+            serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 64]));
         }
-
-        // float
-        serialize_deserialize!(f32, f32::MIN);
-        serialize_deserialize!(f64, f64::MIN);
-
-        serialize_deserialize!(f32, f32::MAX);
-        serialize_deserialize!(f64, f64::MAX);
-
-        for _ in 0..NUM {
-            serialize_deserialize!(f32, rng.gen::<f32>());
-            serialize_deserialize!(f64, rng.gen::<f64>());
-        }
-
-        // String
-        serialize_deserialize!(String, "");
-        serialize_deserialize!(String, String::from("abcdef"));
-
-        // Cow<str>
-        serialize_deserialize!(Cow<str>, Cow::from(""));
-        serialize_deserialize!(Cow<str>, Cow::from(String::from("abcdef")));
-
-        // Vec
-        serialize_deserialize!(Vec<u8>, vec![0u8; 0]);
-        serialize_deserialize!(Vec<u8>, vec![0u8; 64]);
-
-        // Cow<[u8]>
-        serialize_deserialize!(Cow<[u8]>, Cow::from(vec![0u8; 0]));
-        serialize_deserialize!(Cow<[u8]>, Cow::from(vec![0u8; 64]));
-
-        // ZBuf
-        serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 0]));
-        serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 64]));
+        basic();
 
         // SHM
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
