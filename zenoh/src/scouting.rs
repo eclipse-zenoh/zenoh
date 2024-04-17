@@ -233,9 +233,8 @@ impl ScoutInner {
 
 impl Drop for ScoutInner {
     fn drop(&mut self) {
-        if self.scout_task.is_some() {
-            let task = self.scout_task.take();
-            task.unwrap().terminate(Duration::from_secs(10));
+        if let Some(task) = self.scout_task.take() {
+            task.terminate(Duration::from_secs(10));
         }
     }
 }
@@ -324,7 +323,16 @@ fn scout(
             .collect();
         if !sockets.is_empty() {
             let cancellation_token = TerminatableTask::create_cancellation_token();
-            let cancellation_token_clone = cancellation_token.clone();
+
+            // Spawn another thread to drop the callback
+            let c_callback = callback.clone();
+            let c_cancellation_token = cancellation_token.clone();
+            zenoh_runtime::ZRuntime::Acceptor.spawn(async move {
+                c_cancellation_token.cancelled().await;
+                std::mem::drop(c_callback);
+            });
+
+            let c_cancellation_token = cancellation_token.clone();
             let task = TerminatableTask::spawn(
                 zenoh_runtime::ZRuntime::Acceptor,
                 async move {
@@ -337,10 +345,10 @@ fn scout(
                     });
                     tokio::select! {
                         _ = scout => {},
-                        _ = cancellation_token_clone.cancelled() => { tracing::trace!("stop scout({}, {})", what, &config); },
+                        _ = c_cancellation_token.cancelled() => { tracing::trace!("stop scout({}, {})", what, &config); },
                     }
                 },
-                cancellation_token.clone(),
+                cancellation_token,
             );
             return Ok(ScoutInner {
                 scout_task: Some(task),
