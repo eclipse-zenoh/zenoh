@@ -257,7 +257,7 @@ impl HatQueriesTrait for HatCode {
         _mode: InterestMode,
         _aggregate: bool,
     ) {
-        todo!()
+        // ignore
     }
 
     fn undeclare_qabl_interest(
@@ -266,7 +266,7 @@ impl HatQueriesTrait for HatCode {
         _face: &mut Arc<FaceState>,
         _id: InterestId,
     ) {
-        todo!()
+        // ignore
     }
 
     fn declare_queryable(
