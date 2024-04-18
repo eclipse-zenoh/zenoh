@@ -24,7 +24,7 @@ on:
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_PROFILE_DEV_DEBUG: false
-  ZENOH_RUNTIME: '(rx: (worker_threads: 2), acc: (worker_threads: 2), app: (worker_threads: 2), tx: (max_blocking_threads: 2), net: (max_blocking_threads: 2))'
+  ZENOH_RUNTIME: '(rx: (worker_threads: 2), acc: (worker_threads: 1), app: (worker_threads: 1), tx: (max_blocking_threads: 1), net: (max_blocking_threads: 1))'
 
 jobs:
   # check:
@@ -97,78 +97,29 @@ jobs:
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
 
-      # - uses: hustcer/setup-nu@v3.9
-      #   with:
-      #     version: "0.92.2"
+      - name: Run tests
+        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
-      - name: Install nushell
-        run: brew install nushell
+      - name: Run tests with SHM
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
 
-      - name: Build nextest cache
-        run: cargo nextest archive --archive-file nextest-routing.tar.zst -p zenoh --test routing
+      - name: Check for feature leaks
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo nextest run -p zenohd --no-default-features
 
-      - name: Default shell will be `nu`
-        shell: nu {0}
-        run: |
-          let log_file = "failed-list.txt"
-          let range = 1..2
-          for tx in $range {
-              for rx in $range {
-                  for app in $range {
-                      for acc in $range {
-                          for net in $range {
-                              let table = {
-                                  tx: $tx,
-                                  rx: $rx,
-                                  app: $app,
-                                  acc: $acc,
-                                  net: $net
-                              }
-                              let param = $table
-                                  | transpose key value
-                                  | each {|row| $"($row.key): \(worker_threads: ($row.value)\)" }
-                                  | str join ', '
-                              $env.ZENOH_RUNTIME = "(" + $param + ")"
+      - name: Run doctests
+        run: cargo test --doc
 
-                              try {
-                                  cargo nextest run --archive-file nextest-routing.tar.zst
-                              } catch {
-                                  $table
-                                      | table
-                                      | ansi strip
-                                      | save --append $log_file
-                                  echo "\n" | save --append $log_file
-                              }
-                          }
-                      }
-                  }
-              }
-          }
-          cat $log_file
+      - name: Install valgrind
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get install -y valgrind
+        shell: bash
 
-      # - name: Run tests
-      #   run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-      #
-      # - name: Run tests with SHM
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
-      #
-      # - name: Check for feature leaks
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: cargo nextest run -p zenohd --no-default-features
-      #
-      # - name: Run doctests
-      #   run: cargo test --doc
-      #
-      # - name: Install valgrind
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: sudo apt-get install -y valgrind
-      #   shell: bash
-      #
-      # - name: Run memory leaks check
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: ci/valgrind-check/run.sh
-      #   shell: bash
+      - name: Run memory leaks check
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: ci/valgrind-check/run.sh
+        shell: bash
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
