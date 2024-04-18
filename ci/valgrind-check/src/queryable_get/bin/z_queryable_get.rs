@@ -31,10 +31,11 @@ async fn main() {
         .declare_queryable(&queryable_key_expr.clone())
         .callback(move |query| {
             println!(">> Handling query '{}'", query.selector());
+            let queryable_key_expr = queryable_key_expr.clone();
             zenoh_runtime::ZRuntime::Application.block_in_place(async move {
                 query
                     .reply(
-                        queryable_key_expr.clone(),
+                        queryable_key_expr,
                         query.value().unwrap().payload().clone(),
                     )
                     .res()
