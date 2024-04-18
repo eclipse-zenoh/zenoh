@@ -24,7 +24,7 @@ on:
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_PROFILE_DEV_DEBUG: false
-  ZENOH_RUNTIME: '(rx: (worker_threads: 2), acc: (worker_threads: 1), app: (worker_threads: 1), tx: (max_blocking_threads: 1), net: (max_blocking_threads: 1))'
+  ZENOH_RUNTIME: '(rx: (worker_threads: 2, max_blocking_threads: 1), acc: (handover: app), net: (handover: app), app: (worker_threads: 2, max_blocking_threads: 1), tx: (worker_threads: 1, max_blocking_threads: 1))'
 
 jobs:
   # check:
@@ -75,9 +75,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          # - ubuntu-latest
-          # - windows-latest
-          # - macos-13
+          - ubuntu-latest
+          - windows-latest
+          - macos-13
           - macos-14
 
     steps:
