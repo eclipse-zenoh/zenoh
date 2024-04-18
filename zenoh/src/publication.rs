@@ -16,13 +16,13 @@
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
+use crate::Id;
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
     bytes::{OptionZBytes, ZBytes},
     handlers::{Callback, DefaultHandler, IntoHandler},
-    Id,
 };
 use std::fmt;
 use std::future::Ready;
@@ -873,7 +873,6 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     fn create_one_shot_publisher(self) -> ZResult<Publisher<'a>> {
         Ok(Publisher {
             session: self.session,
-            #[cfg(feature = "unstable")]
             id: 0, // This is a one shot Publisher
             key_expr: self.key_expr?,
             congestion_control: self.congestion_control,
@@ -924,10 +923,9 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
         let session = self.session;
         session
             .declare_publisher_inner(key_expr.clone(), self.destination)
-            .map(|eid| Publisher {
+            .map(|id| Publisher {
                 session,
-                #[cfg(feature = "unstable")]
-                id: eid,
+                id,
                 key_expr,
                 congestion_control: self.congestion_control,
                 priority: self.priority,

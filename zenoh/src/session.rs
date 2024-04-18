@@ -1140,22 +1140,25 @@ impl Session {
                 let state = zread!(self.state);
                 self.update_status_up(&state, &key_expr)
             }
-        } else if key_expr
-            .as_str()
-            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
+        } else {
+            #[cfg(feature = "unstable")]
+            if key_expr
+                .as_str()
+                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+            {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
 
-            primitives.send_interest(Interest {
-                id,
-                mode: InterestMode::CurrentFuture,
-                options: InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
-                wire_expr: Some(key_expr.to_wire(self).to_owned()),
-                ext_qos: network::ext::QoSType::DEFAULT,
-                ext_tstamp: None,
-                ext_nodeid: network::ext::NodeIdType::DEFAULT,
-            });
+                primitives.send_interest(Interest {
+                    id,
+                    mode: InterestMode::CurrentFuture,
+                    options: InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
+                    wire_expr: Some(key_expr.to_wire(self).to_owned()),
+                    ext_qos: network::ext::QoSType::DEFAULT,
+                    ext_tstamp: None,
+                    ext_nodeid: network::ext::NodeIdType::DEFAULT,
+                });
+            }
         }
 
         Ok(sub_state)
@@ -1214,23 +1217,26 @@ impl Session {
                         self.update_status_down(&state, &sub_state.key_expr)
                     }
                 }
-            } else if sub_state
-                .key_expr
-                .as_str()
-                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-            {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                drop(state);
+            } else {
+                #[cfg(feature = "unstable")]
+                if sub_state
+                    .key_expr
+                    .as_str()
+                    .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                {
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
 
-                primitives.send_interest(Interest {
-                    id: sub_state.id,
-                    mode: InterestMode::Final,
-                    options: InterestOptions::empty(),
-                    wire_expr: None,
-                    ext_qos: declare::ext::QoSType::DEFAULT,
-                    ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                });
+                    primitives.send_interest(Interest {
+                        id: sub_state.id,
+                        mode: InterestMode::Final,
+                        options: InterestOptions::empty(),
+                        wire_expr: None,
+                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    });
+                }
             }
             Ok(())
         } else {
