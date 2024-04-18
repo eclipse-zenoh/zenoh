@@ -53,7 +53,7 @@ pub trait Deserialize<'a, T> {
     fn deserialize(self, t: Self::Input) -> Result<T, Self::Error>;
 }
 
-/// A payload contains the serialized bytes of user data.
+/// ZBytes contains the serialized bytes of user data.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZBytes(ZBuf);
