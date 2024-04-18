@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
+use crate::config::PluginLoad;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::plugins::sealed::{self as plugins};
@@ -63,7 +64,7 @@ pub struct AdminSpace {
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
-    Start(crate::config::PluginLoad),
+    Start(PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -74,11 +75,24 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        let plugins_mgr = zlock!(self.context.plugins_mgr);
-        let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
-            "Plugin `{}` is not running, but its configuration is being changed",
-            name
-        ))?;
+        let mut plugin_mgr = zlock!(self.context.plugins_mgr);
+        let plugin = if let Some(plugin) = plugin_mgr.started_plugin(name) {
+            plugin
+        } else {
+            Self::start_plugin(
+                &mut plugin_mgr,
+                &PluginLoad {
+                    name: name.to_string(),
+                    paths: None,
+                    required: false,
+                },
+                &self.context.runtime,
+            )?;
+            plugin_mgr.started_plugin(name).ok_or(format!(
+                "Internal error: plugin `{}` successfully started but not found in running plugins list",
+                name
+            ))?
+        };
         plugin.instance().config_checker(path, current, new)
     }
 }
@@ -86,7 +100,7 @@ impl ConfigValidator for AdminSpace {
 impl AdminSpace {
     fn start_plugin(
         plugin_mgr: &mut plugins::PluginsManager,
-        config: &crate::config::PluginLoad,
+        config: &PluginLoad,
         start_args: &Runtime,
     ) -> ZResult<()> {
         let name = &config.name;
@@ -98,7 +112,6 @@ impl AdminSpace {
         } else {
             plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
         };
-
         let loaded = if let Some(loaded) = declared.loaded_mut() {
             tracing::warn!(
                 "Plugin `{}` was already loaded from {}",
@@ -109,7 +122,6 @@ impl AdminSpace {
         } else {
             declared.load()?
         };
-
         if let Some(started) = loaded.started_mut() {
             tracing::warn!("Plugin `{}` was already started", started.name());
         } else {
