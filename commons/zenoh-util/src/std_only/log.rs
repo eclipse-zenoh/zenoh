@@ -35,7 +35,7 @@ pub fn try_init_log_from_env() {
 /// such static is not deallocated prior to process existing, thus tools such as `valgrind`
 /// will report a memory leak.
 /// Refer to this issue: https://github.com/tokio-rs/tracing/issues/2069
-pub fn try_init_log_from_env_or<S>(fallback: S)
+pub fn init_log_from_env_or<S>(fallback: S)
 where
     S: AsRef<str>,
 {
