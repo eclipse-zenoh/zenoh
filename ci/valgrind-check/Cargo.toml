@@ -1,0 +1,38 @@
+#
+# Copyright (c) 2024 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+[package]
+name = "valgrind-check"
+version = "0.1.0"
+repository = "https://github.com/eclipse-zenoh/zenoh"
+homepage = "http://zenoh.io"
+license = "EPL-2.0 OR Apache-2.0"
+edition = "2021"
+categories = ["network-programming"]
+description = "Internal crate for zenoh."
+
+[dependencies]
+tokio = { version = "1.35.1",  features = ["rt-multi-thread", "time", "io-std"] }
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+futures = "0.3.25"
+zenoh = { path = "../../zenoh/" }
+zenoh-runtime = { path = "../../commons/zenoh-runtime/" }
+zenoh-util = { path = "../../commons/zenoh-util/", features = ["test"] }
+
+[[bin]]
+name = "pub_sub"
+path = "src/pub_sub/bin/z_pub_sub.rs"
+
+[[bin]]
+name = "queryable_get"
+path = "src/queryable_get/bin/z_queryable_get.rs"

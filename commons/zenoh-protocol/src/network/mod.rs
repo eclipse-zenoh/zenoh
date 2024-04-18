@@ -36,12 +36,12 @@ pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
     //          defined in `crate::transport::id`.
     pub const OAM: u8 = 0x1f;
-    pub const INTEREST: u8 = 0x19;
     pub const DECLARE: u8 = 0x1e;
     pub const PUSH: u8 = 0x1d;
     pub const REQUEST: u8 = 0x1c;
     pub const RESPONSE: u8 = 0x1b;
     pub const RESPONSE_FINAL: u8 = 0x1a;
+    pub const INTEREST: u8 = 0x19;
 }
 
 #[repr(u8)]

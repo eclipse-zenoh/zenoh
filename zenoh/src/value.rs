@@ -13,57 +13,75 @@
 //
 
 //! Value primitives.
-use crate::{encoding::Encoding, payload::Payload};
+use crate::{bytes::ZBytes, encoding::Encoding};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the [`Payload`] should be interpreted.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Value {
-    /// The binary [`Payload`] of this [`Value`].
-    pub payload: Payload,
-    /// The [`Encoding`] of this [`Value`].
-    pub encoding: Encoding,
+    pub(crate) payload: ZBytes,
+    pub(crate) encoding: Encoding,
 }
 
 impl Value {
-    /// Creates a new [`Value`] with default [`Encoding`].
-    pub fn new<T>(payload: T) -> Self
+    /// Creates a new [`Value`] with specified [`Payload`] and  [`Encoding`].
+    pub fn new<T, E>(payload: T, encoding: E) -> Self
     where
-        T: Into<Payload>,
+        T: Into<ZBytes>,
+        E: Into<Encoding>,
     {
         Value {
             payload: payload.into(),
-            encoding: Encoding::default(),
+            encoding: encoding.into(),
         }
     }
-
     /// Creates an empty [`Value`].
     pub const fn empty() -> Self {
         Value {
-            payload: Payload::empty(),
+            payload: ZBytes::empty(),
             encoding: Encoding::default(),
         }
     }
+    /// Checks if the [`Value`] is empty.
+    /// Value is considered empty if its payload is empty and encoding is default.
+    pub fn is_empty(&self) -> bool {
+        self.payload.is_empty() && self.encoding == Encoding::default()
+    }
 
-    /// Sets the encoding of this [`Value`]`.
-    #[inline(always)]
-    pub fn with_encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
-    where
-        IntoEncoding: Into<Encoding>,
-    {
-        self.encoding = encoding.into();
-        self
+    /// Gets binary [`Payload`] of this [`Value`].
+    pub fn payload(&self) -> &ZBytes {
+        &self.payload
+    }
+
+    /// Gets [`Encoding`] of this [`Value`].
+    pub fn encoding(&self) -> &Encoding {
+        &self.encoding
     }
 }
 
 impl<T> From<T> for Value
 where
-    T: Into<Payload>,
+    T: Into<ZBytes>,
 {
     fn from(t: T) -> Self {
         Value {
             payload: t.into(),
             encoding: Encoding::default(),
         }
+    }
+}
+
+impl<T> From<Option<T>> for Value
+where
+    T: Into<Value>,
+{
+    fn from(t: Option<T>) -> Self {
+        t.map_or_else(Value::empty, Into::into)
+    }
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Value::empty()
     }
 }

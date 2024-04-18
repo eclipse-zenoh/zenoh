@@ -13,10 +13,11 @@
 //
 
 //! Query primitives.
+#[cfg(feature = "unstable")]
+use crate::bytes::{OptionZBytes, ZBytes};
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
+use crate::sample::QoSBuilder;
 use crate::Session;
 use std::collections::HashMap;
 use std::future::Ready;
@@ -76,10 +77,31 @@ impl Default for QueryConsolidation {
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
-    /// The result of this Reply.
-    pub sample: Result<Sample, Value>,
-    /// The id of the zenoh instance that answered this Reply.
-    pub replier_id: ZenohId,
+    pub(crate) result: Result<Sample, Value>,
+    pub(crate) replier_id: ZenohId,
+}
+
+impl Reply {
+    /// Gets the a borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
+    pub fn result(&self) -> Result<&Sample, &Value> {
+        self.result.as_ref()
+    }
+
+    /// Converts this `Reply` into the its result. Use [`Reply::result`] it you don't want to take ownership.
+    pub fn into_result(self) -> Result<Sample, Value> {
+        self.result
+    }
+
+    /// Gets the id of the zenoh instance that answered this Reply.
+    pub fn replier_id(&self) -> ZenohId {
+        self.replier_id
+    }
+}
+
+impl From<Reply> for Result<Sample, Value> {
+    fn from(value: Reply) -> Self {
+        value.into_result()
+    }
 }
 
 pub(crate) struct QueryState {
@@ -109,7 +131,7 @@ pub(crate) struct QueryState {
 ///     .await
 ///     .unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
-///     println!("Received {:?}", reply.sample)
+///     println!("Received {:?}", reply.result())
 /// }
 /// # }
 /// ```
@@ -121,12 +143,79 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
+    pub(crate) qos: QoSBuilder,
     pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
     pub(crate) value: Option<Value>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
+    pub(crate) attachment: Option<ZBytes>,
+    #[cfg(feature = "unstable")]
+    pub(crate) source_info: SourceInfo,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
+    #[cfg(feature = "unstable")]
+    fn source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            source_info,
+            ..self
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
+        let attachment: OptionZBytes = attachment.into();
+        Self {
+            attachment: attachment.into(),
+            ..self
+        }
+    }
+}
+
+impl QoSBuilderTrait for GetBuilder<'_, '_, DefaultHandler> {
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
+        let qos = self.qos.congestion_control(congestion_control);
+        Self { qos, ..self }
+    }
+
+    fn priority(self, priority: Priority) -> Self {
+        let qos = self.qos.priority(priority);
+        Self { qos, ..self }
+    }
+
+    fn express(self, is_express: bool) -> Self {
+        let qos = self.qos.express(is_express);
+        Self { qos, ..self }
+    }
+}
+
+impl<Handler> ValueBuilderTrait for GetBuilder<'_, '_, Handler> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        let mut value = self.value.unwrap_or_default();
+        value.encoding = encoding.into();
+        Self {
+            value: Some(value),
+            ..self
+        }
+    }
+
+    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
+        let mut value = self.value.unwrap_or_default();
+        value.payload = payload.into();
+        Self {
+            value: Some(value),
+            ..self
+        }
+    }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let value: Value = value.into();
+        Self {
+            value: if value.is_empty() { None } else { Some(value) },
+            ..self
+        }
+    }
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -141,7 +230,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
-    ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
+    ///     .callback(|reply| {println!("Received {:?}", reply.result());})
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -158,11 +247,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             scope,
             target,
             consolidation,
+            qos,
             destination,
             timeout,
             value,
             #[cfg(feature = "unstable")]
             attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
             handler: _,
         } = self;
         GetBuilder {
@@ -171,11 +263,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             scope,
             target,
             consolidation,
+            qos,
             destination,
             timeout,
             value,
             #[cfg(feature = "unstable")]
             attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
             handler: callback,
         }
     }
@@ -228,7 +323,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!("Received {:?}", reply.sample);
+    ///     println!("Received {:?}", reply.result());
     /// }
     /// # }
     /// ```
@@ -243,11 +338,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             scope,
             target,
             consolidation,
+            qos,
             destination,
             timeout,
             value,
             #[cfg(feature = "unstable")]
             attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
             handler: _,
         } = self;
         GetBuilder {
@@ -256,11 +354,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             scope,
             target,
             consolidation,
+            qos,
             destination,
             timeout,
             value,
             #[cfg(feature = "unstable")]
             attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
             handler,
         }
     }
@@ -268,48 +369,34 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
 impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// Change the target of the query.
     #[inline]
-    pub fn target(mut self, target: QueryTarget) -> Self {
-        self.target = target;
-        self
+    pub fn target(self, target: QueryTarget) -> Self {
+        Self { target, ..self }
     }
 
     /// Change the consolidation mode of the query.
     #[inline]
-    pub fn consolidation<QC: Into<QueryConsolidation>>(mut self, consolidation: QC) -> Self {
-        self.consolidation = consolidation.into();
-        self
+    pub fn consolidation<QC: Into<QueryConsolidation>>(self, consolidation: QC) -> Self {
+        Self {
+            consolidation: consolidation.into(),
+            ..self
+        }
     }
 
     /// Restrict the matching queryables that will receive the query
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.destination = destination;
-        self
+    pub fn allowed_destination(self, destination: Locality) -> Self {
+        Self {
+            destination,
+            ..self
+        }
     }
 
     /// Set query timeout.
     #[inline]
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
-    /// Set query value.
-    #[inline]
-    pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
-    where
-        IntoValue: Into<Value>,
-    {
-        self.value = Some(value.into());
-        self
-    }
-
-    #[zenoh_macros::unstable]
-    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
-        self.attachment = Some(attachment);
-        self
+    pub fn timeout(self, timeout: Duration) -> Self {
+        Self { timeout, ..self }
     }
 
     /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
@@ -319,29 +406,14 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// expressions that don't intersect with the query's.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
-        let Self {
-            session,
-            selector,
-            scope,
-            target,
-            consolidation,
-            destination,
-            timeout,
-            value,
-            attachment,
-            handler,
-        } = self;
         Self {
-            session,
-            selector: selector.and_then(|s| s.accept_any_keyexpr(accept == ReplyKeyExpr::Any)),
-            scope,
-            target,
-            consolidation,
-            destination,
-            timeout,
-            value,
-            attachment,
-            handler,
+            selector: self.selector.map(|mut s| {
+                if accept == ReplyKeyExpr::Any {
+                    s.parameters_mut().insert(_REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
+                }
+                s
+            }),
+            ..self
         }
     }
 }
@@ -386,11 +458,14 @@ where
                 &self.scope?,
                 self.target,
                 self.consolidation,
+                self.qos.into(),
                 self.destination,
                 self.timeout,
                 self.value,
                 #[cfg(feature = "unstable")]
                 self.attachment,
+                #[cfg(feature = "unstable")]
+                self.source_info,
                 callback,
             )
             .map(|_| receiver)

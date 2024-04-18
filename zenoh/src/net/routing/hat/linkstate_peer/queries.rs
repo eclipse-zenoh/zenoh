@@ -143,7 +143,7 @@ fn send_sourced_queryable_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -212,7 +212,7 @@ fn propagate_sourced_queryable(
                     tree_sid.index() as NodeId,
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating qabl {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -220,7 +220,7 @@ fn propagate_sourced_queryable(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating qabl {}: cannot get index of {}!",
             res.expr(),
             source
@@ -360,7 +360,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -434,7 +434,7 @@ fn propagate_forget_sourced_queryable(
                     tree_sid.index() as NodeId,
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating forget qabl {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -442,7 +442,7 @@ fn propagate_forget_sourced_queryable(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating forget qabl {}: cannot get index of {}!",
             res.expr(),
             source
@@ -664,7 +664,7 @@ fn insert_target_for_qabls(
             }
         }
     } else {
-        log::trace!("Tree for node sid:{} not yet ready", source);
+        tracing::trace!("Tree for node sid:{} not yet ready", source);
     }
 }
 
@@ -859,7 +859,7 @@ impl HatQueriesTrait for HatCode {
         if key_expr.ends_with('/') {
             return EMPTY_ROUTE.clone();
         }
-        log::trace!(
+        tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -868,7 +868,7 @@ impl HatQueriesTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return EMPTY_ROUTE.clone();
             }
         };
@@ -942,7 +942,7 @@ impl HatQueriesTrait for HatCode {
             let key_expr = match OwnedKeyExpr::try_from(key_expr) {
                 Ok(ke) => ke,
                 Err(e) => {
-                    log::warn!("Invalid KE reached the system: {}", e);
+                    tracing::warn!("Invalid KE reached the system: {}", e);
                     return result;
                 }
             };

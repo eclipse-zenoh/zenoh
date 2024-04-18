@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::admin;
+use crate::bytes::ZBytes;
 use crate::config::Config;
 use crate::config::Notifier;
 use crate::encoding::Encoding;
@@ -23,15 +24,13 @@ use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::primitives::Primitives;
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
-use crate::payload::Payload;
+use crate::prelude::KeyExpr;
 use crate::prelude::Locality;
-use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
-#[cfg(feature = "unstable")]
-use crate::sample::Attachment;
 use crate::sample::DataInfo;
+use crate::sample::DataInfoIntoSample;
 use crate::sample::QoS;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
@@ -40,8 +39,9 @@ use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
 use crate::Selector;
+#[cfg(feature = "unstable")]
+use crate::SourceInfo;
 use crate::Value;
-use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -51,6 +51,7 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
@@ -58,16 +59,11 @@ use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 use zenoh_protocol::core::EntityId;
 use zenoh_protocol::network;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::network::interest::InterestMode;
 use zenoh_protocol::network::interest::InterestOptions;
-use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::Interest;
-use zenoh_protocol::network::RequestId;
-use zenoh_protocol::zenoh::reply::ReplyBody;
-use zenoh_protocol::zenoh::Del;
-use zenoh_protocol::zenoh::Put;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -79,16 +75,17 @@ use zenoh_protocol::{
             subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
-        ext,
         request::{self, ext::TargetType, Request},
-        Mapping, Push, Response, ResponseFinal,
+        AtomicRequestId, Mapping, Push, RequestId, Response, ResponseFinal,
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
-        PushBody, RequestBody, ResponseBody,
+        reply::ReplyBody,
+        Del, PushBody, Put, RequestBody, ResponseBody,
     },
 };
 use zenoh_result::ZResult;
+use zenoh_task::TaskController;
 use zenoh_util::core::AsyncResolve;
 
 zconfigurable! {
@@ -308,7 +305,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
     fn declare_queryable<'b, TryIntoKeyExpr>(
@@ -324,7 +321,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: false,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
     fn declare_publisher<'b, TryIntoKeyExpr>(
@@ -402,6 +399,8 @@ pub struct Session {
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
     pub(crate) alive: bool,
+    owns_runtime: bool,
+    task_controller: TaskController,
 }
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
@@ -422,6 +421,8 @@ impl Session {
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
+                owns_runtime: false,
+                task_controller: TaskController::default(),
             };
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
@@ -525,14 +526,19 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # }
     /// ```
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
+    pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
-            self.runtime.close().await?;
-
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
-
+            self.task_controller.terminate_all(Duration::from_secs(10));
+            if self.owns_runtime {
+                self.runtime.close().await?;
+            }
+            let mut state = zwrite!(self.state);
+            state.primitives.as_ref().unwrap().send_close();
+            // clean up to break cyclic references from self.state to itself
+            state.primitives.take();
+            state.queryables.clear();
+            self.alive = false;
             Ok(())
         })
     }
@@ -692,11 +698,12 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session
     ///     .put("key/expression", "payload")
-    ///     .with_encoding(Encoding::TEXT_PLAIN)
+    ///     .encoding(Encoding::TEXT_PLAIN)
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -707,19 +714,23 @@ impl Session {
         &'a self,
         key_expr: TryIntoKeyExpr,
         payload: IntoPayload,
-    ) -> PutBuilder<'a, 'b>
+    ) -> SessionPutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
-        PutBuilder {
+        PublicationBuilder {
             publisher: self.declare_publisher(key_expr),
-            payload: payload.into(),
-            kind: SampleKind::Put,
-            encoding: Encoding::default(),
+            kind: PublicationBuilderPut {
+                payload: payload.into(),
+                encoding: Encoding::default(),
+            },
+            timestamp: None,
             #[cfg(feature = "unstable")]
             attachment: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
         }
     }
 
@@ -743,18 +754,19 @@ impl Session {
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> DeleteBuilder<'a, 'b>
+    ) -> SessionDeleteBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PutBuilder {
+        PublicationBuilder {
             publisher: self.declare_publisher(key_expr),
-            payload: Payload::empty(),
-            kind: SampleKind::Delete,
-            encoding: Encoding::default(),
+            kind: PublicationBuilderDelete,
+            timestamp: None,
             #[cfg(feature = "unstable")]
             attachment: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
         }
     }
     /// Query data from the matching queryables in the system.
@@ -775,35 +787,39 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session.get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!(">> Received {:?}", reply.sample);
+    ///     println!(">> Received {:?}", reply.result());
     /// }
     /// # }
     /// ```
-    pub fn get<'a, 'b: 'a, IntoSelector>(
+    pub fn get<'a, 'b: 'a, TryIntoSelector>(
         &'a self,
-        selector: IntoSelector,
+        selector: TryIntoSelector,
     ) -> GetBuilder<'a, 'b, DefaultHandler>
     where
-        IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
+        TryIntoSelector: TryInto<Selector<'b>>,
+        <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
         let timeout = {
             let conf = self.runtime.config().lock();
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
+        let qos: QoS = request::ext::QoSType::REQUEST.into();
         GetBuilder {
             session: self,
             selector,
             scope: Ok(None),
             target: QueryTarget::DEFAULT,
             consolidation: QueryConsolidation::DEFAULT,
+            qos: qos.into(),
             destination: Locality::default(),
             timeout,
             value: None,
             #[cfg(feature = "unstable")]
             attachment: None,
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
         }
     }
 }
@@ -815,24 +831,27 @@ impl Session {
             state: self.state.clone(),
             id: self.id,
             alive: false,
+            owns_runtime: self.owns_runtime,
+            task_controller: self.task_controller.clone(),
         }
     }
 
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
-            log::debug!("Config: {:?}", &config);
+            tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::init(config).await {
                 Ok(mut runtime) => {
-                    let session = Self::init(
+                    let mut session = Self::init(
                         runtime.clone(),
                         aggregated_subscribers,
                         aggregated_publishers,
                     )
                     .res_async()
                     .await;
+                    session.owns_runtime = true;
                     match runtime.start().await {
                         Ok(()) => {
                             // Workaround for the declare_and_shoot problem
@@ -902,7 +921,7 @@ impl Session {
         destination: Locality,
     ) -> ZResult<EntityId> {
         let mut state = zwrite!(self.state);
-        log::trace!("declare_publisher({:?})", key_expr);
+        tracing::trace!("declare_publisher({:?})", key_expr);
         let id = self.runtime.next_id();
 
         let mut pub_state = PublisherState {
@@ -1000,7 +1019,7 @@ impl Session {
         info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("declare_subscriber({:?})", key_expr);
+        tracing::trace!("declare_subscriber({:?})", key_expr);
         let id = self.runtime.next_id();
         let key_expr = match scope {
             Some(scope) => scope / key_expr,
@@ -1227,7 +1246,7 @@ impl Session {
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("declare_queryable({:?})", key_expr);
+        tracing::trace!("declare_queryable({:?})", key_expr);
         let id = self.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
@@ -1293,7 +1312,7 @@ impl Session {
         key_expr: &KeyExpr,
     ) -> ZResult<Arc<LivelinessTokenState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("declare_liveliness({:?})", key_expr);
+        tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
         let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
         let tok_state = Arc::new(LivelinessTokenState {
@@ -1354,7 +1373,7 @@ impl Session {
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
         let id = self.runtime.next_id();
-        log::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
+        tracing::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
             current: std::sync::Mutex::new(false),
@@ -1375,7 +1394,7 @@ impl Session {
                     (listener_state.callback)(MatchingStatus { matching: true });
                 }
             }
-            Err(e) => log::error!("Error trying to acquire MathginListener lock: {}", e),
+            Err(e) => tracing::error!("Error trying to acquire MathginListener lock: {}", e),
         }
         Ok(listener_state)
     }
@@ -1427,30 +1446,34 @@ impl Session {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
-                zenoh_runtime::ZRuntime::RX.spawn({
-                    let session = self.clone();
-                    let msub = msub.clone();
-                    async move {
-                        match msub.current.lock() {
-                            Ok(mut current) => {
-                                if !*current {
-                                    if let Ok(status) =
-                                        session.matching_status(&msub.key_expr, msub.destination)
-                                    {
-                                        if status.matching_subscribers() {
-                                            *current = true;
-                                            let callback = msub.callback.clone();
-                                            (callback)(status)
+                self.task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                        let session = self.clone();
+                        let msub = msub.clone();
+                        async move {
+                            match msub.current.lock() {
+                                Ok(mut current) => {
+                                    if !*current {
+                                        if let Ok(status) = session
+                                            .matching_status(&msub.key_expr, msub.destination)
+                                        {
+                                            if status.matching_subscribers() {
+                                                *current = true;
+                                                let callback = msub.callback.clone();
+                                                (callback)(status)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Error trying to acquire MathginListener lock: {}",
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    });
             }
         }
     }
@@ -1461,30 +1484,34 @@ impl Session {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
-                zenoh_runtime::ZRuntime::RX.spawn({
-                    let session = self.clone();
-                    let msub = msub.clone();
-                    async move {
-                        match msub.current.lock() {
-                            Ok(mut current) => {
-                                if *current {
-                                    if let Ok(status) =
-                                        session.matching_status(&msub.key_expr, msub.destination)
-                                    {
-                                        if !status.matching_subscribers() {
-                                            *current = false;
-                                            let callback = msub.callback.clone();
-                                            (callback)(status)
+                self.task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                        let session = self.clone();
+                        let msub = msub.clone();
+                        async move {
+                            match msub.current.lock() {
+                                Ok(mut current) => {
+                                    if *current {
+                                        if let Ok(status) = session
+                                            .matching_status(&msub.key_expr, msub.destination)
+                                        {
+                                            if !status.matching_subscribers() {
+                                                *current = false;
+                                                let callback = msub.callback.clone();
+                                                (callback)(status)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Error trying to acquire MathginListener lock: {}",
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    });
             }
         }
     }
@@ -1506,7 +1533,7 @@ impl Session {
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
@@ -1520,7 +1547,7 @@ impl Session {
                             match &sub.scope {
                                 Some(scope) => {
                                     if !res.key_expr.starts_with(&***scope) {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
                                             res.key_expr,
                                             scope,
@@ -1533,7 +1560,7 @@ impl Session {
                                                 key_expr.into_owned(),
                                             )),
                                             Err(e) => {
-                                                log::warn!(
+                                                tracing::warn!(
                                                     "Error unscoping received Data for `{}`: {}",
                                                     res.key_expr,
                                                     e,
@@ -1549,14 +1576,14 @@ impl Session {
                     }
                 }
                 Some(Resource::Prefix { prefix }) => {
-                    log::error!(
+                    tracing::error!(
                         "Received Data for `{}`, which isn't a key expression",
                         prefix
                     );
                     return;
                 }
                 None => {
-                    log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                    tracing::error!("Received Data for unknown expr_id: {}", key_expr.scope);
                     return;
                 }
             }
@@ -1571,7 +1598,7 @@ impl Session {
                             match &sub.scope {
                                 Some(scope) => {
                                     if !key_expr.starts_with(&***scope) {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
                                             key_expr,
                                             scope,
@@ -1583,7 +1610,7 @@ impl Session {
                                                 key_expr.into_owned(),
                                             )),
                                             Err(e) => {
-                                                log::warn!(
+                                                tracing::warn!(
                                                     "Error unscoping received Data for `{}`: {}",
                                                     key_expr,
                                                     e,
@@ -1599,7 +1626,7 @@ impl Session {
                     }
                 }
                 Err(err) => {
-                    log::error!("Received Data for unkown key_expr: {}", err);
+                    tracing::error!("Received Data for unkown key_expr: {}", err);
                     return;
                 }
             }
@@ -1607,21 +1634,21 @@ impl Session {
         drop(state);
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
-            #[allow(unused_mut)]
-            let mut sample = Sample::new(key_expr, payload.clone()).with_info(info.clone());
-            #[cfg(feature = "unstable")]
-            {
-                sample.attachment = attachment.clone();
-            }
+            let sample = info.clone().into_sample(
+                key_expr,
+                payload.clone(),
+                #[cfg(feature = "unstable")]
+                attachment.clone(),
+            );
             cb(sample);
         }
         if let Some((cb, key_expr)) = last {
-            #[allow(unused_mut)]
-            let mut sample = Sample::new(key_expr, payload).with_info(info);
-            #[cfg(feature = "unstable")]
-            {
-                sample.attachment = attachment;
-            }
+            let sample = info.into_sample(
+                key_expr,
+                payload,
+                #[cfg(feature = "unstable")]
+                attachment.clone(),
+            );
             cb(sample);
         }
     }
@@ -1633,17 +1660,19 @@ impl Session {
         scope: &Option<KeyExpr<'_>>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        qos: QoS,
         destination: Locality,
         timeout: Duration,
         value: Option<Value>,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
-        log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
+        tracing::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
             ConsolidationMode::Auto => {
-                if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
+                if selector.parameters().contains_key(TIME_RANGE_KEY) {
                     ConsolidationMode::None
                 } else {
                     ConsolidationMode::Latest
@@ -1657,27 +1686,33 @@ impl Session {
             _ => 1,
         };
 
-        zenoh_runtime::ZRuntime::Net.spawn({
-            let state = self.state.clone();
-            let zid = self.runtime.zid();
-            async move {
-                tokio::time::sleep(timeout).await;
-                let mut state = zwrite!(state);
-                if let Some(query) = state.queries.remove(&qid) {
-                    std::mem::drop(state);
-                    log::debug!("Timeout on query {}! Send error and close.", qid);
-                    if query.reception_mode == ConsolidationMode::Latest {
-                        for (_, reply) in query.replies.unwrap().into_iter() {
-                            (query.callback)(reply);
+        let token = self.task_controller.get_cancellation_token();
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                let state = self.state.clone();
+                let zid = self.runtime.zid();
+                async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(timeout) => {
+                            let mut state = zwrite!(state);
+                            if let Some(query) = state.queries.remove(&qid) {
+                                std::mem::drop(state);
+                                tracing::debug!("Timeout on query {}! Send error and close.", qid);
+                                if query.reception_mode == ConsolidationMode::Latest {
+                                    for (_, reply) in query.replies.unwrap().into_iter() {
+                                        (query.callback)(reply);
+                                    }
+                                }
+                                (query.callback)(Reply {
+                                    result: Err("Timeout".into()),
+                                    replier_id: zid,
+                                });
+                            }
                         }
+                        _ = token.cancelled() => {}
                     }
-                    (query.callback)(Reply {
-                        sample: Err("Timeout".into()),
-                        replier_id: zid,
-                    });
                 }
-            }
-        });
+            });
 
         let selector = match scope {
             Some(scope) => Selector {
@@ -1687,7 +1722,7 @@ impl Session {
             None => selector.clone(),
         };
 
-        log::trace!("Register query {} (nb_final = {})", qid, nb_final);
+        tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = selector.key_expr.to_wire(self).to_owned();
         state.queries.insert(
             qid,
@@ -1716,7 +1751,7 @@ impl Session {
             primitives.send_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
-                ext_qos: request::ext::QoSType::REQUEST,
+                ext_qos: qos.into(),
                 ext_tstamp: None,
                 ext_nodeid: request::ext::NodeIdType::DEFAULT,
                 ext_target: target,
@@ -1725,6 +1760,9 @@ impl Session {
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
                     consolidation,
                     parameters: selector.parameters().to_string(),
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source.into(),
+                    #[cfg(not(feature = "unstable"))]
                     ext_sinfo: None,
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
@@ -1741,7 +1779,7 @@ impl Session {
             self.handle_query(
                 true,
                 &wexpr,
-                selector.parameters(),
+                selector.parameters().as_str(),
                 qid,
                 target,
                 consolidation,
@@ -1768,7 +1806,7 @@ impl Session {
         _target: TargetType,
         _consolidation: Consolidation,
         body: Option<QueryBodyType>,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) {
         let (primitives, key_expr, queryables) = {
             let state = zread!(self.state);
@@ -1810,13 +1848,11 @@ impl Session {
             }
         };
 
-        let parameters = parameters.to_owned();
-
         let zid = self.runtime.zid();
 
         let query_inner = Arc::new(QueryInner {
             key_expr,
-            parameters,
+            parameters: parameters.to_owned().into(),
             value: body.map(|b| Value {
                 payload: b.payload.into(),
                 encoding: b.encoding.into(),
@@ -1878,7 +1914,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -1923,7 +1959,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: false,
             origin: Locality::default(),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -2058,7 +2094,10 @@ impl Primitives for Session {
                             }
                         }
                         Err(err) => {
-                            log::error!("Received DeclareSubscriber for unkown wire_expr: {}", err)
+                            tracing::error!(
+                                "Received DeclareSubscriber for unkown wire_expr: {}",
+                                err
+                            )
                         }
                     }
                 }
@@ -2090,7 +2129,7 @@ impl Primitives for Session {
                             );
                         }
                     } else {
-                        log::error!("Received Undeclare Subscriber for unkown id: {}", m.id);
+                        tracing::error!("Received Undeclare Subscriber for unkown id: {}", m.id);
                     }
                 }
             }
@@ -2106,7 +2145,7 @@ impl Primitives for Session {
             DeclareBody::UndeclareToken(m) => {
                 trace!("recv UndeclareToken {:?}", m.id);
             }
-            DeclareBody::DeclareFinal => {
+            DeclareBody::DeclareFinal(_) => {
                 trace!("recv DeclareFinal {:?}", msg.interest_id);
             }
         }
@@ -2190,12 +2229,12 @@ impl Primitives for Session {
                         };
                         let new_reply = Reply {
                             replier_id,
-                            sample: Err(value),
+                            result: Err(value),
                         };
                         callback(new_reply);
                     }
                     None => {
-                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                        tracing::warn!("Received ReplyData for unkown Query: {}", msg.rid);
                     }
                 }
             }
@@ -2210,15 +2249,16 @@ impl Primitives for Session {
                 };
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        if !matches!(
-                            query
+                        let c = zcondfeat!(
+                            "unstable",
+                            !query
                                 .selector
                                 .parameters()
-                                .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
-                            Ok([true])
-                        ) && !query.selector.key_expr.intersects(&key_expr)
-                        {
-                            log::warn!(
+                                .contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM),
+                            true
+                        );
+                        if c && !query.selector.key_expr.intersects(&key_expr) {
+                            tracing::warn!(
                                 "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
@@ -2229,7 +2269,7 @@ impl Primitives for Session {
                         let key_expr = match &query.scope {
                             Some(scope) => {
                                 if !key_expr.starts_with(&***scope) {
-                                    log::warn!(
+                                    tracing::warn!(
                                         "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
                                         key_expr,
                                         msg.ext_respid,
@@ -2240,7 +2280,7 @@ impl Primitives for Session {
                                 match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
                                     Ok(key_expr) => key_expr,
                                     Err(e) => {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Error unscoping received Reply for `{}` from `{:?}: {}",
                                             key_expr,
                                             msg.ext_respid,
@@ -2257,7 +2297,7 @@ impl Primitives for Session {
                             payload: ZBuf,
                             info: DataInfo,
                             #[cfg(feature = "unstable")]
-                            attachment: Option<Attachment>,
+                            attachment: Option<ZBytes>,
                         }
                         let Ret {
                             payload,
@@ -2304,16 +2344,14 @@ impl Primitives for Session {
                                 attachment: _attachment.map(Into::into),
                             },
                         };
-
-                        #[allow(unused_mut)]
-                        let mut sample =
-                            Sample::new(key_expr.into_owned(), payload).with_info(Some(info));
-                        #[cfg(feature = "unstable")]
-                        {
-                            sample.attachment = attachment;
-                        }
+                        let sample = info.into_sample(
+                            key_expr.into_owned(),
+                            payload,
+                            #[cfg(feature = "unstable")]
+                            attachment,
+                        );
                         let new_reply = Reply {
-                            sample: Ok(sample),
+                            result: Ok(sample),
                             replier_id: ZenohId::rand(), // TODO
                         };
                         let callback =
@@ -2323,15 +2361,15 @@ impl Primitives for Session {
                                 }
                                 ConsolidationMode::Monotonic => {
                                     match query.replies.as_ref().unwrap().get(
-                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                        new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
                                         Some(reply) => {
-                                            if new_reply.sample.as_ref().unwrap().timestamp
-                                                > reply.sample.as_ref().unwrap().timestamp
+                                            if new_reply.result.as_ref().unwrap().timestamp
+                                                > reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
-                                                        .sample
+                                                        .result
                                                         .as_ref()
                                                         .unwrap()
                                                         .key_expr
@@ -2347,7 +2385,7 @@ impl Primitives for Session {
                                         None => {
                                             query.replies.as_mut().unwrap().insert(
                                                 new_reply
-                                                    .sample
+                                                    .result
                                                     .as_ref()
                                                     .unwrap()
                                                     .key_expr
@@ -2361,15 +2399,15 @@ impl Primitives for Session {
                                 }
                                 Consolidation::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
-                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                        new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
                                         Some(reply) => {
-                                            if new_reply.sample.as_ref().unwrap().timestamp
-                                                > reply.sample.as_ref().unwrap().timestamp
+                                            if new_reply.result.as_ref().unwrap().timestamp
+                                                > reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
-                                                        .sample
+                                                        .result
                                                         .as_ref()
                                                         .unwrap()
                                                         .key_expr
@@ -2382,7 +2420,7 @@ impl Primitives for Session {
                                         None => {
                                             query.replies.as_mut().unwrap().insert(
                                                 new_reply
-                                                    .sample
+                                                    .result
                                                     .as_ref()
                                                     .unwrap()
                                                     .key_expr
@@ -2401,7 +2439,7 @@ impl Primitives for Session {
                         }
                     }
                     None => {
-                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                        tracing::warn!("Received ReplyData for unkown Query: {}", msg.rid);
                     }
                 }
             }

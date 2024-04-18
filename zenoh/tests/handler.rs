@@ -14,12 +14,12 @@
 #[test]
 fn pubsub_with_ringbuffer() {
     use std::{thread, time::Duration};
-    use zenoh::{handlers::RingBuffer, prelude::sync::*};
+    use zenoh::{handlers::RingChannel, prelude::sync::*};
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let sub = zenoh
         .declare_subscriber("test/ringbuffer")
-        .with(RingBuffer::new(3))
+        .with(RingChannel::new(3))
         .res()
         .unwrap();
     for i in 0..10 {
@@ -33,7 +33,6 @@ fn pubsub_with_ringbuffer() {
         assert_eq!(
             sub.recv()
                 .unwrap()
-                .unwrap()
                 .payload()
                 .deserialize::<String>()
                 .unwrap(),
@@ -46,33 +45,33 @@ fn pubsub_with_ringbuffer() {
 
 #[test]
 fn query_with_ringbuffer() {
-    use zenoh::{handlers::RingBuffer, prelude::sync::*};
+    use zenoh::{handlers::RingChannel, prelude::sync::*};
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let queryable = zenoh
         .declare_queryable("test/ringbuffer_query")
-        .with(RingBuffer::new(1))
+        .with(RingChannel::new(1))
         .res()
         .unwrap();
 
     let _reply1 = zenoh
         .get("test/ringbuffer_query")
-        .with_value("query1")
+        .payload("query1")
         .res()
         .unwrap();
     let _reply2 = zenoh
         .get("test/ringbuffer_query")
-        .with_value("query2")
+        .payload("query2")
         .res()
         .unwrap();
 
-    let query = queryable.recv().unwrap().unwrap();
+    let query = queryable.recv().unwrap();
     // Only receive the latest query
     assert_eq!(
         query
             .value()
             .unwrap()
-            .payload
+            .payload()
             .deserialize::<String>()
             .unwrap(),
         "query2"

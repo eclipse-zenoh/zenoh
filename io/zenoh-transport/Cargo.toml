@@ -62,7 +62,7 @@ tokio = { workspace = true, features = [
 ] }
 tokio-util = { workspace = true, features = ["rt"]}
 flume = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 lz4_flex = { workspace = true }
 paste = { workspace = true }
 rand = { workspace = true, features = ["default"] }
@@ -83,11 +83,12 @@ zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
+zenoh-task = { workspace = true }
 
 
 
 [dev-dependencies]
 futures-util = { workspace = true }
-env_logger = { workspace = true }
+zenoh-util = {workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 futures = { workspace = true }

@@ -79,7 +79,7 @@ impl LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
         if let Err(err) = tcp_stream.set_nodelay(true) {
-            log::warn!(
+            tracing::warn!(
                 "Unable to set NODEALY option on TLS link {} => {}: {}",
                 src_addr,
                 dst_addr,
@@ -91,7 +91,7 @@ impl LinkUnicastTls {
         if let Err(err) = tcp_stream.set_linger(Some(Duration::from_secs(
             (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
         ))) {
-            log::warn!(
+            tracing::warn!(
                 "Unable to set LINGER option on TLS link {} => {}: {}",
                 src_addr,
                 dst_addr,
@@ -123,23 +123,23 @@ impl LinkUnicastTls {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastTls {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing TLS link: {}", self);
+        tracing::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
         let _guard = zasynclock!(self.write_mtx);
         let tls_stream = self.get_sock_mut();
         let res = tls_stream.flush().await;
-        log::trace!("TLS link flush {}: {:?}", self, res);
+        tracing::trace!("TLS link flush {}: {:?}", self, res);
         // Close the underlying TCP stream
         let (tcp_stream, _) = tls_stream.get_mut();
         let res = tcp_stream.shutdown().await;
-        log::trace!("TLS link shutdown {}: {:?}", self, res);
+        tracing::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| zerror!(e).into())
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write(buffer).await.map_err(|e| {
-            log::trace!("Write error on TLS link {}: {}", self, e);
+            tracing::trace!("Write error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
     }
@@ -147,7 +147,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write_all(buffer).await.map_err(|e| {
-            log::trace!("Write error on TLS link {}: {}", self, e);
+            tracing::trace!("Write error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
     }
@@ -155,7 +155,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read(buffer).await.map_err(|e| {
-            log::trace!("Read error on TLS link {}: {}", self, e);
+            tracing::trace!("Read error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
     }
@@ -163,7 +163,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
         let _ = self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
-            log::trace!("Read error on TLS link {}: {}", self, e);
+            tracing::trace!("Read error on TLS link {}: {}", self, e);
             zerror!(e)
         })?;
         Ok(())
@@ -204,8 +204,8 @@ impl Drop for LinkUnicastTls {
     fn drop(&mut self) {
         // Close the underlying TCP stream
         let (tcp_stream, _) = self.get_sock_mut().get_mut();
-        let _ =
-            zenoh_runtime::ZRuntime::TX.block_in_place(async move { tcp_stream.shutdown().await });
+        let _ = zenoh_runtime::ZRuntime::Acceptor
+            .block_in_place(async move { tcp_stream.shutdown().await });
     }
 }
 
@@ -370,11 +370,11 @@ async fn accept_task(
 
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TLS connections: {}", e);
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
-    log::trace!("Ready to accept TLS connections on: {:?}", src_addr);
+    tracing::trace!("Ready to accept TLS connections on: {:?}", src_addr);
     loop {
         tokio::select! {
             _ = token.cancelled() => break,
@@ -387,22 +387,22 @@ async fn accept_task(
                             Ok(stream) => TlsStream::Server(stream),
                             Err(e) => {
                                 let e = format!("Can not accept TLS connection: {e}");
-                                log::warn!("{}", e);
+                                tracing::warn!("{}", e);
                                 continue;
                             }
                         };
 
-                        log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
+                        tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-                            log::error!("{}-{}: {}", file!(), line!(), e)
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     }
                     Err(e) => {
-                        log::warn!("{}. Hint: increase the system open file limit.", e);
+                        tracing::warn!("{}. Hint: increase the system open file limit.", e);
                         // Throttle the accept loop upon an error
                         // NOTE: This might be due to various factors. However, the most common case is that
                         //       the process has reached the maximum number of open files in the system. On
@@ -526,7 +526,7 @@ impl TlsClientConfig {
                     .parse()
                     .map_err(|_| zerror!("Unknown server name verification argument: {}", s))?;
                 if s {
-                    log::warn!("Skipping name verification of servers");
+                    tracing::warn!("Skipping name verification of servers");
                 }
                 s
             }
@@ -534,18 +534,18 @@ impl TlsClientConfig {
         };
 
         // Allows mixed user-generated CA and webPKI CA
-        log::debug!("Loading default Web PKI certificates.");
+        tracing::debug!("Loading default Web PKI certificates.");
         let mut root_cert_store = RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
         };
 
         if let Some(custom_root_cert) = load_trust_anchors(config)? {
-            log::debug!("Loading user-generated certificates.");
+            tracing::debug!("Loading user-generated certificates.");
             root_cert_store.extend(custom_root_cert.roots);
         }
 
         let cc = if tls_client_server_auth {
-            log::debug!("Loading client authentication key and certificate...");
+            tracing::debug!("Loading client authentication key and certificate...");
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
             let tls_client_certificate = TlsClientConfig::load_tls_certificate(config).await?;
 

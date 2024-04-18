@@ -32,8 +32,3 @@ pub use ring_buffer::*;
 pub mod stack_buffer;
 #[cfg(feature = "std")]
 pub use stack_buffer::*;
-
-#[cfg(feature = "std")]
-pub mod properties;
-#[cfg(feature = "std")]
-pub use properties::*;

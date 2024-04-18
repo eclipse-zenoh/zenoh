@@ -47,7 +47,7 @@ transport_tls = ["zenoh-transport/transport_tls"]
 transport_udp = ["zenoh-transport/transport_udp"]
 transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_ws = ["zenoh-transport/transport_ws"]
-transport_vsock= ["zenoh-transport/transport_vsock"]
+transport_vsock = ["zenoh-transport/transport_vsock"]
 unstable = []
 default = [
     "auth_pubkey",
@@ -65,17 +65,18 @@ default = [
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
 tokio-util = { workspace = true }
+ahash = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 const_format = { workspace = true }
-env_logger = { workspace = true }
+
 event-listener = { workspace = true }
 flume = { workspace = true }
 form_urlencoded = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 lazy_static = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 ordered-float = { workspace = true }
 paste = { workspace = true }
 petgraph = { workspace = true }
@@ -90,6 +91,7 @@ serde_yaml = { workspace = true }
 socket2 = { workspace = true }
 stop-token = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
+unwrap-infallible = { workspace = true }
 uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
@@ -109,6 +111,7 @@ zenoh-sync = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
+zenoh-task = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }

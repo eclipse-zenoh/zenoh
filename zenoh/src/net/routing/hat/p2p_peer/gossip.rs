@@ -14,6 +14,7 @@
 use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
 use crate::net::runtime::Runtime;
+use crate::runtime::WeakRuntime;
 use petgraph::graph::NodeIndex;
 use std::convert::TryInto;
 use vec_map::VecMap;
@@ -93,7 +94,7 @@ pub(super) struct Network {
     pub(super) idx: NodeIndex,
     pub(super) links: VecMap<Link>,
     pub(super) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
-    pub(super) runtime: Runtime,
+    pub(super) runtime: WeakRuntime,
 }
 
 impl Network {
@@ -107,7 +108,7 @@ impl Network {
         autoconnect: WhatAmIMatcher,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
-        log::debug!("{} Add node (self) {}", name, zid);
+        tracing::debug!("{} Add node (self) {}", name, zid);
         let idx = graph.add_node(Node {
             zid,
             whatami: Some(runtime.whatami()),
@@ -124,7 +125,7 @@ impl Network {
             idx,
             links: VecMap::new(),
             graph,
-            runtime,
+            runtime: Runtime::downgrade(&runtime),
         }
     }
 
@@ -168,7 +169,7 @@ impl Network {
                     if let Some(idx2) = self.get_idx(zid) {
                         Some(idx2.index().try_into().unwrap())
                     } else {
-                        log::error!(
+                        tracing::error!(
                             "{} Internal error building link state: cannot get index of {}",
                             self.name,
                             zid
@@ -191,7 +192,7 @@ impl Network {
             whatami: self.graph[idx].whatami,
             locators: if details.locators {
                 if idx == self.idx {
-                    Some(self.runtime.get_locators())
+                    Some(self.runtime.upgrade().unwrap().get_locators())
                 } else {
                     self.graph[idx].locators.clone()
                 }
@@ -221,12 +222,12 @@ impl Network {
 
     fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
         if let Ok(msg) = self.make_msg(idxs) {
-            log::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
+            tracing::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
             if let Err(e) = transport.schedule(msg) {
-                log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+                tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);
             }
         } else {
-            log::error!("Failed to encode Linkstate message");
+            tracing::error!("Failed to encode Linkstate message");
         }
     }
 
@@ -237,14 +238,14 @@ impl Network {
         if let Ok(msg) = self.make_msg(idxs) {
             for link in self.links.values() {
                 if parameters(link) {
-                    log::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
+                    tracing::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
                     if let Err(e) = link.transport.schedule(msg.clone()) {
-                        log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+                        tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);
                     }
                 }
             }
         } else {
-            log::error!("Failed to encode Linkstate message");
+            tracing::error!("Failed to encode Linkstate message");
         }
     }
 
@@ -265,7 +266,8 @@ impl Network {
     }
 
     pub(super) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohId) {
-        log::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
+        tracing::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
+        let strong_runtime = self.runtime.upgrade().unwrap();
 
         let graph = &self.graph;
         let links = &mut self.links;
@@ -273,7 +275,7 @@ impl Network {
         let src_link = match links.values_mut().find(|link| link.zid == src) {
             Some(link) => link,
             None => {
-                log::error!(
+                tracing::error!(
                     "{} Received LinkStateList from unknown link {}",
                     self.name,
                     src
@@ -308,7 +310,7 @@ impl Network {
                             link_state.links,
                         )),
                         None => {
-                            log::error!(
+                            tracing::error!(
                                 "Received LinkState from {} with unknown node mapping {}",
                                 src,
                                 link_state.psid
@@ -331,7 +333,7 @@ impl Network {
                         if let Some(zid) = src_link.get_zid(l) {
                             Some(*zid)
                         } else {
-                            log::error!(
+                            tracing::error!(
                                 "{} Received LinkState from {} with unknown link mapping {}",
                                 self.name,
                                 src,
@@ -345,14 +347,14 @@ impl Network {
             })
             .collect::<Vec<_>>();
 
-        // log::trace!(
+        // tracing::trace!(
         //     "{} Received from {} mapped: {:?}",
         //     self.name,
         //     src,
         //     link_states
         // );
         for link_state in &link_states {
-            log::trace!(
+            tracing::trace!(
                 "{} Received from {} mapped: {:?}",
                 self.name,
                 src,
@@ -406,14 +408,14 @@ impl Network {
 
                     if !self.autoconnect.is_empty() {
                         // Connect discovered peers
-                        if zenoh_runtime::ZRuntime::Net
-                            .block_in_place(self.runtime.manager().get_transport_unicast(&zid))
+                        if zenoh_runtime::ZRuntime::Acceptor
+                            .block_in_place(strong_runtime.manager().get_transport_unicast(&zid))
                             .is_none()
                             && self.autoconnect.matches(whatami)
                         {
                             if let Some(locators) = locators {
-                                let runtime = self.runtime.clone();
-                                self.runtime.spawn(async move {
+                                let runtime = strong_runtime.clone();
+                                strong_runtime.spawn(async move {
                                     // random backoff
                                     tokio::time::sleep(std::time::Duration::from_millis(
                                         rand::random::<u64>() % 100,
@@ -446,7 +448,7 @@ impl Network {
             let (idx, new) = match self.get_idx(&zid) {
                 Some(idx) => (idx, false),
                 None => {
-                    log::debug!("{} Add node (link) {}", self.name, zid);
+                    tracing::debug!("{} Add node (link) {}", self.name, zid);
                     (
                         self.add_node(Node {
                             zid,
@@ -534,7 +536,7 @@ impl Network {
     }
 
     pub(super) fn remove_link(&mut self, zid: &ZenohId) -> Vec<(NodeIndex, Node)> {
-        log::trace!("{} remove_link {}", self.name, zid);
+        tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|link| *link != *zid);
 

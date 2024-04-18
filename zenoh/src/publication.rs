@@ -15,13 +15,12 @@
 //! Publishing primitives.
 use crate::net::primitives::Primitives;
 use crate::prelude::*;
-#[zenoh_macros::unstable]
-use crate::sample::Attachment;
-use crate::sample::{DataInfo, QoS, Sample, SampleKind};
+use crate::sample::{DataInfo, QoS, Sample, SampleFields, SampleKind};
 use crate::SessionRef;
 use crate::Undeclarable;
 #[cfg(feature = "unstable")]
 use crate::{
+    bytes::{OptionZBytes, ZBytes},
     handlers::{Callback, DefaultHandler, IntoHandler},
     Id,
 };
@@ -31,8 +30,6 @@ use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
-#[zenoh_macros::unstable]
-use zenoh_protocol::zenoh::ext::SourceInfoType;
 use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::zenoh::Put;
@@ -41,26 +38,16 @@ use zenoh_result::ZResult;
 /// The kind of congestion control.
 pub use zenoh_protocol::core::CongestionControl;
 
-/// A builder for initializing a [`delete`](crate::Session::delete) operation.
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-/// use zenoh::publication::CongestionControl;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// session
-///     .delete("key/expression")
-///     .res()
-///     .await
-///     .unwrap();
-/// # }
-/// ```
-pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
+#[derive(Debug, Clone)]
+pub struct PublicationBuilderPut {
+    pub(crate) payload: ZBytes,
+    pub(crate) encoding: Encoding,
+}
+#[derive(Debug, Clone)]
+pub struct PublicationBuilderDelete;
 
-/// A builder for initializing a [`put`](crate::Session::put) operation.
+/// A builder for initializing  [`Session::put`](crate::Session::put), [`Session::delete`](crate::Session::delete),
+/// [`Publisher::put`](crate::Publisher::put), and [`Publisher::delete`](crate::Publisher::delete) operations.
 ///
 /// # Examples
 /// ```
@@ -68,11 +55,12 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
+/// use zenoh::sample::builder::{ValueBuilderTrait, QoSBuilderTrait};
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
 ///     .put("key/expression", "payload")
-///     .with_encoding(Encoding::TEXT_PLAIN)
+///     .encoding(Encoding::TEXT_PLAIN)
 ///     .congestion_control(CongestionControl::Block)
 ///     .res()
 ///     .await
@@ -81,39 +69,52 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
-pub struct PutBuilder<'a, 'b> {
-    pub(crate) publisher: PublisherBuilder<'a, 'b>,
-    pub(crate) payload: Payload,
-    pub(crate) kind: SampleKind,
-    pub(crate) encoding: Encoding,
+pub struct PublicationBuilder<P, T> {
+    pub(crate) publisher: P,
+    pub(crate) kind: T,
+    pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
+    pub(crate) source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachment: Option<ZBytes>,
 }
 
-impl PutBuilder<'_, '_> {
-    /// Change the `congestion_control` to apply when routing the data.
-    #[inline]
-    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
-        self.publisher = self.publisher.congestion_control(congestion_control);
-        self
-    }
+pub type SessionPutBuilder<'a, 'b> =
+    PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut>;
 
-    /// Change the priority of the written data.
-    #[inline]
-    pub fn priority(mut self, priority: Priority) -> Self {
-        self.publisher = self.publisher.priority(priority);
-        self
-    }
+pub type SessionDeleteBuilder<'a, 'b> =
+    PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderDelete>;
 
-    /// Change the `express` policy to apply when routing the data.
-    /// When express is set to `true`, then the message will not be batched.
-    /// This usually has a positive impact on latency but negative impact on throughput.
-    #[inline]
-    pub fn express(mut self, is_express: bool) -> Self {
-        self.publisher = self.publisher.express(is_express);
-        self
-    }
+pub type PublisherPutBuilder<'a> = PublicationBuilder<&'a Publisher<'a>, PublicationBuilderPut>;
 
+pub type PublisherDeleteBuilder<'a> =
+    PublicationBuilder<&'a Publisher<'a>, PublicationBuilderDelete>;
+
+impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+    #[inline]
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
+        Self {
+            publisher: self.publisher.congestion_control(congestion_control),
+            ..self
+        }
+    }
+    #[inline]
+    fn priority(self, priority: Priority) -> Self {
+        Self {
+            publisher: self.publisher.priority(priority),
+            ..self
+        }
+    }
+    #[inline]
+    fn express(self, is_express: bool) -> Self {
+        Self {
+            publisher: self.publisher.express(is_express),
+            ..self
+        }
+    }
+}
+
+impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
@@ -122,66 +123,117 @@ impl PutBuilder<'_, '_> {
         self.publisher = self.publisher.allowed_destination(destination);
         self
     }
+}
 
-    /// Set the [`Encoding`] of the written data.
-    #[inline]
-    pub fn with_encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
-    where
-        IntoEncoding: Into<Encoding>,
-    {
-        self.encoding = encoding.into();
-        self
+impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            kind: PublicationBuilderPut {
+                encoding: encoding.into(),
+                ..self.kind
+            },
+            ..self
+        }
     }
 
-    #[zenoh_macros::unstable]
-    /// Attach user-provided data to the written data.
-    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
-        self.attachment = Some(attachment);
-        self
+    fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
+    where
+        IntoPayload: Into<ZBytes>,
+    {
+        Self {
+            kind: PublicationBuilderPut {
+                payload: payload.into(),
+                ..self.kind
+            },
+            ..self
+        }
+    }
+    fn value<T: Into<Value>>(self, value: T) -> Self {
+        let Value { payload, encoding } = value.into();
+        Self {
+            kind: PublicationBuilderPut { payload, encoding },
+            ..self
+        }
     }
 }
 
-impl Resolvable for PutBuilder<'_, '_> {
+#[zenoh_macros::unstable]
+impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
+    #[cfg(feature = "unstable")]
+    fn source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            source_info,
+            ..self
+        }
+    }
+    #[cfg(feature = "unstable")]
+    fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
+        let attachment: OptionZBytes = attachment.into();
+        Self {
+            attachment: attachment.into(),
+            ..self
+        }
+    }
+}
+
+impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
+    fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            ..self
+        }
+    }
+}
+
+impl<P, T> Resolvable for PublicationBuilder<P, T> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for PutBuilder<'_, '_> {
+impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
     #[inline]
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let PublisherBuilder {
-            session,
-            key_expr,
-            congestion_control,
-            priority,
-            is_express,
-            destination,
-        } = self.publisher;
-
-        let publisher = Publisher {
-            session,
-            #[cfg(feature = "unstable")]
-            id: 0, // This is a one shot Publisher
-            key_expr: key_expr?,
-            congestion_control,
-            priority,
-            is_express,
-            destination,
-        };
-
+        let publisher = self.publisher.create_one_shot_publisher()?;
         resolve_put(
             &publisher,
-            self.payload,
-            self.kind,
-            self.encoding,
+            self.kind.payload,
+            SampleKind::Put,
+            self.kind.encoding,
+            self.timestamp,
             #[cfg(feature = "unstable")]
-            None,
+            self.source_info,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
 }
 
-impl AsyncResolve for PutBuilder<'_, '_> {
+impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
+    #[inline]
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        let publisher = self.publisher.create_one_shot_publisher()?;
+        resolve_put(
+            &publisher,
+            ZBytes::empty(),
+            SampleKind::Delete,
+            Encoding::ZENOH_BYTES,
+            self.timestamp,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            #[cfg(feature = "unstable")]
+            self.attachment,
+        )
+    }
+}
+
+impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -314,25 +366,22 @@ impl<'a> Publisher<'a> {
 
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
-    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
+    pub fn set_congestion_control(&mut self, congestion_control: CongestionControl) {
         self.congestion_control = congestion_control;
-        self
     }
 
     /// Change the priority of the written data.
     #[inline]
-    pub fn priority(mut self, priority: Priority) -> Self {
+    pub fn set_priority(&mut self, priority: Priority) {
         self.priority = priority;
-        self
     }
 
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn allowed_destination(mut self, destination: Locality) -> Self {
+    pub fn set_allowed_destination(&mut self, destination: Locality) {
         self.destination = destination;
-        self
     }
 
     /// Consumes the given `Publisher`, returning a thread-safe reference-counting
@@ -371,19 +420,6 @@ impl<'a> Publisher<'a> {
         std::sync::Arc::new(self)
     }
 
-    fn _write(&self, kind: SampleKind, payload: Payload) -> Publication {
-        Publication {
-            publisher: self,
-            payload,
-            kind,
-            encoding: Encoding::ZENOH_BYTES,
-            #[cfg(feature = "unstable")]
-            source_info: None,
-            #[cfg(feature = "unstable")]
-            attachment: None,
-        }
-    }
-
     /// Put data.
     ///
     /// # Examples
@@ -398,11 +434,22 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     #[inline]
-    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> Publication
+    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> PublisherPutBuilder<'_>
     where
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
-        self._write(SampleKind::Put, payload.into())
+        PublicationBuilder {
+            publisher: self,
+            kind: PublicationBuilderPut {
+                payload: payload.into(),
+                encoding: Encoding::ZENOH_BYTES,
+            },
+            timestamp: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
+        }
     }
 
     /// Delete data.
@@ -418,8 +465,16 @@ impl<'a> Publisher<'a> {
     /// publisher.delete().res().await.unwrap();
     /// # }
     /// ```
-    pub fn delete(&self) -> Publication {
-        self._write(SampleKind::Delete, Payload::empty())
+    pub fn delete(&self) -> PublisherDeleteBuilder<'_> {
+        PublicationBuilder {
+            publisher: self,
+            kind: PublicationBuilderDelete,
+            timestamp: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment: None,
+        }
     }
 
     /// Return the [`MatchingStatus`] of the publisher.
@@ -478,7 +533,7 @@ impl<'a> Publisher<'a> {
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Borrow(self),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 
@@ -583,7 +638,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Shared(self.clone()),
-            handler: DefaultHandler,
+            handler: DefaultHandler::default(),
         }
     }
 }
@@ -643,66 +698,14 @@ impl Drop for Publisher<'_> {
     }
 }
 
-/// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
-/// [`Publisher::delete()`](Publisher::delete) and [`Publisher::write()`](Publisher::write).
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct Publication<'a> {
-    publisher: &'a Publisher<'a>,
-    payload: Payload,
-    kind: SampleKind,
-    encoding: Encoding,
-    #[cfg(feature = "unstable")]
-    pub(crate) source_info: Option<SourceInfo>,
-    #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
-}
-
-impl<'a> Publication<'a> {
-    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
-        self
-    }
-
-    #[zenoh_macros::unstable]
-    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
-        self.attachment = Some(attachment);
-        self
-    }
-
-    /// Send data with the given [`SourceInfo`].
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.put("Value").with_source_info(SourceInfo {
-    ///     source_id: Some(publisher.id()),
-    ///     source_sn: Some(0),
-    /// }).res().await.unwrap();
-    /// # }
-    /// ```
-    #[zenoh_macros::unstable]
-    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
-        self.source_info = Some(source_info);
-        self
-    }
-}
-
-impl Resolvable for Publication<'_> {
-    type To = ZResult<()>;
-}
-
-impl SyncResolve for Publication<'_> {
+impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         resolve_put(
             self.publisher,
-            self.payload,
-            self.kind,
-            self.encoding,
+            self.kind.payload,
+            SampleKind::Put,
+            self.kind.encoding,
+            self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
             #[cfg(feature = "unstable")]
@@ -711,7 +714,31 @@ impl SyncResolve for Publication<'_> {
     }
 }
 
-impl AsyncResolve for Publication<'_> {
+impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        resolve_put(
+            self.publisher,
+            ZBytes::empty(),
+            SampleKind::Delete,
+            Encoding::ZENOH_BYTES,
+            self.timestamp,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            #[cfg(feature = "unstable")]
+            self.attachment,
+        )
+    }
+}
+
+impl AsyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl AsyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -729,17 +756,25 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 
     #[inline]
     fn start_send(self: Pin<&mut Self>, item: Sample) -> Result<(), Self::Error> {
-        Publication {
-            publisher: &self,
-            payload: item.payload,
-            kind: item.kind,
-            encoding: item.encoding,
+        let SampleFields {
+            payload,
+            kind,
+            encoding,
             #[cfg(feature = "unstable")]
-            source_info: None,
+            attachment,
+            ..
+        } = item.into();
+        resolve_put(
+            &self,
+            payload,
+            kind,
+            encoding,
+            None,
             #[cfg(feature = "unstable")]
-            attachment: item.attachment,
-        }
-        .res_sync()
+            SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachment,
+        )
     }
 
     #[inline]
@@ -761,6 +796,7 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
+/// use zenoh::sample::builder::QoSBuilderTrait;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session
@@ -798,30 +834,32 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> PublisherBuilder<'a, 'b> {
+impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
-    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
-        self.congestion_control = congestion_control;
-        self
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
+        Self {
+            congestion_control,
+            ..self
+        }
     }
 
     /// Change the priority of the written data.
     #[inline]
-    pub fn priority(mut self, priority: Priority) -> Self {
-        self.priority = priority;
-        self
+    fn priority(self, priority: Priority) -> Self {
+        Self { priority, ..self }
     }
 
     /// Change the `express` policy to apply when routing the data.
     /// When express is set to `true`, then the message will not be batched.
     /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
-    pub fn express(mut self, is_express: bool) -> Self {
-        self.is_express = is_express;
-        self
+    fn express(self, is_express: bool) -> Self {
+        Self { is_express, ..self }
     }
+}
 
+impl<'a, 'b> PublisherBuilder<'a, 'b> {
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
@@ -829,6 +867,20 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = destination;
         self
+    }
+
+    // internal function for perfroming the publication
+    fn create_one_shot_publisher(self) -> ZResult<Publisher<'a>> {
+        Ok(Publisher {
+            session: self.session,
+            #[cfg(feature = "unstable")]
+            id: 0, // This is a one shot Publisher
+            key_expr: self.key_expr?,
+            congestion_control: self.congestion_control,
+            priority: self.priority,
+            is_express: self.is_express,
+            destination: self.destination,
+        })
     }
 }
 
@@ -895,20 +947,24 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
 
 fn resolve_put(
     publisher: &Publisher<'_>,
-    payload: Payload,
+    payload: ZBytes,
     kind: SampleKind,
     encoding: Encoding,
-    #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
-    #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+    timestamp: Option<uhlc::Timestamp>,
+    #[cfg(feature = "unstable")] source_info: SourceInfo,
+    #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
 ) -> ZResult<()> {
-    log::trace!("write({:?}, [...])", &publisher.key_expr);
+    tracing::trace!("write({:?}, [...])", &publisher.key_expr);
     let primitives = zread!(publisher.session.state)
         .primitives
         .as_ref()
         .unwrap()
         .clone();
-    let timestamp = publisher.session.runtime.new_timestamp();
-
+    let timestamp = if timestamp.is_none() {
+        publisher.session.runtime.new_timestamp()
+    } else {
+        timestamp
+    };
     if publisher.destination != Locality::SessionLocal {
         primitives.send_push(Push {
             wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
@@ -933,10 +989,7 @@ fn resolve_put(
                         timestamp,
                         encoding: encoding.clone().into(),
                         #[cfg(feature = "unstable")]
-                        ext_sinfo: source_info.map(|s| SourceInfoType {
-                            id: s.source_id.unwrap_or_default(),
-                            sn: s.source_sn.unwrap_or_default() as u32,
-                        }),
+                        ext_sinfo: source_info.into(),
                         #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
@@ -958,10 +1011,7 @@ fn resolve_put(
                     PushBody::Del(Del {
                         timestamp,
                         #[cfg(feature = "unstable")]
-                        ext_sinfo: source_info.map(|s| SourceInfoType {
-                            id: s.source_id.unwrap_or_default(),
-                            sn: s.source_sn.unwrap_or_default() as u32,
-                        }),
+                        ext_sinfo: source_info.into(),
                         #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         ext_attachment,
@@ -1358,7 +1408,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 #[zenoh_macros::unstable]
 pub struct MatchingListener<'a, Receiver> {
     pub(crate) listener: MatchingListenerInner<'a>,
-    pub receiver: Receiver,
+    pub(crate) receiver: Receiver,
 }
 
 #[zenoh_macros::unstable]

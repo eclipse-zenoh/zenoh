@@ -38,14 +38,14 @@ pub(crate) mod common {
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoHandler;
-    pub use crate::selector::{Parameter, Parameters, Selector};
+    pub use crate::selector::Selector;
     pub use crate::session::{Session, SessionDeclarations};
 
     pub use crate::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 
-    pub use crate::encoding::Encoding;
     /// The encoding of a zenoh `Value`.
-    pub use crate::payload::{Deserialize, Payload, Serialize};
+    pub use crate::bytes::{Deserialize, Serialize, ZBytes};
+    pub use crate::encoding::Encoding;
     pub use crate::value::Value;
 
     #[zenoh_macros::unstable]
@@ -60,6 +60,11 @@ pub(crate) mod common {
     #[zenoh_macros::unstable]
     pub use crate::publication::PublisherDeclarations;
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
+
+    pub use crate::sample::builder::{QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait};
+
+    #[zenoh_macros::unstable]
+    pub use crate::sample::builder::SampleBuilderTrait;
 }
 
 /// Prelude to import when using Zenoh's sync API.

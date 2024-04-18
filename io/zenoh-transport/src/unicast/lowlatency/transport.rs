@@ -87,7 +87,7 @@ impl TransportUnicastLowlatency {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn finalize(&self, reason: u8) -> ZResult<()> {
-        log::debug!(
+        tracing::debug!(
             "[{}] Finalizing transport with peer: {}",
             self.manager.config.zid,
             self.config.zid
@@ -107,7 +107,7 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) async fn delete(&self) -> ZResult<()> {
-        log::debug!(
+        tracing::debug!(
             "[{}] Deleting transport with peer: {}",
             self.manager.config.zid,
             self.config.zid
@@ -150,7 +150,7 @@ impl TransportUnicastLowlatency {
         let mut a_guard = zasynclock!(self.alive);
         if *a_guard {
             let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             return Err(e.into());
         }
 
@@ -229,7 +229,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
-        log::trace!("Adding link: {}", link);
+        tracing::trace!("Adding link: {}", link);
 
         let _ = self.sync(other_initial_sn).await;
 
@@ -263,12 +263,12 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*           TERMINATION             */
     /*************************************/
     async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
-        log::trace!("Closing link {} with peer: {}", link, self.config.zid);
+        tracing::trace!("Closing link {} with peer: {}", link, self.config.zid);
         self.finalize(reason).await
     }
 
     async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing transport with peer: {}", self.config.zid);
+        tracing::trace!("Closing transport with peer: {}", self.config.zid);
         self.finalize(reason).await
     }
 }

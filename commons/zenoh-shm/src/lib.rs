@@ -147,7 +147,7 @@ impl SharedMemoryBuf {
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        log::trace!("SharedMemoryBuf::as_slice() == len = {:?}", self.len);
+        tracing::trace!("SharedMemoryBuf::as_slice() == len = {:?}", self.len);
         let bp = self.buf.load(Ordering::SeqCst);
         unsafe { std::slice::from_raw_parts(bp, self.len) }
     }
@@ -218,7 +218,7 @@ impl SharedMemoryReader {
                     info.shm_manager,
                     e
                 );
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 Err(ShmError(e).into())
             }
         }
@@ -243,7 +243,7 @@ impl SharedMemoryReader {
             }
             None => {
                 let e = zerror!("Unable to find shared memory segment: {}", info.shm_manager);
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 Err(ShmError(e).into())
             }
         }
@@ -298,7 +298,7 @@ impl SharedMemoryManager {
             .to_str()
             .ok_or_else(|| ShmError(zerror!("Unable to parse tmp directory: {:?}", temp_dir)))?
             .to_string();
-        log::trace!("Creating file at: {}", path);
+        tracing::trace!("Creating file at: {}", path);
         let real_size = size + ACCOUNTED_OVERHEAD;
         let shmem = match ShmemConf::new()
             .size(real_size)
@@ -335,7 +335,7 @@ impl SharedMemoryManager {
             busy_list,
             alignment: mem::align_of::<ChunkHeaderType>(),
         };
-        log::trace!(
+        tracing::trace!(
             "Created SharedMemoryManager for {:?}",
             shm.own_segment.as_ptr()
         );
@@ -361,7 +361,7 @@ impl SharedMemoryManager {
     }
 
     pub fn alloc(&mut self, len: usize) -> ZResult<SharedMemoryBuf> {
-        log::trace!("SharedMemoryManager::alloc({})", len);
+        tracing::trace!("SharedMemoryManager::alloc({})", len);
         // Always allocate a size that will keep the proper alignment requirements
         let required_len = align_addr_at(len + CHUNK_HEADER_SIZE, self.alignment);
         if self.available < required_len {
@@ -374,20 +374,23 @@ impl SharedMemoryManager {
             match self.free_list.pop() {
                 Some(mut chunk) if chunk.size >= required_len => {
                     self.available -= required_len;
-                    log::trace!("Allocator selected Chunk ({:?})", &chunk);
+                    tracing::trace!("Allocator selected Chunk ({:?})", &chunk);
                     if chunk.size - required_len >= MIN_FREE_CHUNK_SIZE {
                         let free_chunk = Chunk {
                             base_addr: unsafe { chunk.base_addr.add(required_len) },
                             offset: chunk.offset + required_len,
                             size: chunk.size - required_len,
                         };
-                        log::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
+                        tracing::trace!(
+                            "The allocation will leave a Free Chunk: {:?}",
+                            &free_chunk
+                        );
                         self.free_list.push(free_chunk);
                     }
                     chunk.size = required_len;
                     let shm_buf = self.free_chunk_map_to_shmbuf(&chunk);
-                    log::trace!("The allocated Chunk is ({:?})", &chunk);
-                    log::trace!("Allocated Shared Memory Buffer: {:?}", &shm_buf);
+                    tracing::trace!("The allocated Chunk is ({:?})", &chunk);
+                    tracing::trace!("Allocated Shared Memory Buffer: {:?}", &shm_buf);
                     self.busy_list.push(chunk);
                     Ok(shm_buf)
                 }
@@ -398,13 +401,13 @@ impl SharedMemoryManager {
                 }
                 None => {
                     let e = zerror!("SharedMemoryManager::alloc({}) cannot find any available chunk\nSharedMemoryManager::free_list = {:?}", len, self.free_list);
-                    log::trace!("{}", e);
+                    tracing::trace!("{}", e);
                     Err(e.into())
                 }
             }
         } else {
             let e = zerror!( "SharedMemoryManager does not have sufficient free memory to allocate {} bytes, try de-fragmenting!", len);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             Err(e.into())
         }
     }
@@ -465,7 +468,7 @@ impl SharedMemoryManager {
 
     /// Returns the amount of memory freed
     pub fn garbage_collect(&mut self) -> usize {
-        log::trace!("Running Garbage Collector");
+        tracing::trace!("Running Garbage Collector");
 
         let mut freed = 0;
         let (free, busy) = self
@@ -476,7 +479,7 @@ impl SharedMemoryManager {
 
         for f in free {
             freed += f.size;
-            log::trace!("Garbage Collecting Chunk: {:?}", f);
+            tracing::trace!("Garbage Collecting Chunk: {:?}", f);
             self.free_list.push(f)
         }
         self.available += freed;

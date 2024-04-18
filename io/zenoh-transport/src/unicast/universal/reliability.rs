@@ -120,7 +120,7 @@ impl<T> ReliabilityQueue<T> {
                 self.sn.get(),
                 self.capacity()
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             return zerror!(ZErrorKind::Other { descr: e });
         }
 
@@ -152,7 +152,7 @@ impl<T> ReliabilityQueue<T> {
                 self.sn.get(),
                 self.capacity()
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             return zerror!(ZErrorKind::Other { descr: e });
         }
 
@@ -222,7 +222,7 @@ impl<T: Clone> ReliabilityQueue<T> {
                 self.sn.get(),
                 self.capacity()
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             return zerror!(ZErrorKind::Other { descr: e });
         }
 

@@ -221,6 +221,16 @@ impl Default for SharedMemoryConf {
     }
 }
 
+impl Default for AclConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            default_permission: Permission::Deny,
+            rules: None,
+        }
+    }
+}
+
 pub const DEFAULT_CONNECT_TIMEOUT_MS: ModeDependentValue<i64> =
     ModeDependentValue::Dependent(ModeValues {
         client: Some(0),

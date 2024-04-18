@@ -44,7 +44,7 @@ where
             DeclareBody::UndeclareQueryable(r) => self.write(&mut *writer, r)?,
             DeclareBody::DeclareToken(r) => self.write(&mut *writer, r)?,
             DeclareBody::UndeclareToken(r) => self.write(&mut *writer, r)?,
-            DeclareBody::DeclareFinal => (),
+            DeclareBody::DeclareFinal(r) => self.write(&mut *writer, r)?,
         }
 
         Ok(())
@@ -71,7 +71,7 @@ where
             U_QUERYABLE => DeclareBody::UndeclareQueryable(codec.read(&mut *reader)?),
             D_TOKEN => DeclareBody::DeclareToken(codec.read(&mut *reader)?),
             U_TOKEN => DeclareBody::UndeclareToken(codec.read(&mut *reader)?),
-            D_FINAL => DeclareBody::DeclareFinal,
+            D_FINAL => DeclareBody::DeclareFinal(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

@@ -22,9 +22,10 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         OnceLock,
     },
+    time::Duration,
 };
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
-use zenoh_collections::Properties;
+use zenoh_protocol::core::Properties;
 use zenoh_result::ZResult as Result;
 
 const ZENOH_RUNTIME_THREADS_ENV: &str = "ZENOH_RUNTIME_THREADS";
@@ -144,6 +145,38 @@ impl ZRuntimePool {
             .expect("The hashmap should contains {zrt} after initialization")
             .get_or_init(|| zrt.init().expect("Failed to init {zrt}"))
             .handle()
+    }
+}
+
+// If there are any blocking tasks spawned by ZRuntimes, the function will block until they return.
+impl Drop for ZRuntimePool {
+    fn drop(&mut self) {
+        let handles: Vec<_> = self
+            .0
+            .drain()
+            .filter_map(|(_name, mut rt)| {
+                rt.take()
+                    .map(|r| std::thread::spawn(move || r.shutdown_timeout(Duration::from_secs(1))))
+            })
+            .collect();
+
+        for hd in handles {
+            let _ = hd.join();
+        }
+    }
+}
+
+/// In order to prevent valgrind reporting memory leaks,
+/// we use this guard to force drop ZRUNTIME_POOL since Rust does not drop static variables.
+#[doc(hidden)]
+pub struct ZRuntimePoolGuard;
+
+impl Drop for ZRuntimePoolGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let ptr = &(*ZRUNTIME_POOL) as *const ZRuntimePool;
+            std::mem::drop(ptr.read());
+        }
     }
 }
 

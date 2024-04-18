@@ -30,8 +30,9 @@ use std::sync::Arc;
 use tokio::fs::remove_file;
 use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use zenoh_core::{zasyncread, zasyncwrite};
+use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, SyncResolve};
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_protocol::transport::BatchSize;
 use zenoh_runtime::ZRuntime;
@@ -286,6 +287,7 @@ async fn handle_incoming_connections(
 struct UnicastPipeListener {
     uplink_locator: Locator,
     token: CancellationToken,
+    handle: JoinHandle<()>,
 }
 impl UnicastPipeListener {
     async fn listen(endpoint: EndPoint, manager: Arc<NewLinkChannelSender>) -> ZResult<Self> {
@@ -301,7 +303,7 @@ impl UnicastPipeListener {
 
         // WARN: The spawn_blocking is mandatory verified by the ping/pong test
         // create listening task
-        tokio::task::spawn_blocking(move || {
+        let handle = tokio::task::spawn_blocking(move || {
             ZRuntime::Acceptor.block_on(async move {
                 loop {
                     tokio::select! {
@@ -323,11 +325,13 @@ impl UnicastPipeListener {
         Ok(Self {
             uplink_locator: local,
             token,
+            handle,
         })
     }
 
     fn stop_listening(self) {
         self.token.cancel();
+        let _ = ResolveFuture::new(self.handle).res_sync();
     }
 }
 
@@ -468,7 +472,7 @@ impl Drop for UnicastPipe {
 #[async_trait]
 impl LinkUnicastTrait for UnicastPipe {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing Unix Pipe link: {}", self);
+        tracing::trace!("Closing Unix Pipe link: {}", self);
         Ok(())
     }
 
@@ -506,7 +510,7 @@ impl LinkUnicastTrait for UnicastPipe {
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
         // @TODO: Not supported for now
-        log::debug!("The get_interface_names for UnicastPipe is not supported");
+        tracing::debug!("The get_interface_names for UnicastPipe is not supported");
         vec![]
     }
 

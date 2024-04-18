@@ -28,7 +28,7 @@ description = "Internal crate for zenoh."
 async-trait = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 rustls = { workspace = true }
 rustls-pemfile = { workspace = true }
 rustls-pki-types = { workspace = true }
@@ -38,6 +38,7 @@ tokio = { workspace = true, features = ["io-util", "net", "fs", "sync"] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
 webpki-roots = { workspace = true }
+zenoh-collections = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }

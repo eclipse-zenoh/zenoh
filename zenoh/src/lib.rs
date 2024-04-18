@@ -70,7 +70,7 @@
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
 //!     let replies = session.get("key/expression").res().await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
-//!         println!(">> Received {:?}", reply.sample);
+//!         println!(">> Received {:?}", reply.result());
 //!     }
 //! }
 //! ```
@@ -134,12 +134,12 @@ pub use net::runtime;
 pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
+pub mod bytes;
 pub(crate) mod encoding;
 pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
-pub mod payload;
 pub mod plugins;
 pub mod prelude;
 pub mod publication;
@@ -214,7 +214,7 @@ where
     ScoutBuilder {
         what: what.into(),
         config: config.try_into().map_err(|e| e.into()),
-        handler: DefaultHandler,
+        handler: DefaultHandler::default(),
     }
 }
 

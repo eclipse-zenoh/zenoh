@@ -31,10 +31,7 @@ use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 use zenoh_protocol::{
-    core::{
-        endpoint::{self, Address},
-        Locator,
-    },
+    core::{endpoint::Address, Locator, Parameters},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -166,8 +163,7 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
             };
         }
 
-        let mut s = String::new();
-        endpoint::Parameters::extend(ps.drain(..), &mut s);
+        let s = Parameters::from_iter(ps.drain(..));
 
         Ok(s)
     }

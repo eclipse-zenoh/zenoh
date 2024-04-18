@@ -40,11 +40,11 @@ where
         let Interest {
             id,
             mode,
+            options: _, // Compute the options on-the-fly according to Interest fields
             wire_expr,
             ext_qos,
             ext_tstamp,
             ext_nodeid,
-            ..
         } = x;
 
         // Header

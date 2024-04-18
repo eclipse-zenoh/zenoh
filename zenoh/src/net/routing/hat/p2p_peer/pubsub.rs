@@ -536,7 +536,7 @@ impl HatPubSubTrait for HatCode {
         if key_expr.ends_with('/') {
             return Arc::new(route);
         }
-        log::trace!(
+        tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -545,7 +545,7 @@ impl HatPubSubTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return Arc::new(route);
             }
         };

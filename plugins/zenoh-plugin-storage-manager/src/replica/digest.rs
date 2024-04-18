@@ -309,6 +309,7 @@ impl Digest {
 
         for int in intervals_to_update {
             let interval = intervals.get_mut(&int).unwrap();
+            interval.content.retain(|x| subintervals.contains_key(x));
             let content = &interval.content;
             if !content.is_empty() {
                 // order the content, hash them
@@ -325,6 +326,7 @@ impl Digest {
 
         for era_type in eras_to_update {
             let era = eras.get_mut(&era_type).unwrap();
+            era.content.retain(|x| intervals.contains_key(x));
             let content = &era.content;
             if !content.is_empty() {
                 // order the content, hash them
@@ -491,11 +493,7 @@ impl Digest {
                     .get_mut(&subinterval)
                     .unwrap()
                     .content
-                    .retain(|x| {
-                        x.timestamp.get_time() != entry.timestamp.get_time()
-                            && x.timestamp.get_id() != entry.timestamp.get_id()
-                            && x.key != entry.key
-                    });
+                    .retain(|x| x.timestamp != entry.timestamp || x.key != entry.key);
                 subintervals_to_update.insert(subinterval);
             }
             if current.intervals.contains_key(&interval) {

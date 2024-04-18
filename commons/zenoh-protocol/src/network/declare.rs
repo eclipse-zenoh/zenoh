@@ -97,7 +97,7 @@ pub enum DeclareBody {
     UndeclareQueryable(UndeclareQueryable),
     DeclareToken(DeclareToken),
     UndeclareToken(UndeclareToken),
-    DeclareFinal,
+    DeclareFinal(DeclareFinal),
 }
 
 impl DeclareBody {
@@ -107,7 +107,7 @@ impl DeclareBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..8) {
+        match rng.gen_range(0..9) {
             0 => DeclareBody::DeclareKeyExpr(DeclareKeyExpr::rand()),
             1 => DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr::rand()),
             2 => DeclareBody::DeclareSubscriber(DeclareSubscriber::rand()),
@@ -116,7 +116,7 @@ impl DeclareBody {
             5 => DeclareBody::UndeclareQueryable(UndeclareQueryable::rand()),
             6 => DeclareBody::DeclareToken(DeclareToken::rand()),
             7 => DeclareBody::UndeclareToken(UndeclareToken::rand()),
-            8 => DeclareBody::DeclareFinal,
+            8 => DeclareBody::DeclareFinal(DeclareFinal::rand()),
             _ => unreachable!(),
         }
     }

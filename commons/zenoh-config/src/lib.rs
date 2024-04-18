@@ -19,7 +19,7 @@ mod include;
 use include::recursive_include;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
@@ -73,9 +73,9 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-pub enum DownsamplingFlow {
+pub enum InterceptorFlow {
     Egress,
     Ingress,
 }
@@ -97,7 +97,48 @@ pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied.
     pub rules: Vec<DownsamplingRuleConf>,
     /// Downsampling flow direction: egress, ingress
-    pub flow: DownsamplingFlow,
+    pub flow: InterceptorFlow,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigRules {
+    pub interfaces: Vec<String>,
+    pub key_exprs: Vec<String>,
+    pub actions: Vec<Action>,
+    pub flows: Vec<InterceptorFlow>,
+    pub permission: Permission,
+}
+
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub struct PolicyRule {
+    pub subject: Subject,
+    pub key_expr: String,
+    pub action: Action,
+    pub permission: Permission,
+    pub flow: InterceptorFlow,
+}
+
+#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[serde(untagged)]
+#[serde(rename_all = "snake_case")]
+pub enum Subject {
+    Interface(String),
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Action {
+    Put,
+    DeclareSubscriber,
+    Get,
+    DeclareQueryable,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Permission {
+    Allow,
+    Deny,
 }
 
 pub trait ConfigValidator: Send + Sync {
@@ -431,6 +472,7 @@ validated_struct::validator! {
                     known_keys_file: Option<String>,
                 },
             },
+
         },
         /// Configuration of the admin space.
         pub adminspace: #[derive(Default)]
@@ -455,6 +497,13 @@ validated_struct::validator! {
 
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
+
+        ///Configuration of the access control (ACL)
+        pub access_control: AclConfig {
+            pub enabled: bool,
+            pub default_permission: Permission,
+            pub rules: Option<Vec<AclConfigRules>>
+        },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
@@ -1185,20 +1234,34 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             .unwrap()
             .entry(plugin)
             .or_insert(Value::Null);
-        let mut new_value = value.clone().merge(key, new_value)?;
-        if let Some(validator) = self.validator.upgrade() {
-            match validator.check_config(
-                plugin,
-                key,
-                value.as_object().unwrap(),
-                new_value.as_object().unwrap(),
-            ) {
-                Ok(Some(val)) => new_value = Value::Object(val),
-                Ok(None) => {}
+        let new_value = value.clone().merge(key, new_value)?;
+        *value = if let Some(validator) = self.validator.upgrade() {
+            // New plugin configuration for compare with original configuration.
+            // Return error if it's not an object.
+            // Note: it's ok if original "new_value" is not an object: this can be some subkey of the plugin configuration. But the result of the merge should be an object.
+            // Error occurs  if the original plugin configuration is not an object itself (e.g. null).
+            let Some(new_plugin_config) = new_value.as_object() else {
+                return Err(format!(
+                    "Attempt to provide non-object value as configuration for plugin `{plugin}`"
+                )
+                .into());
+            };
+            // Original plugin configuration for compare with new configuration.
+            // If for some reason it's not defined or not an object, we default to an empty object.
+            // Usually this happens when no plugin with this name defined. Reject then should be performed by the validator with `plugin not found` error.
+            let empty_config = Map::new();
+            let current_plugin_config = value.as_object().unwrap_or(&empty_config);
+            match validator.check_config(plugin, key, current_plugin_config, new_plugin_config) {
+                // Validator made changes to the proposed configuration, take these changes
+                Ok(Some(val)) => Value::Object(val),
+                // Validator accepted the proposed configuration as is
+                Ok(None) => new_value,
+                // Validator rejected the proposed configuration
                 Err(e) => return Err(format!("{e}").into()),
             }
-        }
-        *value = new_value;
+        } else {
+            new_value
+        };
         Ok(())
     }
     fn get<'a>(&'a self, mut key: &str) -> Result<&'a dyn Any, GetError> {

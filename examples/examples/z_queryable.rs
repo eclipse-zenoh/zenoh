@@ -19,7 +19,7 @@ use zenoh_examples::CommonArgs;
 #[tokio::main]
 async fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     let (config, key_expr, value, complete) = parse_args();
 
@@ -29,6 +29,10 @@ async fn main() {
     println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
         .declare_queryable(&key_expr)
+        // // By default queryable receives queries from a FIFO. 
+        // // Uncomment this line to use a ring channel instead. 
+        // // More information on the ring channel are available in the z_pull example.
+        // .with(zenoh::handlers::RingChannel::default())
         .complete(complete)
         .res()
         .await
@@ -40,7 +44,7 @@ async fn main() {
             None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
             Some(value) => {
                 let payload = value
-                    .payload
+                    .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(

@@ -234,7 +234,7 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
         for _ in 0..msg_count {
             let rs = ztimeout!(s03.get(cke.clone()).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.sample.unwrap().payload().len(), size);
+                assert_eq!(s.result().unwrap().payload().len(), size);
                 cnt += 1;
             }
         }
@@ -260,7 +260,7 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_p2p() {
-    let _ = env_logger::try_init();
+    zenoh_util::try_init_log_from_env();
 
     let (s01, s02, s03) = open_p2p_sessions().await;
     test_unicity_pubsub(&s01, &s02, &s03).await;
@@ -270,7 +270,7 @@ async fn zenoh_unicity_p2p() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_brokered() {
-    let _ = env_logger::try_init();
+    zenoh_util::try_init_log_from_env();
     let r = open_router_session().await;
 
     let (s01, s02, s03) = open_client_sessions().await;

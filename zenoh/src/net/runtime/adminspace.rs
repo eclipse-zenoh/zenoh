@@ -12,22 +12,23 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
+use crate::bytes::ZBytes;
 use crate::encoding::Encoding;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
 use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
+use crate::sample::builder::ValueBuilderTrait;
 use crate::value::Value;
-use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
+use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
@@ -98,7 +99,7 @@ impl AdminSpace {
     ) -> ZResult<()> {
         let name = &config.name;
         let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-            log::warn!("Plugin `{}` was already declared", declared.name());
+            tracing::warn!("Plugin `{}` was already declared", declared.name());
             declared
         } else if let Some(paths) = &config.paths {
             plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
@@ -107,7 +108,7 @@ impl AdminSpace {
         };
 
         let loaded = if let Some(loaded) = declared.loaded_mut() {
-            log::warn!(
+            tracing::warn!(
                 "Plugin `{}` was already loaded from {}",
                 loaded.name(),
                 loaded.path()
@@ -118,10 +119,10 @@ impl AdminSpace {
         };
 
         if let Some(started) = loaded.started_mut() {
-            log::warn!("Plugin `{}` was already started", started.name());
+            tracing::warn!("Plugin `{}` was already started", started.name());
         } else {
             let started = loaded.start(start_args)?;
-            log::info!(
+            tracing::info!(
                 "Successfully started plugin `{}` from {}",
                 started.name(),
                 started.path()
@@ -258,7 +259,7 @@ impl AdminSpace {
                                     if plugin.required {
                                         panic!("Failed to load plugin `{}`: {}", plugin.name, e)
                                     } else {
-                                        log::error!(
+                                        tracing::error!(
                                             "Failed to load plugin `{}`: {}",
                                             plugin.name,
                                             e
@@ -269,7 +270,7 @@ impl AdminSpace {
                         }
                     }
                 }
-                log::info!("Running plugins: {:?}", &active_plugins)
+                tracing::info!("Running plugins: {:?}", &active_plugins)
             }
         });
 
@@ -321,11 +322,11 @@ impl AdminSpace {
 
 impl Primitives for AdminSpace {
     fn send_interest(&self, msg: Interest) {
-        log::trace!("Recv interest {:?}", msg);
+        tracing::trace!("Recv interest {:?}", msg);
     }
 
     fn send_declare(&self, msg: Declare) {
-        log::trace!("Recv declare {:?}", msg);
+        tracing::trace!("Recv declare {:?}", msg);
         if let DeclareBody::DeclareKeyExpr(m) = msg.body {
             match self.key_expr_to_string(&m.wire_expr) {
                 Ok(s) => {
@@ -341,7 +342,7 @@ impl Primitives for AdminSpace {
         {
             let conf = self.context.runtime.state.config.lock();
             if !conf.adminspace.permissions().write {
-                log::error!(
+                tracing::error!(
                     "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
                     msg.wire_expr
                 );
@@ -357,7 +358,7 @@ impl Primitives for AdminSpace {
             match msg.payload {
                 PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
                     Ok(json) => {
-                        log::trace!(
+                        tracing::trace!(
                             "Insert conf value /@/router/{}/config/{} : {}",
                             &self.context.zid_str,
                             key,
@@ -377,13 +378,13 @@ impl Primitives for AdminSpace {
                     ),
                 },
                 PushBody::Del(_) => {
-                    log::trace!(
+                    tracing::trace!(
                         "Deleting conf value /@/router/{}/config/{}",
                         &self.context.zid_str,
                         key
                     );
                     if let Err(e) = self.context.runtime.state.config.remove(key) {
-                        log::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
+                        tracing::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
                     }
                 }
             }
@@ -398,7 +399,7 @@ impl Primitives for AdminSpace {
                 {
                     let conf = self.context.runtime.state.config.lock();
                     if !conf.adminspace.permissions().read {
-                        log::error!(
+                        tracing::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
                         msg.wire_expr
                     );
@@ -414,7 +415,7 @@ impl Primitives for AdminSpace {
                 let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
                     Ok(key_expr) => key_expr.into_owned(),
                     Err(e) => {
-                        log::error!("Unknown KeyExpr: {}", e);
+                        tracing::error!("Unknown KeyExpr: {}", e);
                         primitives.send_response_final(ResponseFinal {
                             rid: msg.id,
                             ext_qos: ext::QoSType::RESPONSE_FINAL,
@@ -425,14 +426,11 @@ impl Primitives for AdminSpace {
                 };
 
                 let zid = self.zid;
-                let parameters = query.parameters.to_owned();
                 let query = Query {
                     inner: Arc::new(QueryInner {
                         key_expr: key_expr.clone(),
-                        parameters,
-                        value: query
-                            .ext_body
-                            .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
+                        parameters: query.parameters.into(),
+                        value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
                         qid: msg.id,
                         zid,
                         primitives,
@@ -539,8 +537,11 @@ fn router_data(context: &AdminContext, query: Query) {
         });
         #[cfg(feature = "stats")]
         {
-            let stats = crate::prelude::Parameters::decode(&query.selector())
-                .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+            let stats = query
+                .selector()
+                .parameters()
+                .iter()
+                .any(|(k, v)| k == "_stats" && v != "false");
             if stats {
                 json.as_object_mut().unwrap().insert(
                     "stats".to_string(),
@@ -570,8 +571,11 @@ fn router_data(context: &AdminContext, query: Query) {
 
     #[cfg(feature = "stats")]
     {
-        let stats = crate::prelude::Parameters::decode(&query.selector())
-            .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+        let stats = query
+            .selector()
+            .parameters()
+            .iter()
+            .any(|(k, v)| k == "_stats" && v != "false");
         if stats {
             json.as_object_mut().unwrap().insert(
                 "stats".to_string(),
@@ -580,20 +584,20 @@ fn router_data(context: &AdminContext, query: Query) {
         }
     }
 
-    log::trace!("AdminSpace router_data: {:?}", json);
-    let payload = match Payload::try_from(json) {
+    tracing::trace!("AdminSpace router_data: {:?}", json);
+    let payload = match ZBytes::try_from(json) {
         Ok(p) => p,
         Err(e) => {
-            log::error!("Error serializing AdminSpace reply: {:?}", e);
+            tracing::error!("Error serializing AdminSpace reply: {:?}", e);
             return;
         }
     };
     if let Err(e) = query
         .reply(reply_key, payload)
-        .with_encoding(Encoding::APPLICATION_JSON)
+        .encoding(Encoding::APPLICATION_JSON)
         .res_sync()
     {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
+        tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
 
@@ -621,7 +625,7 @@ zenoh_build{{version="{}"}} 1
     );
 
     if let Err(e) = query.reply(reply_key, metrics).res() {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
+        tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
 
@@ -636,7 +640,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
         .res()
     {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
+        tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
 
@@ -651,7 +655,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
         .res()
     {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
+        tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
 
@@ -665,8 +669,8 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, Payload::empty()).res() {
-                log::error!("Error sending AdminSpace reply: {:?}", e);
+            if let Err(e) = query.reply(key, ZBytes::empty()).res() {
+                tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
     }
@@ -682,8 +686,8 @@ fn queryables_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, Payload::empty()).res() {
-                log::error!("Error sending AdminSpace reply: {:?}", e);
+            if let Err(e) = query.reply(key, ZBytes::empty()).res() {
+                tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
     }
@@ -693,20 +697,20 @@ fn plugins_data(context: &AdminContext, query: Query) {
     let guard = zlock!(context.plugins_mgr);
     let root_key = format!("@/router/{}/plugins", &context.zid_str);
     let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
-    log::debug!("requested plugins status {:?}", query.key_expr());
+    tracing::debug!("requested plugins status {:?}", query.key_expr());
     if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
         let statuses = guard.plugins_status(names);
         for status in statuses {
-            log::debug!("plugin status: {:?}", status);
+            tracing::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            match Payload::try_from(status) {
+            match ZBytes::try_from(status) {
                 Ok(zbuf) => {
                     if let Err(e) = query.reply(key, zbuf).res_sync() {
-                        log::error!("Error sending AdminSpace reply: {:?}", e);
+                        tracing::error!("Error sending AdminSpace reply: {:?}", e);
                     }
                 }
-                Err(e) => log::debug!("Admin query error: {}", e),
+                Err(e) => tracing::debug!("Admin query error: {}", e),
             }
         }
     }
@@ -724,11 +728,11 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query.reply(key_expr, plugin.path()).res() {
-                            log::error!("Error sending AdminSpace reply: {:?}", e);
+                            tracing::error!("Error sending AdminSpace reply: {:?}", e);
                         }
                     }
                 } else {
-                    log::error!("Error: invalid plugin path key {}", plugin_path_key);
+                    tracing::error!("Error: invalid plugin path key {}", plugin_path_key);
                 }
             });
             let matches_plugin = |plugin_status_space: &mut String| {
@@ -745,29 +749,29 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match Payload::try_from(response.value) {
+                            match ZBytes::try_from(response.value) {
                                 Ok(zbuf) => {
                                     if let Err(e) = query.reply(key_expr, zbuf).res_sync() {
-                                        log::error!("Error sending AdminSpace reply: {:?}", e);
+                                        tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
                                 },
-                                Err(e) => log::debug!("Admin query error: {}", e),
+                                Err(e) => tracing::debug!("Admin query error: {}", e),
                             }
                         } else {
-                            log::error!("Error: plugin {} replied with an invalid key", plugin_key);
+                            tracing::error!("Error: plugin {} replied with an invalid key", plugin_key);
                         }
                     }
                 }
                 Ok(Err(e)) => {
-                    log::error!("Plugin {} bailed from responding to {}: {}", plugin.name(), query.key_expr(), e)
+                    tracing::error!("Plugin {} bailed from responding to {}: {}", plugin.name(), query.key_expr(), e)
                 }
                 Err(e) => match e
                     .downcast_ref::<String>()
                     .map(|s| s.as_str())
                     .or_else(|| e.downcast_ref::<&str>().copied())
                 {
-                    Some(e) => log::error!("Plugin {} panicked while responding to {}: {}", plugin.name(), query.key_expr(), e),
-                    None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.name(), query.key_expr()),
+                    Some(e) => tracing::error!("Plugin {} panicked while responding to {}: {}", plugin.name(), query.key_expr(), e),
+                    None => tracing::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.name(), query.key_expr()),
                 },
             }
         });

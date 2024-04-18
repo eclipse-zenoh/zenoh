@@ -34,7 +34,7 @@ pub mod flag {
 ///
 /// ```text
 ///     A                   B
-///     |  INTEREST         |
+///     |     INTEREST      |
 ///     |------------------>| -- Mode: Current
 ///     |                   |    This is an Interest e.g. for subscriber declarations.
 ///     |                   |
@@ -45,15 +45,16 @@ pub mod flag {
 ///     |  DECL SUBSCRIBER  |
 ///     |<------------------| -- With interest_id field set
 ///     |                   |
-///     |  DECL FINAL       |
+///     |     DECL FINAL    |
 ///     |<------------------| -- With interest_id field set
-///
+///     |                   |
+/// ```
 ///
 /// And the message flow is the following for an [`Interest`] with mode `CurrentFuture`:
 ///
 /// ```text
 ///     A                   B
-///     |  INTEREST         |
+///     |     INTEREST      |
 ///     |------------------>| -- This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
 ///     |                   |
 ///     |  DECL SUBSCRIBER  |
@@ -63,7 +64,7 @@ pub mod flag {
 ///     |  DECL SUBSCRIBER  |
 ///     |<------------------| -- With interest_id field not set
 ///     |                   |
-///     |  DECL FINAL       |
+///     |     DECL FINAL    |
 ///     |<------------------| -- With interest_id field set
 ///     |                   |
 ///     |  DECL SUBSCRIBER  |
@@ -76,7 +77,7 @@ pub mod flag {
 ///     | INTEREST FINAL    |
 ///     |------------------>| -- Mode: Final
 ///     |                   |    This stops the transmission of subscriber declarations/undeclarations.
-///     |                   
+///     |                   |              
 ///
 /// Flags:
 /// - |: Mode           The mode of the interest*
@@ -113,6 +114,7 @@ pub mod flag {
 ///     - if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver.
 ///               If R==0 then M should be set to 0.
 ///     - if A==1 then the replies SHOULD be aggregated
+/// ```
 
 /// The resolution of a RequestId
 pub type DeclareRequestId = u32;
@@ -210,6 +212,7 @@ impl Interest {
     }
 }
 
+#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct InterestOptions {
     options: u8,

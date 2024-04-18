@@ -21,15 +21,17 @@ use crate::KeyExpr;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
+use tokio_util::sync::CancellationToken;
 use zenoh_protocol::network::interest::{InterestId, InterestMode, InterestOptions};
-use zenoh_protocol::network::{ext, Declare, DeclareBody};
+use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareFinal};
 use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
     network::{Mapping, Push, Request, RequestId, Response, ResponseFinal},
 };
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
@@ -46,10 +48,11 @@ pub struct FaceState {
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
-    pub(crate) pending_queries: HashMap<RequestId, Arc<Query>>,
+    pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) task_controller: TaskController,
 }
 
 impl FaceState {
@@ -80,6 +83,7 @@ impl FaceState {
             mcast_group,
             in_interceptors,
             hat,
+            task_controller: TaskController::default(),
         })
     }
 
@@ -157,10 +161,34 @@ impl fmt::Display for FaceState {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct WeakFace {
+    pub(crate) tables: Weak<TablesLock>,
+    pub(crate) state: Weak<FaceState>,
+}
+
+impl WeakFace {
+    pub fn upgrade(&self) -> Option<Face> {
+        Some(Face {
+            tables: self.tables.upgrade()?,
+            state: self.state.upgrade()?,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct Face {
     pub(crate) tables: Arc<TablesLock>,
     pub(crate) state: Arc<FaceState>,
+}
+
+impl Face {
+    pub fn downgrade(&self) -> WeakFace {
+        WeakFace {
+            tables: Arc::downgrade(&self.tables),
+            state: Arc::downgrade(&self.state),
+        }
+    }
 }
 
 impl Primitives for Face {
@@ -204,7 +232,7 @@ impl Primitives for Face {
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareFinal,
+                        body: DeclareBody::DeclareFinal(DeclareFinal),
                     },
                     self.clone(),
                 ));
@@ -279,12 +307,12 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
-                log::warn!("Received unsupported {m:?}")
+                tracing::warn!("Received unsupported {m:?}")
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
-                log::warn!("Received unsupported {m:?}")
+                tracing::warn!("Received unsupported {m:?}")
             }
-            zenoh_protocol::network::DeclareBody::DeclareFinal => {
+            zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
                 if let Some(id) = msg.interest_id {
                     get_mut_unchecked(&mut self.state.clone())
                         .local_interests

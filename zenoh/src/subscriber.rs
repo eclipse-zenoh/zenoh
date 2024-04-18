@@ -202,9 +202,6 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     #[cfg(not(feature = "unstable"))]
     pub(crate) reliability: Reliability,
 
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) mode: Mode,
-
     #[cfg(feature = "unstable")]
     pub origin: Locality,
     #[cfg(not(feature = "unstable"))]
@@ -397,7 +394,7 @@ where
                     state: sub_state,
                     alive: true,
                 },
-                receiver,
+                handler: receiver,
             })
     }
 }
@@ -443,12 +440,12 @@ where
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct Subscriber<'a, Receiver> {
+pub struct Subscriber<'a, Handler> {
     pub(crate) subscriber: SubscriberInner<'a>,
-    pub receiver: Receiver,
+    pub(crate) handler: Handler,
 }
 
-impl<'a, Receiver> Subscriber<'a, Receiver> {
+impl<'a, Handler> Subscriber<'a, Handler> {
     /// Returns the [`EntityGlobalId`] of this Subscriber.
     ///
     /// # Examples
@@ -476,6 +473,20 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.subscriber.state.key_expr
+    }
+
+    /// Returns a reference to this subscriber's handler.
+    /// An handler is anything that implements [`IntoHandler`].
+    /// The default handler is [`DefaultHandler`].
+    pub fn handler(&self) -> &Handler {
+        &self.handler
+    }
+
+    /// Returns a mutable reference to this subscriber's handler.
+    /// An handler is anything that implements [`IntoHandler`].
+    /// The default handler is [`DefaultHandler`].
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.handler
     }
 
     /// Close a [`Subscriber`].
@@ -509,16 +520,16 @@ impl<'a, T> Undeclarable<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> 
     }
 }
 
-impl<Receiver> Deref for Subscriber<'_, Receiver> {
-    type Target = Receiver;
+impl<Handler> Deref for Subscriber<'_, Handler> {
+    type Target = Handler;
 
     fn deref(&self) -> &Self::Target {
-        &self.receiver
+        self.handler()
     }
 }
-impl<Receiver> DerefMut for Subscriber<'_, Receiver> {
+impl<Handler> DerefMut for Subscriber<'_, Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.receiver
+        self.handler_mut()
     }
 }
 

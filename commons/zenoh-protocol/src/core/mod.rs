@@ -53,6 +53,12 @@ pub use endpoint::*;
 pub mod resolution;
 pub use resolution::*;
 
+pub mod parameters;
+pub use parameters::*;
+
+pub mod properties;
+pub use properties::*;
+
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]

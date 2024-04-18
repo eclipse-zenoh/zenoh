@@ -33,7 +33,7 @@ if(typeof(EventSource) !== "undefined") {
 #[async_std::main]
 async fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     let config = parse_args();
     let key = keyexpr::new("demo/sse").unwrap();
@@ -46,7 +46,7 @@ async fn main() {
     let queryable = session.declare_queryable(key).res().await.unwrap();
 
     async_std::task::spawn({
-        let receiver = queryable.receiver.clone();
+        let receiver = queryable.handler().clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
                 request.reply(key, HTML).res().await.unwrap();
