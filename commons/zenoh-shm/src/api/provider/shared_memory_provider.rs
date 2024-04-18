@@ -45,14 +45,14 @@ use super::{
 };
 
 #[derive(Debug)]
-pub struct BusyChunk {
+struct BusyChunk {
     descriptor: ChunkDescriptor,
     header: AllocatedHeaderDescriptor,
     _watchdog: AllocatedWatchdog,
 }
 
 impl BusyChunk {
-    pub fn new(
+    fn new(
         descriptor: ChunkDescriptor,
         header: AllocatedHeaderDescriptor,
         watchdog: AllocatedWatchdog,
@@ -427,7 +427,7 @@ where
         loop {
             match InnerPolicy::alloc(layout, provider) {
                 Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
-                    // todo: implement provider's async signalling instead of this!
+                    // TODO: implement provider's async signalling instead of this!
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
                 other_result => {
@@ -448,7 +448,7 @@ where
         loop {
             match InnerPolicy::alloc(layout, provider) {
                 Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
-                    // todo: implement provider's async signalling instead of this!
+                    // TODO: implement provider's async signalling instead of this!
                     std::thread::sleep(Duration::from_millis(1));
                 }
                 other_result => {
@@ -459,7 +459,7 @@ where
     }
 }
 
-// todo: allocator API
+// TODO: allocator API
 /*pub struct ShmAllocator<
     'a,
     Policy: AllocPolicy,

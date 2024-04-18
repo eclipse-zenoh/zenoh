@@ -11,11 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::{
-    auth_segment::{AuthSegment, AuthSegmentID},
-    auth_unicast::AuthUnicast,
-    establishment::{AcceptFsm, OpenFsm},
-};
+pub(crate) mod auth_segment;
+pub(crate) mod auth_unicast;
+
+use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 use async_trait::async_trait;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
@@ -25,6 +24,10 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::bail;
 use zenoh_protocol::transport::{init, open};
 use zenoh_result::{zerror, Error as ZError};
+
+use auth_segment::{AuthSegment, AuthSegmentID};
+
+use self::auth_unicast::AuthUnicast;
 
 /*************************************/
 /*             InitSyn               */

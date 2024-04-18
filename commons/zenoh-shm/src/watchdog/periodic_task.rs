@@ -51,7 +51,7 @@ impl PeriodicTask {
             .policy(Realtime(RealtimeThreadSchedulePolicy::Fifo))
             .priority(ThreadPriority::Min);
 
-        // todo: deal with windows realtime scheduling
+        // TODO: deal with windows realtime scheduling
         #[cfg(windows)]
         let builder = ThreadBuilder::default().name(name);
                 
@@ -73,7 +73,7 @@ impl PeriodicTask {
                     }
                 }
 
-                //todo: need mlock here!
+                //TODO: need mlock here!
 
                 while c_running.load(Ordering::Relaxed) {
                     let cycle_start = std::time::Instant::now();

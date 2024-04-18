@@ -29,9 +29,9 @@ pub struct WatchdogStorage {
     available: Arc<Mutex<BTreeSet<OwnedDescriptor>>>,
 }
 
-// todo: expand and shrink Storage when needed
+// TODO: expand and shrink Storage when needed
 // OR
-// support multiple descrptor assignment (allow multiple buffers to be assigned to the same watchdog)
+// support multiple descriptor assignment (allow multiple buffers to be assigned to the same watchdog)
 impl WatchdogStorage {
     pub fn new(initial_watchdog_count: usize) -> ZResult<Self> {
         let segment = Arc::new(Segment::create(initial_watchdog_count)?);

@@ -61,7 +61,7 @@ impl ValidatedStorage {
     }
 }
 
-// todo: optimize validation by packing descriptors
+// TODO: optimize validation by packing descriptors
 pub struct WatchdogValidator {
     storage: Arc<ValidatedStorage>,
     _task: PeriodicTask,

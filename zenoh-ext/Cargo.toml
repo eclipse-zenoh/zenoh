@@ -31,7 +31,6 @@ unstable = []
 default = []
 shared-memory = [
     "zenoh/shared-memory",
-    "zenoh-sync/shared-memory",
 ]
 
 [dependencies]

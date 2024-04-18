@@ -74,7 +74,7 @@ fn watchdog_confirmed_concurrent() {
     execute_concurrent(1000, 10, watchdog_confirmed_fn());
 }
 
-// todo: confirmation to dangling watchdog actually writes to potentially-existing
+// TODO: confirmation to dangling watchdog actually writes to potentially-existing
 // other watchdog instance from other test running in the same process and changes it's behaviour,
 // so we cannot run dangling test in parallel with anything else
 #[test]

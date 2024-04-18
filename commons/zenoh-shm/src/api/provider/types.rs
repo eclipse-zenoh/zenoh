@@ -43,7 +43,7 @@ impl From<zenoh_result::Error> for ZAllocError {
 #[zenoh_macros::unstable_doc]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AllocAlignment {
-    pow: u32,
+    pow: u8,
 }
 
 impl Display for AllocAlignment {
@@ -55,13 +55,13 @@ impl Display for AllocAlignment {
 impl Default for AllocAlignment {
     fn default() -> Self {
         Self {
-            pow: (std::mem::align_of::<u32>() as f64).log2().round() as u32,
+            pow: (std::mem::align_of::<u32>() as f64).log2().round() as u8,
         }
     }
 }
 
 impl AllocAlignment {
-    pub fn new(pow: u32) -> Self {
+    pub fn new(pow: u8) -> Self {
         Self { pow }
     }
 

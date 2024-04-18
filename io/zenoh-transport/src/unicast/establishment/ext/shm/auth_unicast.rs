@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -14,6 +12,7 @@ use std::ops::Deref;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use rand::{Rng, SeedableRng};
+use std::ops::Deref;
 use zenoh_crypto::PseudoRng;
 use zenoh_result::ZResult;
 use zenoh_shm::api::common::types::ProtocolID;

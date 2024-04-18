@@ -46,7 +46,7 @@ impl ZSliceShmMut {
 
 impl PartialEq<zsliceshmmut> for &ZSliceShmMut {
     fn eq(&self, other: &zsliceshmmut) -> bool {
-        self.0 == other.0 .0
+        self == other
     }
 }
 
@@ -74,24 +74,32 @@ impl TryFrom<ZSliceShm> for ZSliceShmMut {
 
 impl Borrow<zsliceshm> for ZSliceShmMut {
     fn borrow(&self) -> &zsliceshm {
+        // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
 impl BorrowMut<zsliceshm> for ZSliceShmMut {
     fn borrow_mut(&mut self) -> &mut zsliceshm {
+        // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
 impl Borrow<zsliceshmmut> for ZSliceShmMut {
     fn borrow(&self) -> &zsliceshmmut {
+        // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
 impl BorrowMut<zsliceshmmut> for ZSliceShmMut {
     fn borrow_mut(&mut self) -> &mut zsliceshmmut {
+        // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -172,14 +180,10 @@ impl TryFrom<&mut SharedMemoryBuf> for &mut zsliceshmmut {
 
     fn try_from(value: &mut SharedMemoryBuf) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
+            // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+            // to SharedMemoryBuf type, so it is safe to transmute them in any direction
             true => Ok(unsafe { core::mem::transmute(value) }),
             false => Err(()),
         }
-    }
-}
-
-impl From<&mut zsliceshmmut> for &mut zsliceshm {
-    fn from(value: &mut zsliceshmmut) -> Self {
-        unsafe { core::mem::transmute(value) }
     }
 }

@@ -106,8 +106,8 @@ impl ConfirmedSegment {
 unsafe impl Send for ConfirmedSegment {}
 unsafe impl Sync for ConfirmedSegment {}
 
-// todo: optimize confirmation by packing descriptors AND linked table together
-// todo: think about linked table cleanup
+// TODO: optimize confirmation by packing descriptors AND linked table together
+// TODO: think about linked table cleanup
 pub struct WatchdogConfirmator {
     confirmed: RwLock<BTreeMap<SegmentID, Arc<ConfirmedSegment>>>,
     segment_transactions: Arc<lockfree::queue::Queue<Arc<ConfirmedSegment>>>,

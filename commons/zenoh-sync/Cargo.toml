@@ -28,11 +28,6 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-shared-memory = [
-	"zenoh-buffers/shared-memory"
-]
-
 [dependencies]
 event-listener = { workspace = true }
 futures = { workspace = true }

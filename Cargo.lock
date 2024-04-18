@@ -3719,7 +3719,8 @@ dependencies = [
 [[package]]
 name = "stabby"
 version = "4.0.5"
-source = "git+https://github.com/ZettaScaleLabs/stabby.git#be60202d39554d535843198ede07483ececb4cf0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ec04c5825384722310b6a1fd83023bee0bfdc838f7aa3069f0a59e10203836b"
 dependencies = [
  "lazy_static",
  "rustversion",
@@ -3729,7 +3730,8 @@ dependencies = [
 [[package]]
 name = "stabby-abi"
 version = "4.0.5"
-source = "git+https://github.com/ZettaScaleLabs/stabby.git#be60202d39554d535843198ede07483ececb4cf0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "976322da1deb6cc64a8406fd24378b840b1962acaac1978a993131c3838d81b3"
 dependencies = [
  "libc",
  "rustversion",
@@ -3740,7 +3742,8 @@ dependencies = [
 [[package]]
 name = "stabby-macros"
 version = "4.0.5"
-source = "git+https://github.com/ZettaScaleLabs/stabby.git#be60202d39554d535843198ede07483ececb4cf0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "736712a13ab37b1fa6e073831efca751bbcb31033af4d7308bd5d9d605939183"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

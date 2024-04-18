@@ -30,7 +30,7 @@ pub struct Descriptor {
 impl From<&OwnedDescriptor> for Descriptor {
     fn from(item: &OwnedDescriptor) -> Self {
         let bitpos = {
-            // todo: can be optimized
+            // TODO: can be optimized
             let mut v = item.mask;
             let mut bitpos = 0u32;
             while v > 1 {

@@ -26,6 +26,8 @@ pub struct ChunkDescriptor {
 }
 
 impl ChunkDescriptor {
+    /// Create a new Chunk Descriptor
+    #[zenoh_macros::unstable_doc]
     pub fn new(segment: SegmentID, chunk: ChunkID, len: usize) -> Self {
         Self {
             segment,
@@ -43,6 +45,8 @@ pub struct AllocatedChunk {
 }
 
 impl AllocatedChunk {
+    /// Create a new Allocated Chunk
+    #[zenoh_macros::unstable_doc]
     pub fn new(descriptor: ChunkDescriptor, data: AtomicPtr<u8>) -> Self {
         Self { descriptor, data }
     }

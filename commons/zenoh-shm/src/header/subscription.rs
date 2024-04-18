@@ -53,6 +53,7 @@ impl Subscription {
         drop(guard);
 
         // construct owned descriptor
+        // SAFETY: HeaderDescriptor source guarantees that descriptor.index is valid for segment
         let header = unsafe { segment.array.elem(descriptor.index) };
         let owned_descriptor = OwnedHeaderDescriptor::new(segment, header);
         Ok(owned_descriptor)

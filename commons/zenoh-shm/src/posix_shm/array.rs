@@ -52,6 +52,11 @@ where
     Elem: IStable<ContainsIndirections = stabby::abi::B0>,
     isize: AsPrimitive<ElemIndex>,
 {
+    // Perform compile time check that Elem is not a ZST in such a way `elem_count` can not panic.
+    const _S: () = if size_of::<Elem>() == 0 {
+        panic!("Elem is a ZST. ZSTs are not allowed as ArrayInSHM generic");
+    };
+
     pub fn create(elem_count: usize, file_prefix: &str) -> ZResult<Self> {
         if elem_count == 0 {
             bail!("Unable to create SHM array segment of 0 elements")

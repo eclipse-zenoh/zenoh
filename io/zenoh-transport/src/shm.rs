@@ -30,7 +30,7 @@ use zenoh_shm::{
     SharedMemoryBufInfo,
 };
 
-use crate::unicast::auth_segment::AuthSegment;
+use crate::unicast::establishment::ext::shm::auth_segment::AuthSegment;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportShmConfig {
@@ -265,7 +265,7 @@ impl MapShm for Err {
 #[inline(never)]
 pub fn shmbuf_to_rawbuf(shmb: &SharedMemoryBuf) -> ZSlice {
     // Convert shmb to raw buffer
-    // todo: optimize this! We should not make additional buffer copy here,
+    // TODO: optimize this! We should not make additional buffer copy here,
     // but we need to make serializer serialize SHM buffer as raw buffer.
     shmb.as_ref().to_vec().into()
 }

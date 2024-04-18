@@ -136,44 +136,7 @@ impl ZSlice {
             kind: ZSliceKind::Raw,
         }
     }
-    /*
-        #[inline]
-        #[must_use]
-        pub fn downcast<T>(self) -> Result<T, Self>
-        where
-            T: ZSliceBuffer + Any + Sized,
-        {
-            match Arc::downcast::<T>(self.buf) {
-                Ok(val) => todo!(),
-                Err(_) => todo!(),
-            }
 
-            match Arc::try_unwrap(self.buf) {
-                Ok(t) => match t.as_any().downcast::<T>() {
-                    Some(t) => Ok(t),
-                    None => {
-                        Err(ZSlice {
-                            buf: self.buf,
-                            start: self.start,
-                            end: self.end,
-                            #[cfg(feature = "shared-memory")]
-                            kind: sel
-                        })
-                    }
-                }
-                Err(buf) => {
-                    Err(ZSlice {
-                        buf,
-                        start: self.start,
-                        end: self.end,
-                        #[cfg(feature = "shared-memory")]
-                        kind: sel
-                    })
-                }
-            }
-            // Arc::try_unwrap(self.buf). ?.as_any().downcast::<T>()
-        }
-    */
     #[inline]
     #[must_use]
     pub fn downcast_ref<T>(&self) -> Option<&T>
