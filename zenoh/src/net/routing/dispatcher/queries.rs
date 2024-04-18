@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::declare::InterestId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
@@ -41,7 +41,7 @@ pub(crate) fn declare_qabl_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
     expr: Option<&WireExpr>,
-    continuous: bool,
+    mode: InterestMode,
     aggregate: bool,
 ) {
     if let Some(expr) = expr {
@@ -87,7 +87,7 @@ pub(crate) fn declare_qabl_interest(
                     face,
                     id,
                     Some(&mut res),
-                    continuous,
+                    mode,
                     aggregate,
                 );
             }
@@ -100,7 +100,7 @@ pub(crate) fn declare_qabl_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_qabl_interest(&mut wtables, face, id, None, continuous, aggregate);
+        hat_code.declare_qabl_interest(&mut wtables, face, id, None, mode, aggregate);
     }
 }
 

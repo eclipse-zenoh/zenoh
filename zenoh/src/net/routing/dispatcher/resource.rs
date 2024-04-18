@@ -21,14 +21,14 @@ use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::declare::InterestId;
+use zenoh_protocol::network::interest::InterestId;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
         declare::{
             ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
-            DeclareBody, DeclareKeyExpr, DeclareMode,
+            DeclareBody, DeclareKeyExpr,
         },
         Mapping,
     },
@@ -477,7 +477,7 @@ impl Resource {
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            mode: DeclareMode::Push,
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,

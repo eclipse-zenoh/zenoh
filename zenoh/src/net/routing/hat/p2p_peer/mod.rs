@@ -48,7 +48,8 @@ use std::{
 };
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::network::{
-    declare::{InterestId, QueryableId, SubscriberId},
+    declare::{QueryableId, SubscriberId},
+    interest::InterestId,
     Oam,
 };
 use zenoh_protocol::{

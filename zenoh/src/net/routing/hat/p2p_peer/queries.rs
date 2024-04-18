@@ -17,7 +17,7 @@ use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::HatQueriesTrait;
+use crate::net::routing::hat::{CurrentFutureTrait, HatQueriesTrait};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
@@ -28,12 +28,13 @@ use std::sync::Arc;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::{InterestId, QueryableId};
+use zenoh_protocol::network::declare::QueryableId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::declare::{
         common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
-        DeclareMode, DeclareQueryable, UndeclareQueryable,
+        DeclareQueryable, UndeclareQueryable,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -98,7 +99,7 @@ fn propagate_simple_queryable_to(
         let key_expr = Resource::decl_key(res, dst_face);
         dst_face.primitives.send_declare(RoutingContext::with_expr(
             Declare {
-                mode: DeclareMode::Push,
+                interest_id: None,
                 ext_qos: ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -185,7 +186,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -210,7 +211,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                 if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(&res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            mode: DeclareMode::Push,
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -252,7 +253,7 @@ pub(super) fn undeclare_client_queryable(
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
-                        mode: DeclareMode::Push,
+                        interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -277,7 +278,7 @@ pub(super) fn undeclare_client_queryable(
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode: DeclareMode::Push,
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -334,15 +335,11 @@ impl HatQueriesTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        continuous: bool,
+        mode: InterestMode,
         aggregate: bool,
     ) {
-        if face.whatami == WhatAmI::Client {
-            let mode = if continuous {
-                DeclareMode::Push
-            } else {
-                DeclareMode::Response(id)
-            };
+        if mode.current() && face.whatami == WhatAmI::Client {
+            let interest_id = mode.future().then_some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
                     if tables.faces.values().any(|src_face| {
@@ -353,7 +350,7 @@ impl HatQueriesTrait for HatCode {
                                 .any(|qabl| qabl.context.is_some() && qabl.matches(res))
                     }) {
                         let info = local_qabl_info(tables, res, face);
-                        let id = if continuous {
+                        let id = if mode.future() {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                             face_hat_mut!(face)
                                 .local_qabls
@@ -365,7 +362,7 @@ impl HatQueriesTrait for HatCode {
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode,
+                                interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -389,7 +386,7 @@ impl HatQueriesTrait for HatCode {
                             for qabl in face_hat!(src_face).remote_qabls.values() {
                                 if qabl.context.is_some() && qabl.matches(res) {
                                     let info = local_qabl_info(tables, qabl, face);
-                                    let id = if continuous {
+                                    let id = if mode.future() {
                                         let id =
                                             face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                                         face_hat_mut!(face)
@@ -402,7 +399,7 @@ impl HatQueriesTrait for HatCode {
                                     let key_expr = Resource::decl_key(qabl, face);
                                     face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
-                                            mode,
+                                            interest_id,
                                             ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
                                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -430,7 +427,7 @@ impl HatQueriesTrait for HatCode {
                         for qabl in face_hat!(src_face).remote_qabls.values() {
                             if qabl.context.is_some() {
                                 let info = local_qabl_info(tables, qabl, face);
-                                let id = if continuous {
+                                let id = if mode.future() {
                                     let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                                     face_hat_mut!(face)
                                         .local_qabls
@@ -442,7 +439,7 @@ impl HatQueriesTrait for HatCode {
                                 let key_expr = Resource::decl_key(qabl, face);
                                 face.primitives.send_declare(RoutingContext::with_expr(
                                     Declare {
-                                        mode,
+                                        interest_id,
                                         ext_qos: ext::QoSType::DECLARE,
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -460,7 +457,7 @@ impl HatQueriesTrait for HatCode {
                 }
             }
         }
-        if continuous {
+        if mode.future() {
             face_hat_mut!(face)
                 .remote_qabl_interests
                 .insert(id, res.cloned());

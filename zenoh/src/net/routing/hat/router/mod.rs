@@ -56,7 +56,8 @@ use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, Ze
 use zenoh_protocol::{
     common::ZExtBody,
     network::{
-        declare::{queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId},
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+        interest::InterestId,
         oam::id::OAM_LINKSTATE,
         Oam,
     },

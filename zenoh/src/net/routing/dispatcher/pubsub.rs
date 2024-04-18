@@ -20,7 +20,8 @@ use std::sync::Arc;
 use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::declare::{InterestId, SubscriberId};
+use zenoh_protocol::network::declare::SubscriberId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::{declare::ext, Push},
@@ -28,14 +29,13 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-#[allow(clippy::too_many_arguments)] // TODO refactor
 pub(crate) fn declare_sub_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: InterestId,
     expr: Option<&WireExpr>,
-    continuous: bool,
+    mode: InterestMode,
     aggregate: bool,
 ) {
     if let Some(expr) = expr {
@@ -81,7 +81,7 @@ pub(crate) fn declare_sub_interest(
                     face,
                     id,
                     Some(&mut res),
-                    continuous,
+                    mode,
                     aggregate,
                 );
             }
@@ -94,7 +94,7 @@ pub(crate) fn declare_sub_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_sub_interest(&mut wtables, face, id, None, continuous, aggregate);
+        hat_code.declare_sub_interest(&mut wtables, face, id, None, mode, aggregate);
     }
 }
 

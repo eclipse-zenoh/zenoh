@@ -19,7 +19,7 @@ use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::HatPubSubTrait;
+use crate::net::routing::hat::{CurrentFutureTrait, HatPubSubTrait};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use petgraph::graph::NodeIndex;
@@ -28,12 +28,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::{InterestId, SubscriberId};
+use zenoh_protocol::network::declare::SubscriberId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{Reliability, WhatAmI, ZenohId},
     network::declare::{
         common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareMode, DeclareSubscriber, UndeclareSubscriber,
+        DeclareSubscriber, UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -57,7 +58,7 @@ fn send_sourced_subscription_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode: DeclareMode::Push,
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -97,7 +98,7 @@ fn propagate_simple_subscription_to(
             let key_expr = Resource::decl_key(res, dst_face);
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -129,7 +130,7 @@ fn propagate_simple_subscription_to(
                     let key_expr = Resource::decl_key(res, dst_face);
                     dst_face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            mode: DeclareMode::Push,
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -322,7 +323,7 @@ fn send_forget_sourced_subscription_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode: DeclareMode::Push,
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -348,7 +349,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    mode: DeclareMode::Push,
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -375,7 +376,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            mode: DeclareMode::Push,
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -484,7 +485,7 @@ pub(super) fn undeclare_client_subscription(
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            mode: DeclareMode::Push,
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -511,7 +512,7 @@ pub(super) fn undeclare_client_subscription(
                         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
-                                    mode: DeclareMode::Push,
+                                    interest_id: None,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -640,15 +641,11 @@ impl HatPubSubTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        continuous: bool,
+        mode: InterestMode,
         aggregate: bool,
     ) {
-        if face.whatami == WhatAmI::Client {
-            let mode = if continuous {
-                DeclareMode::Push
-            } else {
-                DeclareMode::Response(id)
-            };
+        if mode.current() && face.whatami == WhatAmI::Client {
+            let interest_id = mode.future().then_some(id);
             let sub_info = SubscriberInfo {
                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
             };
@@ -659,7 +656,7 @@ impl HatPubSubTrait for HatCode {
                             && sub.matches(res)
                             && (remote_client_subs(sub, face) || remote_peer_subs(tables, sub))
                     }) {
-                        let id = if continuous {
+                        let id = if mode.future() {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                             face_hat_mut!(face).local_subs.insert((*res).clone(), id);
                             id
@@ -669,7 +666,7 @@ impl HatPubSubTrait for HatCode {
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode,
+                                interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -688,7 +685,7 @@ impl HatPubSubTrait for HatCode {
                             && sub.matches(res)
                             && (remote_client_subs(sub, face) || remote_peer_subs(tables, sub))
                         {
-                            let id = if continuous {
+                            let id = if mode.future() {
                                 let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                                 face_hat_mut!(face).local_subs.insert(sub.clone(), id);
                                 id
@@ -698,7 +695,7 @@ impl HatPubSubTrait for HatCode {
                             let wire_expr = Resource::decl_key(sub, face);
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
-                                    mode,
+                                    interest_id,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -718,7 +715,7 @@ impl HatPubSubTrait for HatCode {
                     if sub.context.is_some()
                         && (remote_client_subs(sub, face) || remote_peer_subs(tables, sub))
                     {
-                        let id = if continuous {
+                        let id = if mode.future() {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                             face_hat_mut!(face).local_subs.insert(sub.clone(), id);
                             id
@@ -728,7 +725,7 @@ impl HatPubSubTrait for HatCode {
                         let wire_expr = Resource::decl_key(sub, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                mode,
+                                interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -744,7 +741,7 @@ impl HatPubSubTrait for HatCode {
                 }
             }
         }
-        if continuous {
+        if mode.future() {
             face_hat_mut!(face)
                 .remote_sub_interests
                 .insert(id, (res.cloned(), aggregate));

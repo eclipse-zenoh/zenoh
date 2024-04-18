@@ -32,9 +32,10 @@ use zenoh_protocol::{
     core::WireExpr,
     network::{
         declare::{
-            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, InterestId,
-            QueryableId, SubscriberId,
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+            SubscriberId,
         },
+        interest::{InterestId, InterestMode},
         Oam,
     },
 };
@@ -123,7 +124,7 @@ pub(crate) trait HatPubSubTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        continuous: bool,
+        mode: InterestMode,
         aggregate: bool,
     );
     fn undeclare_sub_interest(
@@ -171,7 +172,7 @@ pub(crate) trait HatQueriesTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        continuous: bool,
+        mode: InterestMode,
         aggregate: bool,
     );
     fn undeclare_qabl_interest(
@@ -230,5 +231,22 @@ pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + S
             }
         }
         WhatAmI::Router => Box::new(router::HatCode {}),
+    }
+}
+
+trait CurrentFutureTrait {
+    fn future(&self) -> bool;
+    fn current(&self) -> bool;
+}
+
+impl CurrentFutureTrait for InterestMode {
+    #[inline]
+    fn future(&self) -> bool {
+        self == &InterestMode::Future || self == &InterestMode::CurrentFuture
+    }
+
+    #[inline]
+    fn current(&self) -> bool {
+        self == &InterestMode::Current || self == &InterestMode::CurrentFuture
     }
 }

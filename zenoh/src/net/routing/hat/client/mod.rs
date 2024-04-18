@@ -42,10 +42,11 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::declare::{
-    queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId,
-};
 use zenoh_protocol::network::Oam;
+use zenoh_protocol::network::{
+    declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+    interest::InterestId,
+};
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
