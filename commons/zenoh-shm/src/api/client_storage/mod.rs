@@ -81,6 +81,7 @@ impl SharedMemoryClientSetBuilder {
     }
 }
 
+#[zenoh_macros::unstable_doc]
 pub struct SharedMemoryClientStorageBuilder {
     clients: HashMap<ProtocolID, Arc<dyn SharedMemoryClient>>,
 }

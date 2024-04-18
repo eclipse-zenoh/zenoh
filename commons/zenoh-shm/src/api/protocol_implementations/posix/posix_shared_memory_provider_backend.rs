@@ -103,6 +103,7 @@ impl PosixSharedMemoryProviderBackendBuilder {
     }
 }
 
+#[zenoh_macros::unstable_doc]
 pub struct LayoutedPosixSharedMemoryProviderBackendBuilder<Layout: Borrow<MemoryLayout>> {
     layout: Layout,
 }

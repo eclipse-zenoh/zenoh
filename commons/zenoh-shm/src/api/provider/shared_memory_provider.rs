@@ -89,6 +89,7 @@ where
     }
 }
 
+#[zenoh_macros::unstable_doc]
 pub struct AllocLayoutSizedBuilder<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
@@ -122,6 +123,7 @@ where
     }
 }
 
+#[zenoh_macros::unstable_doc]
 pub struct AllocLayoutAlignedBuilder<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
@@ -571,6 +573,7 @@ where
     }
 }
 
+#[zenoh_macros::unstable_doc]
 pub struct SharedMemoryProviderBuilder;
 impl SharedMemoryProviderBuilder {
     /// Get the builder to construct SharedMemoryProvider
@@ -601,6 +604,7 @@ impl SharedMemoryProviderBuilder {
     }
 }
 
+#[zenoh_macros::unstable_doc]
 pub struct SharedMemoryProviderBuilderID<IDSource: ProtocolIDSource> {
     id: IDSource,
 }
@@ -618,6 +622,7 @@ impl<IDSource: ProtocolIDSource> SharedMemoryProviderBuilderID<IDSource> {
     }
 }
 
+#[zenoh_macros::unstable_doc]
 pub struct SharedMemoryProviderBuilderBackendID<IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
@@ -664,6 +669,7 @@ pub struct DynamicProtocolID {
     id: ProtocolID,
 }
 impl DynamicProtocolID {
+    #[zenoh_macros::unstable_doc]
     pub fn new(id: ProtocolID) -> Self {
         Self { id }
     }
