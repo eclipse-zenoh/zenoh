@@ -31,8 +31,8 @@ use zenoh_result::{ZError, ZResult};
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh_shm::{
     api::slice::{
-        zsliceshm::zsliceshm, zsliceshm::ZSliceShm, zsliceshmmut::zsliceshmmut,
-        zsliceshmmut::ZSliceShmMut,
+        zsliceshm::{zsliceshm, ZSliceShm},
+        zsliceshmmut::{zsliceshmmut, ZSliceShmMut},
     },
     SharedMemoryBuf,
 };
