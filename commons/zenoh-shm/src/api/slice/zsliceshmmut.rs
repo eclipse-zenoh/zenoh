@@ -46,7 +46,7 @@ impl ZSliceShmMut {
 
 impl PartialEq<zsliceshmmut> for &ZSliceShmMut {
     fn eq(&self, other: &zsliceshmmut) -> bool {
-        self == other
+        self.0 == other.0 .0
     }
 }
 
