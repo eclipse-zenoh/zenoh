@@ -20,7 +20,7 @@ use zenoh_shm::SharedMemoryBuf;
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (mut config, key_expr) = parse_args();
 
