@@ -22,21 +22,18 @@ async fn main() {
 
     let _z = zenoh_runtime::ZRuntimePoolGuard;
 
-    let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
+    let queryable_key_expr = keyexpr::new("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();
 
     println!("Declaring Queryable on '{queryable_key_expr}'...");
     let queryable_session = zenoh::open(Config::default()).res().await.unwrap();
     let _queryable = queryable_session
-        .declare_queryable(&queryable_key_expr.clone())
+        .declare_queryable(queryable_key_expr)
         .callback(move |query| {
             println!(">> Handling query '{}'", query.selector());
             zenoh_runtime::ZRuntime::Application.block_in_place(async move {
                 query
-                    .reply(
-                        queryable_key_expr.clone(),
-                        query.value().unwrap().payload().clone(),
-                    )
+                    .reply(queryable_key_expr, query.value().unwrap().payload().clone())
                     .res()
                     .await
                     .unwrap();
