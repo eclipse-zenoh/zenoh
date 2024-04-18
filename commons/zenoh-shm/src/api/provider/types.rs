@@ -61,6 +61,7 @@ impl Default for AllocAlignment {
 }
 
 impl AllocAlignment {
+    #[zenoh_macros::unstable_doc]
     pub fn new(pow: u8) -> Self {
         Self { pow }
     }
