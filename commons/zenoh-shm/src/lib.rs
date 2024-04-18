@@ -193,7 +193,7 @@ impl Drop for SharedMemoryBuf {
 impl Clone for SharedMemoryBuf {
     fn clone(&self) -> Self {
         // # Safety
-        // obviouly, we need to decrement refcount when cloning SharedMemoryBuf instance
+        // obviouly, we need to increment refcount when cloning SharedMemoryBuf instance
         unsafe { self.inc_ref_count() };
         let bp = self.buf.load(Ordering::SeqCst);
         SharedMemoryBuf {
