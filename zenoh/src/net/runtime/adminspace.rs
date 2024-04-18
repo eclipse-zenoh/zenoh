@@ -13,6 +13,7 @@
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
 use crate::api::builders::sample::ValueBuilderTrait;
+use crate::api::bytes::ZBytes;
 use crate::api::key_expr::KeyExpr;
 use crate::api::plugins;
 use crate::api::queryable::Query;
@@ -20,7 +21,6 @@ use crate::api::queryable::QueryInner;
 use crate::api::value::Value;
 use crate::encoding::Encoding;
 use crate::net::primitives::Primitives;
-use crate::api::bytes::ZBytes;
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::TryFrom;

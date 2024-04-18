@@ -22,12 +22,12 @@
 use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
-use zenoh::core::try_init_log_from_env;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
+use zenoh::core::try_init_log_from_env;
 use zenoh::core::Result as ZResult;
 use zenoh::core::SyncResolve;
 use zenoh::internal::zlock;

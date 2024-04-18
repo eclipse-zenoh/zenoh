@@ -24,8 +24,8 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use zenoh::prelude::r#async::*;
 use zenoh::internal::{bail, Condition, TaskController};
+use zenoh::prelude::r#async::*;
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";
 const EVENT_POSTFIX: &str = "evt";

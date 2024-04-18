@@ -38,12 +38,12 @@
 // Reexport API in flat namespace
 pub(crate) mod flat {
     pub use crate::buffers::*;
+    pub use crate::bytes::*;
     pub use crate::config::*;
     pub use crate::core::{Error as ZError, Resolvable, Resolve, Result as ZResult};
     pub use crate::encoding::*;
     pub use crate::handlers::*;
     pub use crate::key_expr::*;
-    pub use crate::bytes::*;
     pub use crate::publication::*;
     pub use crate::query::*;
     pub use crate::queryable::*;
@@ -61,12 +61,12 @@ pub(crate) mod flat {
 // Reexport API in hierarchical namespace
 pub(crate) mod mods {
     pub use crate::buffers;
+    pub use crate::bytes;
     pub use crate::config;
     pub use crate::core;
     pub use crate::encoding;
     pub use crate::handlers;
     pub use crate::key_expr;
-    pub use crate::bytes;
     pub use crate::publication;
     pub use crate::query;
     pub use crate::queryable;

@@ -228,10 +228,10 @@ pub mod encoding {
 /// Payload primitives
 pub mod bytes {
     pub use crate::api::bytes::Deserialize;
-    pub use crate::api::bytes::ZBytes;
-    pub use crate::api::bytes::ZBytesReader;
     pub use crate::api::bytes::Serialize;
     pub use crate::api::bytes::StringOrBase64;
+    pub use crate::api::bytes::ZBytes;
+    pub use crate::api::bytes::ZBytesReader;
     pub use crate::api::bytes::ZSerde;
 }
 
