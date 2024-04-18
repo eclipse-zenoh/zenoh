@@ -45,18 +45,11 @@ pub trait Serialize<T> {
 }
 
 pub trait Deserialize<'a, T> {
+    type Input: 'a;
     type Error;
 
     /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
-    fn deserialize(self, t: &'a ZBytes) -> Result<T, Self::Error>;
-}
-
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
-pub trait DeserializeMut<'a, T> {
-    type Error;
-
-    /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
-    fn deserialize_mut(self, t: &'a mut ZBytes) -> Result<T, Self::Error>;
+    fn deserialize(self, t: Self::Input) -> Result<T, Self::Error>;
 }
 
 /// A payload contains the serialized bytes of user data.
@@ -141,7 +134,7 @@ impl ZBytes {
     /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
     pub fn deserialize<'a, T>(&'a self) -> ZResult<T>
     where
-        ZSerde: Deserialize<'a, T>,
+        ZSerde: Deserialize<'a, T, Input = &'a ZBytes>,
         <ZSerde as Deserialize<'a, T>>::Error: Debug,
     {
         ZSerde
@@ -149,22 +142,21 @@ impl ZBytes {
             .map_err(|e| zerror!("{:?}", e).into())
     }
 
-    #[cfg(all(feature = "shared-memory", feature = "unstable"))]
     /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
     pub fn deserialize_mut<'a, T>(&'a mut self) -> ZResult<T>
     where
-        ZSerde: DeserializeMut<'a, T>,
-        <ZSerde as DeserializeMut<'a, T>>::Error: Debug,
+        ZSerde: Deserialize<'a, T, Input = &'a mut ZBytes>,
+        <ZSerde as Deserialize<'a, T>>::Error: Debug,
     {
         ZSerde
-            .deserialize_mut(self)
+            .deserialize(self)
             .map_err(|e| zerror!("{:?}", e).into())
     }
 
     /// Infallibly deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
     pub fn into<'a, T>(&'a self) -> T
     where
-        ZSerde: Deserialize<'a, T, Error = Infallible>,
+        ZSerde: Deserialize<'a, T, Input = &'a ZBytes, Error = Infallible>,
         <ZSerde as Deserialize<'a, T>>::Error: Debug,
     {
         ZSerde.deserialize(self).unwrap_infallible()
@@ -217,7 +209,7 @@ where
 
 impl<T> Iterator for ZBytesIterator<'_, T>
 where
-    for<'a> ZSerde: Deserialize<'a, T>,
+    for<'a> ZSerde: Deserialize<'a, T, Input = &'a ZBytes>,
     for<'a> <ZSerde as Deserialize<'a, T>>::Error: Debug,
 {
     type Item = T;
@@ -336,10 +328,11 @@ impl From<&ZBuf> for ZBytes {
     }
 }
 
-impl Deserialize<'_, ZBuf> for ZSerde {
+impl<'a> Deserialize<'a, ZBuf> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = Infallible;
 
-    fn deserialize(self, v: &ZBytes) -> Result<ZBuf, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<ZBuf, Self::Error> {
         Ok(v.0.clone())
     }
 }
@@ -385,10 +378,11 @@ impl From<&ZSlice> for ZBytes {
     }
 }
 
-impl Deserialize<'_, ZSlice> for ZSerde {
+impl<'a> Deserialize<'a, ZSlice> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = Infallible;
 
-    fn deserialize(self, v: &ZBytes) -> Result<ZSlice, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<ZSlice, Self::Error> {
         Ok(v.0.to_zslice())
     }
 }
@@ -434,10 +428,11 @@ impl<const N: usize> From<&[u8; N]> for ZBytes {
     }
 }
 
-impl<const N: usize> Deserialize<'_, [u8; N]> for ZSerde {
+impl<'a, const N: usize> Deserialize<'a, [u8; N]> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = ZDeserializeError;
 
-    fn deserialize(self, v: &ZBytes) -> Result<[u8; N], Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<[u8; N], Self::Error> {
         use std::io::Read;
 
         if v.0.len() != N {
@@ -495,10 +490,11 @@ impl From<&Vec<u8>> for ZBytes {
     }
 }
 
-impl Deserialize<'_, Vec<u8>> for ZSerde {
+impl<'a> Deserialize<'a, Vec<u8>> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = Infallible;
 
-    fn deserialize(self, v: &ZBytes) -> Result<Vec<u8>, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<Vec<u8>, Self::Error> {
         Ok(v.0.contiguous().to_vec())
     }
 }
@@ -560,9 +556,10 @@ impl From<&Cow<'_, [u8]>> for ZBytes {
 }
 
 impl<'a> Deserialize<'a, Cow<'a, [u8]>> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = Infallible;
 
-    fn deserialize(self, v: &'a ZBytes) -> Result<Cow<'a, [u8]>, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<Cow<'a, [u8]>, Self::Error> {
         Ok(v.0.contiguous())
     }
 }
@@ -611,10 +608,11 @@ impl From<&String> for ZBytes {
     }
 }
 
-impl Deserialize<'_, String> for ZSerde {
+impl<'a> Deserialize<'a, String> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = FromUtf8Error;
 
-    fn deserialize(self, v: &ZBytes) -> Result<String, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<String, Self::Error> {
         let v: Vec<u8> = ZSerde.deserialize(v).unwrap_infallible();
         String::from_utf8(v)
     }
@@ -680,9 +678,10 @@ impl From<&Cow<'_, str>> for ZBytes {
 }
 
 impl<'a> Deserialize<'a, Cow<'a, str>> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = Utf8Error;
 
-    fn deserialize(self, v: &'a ZBytes) -> Result<Cow<'a, str>, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<Cow<'a, str>, Self::Error> {
         Cow::try_from(v)
     }
 }
@@ -751,9 +750,10 @@ macro_rules! impl_int {
         }
 
         impl<'a> Deserialize<'a, $t> for ZSerde {
+            type Input = &'a ZBytes;
             type Error = ZDeserializeError;
 
-            fn deserialize(self, v: &ZBytes) -> Result<$t, Self::Error> {
+            fn deserialize(self, v: Self::Input) -> Result<$t, Self::Error> {
                 use std::io::Read;
 
                 let mut r = v.reader();
@@ -835,10 +835,11 @@ impl From<&bool> for ZBytes {
     }
 }
 
-impl Deserialize<'_, bool> for ZSerde {
+impl<'a> Deserialize<'a, bool> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = ZDeserializeError;
 
-    fn deserialize(self, v: &ZBytes) -> Result<bool, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<bool, Self::Error> {
         let p = v.deserialize::<u8>().map_err(|_| ZDeserializeError)?;
         match p {
             0 => Ok(false),
@@ -895,9 +896,10 @@ impl<'s> From<&'s Properties<'s>> for ZBytes {
 }
 
 impl<'s> Deserialize<'s, Properties<'s>> for ZSerde {
+    type Input = &'s ZBytes;
     type Error = ZDeserializeError;
 
-    fn deserialize(self, v: &'s ZBytes) -> Result<Properties<'s>, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<Properties<'s>, Self::Error> {
         let s = v
             .deserialize::<Cow<'s, str>>()
             .map_err(|_| ZDeserializeError)?;
@@ -957,10 +959,11 @@ impl TryFrom<&serde_json::Value> for ZBytes {
     }
 }
 
-impl Deserialize<'_, serde_json::Value> for ZSerde {
+impl<'a> Deserialize<'a, serde_json::Value> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = serde_json::Error;
 
-    fn deserialize(self, v: &ZBytes) -> Result<serde_json::Value, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<serde_json::Value, Self::Error> {
         serde_json::from_reader(v.reader())
     }
 }
@@ -1016,10 +1019,11 @@ impl TryFrom<&serde_yaml::Value> for ZBytes {
     }
 }
 
-impl Deserialize<'_, serde_yaml::Value> for ZSerde {
+impl<'a> Deserialize<'a, serde_yaml::Value> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = serde_yaml::Error;
 
-    fn deserialize(self, v: &ZBytes) -> Result<serde_yaml::Value, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<serde_yaml::Value, Self::Error> {
         serde_yaml::from_reader(v.reader())
     }
 }
@@ -1075,10 +1079,11 @@ impl TryFrom<&serde_cbor::Value> for ZBytes {
     }
 }
 
-impl Deserialize<'_, serde_cbor::Value> for ZSerde {
+impl<'a> Deserialize<'a, serde_cbor::Value> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = serde_cbor::Error;
 
-    fn deserialize(self, v: &ZBytes) -> Result<serde_cbor::Value, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<serde_cbor::Value, Self::Error> {
         serde_cbor::from_reader(v.reader())
     }
 }
@@ -1138,10 +1143,11 @@ impl TryFrom<&serde_pickle::Value> for ZBytes {
     }
 }
 
-impl Deserialize<'_, serde_pickle::Value> for ZSerde {
+impl<'a> Deserialize<'a, serde_pickle::Value> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = serde_pickle::Error;
 
-    fn deserialize(self, v: &ZBytes) -> Result<serde_pickle::Value, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<serde_pickle::Value, Self::Error> {
         serde_pickle::value_from_reader(v.reader(), serde_pickle::DeOptions::default())
     }
 }
@@ -1200,9 +1206,10 @@ impl From<ZSliceShmMut> for ZBytes {
 
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 impl<'a> Deserialize<'a, &'a zsliceshm> for ZSerde {
+    type Input = &'a ZBytes;
     type Error = ZDeserializeError;
 
-    fn deserialize(self, v: &'a ZBytes) -> Result<&'a zsliceshm, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<&'a zsliceshm, Self::Error> {
         // A ZSliceShm is expected to have only one slice
         let mut zslices = v.0.zslices();
         if let Some(zs) = zslices.next() {
@@ -1215,10 +1222,11 @@ impl<'a> Deserialize<'a, &'a zsliceshm> for ZSerde {
 }
 
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-impl<'a> DeserializeMut<'a, &'a mut zsliceshm> for ZSerde {
+impl<'a> Deserialize<'a, &'a mut zsliceshm> for ZSerde {
+    type Input = &'a mut ZBytes;
     type Error = ZDeserializeError;
 
-    fn deserialize_mut(self, v: &'a mut ZBytes) -> Result<&'a mut zsliceshm, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<&'a mut zsliceshm, Self::Error> {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
@@ -1231,10 +1239,11 @@ impl<'a> DeserializeMut<'a, &'a mut zsliceshm> for ZSerde {
 }
 
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-impl<'a> DeserializeMut<'a, &'a mut zsliceshmmut> for ZSerde {
+impl<'a> Deserialize<'a, &'a mut zsliceshmmut> for ZSerde {
+    type Input = &'a mut ZBytes;
     type Error = ZDeserializeError;
 
-    fn deserialize_mut(self, v: &'a mut ZBytes) -> Result<&'a mut zsliceshmmut, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<&'a mut zsliceshmmut, Self::Error> {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
@@ -1260,7 +1269,7 @@ impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zsliceshm {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'a mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize_mut(value)
+        ZSerde.deserialize(value)
     }
 }
 
@@ -1269,7 +1278,7 @@ impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zsliceshmmut {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'a mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize_mut(value)
+        ZSerde.deserialize(value)
     }
 }
 
@@ -1329,16 +1338,17 @@ where
     }
 }
 
-impl<A, B> Deserialize<'_, (A, B)> for ZSerde
+impl<'s, A, B> Deserialize<'s, (A, B)> for ZSerde
 where
     for<'a> A: TryFrom<&'a ZBytes>,
     for<'a> <A as TryFrom<&'a ZBytes>>::Error: Debug,
     for<'b> B: TryFrom<&'b ZBytes>,
     for<'b> <B as TryFrom<&'b ZBytes>>::Error: Debug,
 {
+    type Input = &'s ZBytes;
     type Error = ZError;
 
-    fn deserialize(self, bytes: &ZBytes) -> Result<(A, B), Self::Error> {
+    fn deserialize(self, bytes: Self::Input) -> Result<(A, B), Self::Error> {
         let codec = Zenoh080::new();
         let mut reader = bytes.0.reader();
 
