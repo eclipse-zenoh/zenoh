@@ -422,7 +422,7 @@ mod tests {
     #[cfg(feature = "transport_tcp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_unicast_compression_tcp_only() {
-        zenoh_util::init_log_from_env();
+        zenoh_util::try_init_log_from_env();
 
         // Define the locators
         let endpoints: Vec<EndPoint> = vec![
@@ -447,7 +447,7 @@ mod tests {
     #[cfg(feature = "transport_tcp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_unicast_compression_tcp_only_with_lowlatency_transport() {
-        zenoh_util::init_log_from_env();
+        zenoh_util::try_init_log_from_env();
 
         // Define the locators
         let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 19100).parse().unwrap()];
@@ -469,7 +469,7 @@ mod tests {
     #[cfg(feature = "transport_udp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_unicast_compression_udp_only() {
-        zenoh_util::init_log_from_env();
+        zenoh_util::try_init_log_from_env();
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
@@ -494,7 +494,7 @@ mod tests {
     #[cfg(feature = "transport_udp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_unicast_compression_udp_only_with_lowlatency_transport() {
-        zenoh_util::init_log_from_env();
+        zenoh_util::try_init_log_from_env();
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 19110).parse().unwrap()];

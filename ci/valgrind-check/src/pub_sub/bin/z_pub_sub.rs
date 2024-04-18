@@ -14,10 +14,10 @@
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh_util::init_log;
+
 #[tokio::main]
 async fn main() {
-    init_log();
+    zenoh_util::init_log_test();
 
     let pub_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let sub_key_expr = KeyExpr::try_from("test/valgrind/**").unwrap();

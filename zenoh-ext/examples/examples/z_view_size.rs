@@ -21,7 +21,7 @@ use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (config, group_name, id, size, timeout) = parse_args();
 
