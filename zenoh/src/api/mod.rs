@@ -16,13 +16,13 @@ pub(crate) type Id = u32;
 
 pub(crate) mod admin;
 pub(crate) mod builders;
+pub(crate) mod bytes;
 pub(crate) mod encoding;
 pub(crate) mod handlers;
 pub(crate) mod info;
 pub(crate) mod key_expr;
 #[cfg(feature = "unstable")]
 pub(crate) mod liveliness;
-pub(crate) mod payload;
 pub(crate) mod plugins;
 pub(crate) mod publication;
 pub(crate) mod query;

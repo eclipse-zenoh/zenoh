@@ -11,10 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::marker::PhantomData;
+use crate::api::bytes::ZBytes;
 use crate::api::encoding::Encoding;
 use crate::api::key_expr::KeyExpr;
-use crate::api::payload::Payload;
 use crate::api::publication::Priority;
 use crate::api::sample::QoS;
 use crate::api::sample::QoSBuilder;
@@ -22,7 +21,8 @@ use crate::api::sample::Sample;
 use crate::api::sample::SampleKind;
 use crate::api::value::Value;
 #[cfg(feature = "unstable")]
-use crate::{api::payload::OptionPayload, sample::SourceInfo};
+use crate::{api::bytes::OptionZBytes, sample::SourceInfo};
+use std::marker::PhantomData;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;

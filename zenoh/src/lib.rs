@@ -122,6 +122,7 @@ pub mod core {
     /// A zenoh result.
     pub use zenoh_result::ZResult as Result;
     pub use zenoh_util::core::zresult::ErrNo;
+    pub use zenoh_util::try_init_log_from_env;
 }
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
@@ -207,8 +208,6 @@ pub mod sample {
     pub use crate::api::builders::sample::TimestampBuilderTrait;
     pub use crate::api::builders::sample::ValueBuilderTrait;
     #[zenoh_macros::unstable]
-    pub use crate::api::sample::Attachment;
-    #[zenoh_macros::unstable]
     pub use crate::api::sample::Locality;
     pub use crate::api::sample::Sample;
     pub use crate::api::sample::SampleKind;
@@ -227,13 +226,13 @@ pub mod encoding {
 }
 
 /// Payload primitives
-pub mod payload {
-    pub use crate::api::payload::Deserialize;
-    pub use crate::api::payload::Payload;
-    pub use crate::api::payload::PayloadReader;
-    pub use crate::api::payload::Serialize;
-    pub use crate::api::payload::StringOrBase64;
-    pub use crate::api::payload::ZSerde;
+pub mod bytes {
+    pub use crate::api::bytes::Deserialize;
+    pub use crate::api::bytes::ZBytes;
+    pub use crate::api::bytes::ZBytesReader;
+    pub use crate::api::bytes::Serialize;
+    pub use crate::api::bytes::StringOrBase64;
+    pub use crate::api::bytes::ZSerde;
 }
 
 /// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries

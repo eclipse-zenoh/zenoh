@@ -15,19 +15,19 @@ use std::future::Ready;
 //
 use crate::api::builders::sample::SampleBuilderTrait;
 use crate::api::builders::sample::{QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait};
-use crate::api::key_expr::KeyExpr;
 #[cfg(feature = "unstable")]
-use crate::api::payload::OptionPayload;
+use crate::api::bytes::OptionZBytes;
+use crate::api::bytes::ZBytes;
+use crate::api::key_expr::KeyExpr;
 use crate::api::publication::Priority;
 #[cfg(feature = "unstable")]
-use crate::api::sample::Attachment;
 use crate::api::sample::Locality;
 use crate::api::sample::SampleKind;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::session::SessionRef;
 use crate::api::value::Value;
-use crate::api::{encoding::Encoding, payload::Payload, publication::Publisher};
+use crate::api::{encoding::Encoding, publication::Publisher};
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
 use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::network::Mapping;
@@ -45,7 +45,7 @@ pub type PublisherDeleteBuilder<'a> =
 
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderPut {
-    pub(crate) payload: Payload,
+    pub(crate) payload: ZBytes,
     pub(crate) encoding: Encoding,
 }
 #[derive(Debug, Clone)]
@@ -79,7 +79,7 @@ pub struct PublicationBuilder<P, T> {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
+    pub(crate) attachment: Option<ZBytes>,
 }
 
 impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
@@ -130,7 +130,7 @@ impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
 
     fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
     where
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         Self {
             kind: PublicationBuilderPut {
@@ -158,8 +158,8 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
         }
     }
     #[cfg(feature = "unstable")]
-    fn attachment<TA: Into<OptionPayload>>(self, attachment: TA) -> Self {
-        let attachment: OptionPayload = attachment.into();
+    fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
+        let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
@@ -202,7 +202,7 @@ impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBui
     fn res_sync(self) -> <Self as Resolvable>::To {
         let publisher = self.publisher.create_one_shot_publisher()?;
         publisher.resolve_put(
-            Payload::empty(),
+            ZBytes::empty(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
             self.timestamp,
@@ -407,7 +407,7 @@ impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
 impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         self.publisher.resolve_put(
-            Payload::empty(),
+            ZBytes::empty(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
             self.timestamp,

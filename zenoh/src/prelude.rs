@@ -43,7 +43,7 @@ pub(crate) mod flat {
     pub use crate::encoding::*;
     pub use crate::handlers::*;
     pub use crate::key_expr::*;
-    pub use crate::payload::*;
+    pub use crate::bytes::*;
     pub use crate::publication::*;
     pub use crate::query::*;
     pub use crate::queryable::*;
@@ -66,7 +66,7 @@ pub(crate) mod mods {
     pub use crate::encoding;
     pub use crate::handlers;
     pub use crate::key_expr;
-    pub use crate::payload;
+    pub use crate::bytes;
     pub use crate::publication;
     pub use crate::query;
     pub use crate::queryable;

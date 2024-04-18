@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-<<<<<<<< HEAD:zenoh/src/api/payload.rs
-========
 //! ZBytes primitives.
->>>>>>>> protocol_changes:zenoh/src/bytes.rs
 use crate::buffers::ZBuf;
 use std::{
     borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref, str::Utf8Error,

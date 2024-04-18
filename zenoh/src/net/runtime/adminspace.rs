@@ -20,7 +20,7 @@ use crate::api::queryable::QueryInner;
 use crate::api::value::Value;
 use crate::encoding::Encoding;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
+use crate::api::bytes::ZBytes;
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::TryFrom;

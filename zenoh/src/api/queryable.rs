@@ -13,10 +13,10 @@
 //
 use super::{
     builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
+    bytes::ZBytes,
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
-    payload::Payload,
     publication::Priority,
     sample::{Locality, QoSBuilder, Sample, SampleKind},
     selector::{Parameters, Selector},
@@ -43,10 +43,8 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
     super::{
-        builders::sample::SampleBuilderTrait,
-        payload::OptionPayload,
-        query::ReplyKeyExpr,
-        sample::{Attachment, SourceInfo},
+        builders::sample::SampleBuilderTrait, bytes::OptionZBytes, query::ReplyKeyExpr,
+        sample::SourceInfo,
     },
     zenoh_protocol::core::EntityGlobalId,
 };
@@ -283,8 +281,8 @@ impl AsyncResolve for ReplySample<'_> {
 
 #[derive(Debug)]
 pub struct ReplyBuilderPut {
-    payload: super::ZBytes,
-    encoding: super::Encoding,
+    payload: ZBytes,
+    encoding: Encoding,
 }
 #[derive(Debug)]
 pub struct ReplyBuilderDelete;

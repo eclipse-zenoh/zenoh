@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{
+    bytes::ZBytes,
     encoding::Encoding,
     key_expr::KeyExpr,
-    payload::Payload,
     queryable::Query,
     sample::Locality,
     sample::{DataInfo, SampleKind},

@@ -17,9 +17,9 @@ use super::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
         PublisherDeleteBuilder, PublisherPutBuilder,
     },
+    bytes::ZBytes,
     encoding::Encoding,
     key_expr::KeyExpr,
-    payload::Payload,
     sample::{DataInfo, Locality, QoS, Sample, SampleFields, SampleKind},
     session::{SessionRef, Undeclarable},
 };
@@ -43,7 +43,7 @@ use zenoh_result::{Error, ZResult};
 #[zenoh_macros::unstable]
 use {
     crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
-    crate::api::sample::{Attachment, SourceInfo},
+    crate::api::sample::SourceInfo,
     crate::api::Id,
     zenoh_protocol::core::EntityGlobalId,
     zenoh_protocol::core::EntityId,
@@ -533,12 +533,12 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 impl Publisher<'_> {
     pub(crate) fn resolve_put(
         &self,
-        payload: Payload,
+        payload: ZBytes,
         kind: SampleKind,
         encoding: Encoding,
         timestamp: Option<uhlc::Timestamp>,
         #[cfg(feature = "unstable")] source_info: SourceInfo,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         tracing::trace!("write({:?}, [...])", &self.key_expr);
         let primitives = zread!(self.session.state)

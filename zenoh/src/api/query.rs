@@ -14,10 +14,10 @@
 
 use super::{
     builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
+    bytes::ZBytes,
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
-    payload::Payload,
     publication::Priority,
     sample::{Locality, QoSBuilder, Sample},
     selector::Selector,
@@ -31,11 +31,7 @@ use zenoh_protocol::core::{CongestionControl, ZenohId};
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
-use super::{
-    builders::sample::SampleBuilderTrait,
-    payload::OptionPayload,
-    sample::{Attachment, SourceInfo},
-};
+use super::{builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;

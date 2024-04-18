@@ -29,11 +29,10 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::core::AsyncResolve;
+use zenoh::bytes::{StringOrBase64, ZBytes};
+use zenoh::core::{try_init_log_from_env, AsyncResolve};
 use zenoh::encoding::Encoding;
 use zenoh::key_expr::{keyexpr, KeyExpr};
-use zenoh::payload::{Payload, StringOrBase64};
-use zenoh::bytes::StringOrBase64;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
@@ -245,7 +244,7 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::try_init_log_from_env();
+        try_init_log_from_env();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();

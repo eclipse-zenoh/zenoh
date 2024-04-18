@@ -14,9 +14,8 @@
 
 //! Sample primitives
 use super::{
-    builders::sample::QoSBuilderTrait, encoding::Encoding, key_expr::KeyExpr, payload::Payload,
+    builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
     publication::Priority, value::Value,
-bytes::ZBytes
 };
 #[cfg(feature = "unstable")]
 use serde::Serialize;
@@ -25,11 +24,6 @@ use zenoh_protocol::{
     core::{CongestionControl, EntityGlobalId, Timestamp},
     network::declare::ext::QoSType,
 };
-
-#[zenoh_macros::unstable]
-pub use attachment::Attachment;
-#[zenoh_macros::unstable]
-use serde::Serialize;
 
 pub type SourceSn = u64;
 

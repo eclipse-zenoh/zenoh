@@ -16,14 +16,16 @@ use super::{
     builders::publication::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
     },
+    bytes::ZBytes,
     encoding::Encoding,
     handlers::{Callback, DefaultHandler},
     info::SessionInfo,
     key_expr::{KeyExpr, KeyExprInner},
-    payload::Payload,
     publication::Priority,
-    query::_REPLY_KEY_EXPR_ANY_SEL_PARAM,
-    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
+    query::{
+        ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply,
+        _REPLY_KEY_EXPR_ANY_SEL_PARAM,
+    },
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::{Selector, TIME_RANGE_KEY},
@@ -83,7 +85,7 @@ use super::{
     liveliness::{Liveliness, LivelinessTokenState},
     publication::Publisher,
     publication::{MatchingListenerState, MatchingStatus},
-    sample::{Attachment, SourceInfo},
+    sample::SourceInfo,
 };
 
 zconfigurable! {
