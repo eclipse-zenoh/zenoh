@@ -97,9 +97,12 @@ jobs:
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
 
-      - uses: hustcer/setup-nu@v3.9
-        with:
-          version: "0.92.2"
+      # - uses: hustcer/setup-nu@v3.9
+      #   with:
+      #     version: "0.92.2"
+
+      - name: Install nushell
+        run: brew install nushell
 
       - name: Build nextest cache
         run: cargo nextest archive --archive-file nextest-routing.tar.zst -p zenoh --test routing
