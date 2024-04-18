@@ -18,13 +18,7 @@ use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
 use std::str;
-use zenoh::core::AsyncResolve;
-use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
-use zenoh::payload::StringOrBase64;
-use zenoh::sample::{Sample, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait};
-use zenoh::session::Session;
-use zenoh::time::Timestamp;
-use zenoh::value::Value;
+use zenoh::prelude::r#async::*;
 
 pub struct Aligner {
     session: Arc<Session>,

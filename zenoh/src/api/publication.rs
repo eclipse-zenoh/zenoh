@@ -222,7 +222,7 @@ impl<'a> Publisher<'a> {
     #[inline]
     pub fn put<IntoPayload>(&self, payload: IntoPayload) -> PublisherPutBuilder<'_>
     where
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         PublicationBuilder {
             publisher: self,

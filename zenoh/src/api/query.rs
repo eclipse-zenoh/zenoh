@@ -160,7 +160,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) handler: Handler,
     pub(crate) value: Option<Value>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
+    pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
 }
@@ -176,8 +176,8 @@ impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
     }
 
     #[cfg(feature = "unstable")]
-    fn attachment<T: Into<OptionPayload>>(self, attachment: T) -> Self {
-        let attachment: OptionPayload = attachment.into();
+    fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
+        let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
@@ -212,7 +212,7 @@ impl<Handler> ValueBuilderTrait for GetBuilder<'_, '_, Handler> {
         }
     }
 
-    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
         let mut value = self.value.unwrap_or_default();
         value.payload = payload.into();
         Self {

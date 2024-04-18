@@ -63,7 +63,7 @@ pub(crate) struct QueryInner {
     pub(crate) zid: ZenohId,
     pub(crate) primitives: Arc<dyn Primitives>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<Attachment>,
+    pub(crate) attachment: Option<ZBytes>,
 }
 
 impl Drop for QueryInner {
@@ -111,8 +111,20 @@ impl Query {
         self.inner.value.as_ref()
     }
 
+    /// This Query's payload.
+    #[inline(always)]
+    pub fn payload(&self) -> Option<&ZBytes> {
+        self.inner.value.as_ref().map(|v| &v.payload)
+    }
+
+    /// This Query's encoding.
+    #[inline(always)]
+    pub fn encoding(&self) -> Option<&Encoding> {
+        self.inner.value.as_ref().map(|v| &v.encoding)
+    }
+
     #[zenoh_macros::unstable]
-    pub fn attachment(&self) -> Option<&Attachment> {
+    pub fn attachment(&self) -> Option<&ZBytes> {
         self.inner.attachment.as_ref()
     }
 
@@ -146,7 +158,7 @@ impl Query {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         ReplyBuilder {
             query: self,
@@ -271,8 +283,8 @@ impl AsyncResolve for ReplySample<'_> {
 
 #[derive(Debug)]
 pub struct ReplyBuilderPut {
-    payload: Payload,
-    encoding: Encoding,
+    payload: super::ZBytes,
+    encoding: super::Encoding,
 }
 #[derive(Debug)]
 pub struct ReplyBuilderDelete;
@@ -291,7 +303,7 @@ pub struct ReplyBuilder<'a, 'b, T> {
     source_info: SourceInfo,
 
     #[cfg(feature = "unstable")]
-    attachment: Option<Attachment>,
+    attachment: Option<ZBytes>,
 }
 
 impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
@@ -306,8 +318,8 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 #[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     #[cfg(feature = "unstable")]
-    fn attachment<U: Into<OptionPayload>>(self, attachment: U) -> Self {
-        let attachment: OptionPayload = attachment.into();
+    fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
+        let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
             ..self
@@ -351,7 +363,7 @@ impl ValueBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
         }
     }
 
-    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
         Self {
             kind: ReplyBuilderPut {
                 payload: payload.into(),
@@ -493,7 +505,7 @@ impl ValueBuilderTrait for ReplyErrBuilder<'_> {
         Self { value, ..self }
     }
 
-    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
         let mut value = self.value.clone();
         value.payload = payload.into();
         Self { value, ..self }

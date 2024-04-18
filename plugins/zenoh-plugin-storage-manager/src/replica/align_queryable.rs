@@ -18,17 +18,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
-use zenoh::core::AsyncResolve;
-use zenoh::key_expr::OwnedKeyExpr;
-use zenoh::payload::StringOrBase64;
-use zenoh::sample::Sample;
-use zenoh::sample::TimestampBuilderTrait;
-use zenoh::sample::ValueBuilderTrait;
-use zenoh::selector::Selector;
-use zenoh::session::Session;
-use zenoh::session::SessionDeclarations;
-use zenoh::time::Timestamp;
-use zenoh::value::Value;
+use zenoh::prelude::r#async::*;
 
 pub struct AlignQueryable {
     session: Arc<Session>,

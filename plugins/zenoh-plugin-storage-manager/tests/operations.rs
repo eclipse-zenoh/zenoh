@@ -20,14 +20,7 @@ use std::str::FromStr;
 use std::thread::sleep;
 
 use async_std::task;
-use zenoh::config::{Config, ValidatedMap};
-use zenoh::core::AsyncResolve;
-use zenoh::internal::zasync_executor_init;
-use zenoh::payload::StringOrBase64;
-use zenoh::query::Reply;
-use zenoh::sample::Sample;
-use zenoh::session::Session;
-use zenoh::time::Timestamp;
+use zenoh::prelude::r#async::*;
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {

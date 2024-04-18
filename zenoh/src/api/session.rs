@@ -714,7 +714,7 @@ impl Session {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         PublicationBuilder {
             publisher: self.declare_publisher(key_expr),
@@ -1481,7 +1481,7 @@ impl Session {
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
@@ -1612,7 +1612,7 @@ impl Session {
         destination: Locality,
         timeout: Duration,
         value: Option<Value>,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
         #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
@@ -1754,7 +1754,7 @@ impl Session {
         _target: TargetType,
         _consolidation: Consolidation,
         body: Option<QueryBodyType>,
-        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) {
         let (primitives, key_expr, queryables) = {
             let state = zread!(self.state);
@@ -2239,7 +2239,7 @@ impl Primitives for Session {
                             payload: ZBuf,
                             info: DataInfo,
                             #[cfg(feature = "unstable")]
-                            attachment: Option<Attachment>,
+                            attachment: Option<ZBytes>,
                         }
                         let Ret {
                             payload,

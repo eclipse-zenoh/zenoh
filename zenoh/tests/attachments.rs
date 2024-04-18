@@ -14,6 +14,7 @@
 #[cfg(feature = "unstable")]
 #[test]
 fn attachment_pubsub() {
+    use zenoh::bytes::ZBytes;
     use zenoh::prelude::sync::*;
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
@@ -42,12 +43,12 @@ fn attachment_pubsub() {
 
         zenoh
             .put("test/attachment", "put")
-            .attachment(Attachment::from_iter(backer.iter()))
+            .attachment(ZBytes::from_iter(backer.iter()))
             .res()
             .unwrap();
         publisher
             .put("publisher")
-            .attachment(Attachment::from_iter(backer.iter()))
+            .attachment(ZBytes::from_iter(backer.iter()))
             .res()
             .unwrap();
     }
@@ -55,7 +56,7 @@ fn attachment_pubsub() {
 
 #[cfg(feature = "unstable")]
 #[test]
-fn queries() {
+fn attachment_queries() {
     use zenoh::prelude::sync::*;
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
@@ -81,7 +82,7 @@ fn queries() {
                     query.key_expr().clone(),
                     query.value().unwrap().payload().clone(),
                 )
-                .attachment(Attachment::from_iter(
+                .attachment(ZBytes::from_iter(
                     attachment
                         .iter::<(
                             [u8; std::mem::size_of::<usize>()],
@@ -106,7 +107,7 @@ fn queries() {
         let get = zenoh
             .get("test/attachment")
             .payload("query")
-            .attachment(Attachment::from_iter(backer.iter()))
+            .attachment(ZBytes::from_iter(backer.iter()))
             .res()
             .unwrap();
         while let Ok(reply) = get.recv() {

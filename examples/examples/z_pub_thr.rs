@@ -29,7 +29,7 @@ fn main() {
 
     let payload_size = args.payload_size;
 
-    let data: Payload = (0..payload_size)
+    let data: ZBytes = (0..payload_size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();
