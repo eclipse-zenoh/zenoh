@@ -43,6 +43,9 @@ jobs:
           rustup show
           rustup component add rustfmt clippy
 
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Code format check
         run: cargo fmt --check
 
