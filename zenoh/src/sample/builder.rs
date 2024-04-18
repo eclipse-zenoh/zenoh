@@ -14,13 +14,13 @@
 use crate::sample::{QoS, QoSBuilder};
 use crate::Encoding;
 use crate::KeyExpr;
-use crate::Payload;
 use crate::Priority;
 use crate::Sample;
 use crate::SampleKind;
 use crate::Value;
+use crate::ZBytes;
 #[cfg(feature = "unstable")]
-use crate::{payload::OptionPayload, sample::SourceInfo};
+use crate::{bytes::OptionZBytes, sample::SourceInfo};
 use std::marker::PhantomData;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
@@ -49,14 +49,14 @@ pub trait SampleBuilderTrait {
     fn source_info(self, source_info: SourceInfo) -> Self;
     /// Attach user-provided data in key-value format
     #[zenoh_macros::unstable]
-    fn attachment<T: Into<OptionPayload>>(self, attachment: T) -> Self;
+    fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
 
 pub trait ValueBuilderTrait {
     /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self;
     /// Sets the payload
-    fn payload<T: Into<Payload>>(self, payload: T) -> Self;
+    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self;
     /// Sets both payload and encoding at once.
     /// This is convenient for passing user type which supports `Into<Value>` when both payload and encoding depends on user type
     fn value<T: Into<Value>>(self, value: T) -> Self;
@@ -82,7 +82,7 @@ impl SampleBuilder<SampleBuilderPut> {
     ) -> SampleBuilder<SampleBuilderPut>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<Payload>,
+        IntoPayload: Into<ZBytes>,
     {
         Self {
             sample: Sample {
@@ -110,7 +110,7 @@ impl SampleBuilder<SampleBuilderDelete> {
         Self {
             sample: Sample {
                 key_expr: key_expr.into(),
-                payload: Payload::empty(),
+                payload: ZBytes::empty(),
                 kind: SampleKind::Delete,
                 encoding: Encoding::default(),
                 timestamp: None,
@@ -175,8 +175,8 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
     }
 
     #[zenoh_macros::unstable]
-    fn attachment<U: Into<OptionPayload>>(self, attachment: U) -> Self {
-        let attachment: OptionPayload = attachment.into();
+    fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
+        let attachment: OptionZBytes = attachment.into();
         Self {
             sample: Sample {
                 attachment: attachment.into(),
@@ -224,7 +224,7 @@ impl ValueBuilderTrait for SampleBuilder<SampleBuilderPut> {
             _t: PhantomData::<SampleBuilderPut>,
         }
     }
-    fn payload<T: Into<Payload>>(self, payload: T) -> Self {
+    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
         Self {
             sample: Sample {
                 payload: payload.into(),

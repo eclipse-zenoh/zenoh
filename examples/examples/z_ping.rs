@@ -39,7 +39,7 @@ fn main() {
         .res()
         .unwrap();
 
-    let data: Payload = (0usize..size)
+    let data: ZBytes = (0usize..size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();

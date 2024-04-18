@@ -17,7 +17,7 @@ use crate::{
     prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
     sample::DataInfo,
-    Payload, Session, ZResult,
+    Session, ZBytes, ZResult,
 };
 use std::{
     collections::hash_map::DefaultHasher,
@@ -68,7 +68,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
             let key_expr = *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
-                    match Payload::try_from(value) {
+                    match ZBytes::try_from(value) {
                         Ok(zbuf) => {
                             let _ = query.reply(key_expr, zbuf).res_sync();
                         }
@@ -85,7 +85,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid / *KE_LINK / lid;
                     if query.key_expr().intersects(&key_expr) {
                         if let Ok(value) = serde_json::value::to_value(link) {
-                            match Payload::try_from(value) {
+                            match ZBytes::try_from(value) {
                                 Ok(zbuf) => {
                                     let _ = query.reply(key_expr, zbuf).res_sync();
                                 }

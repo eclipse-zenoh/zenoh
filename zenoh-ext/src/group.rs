@@ -24,7 +24,7 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use zenoh::payload::PayloadReader;
+use zenoh::bytes::ZBytesReader;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
@@ -242,7 +242,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
         .await
         .unwrap();
     while let Ok(s) = sub.recv_async().await {
-        match bincode::deserialize_from::<PayloadReader, GroupNetEvent>(s.payload().reader()) {
+        match bincode::deserialize_from::<ZBytesReader, GroupNetEvent>(s.payload().reader()) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
                     tracing::debug!("Member join: {:?}", &je.member);
@@ -301,7 +301,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 while let Ok(reply) = receiver.recv_async().await {
                                     match reply.result() {
                                         Ok(sample) => {
-                                            match bincode::deserialize_from::<PayloadReader, Member>(
+                                            match bincode::deserialize_from::<ZBytesReader, Member>(
                                                 sample.payload().reader(),
                                             ) {
                                                 Ok(m) => {
