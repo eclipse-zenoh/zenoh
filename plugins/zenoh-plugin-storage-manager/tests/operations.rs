@@ -20,6 +20,7 @@ use std::str::FromStr;
 use std::thread::sleep;
 
 use async_std::task;
+use zenoh::internal::zasync_executor_init;
 use zenoh::prelude::r#async::*;
 use zenoh_plugin_trait::Plugin;
 

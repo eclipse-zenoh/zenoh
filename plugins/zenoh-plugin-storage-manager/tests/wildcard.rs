@@ -21,6 +21,7 @@ use std::thread::sleep;
 
 // use std::collections::HashMap;
 use async_std::task;
+use zenoh::internal::zasync_executor_init;
 use zenoh::prelude::r#async::*;
 use zenoh_plugin_trait::Plugin;
 
