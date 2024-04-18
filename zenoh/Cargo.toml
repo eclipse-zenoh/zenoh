@@ -114,6 +114,9 @@ zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 
+[dev-dependencies]
+tokio = { workspace = true }
+
 [build-dependencies]
 rustc_version = { workspace = true }
 
