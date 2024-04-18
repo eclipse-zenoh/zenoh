@@ -255,6 +255,7 @@ pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
+    #[cfg(feature = "unstable")]
     pub(crate) destination: Locality,
 }
 
