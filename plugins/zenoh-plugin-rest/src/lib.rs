@@ -494,7 +494,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    zenoh_util::try_init_log_from_env();
+    try_init_log_from_env();
 
     let zid = runtime.zid().to_string();
     let session = zenoh::session::init(runtime).res().await.unwrap();
