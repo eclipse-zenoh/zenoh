@@ -222,6 +222,11 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
 const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
+#[cfg(any(
+    feature = "transport_tcp",
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
 // Transport Handler for the router
