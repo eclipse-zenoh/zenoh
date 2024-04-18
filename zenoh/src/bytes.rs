@@ -29,12 +29,13 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{core::Properties, zenoh::ext::AttachmentType};
 use zenoh_result::{ZError, ZResult};
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-use zenoh_shm::api::slice::{
-    zsliceshm::zsliceshm, zsliceshm::ZSliceShm, zsliceshmmut::zsliceshmmut,
-    zsliceshmmut::ZSliceShmMut,
+use zenoh_shm::{
+    api::slice::{
+        zsliceshm::zsliceshm, zsliceshm::ZSliceShm, zsliceshmmut::zsliceshmmut,
+        zsliceshmmut::ZSliceShmMut,
+    },
+    SharedMemoryBuf,
 };
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
-use zenoh_shm::SharedMemoryBuf;
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
