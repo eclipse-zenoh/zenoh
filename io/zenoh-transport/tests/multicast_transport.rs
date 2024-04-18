@@ -327,7 +327,7 @@ mod tests {
     #[cfg(all(feature = "transport_compression", feature = "transport_udp"))]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_multicast_udp_only() {
-        zenoh_util::init_log_from_env();
+        zenoh_util::try_init_log_from_env();
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![

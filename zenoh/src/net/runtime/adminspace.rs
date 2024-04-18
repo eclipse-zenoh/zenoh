@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
+use crate::bytes::ZBytes;
 use crate::encoding::Encoding;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
 use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
@@ -580,7 +580,7 @@ fn router_data(context: &AdminContext, query: Query) {
     }
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
-    let payload = match Payload::try_from(json) {
+    let payload = match ZBytes::try_from(json) {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("Error serializing AdminSpace reply: {:?}", e);
@@ -664,7 +664,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, Payload::empty()).res() {
+            if let Err(e) = query.reply(key, ZBytes::empty()).res() {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -681,7 +681,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, Payload::empty()).res() {
+            if let Err(e) = query.reply(key, ZBytes::empty()).res() {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -699,7 +699,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
             tracing::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            match Payload::try_from(status) {
+            match ZBytes::try_from(status) {
                 Ok(zbuf) => {
                     if let Err(e) = query.reply(key, zbuf).res_sync() {
                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -744,7 +744,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match Payload::try_from(response.value) {
+                            match ZBytes::try_from(response.value) {
                                 Ok(zbuf) => {
                                     if let Err(e) = query.reply(key_expr, zbuf).res_sync() {
                                         tracing::error!("Error sending AdminSpace reply: {:?}", e);

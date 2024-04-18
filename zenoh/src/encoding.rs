@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::payload::Payload;
+use crate::bytes::ZBytes;
 use phf::phf_map;
 use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
 use zenoh_buffers::{ZBuf, ZSlice};
@@ -727,7 +727,7 @@ pub trait EncodingMapping {
 }
 
 // Bytes
-impl EncodingMapping for Payload {
+impl EncodingMapping for ZBytes {
     const ENCODING: Encoding = Encoding::ZENOH_BYTES;
 }
 

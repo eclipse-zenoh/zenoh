@@ -28,7 +28,7 @@ use zenoh_examples::CommonArgs;
 
 fn main() {
     // Initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (mut config, warmup, size, n) = parse_args();
 

@@ -20,7 +20,7 @@ use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let args = Args::parse();
 
     let mut prio = Priority::DEFAULT;
@@ -30,7 +30,7 @@ fn main() {
 
     let payload_size = args.payload_size;
 
-    let data: Payload = (0..payload_size)
+    let data: ZBytes = (0..payload_size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();

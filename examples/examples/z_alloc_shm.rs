@@ -24,7 +24,7 @@ use zenoh::Result;
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     run().await.unwrap()
 }
 

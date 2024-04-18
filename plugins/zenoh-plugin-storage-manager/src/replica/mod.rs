@@ -26,7 +26,7 @@ use std::str;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use urlencoding::encode;
-use zenoh::payload::StringOrBase64;
+use zenoh::bytes::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;

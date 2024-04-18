@@ -330,8 +330,6 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 fn selector_accessors() {
     use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
 
-    #[cfg(feature = "unstable")]
-    let time_range = "[now(-2s)..now(2s)]".parse().unwrap();
     for selector in [
         "hello/there?_timetrick",
         "hello/there?_timetrick;_time",
@@ -347,15 +345,25 @@ fn selector_accessors() {
 
         assert_eq!(selector.parameters().get("_timetrick").unwrap(), "");
 
-        #[cfg(feature = "unstable")]
-        {
-            selector.parameters_mut().set_time_range(time_range);
-            assert_eq!(
-                selector.parameters().time_range().unwrap().unwrap(),
-                time_range
-            );
-            assert!(selector.parameters().contains_key(TIME_RANGE_KEY));
-        }
+        let time_range = "[now(-2s)..now(2s)]";
+        zcondfeat!(
+            "unstable",
+            {
+                let time_range = time_range.parse().unwrap();
+                selector.parameters_mut().set_time_range(time_range);
+                assert_eq!(
+                    selector.parameters().time_range().unwrap().unwrap(),
+                    time_range
+                );
+            },
+            {
+                selector.parameters_mut().insert(TIME_RANGE_KEY, time_range);
+            }
+        );
+        assert_eq!(
+            selector.parameters().get(TIME_RANGE_KEY).unwrap(),
+            time_range
+        );
 
         let hm: HashMap<&str, &str> = HashMap::from(selector.parameters());
         assert!(hm.contains_key(TIME_RANGE_KEY));
