@@ -18,7 +18,7 @@ fn shm_payload_single_buf() {
     use zenoh::shm::slice::zsliceshm::{zsliceshm, ZSliceShm};
     use zenoh::shm::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
     use zenoh::{
-        payload::Payload,
+        bytes::ZBytes,
         shm::{
             protocol_implementations::posix::{
                 posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
@@ -63,11 +63,11 @@ fn shm_payload_single_buf() {
     let _data: &[u8] = &owned_shm_buf_mut;
     let _data_mut: &mut [u8] = &mut owned_shm_buf_mut;
 
-    // build a Payload from an SHM buffer
-    let mut payload: Payload = owned_shm_buf_mut.into();
+    // build a ZBytes from an SHM buffer
+    let mut payload: ZBytes = owned_shm_buf_mut.into();
 
     {
-        // deserialize Payload as borrowed zsliceshm
+        // deserialize ZBytes as borrowed zsliceshm
         let borrowed_shm_buf: &zsliceshm = payload.deserialize().unwrap();
 
         // get data
@@ -81,7 +81,7 @@ fn shm_payload_single_buf() {
     }
 
     {
-        // deserialize Payload as mutably borrowed zsliceshm
+        // deserialize ZBytes as mutably borrowed zsliceshm
         let borrowed_shm_buf: &mut zsliceshm = payload.deserialize_mut().unwrap();
 
         // get data

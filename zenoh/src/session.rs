@@ -707,15 +707,15 @@ impl Session {
     /// # }
     /// ```
     #[inline]
-    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoPayload>(
+    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoZBytes>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-        payload: IntoPayload,
+        payload: IntoZBytes,
     ) -> SessionPutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<ZBytes>,
+        IntoZBytes: Into<ZBytes>,
     {
         PublicationBuilder {
             publisher: self.declare_publisher(key_expr),

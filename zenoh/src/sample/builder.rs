@@ -76,13 +76,13 @@ pub struct SampleBuilder<T> {
 }
 
 impl SampleBuilder<SampleBuilderPut> {
-    pub fn put<IntoKeyExpr, IntoPayload>(
+    pub fn put<IntoKeyExpr, IntoZBytes>(
         key_expr: IntoKeyExpr,
-        payload: IntoPayload,
+        payload: IntoZBytes,
     ) -> SampleBuilder<SampleBuilderPut>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<ZBytes>,
+        IntoZBytes: Into<ZBytes>,
     {
         Self {
             sample: Sample {
