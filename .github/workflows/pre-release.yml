@@ -37,7 +37,7 @@ jobs:
     container: ${{ matrix.image }}
     steps:
       - name: Update and install packages
-        run: apt-get update && apt-get install -y curl git build-essential pkg-config
+        run: apt-get update && apt-get install -y curl git build-essential pkg-config libssl-dev
 
       - name: Install Rust toolchain
         run: |
@@ -74,7 +74,7 @@ jobs:
     container: ${{ matrix.image }}
     steps:
       - name: Update and install packages
-        run: apt-get update && apt-get install -y curl git build-essential pkg-config
+        run: apt-get update && apt-get install -y curl git build-essential pkg-config libssl-dev
 
       - name: Install Rust toolchain
         run: |
