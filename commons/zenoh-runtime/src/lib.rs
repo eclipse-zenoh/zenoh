@@ -91,27 +91,27 @@ impl RuntimeParam {
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug, RegisterParam, Deserialize)]
 #[param(RuntimeParam)]
 pub enum ZRuntime {
-    /// Renamed to app. Default param: worker_threads = 1
+    /// Renamed to app. Default param: worker_threads = 1.
     #[serde(rename = "app")]
     #[param(worker_threads = 1)]
     Application,
 
-    /// Renamed to acc. Default param: worker_threads = 1
+    /// Renamed to acc. Default param: worker_threads = 1.
     #[serde(rename = "acc")]
     #[param(worker_threads = 1)]
     Acceptor,
 
-    /// Renamed to tx. Default param: worker_threads = 1
+    /// Renamed to tx. Default param: worker_threads = 1.
     #[serde(rename = "tx")]
     #[param(worker_threads = 1)]
     TX,
 
-    /// Renamed to rx. Default param: worker_threads = 1
+    /// Renamed to rx. Default param: worker_threads = 2.
     #[serde(rename = "rx")]
-    #[param(worker_threads = 1)]
+    #[param(worker_threads = 2)]
     RX,
 
-    /// Renamed to net. Default param: worker_threads = 1
+    /// Renamed to net. Default param: worker_threads = 1.
     #[serde(rename = "net")]
     #[param(worker_threads = 1)]
     Net,
