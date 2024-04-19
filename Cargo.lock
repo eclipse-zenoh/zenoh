@@ -531,6 +531,9 @@ name = "bitflags"
 version = "2.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed570934406eb16438a4e976b1b4500774099c13b8cb96eec99f620f05090ddf"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "blake3"
@@ -3005,6 +3008,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ron"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b91f7eff05f748767f183df4320a63d6936e9c6107d97c9e6bdd9784f4289c94"
+dependencies = [
+ "base64 0.21.4",
+ "bitflags 2.4.2",
+ "serde",
+ "serde_derive",
+]
+
+[[package]]
 name = "route-recognizer"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5430,8 +5445,12 @@ version = "0.11.0-dev"
 dependencies = [
  "futures",
  "lazy_static",
+ "libc",
+ "ron",
+ "serde",
  "tokio",
  "zenoh-collections",
+ "zenoh-macros",
  "zenoh-result",
 ]
 

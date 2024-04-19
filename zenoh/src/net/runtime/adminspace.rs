@@ -80,10 +80,12 @@ impl ConfigValidator for AdminSpace {
         #[cfg(all(feature = "unstable", feature = "plugins"))]
         {
             let plugins_mgr = self.context.runtime.plugins_manager();
-            let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
-                "Plugin `{}` is not running, but its configuration is being changed",
-                name
-            ))?;
+            let Some(plugin) = plugins_mgr.started_plugin(name) else {
+                tracing::warn!("Plugin `{}` is not started", name);
+                // If plugin not started, just allow any config. The plugin `name` will be attempted to start with this config
+                // on config comparison (see `PluginDiff`)
+                return Ok(None);
+            };
             plugin.instance().config_checker(path, current, new)
         }
         #[cfg(not(all(feature = "unstable", feature = "plugins")))]
