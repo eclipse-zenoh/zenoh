@@ -74,11 +74,13 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        let plugins_mgr = zlock!(self.context.plugins_mgr);
-        let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
-            "Plugin `{}` is not running, but its configuration is being changed",
-            name
-        ))?;
+        let plugin_mgr = zlock!(self.context.plugins_mgr);
+        let Some(plugin) = plugin_mgr.started_plugin(name) else {
+            tracing::warn!("Plugin `{}` is not started", name);
+            // If plugin not started, just allow any config. The plugin `name` will be attempted to start with this config
+            // on config comparison (see `PluginDiff`)
+            return Ok(None);
+        };
         plugin.instance().config_checker(path, current, new)
     }
 }
