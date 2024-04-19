@@ -44,7 +44,6 @@ use zenoh_transport::unicast::TransportUnicast;
 
 pub struct AdminContext {
     runtime: Runtime,
-    plugins_mgr: Mutex<plugins::PluginsManager>,
     zid_str: String,
     version: String,
     metadata: serde_json::Value,
@@ -74,7 +73,7 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        let plugins_mgr = zlock!(self.context.plugins_mgr);
+        let plugins_mgr = self.context.runtime.plugins_manager();
         let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
             "Plugin `{}` is not running, but its configuration is being changed",
             name
@@ -124,7 +123,7 @@ impl AdminSpace {
         Ok(())
     }
 
-    pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
+    pub async fn start(runtime: &Runtime, version: String) {
         let zid_str = runtime.state.zid.to_string();
         let metadata = runtime.state.metadata.clone();
         let root_key: OwnedKeyExpr = format!("@/router/{zid_str}").try_into().unwrap();
@@ -170,14 +169,14 @@ impl AdminSpace {
             Arc::new(plugins_status),
         );
 
-        let mut active_plugins = plugins_mgr
+        let mut active_plugins = runtime
+            .plugins_manager()
             .started_plugins_iter()
             .map(|rec| (rec.name().to_string(), rec.path().to_string()))
             .collect::<HashMap<_, _>>();
 
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
-            plugins_mgr: Mutex::new(plugins_mgr),
             zid_str,
             version,
             metadata,
@@ -232,7 +231,7 @@ impl AdminSpace {
                         }
                         diffs.push(PluginDiff::Start(request))
                     }
-                    let mut plugins_mgr = zlock!(admin.context.plugins_mgr);
+                    let mut plugins_mgr = admin.context.runtime.plugins_manager();
                     for diff in diffs {
                         match diff {
                             PluginDiff::Delete(name) => {
@@ -492,7 +491,7 @@ fn router_data(context: &AdminContext, query: Query) {
 
     // plugins info
     let plugins: serde_json::Value = {
-        let plugins_mgr = zlock!(context.plugins_mgr);
+        let plugins_mgr = context.runtime.plugins_manager();
         plugins_mgr
             .started_plugins_iter()
             .map(|rec| (rec.name(), json!({ "path": rec.path() })))
@@ -692,7 +691,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
 }
 
 fn plugins_data(context: &AdminContext, query: Query) {
-    let guard = zlock!(context.plugins_mgr);
+    let guard = context.runtime.plugins_manager();
     let root_key = format!("@/router/{}/plugins", &context.zid_str);
     let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
     tracing::debug!("requested plugins status {:?}", query.key_expr());
@@ -710,8 +709,8 @@ fn plugins_data(context: &AdminContext, query: Query) {
 }
 
 fn plugins_status(context: &AdminContext, query: Query) {
-    let selector = query.selector();
-    let guard = zlock!(context.plugins_mgr);
+    let selector: crate::Selector<'_> = query.selector();
+    let guard = context.runtime.plugins_manager();
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
 
     for plugin in guard.started_plugins_iter() {

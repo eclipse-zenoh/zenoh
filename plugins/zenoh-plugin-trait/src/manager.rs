@@ -44,11 +44,11 @@ pub trait StartedPlugin<StartArgs, Instance>: PluginStatus {
 }
 
 struct PluginRecord<StartArgs: PluginStartArgs, Instance: PluginInstance>(
-    Box<dyn DeclaredPlugin<StartArgs, Instance> + Send>,
+    Box<dyn DeclaredPlugin<StartArgs, Instance> + Send + Sync>,
 );
 
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginRecord<StartArgs, Instance> {
-    fn new<P: DeclaredPlugin<StartArgs, Instance> + Send + 'static>(plugin: P) -> Self {
+    fn new<P: DeclaredPlugin<StartArgs, Instance> + Send + Sync + 'static>(plugin: P) -> Self {
         Self(Box::new(plugin))
     }
 }

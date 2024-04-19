@@ -14,14 +14,12 @@
 use clap::Parser;
 use futures::future;
 use git_version::git_version;
-use std::collections::HashSet;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
-use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
-use zenoh::plugins::PluginsManager;
+use zenoh::config::{Config, ModeDependentValue, PermissionsConf, ValidatedMap};
 use zenoh::prelude::{EndPoint, WhatAmI};
-use zenoh::runtime::{AdminSpace, Runtime};
+use zenoh::runtime::Runtime;
 use zenoh::Result;
 
 #[cfg(feature = "loki")]
@@ -94,129 +92,30 @@ struct Args {
     adminspace_permissions: Option<String>,
 }
 
-fn load_plugin(
-    plugin_mgr: &mut PluginsManager,
-    name: &str,
-    paths: &Option<Vec<String>>,
-) -> Result<()> {
-    let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-        tracing::warn!("Plugin `{}` was already declared", declared.name());
-        declared
-    } else if let Some(paths) = paths {
-        plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
-    } else {
-        plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
-    };
-
-    if let Some(loaded) = declared.loaded_mut() {
-        tracing::warn!(
-            "Plugin `{}` was already loaded from {}",
-            loaded.name(),
-            loaded.path()
-        );
-    } else {
-        let _ = declared.load()?;
-    };
-    Ok(())
-}
-
 fn main() {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap()
         .block_on(async {
-        init_logging().unwrap();
+            init_logging().unwrap();
 
-        tracing::info!("zenohd {}", *LONG_VERSION);
+            tracing::info!("zenohd {}", *LONG_VERSION);
 
-        let args = Args::parse();
-        let config = config_from_args(&args);
-        tracing::info!("Initial conf: {}", &config);
+            let args = Args::parse();
+            let config = config_from_args(&args);
+            tracing::info!("Initial conf: {}", &config);
 
-        let mut plugin_mgr = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
-        // Static plugins are to be added here, with `.add_static::<PluginType>()`
-        let mut required_plugins = HashSet::new();
-        for plugin_load in config.plugins().load_requests() {
-            let PluginLoad {
-                name,
-                paths,
-                required,
-            } = plugin_load;
-            tracing::info!(
-                "Loading {req} plugin \"{name}\"",
-                req = if required { "required" } else { "" }
-            );
-            if let Err(e) = load_plugin(&mut plugin_mgr, &name, &paths) {
-                if required {
-                    panic!("Plugin load failure: {}", e)
-                } else {
-                    tracing::error!("Plugin load failure: {}", e)
-                }
-            }
-            if required {
-                required_plugins.insert(name);
-            }
-        }
-
-        let runtime = match Runtime::new(config).await {
-            Ok(runtime) => runtime,
-            Err(e) => {
-                println!("{e}. Exiting...");
-                std::process::exit(-1);
-            }
-        };
-
-        for plugin in plugin_mgr.loaded_plugins_iter_mut() {
-            let required = required_plugins.contains(plugin.name());
-            tracing::info!(
-                "Starting {req} plugin \"{name}\"",
-                req = if required { "required" } else { "" },
-                name = plugin.name()
-            );
-            match plugin.start(&runtime) {
-                Ok(_) => {
-                    tracing::info!(
-                        "Successfully started plugin {} from {:?}",
-                        plugin.name(),
-                        plugin.path()
-                    );
-                }
+            let _runtime = match Runtime::new(config).await {
+                Ok(runtime) => runtime,
                 Err(e) => {
-                    let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
-                        Ok(s) => s,
-                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", plugin.name(), plugin.path()),
-                    };
-                    if required {
-                        panic!(
-                            "Plugin \"{}\" failed to start: {}",
-                            plugin.name(),
-                            if report.is_empty() {
-                                "no details provided"
-                            } else {
-                                report.as_str()
-                            }
-                        );
-                    } else {
-                        tracing::error!(
-                            "Required plugin \"{}\" failed to start: {}",
-                            plugin.name(),
-                            if report.is_empty() {
-                                "no details provided"
-                            } else {
-                                report.as_str()
-                            }
-                        );
-                    }
+                    println!("{e}. Exiting...");
+                    std::process::exit(-1);
                 }
-            }
-        }
-        tracing::info!("Finished loading plugins");
+            };
 
-        AdminSpace::start(&runtime, plugin_mgr, LONG_VERSION.clone()).await;
-
-        future::pending::<()>().await;
-    });
+            future::pending::<()>().await;
+        });
 }
 
 fn config_from_args(args: &Args) -> Config {

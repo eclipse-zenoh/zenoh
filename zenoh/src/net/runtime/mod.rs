@@ -24,12 +24,13 @@ use super::primitives::DeMux;
 use super::routing;
 use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
-use crate::GIT_VERSION;
+use crate::plugins::sealed::PluginsManager;
+use crate::{GIT_VERSION, LONG_VERSION};
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -46,7 +47,7 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-struct RuntimeState {
+pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
     metadata: serde_json::Value,
@@ -57,6 +58,7 @@ struct RuntimeState {
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
     task_controller: TaskController,
+    plugins_manager: Mutex<PluginsManager>,
 }
 
 pub struct WeakRuntime {
@@ -119,8 +121,10 @@ impl Runtime {
             .zid(zid)
             .build(handler.clone())?;
 
-        let config = Notifier::new(config);
+        // Create plugin_manager and load plugins
+        let (plugins_manager, plugins) = crate::plugins::loader::load_plugins(&config);
 
+        let config = Notifier::new(config);
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid,
@@ -133,11 +137,16 @@ impl Runtime {
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
                 task_controller: TaskController::default(),
+                plugins_manager: Mutex::new(plugins_manager),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
+        // Start plugins
+        crate::plugins::loader::start_plugins(&runtime, plugins);
+
+        // Start notifier task
         let receiver = config.subscribe();
         let token = runtime.get_cancellation_token();
         runtime.spawn({
@@ -164,20 +173,29 @@ impl Runtime {
             }
         });
 
+        // Admin space
+        AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+
         Ok(runtime)
     }
 
     #[inline(always)]
-    pub fn manager(&self) -> &TransportManager {
+    pub(crate) fn manager(&self) -> &TransportManager {
         &self.state.manager
     }
 
-    pub fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
+    #[inline(always)]
+    pub(crate) fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+        zlock!(self.state.plugins_manager)
+    }
+
+    pub(crate) fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
         zwrite!(self.state.transport_handlers).push(handler);
     }
 
     pub async fn close(&self) -> ZResult<()> {
         tracing::trace!("Runtime::close())");
+        // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.state
             .task_controller
