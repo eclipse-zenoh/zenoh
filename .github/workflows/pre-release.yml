@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image: [ "ubuntu:22.04", "ubuntu:24.04" ]
+        image: [ "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
     container:
       image: ${{ matrix.image }}
       options: --sysctl net.ipv6.conf.all.disable_ipv6=0
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image: [ "ubuntu:22.04", "ubuntu:24.04" ]
+        image: [ "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
     container:
       image: ${{ matrix.image }}
       options: --sysctl net.ipv6.conf.all.disable_ipv6=0
