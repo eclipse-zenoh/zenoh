@@ -75,65 +75,37 @@ impl WeakRuntime {
     }
 }
 
-#[derive(Clone)]
-pub struct Runtime {
-    state: Arc<RuntimeState>,
+pub struct RuntimeBuilder {
+    config: Config,
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    plugins_manager: Option<PluginsManager>,
 }
 
-impl StructVersion for Runtime {
-    fn struct_version() -> u64 {
-        1
-    }
-    fn struct_features() -> &'static str {
-        crate::FEATURES
-    }
-}
-
-impl PluginStartArgs for Runtime {}
-
-impl Runtime {
-    pub async fn new(config: Config) -> ZResult<Runtime> {
-        // Create plugin_manager and load plugins
-        let mut runtime = Runtime::init(config).await?;
-        match runtime.start().await {
-            Ok(()) => Ok(runtime),
-            Err(err) => Err(err),
-        }
-    }
-
-    pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
-        // Create plugin_manager and load plugins
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
-        let plugins_manager = crate::plugins::loader::load_plugins(&config);
-        Runtime::init_inner(
+impl RuntimeBuilder {
+    pub fn new(config: Config) -> Self {
+        Self {
             config,
             #[cfg(all(feature = "unstable", feature = "plugins"))]
-            plugins_manager,
-        )
-        .await
+            plugins_manager: None,
+        }
     }
 
     #[cfg(all(feature = "unstable", feature = "plugins"))]
-    pub async fn new_with_plugins_manager(
-        config: Config,
-        plugins_manager: PluginsManager,
-    ) -> ZResult<Runtime> {
-        let mut runtime = Runtime::init_inner(config, plugins_manager).await?;
-        match runtime.start().await {
-            Ok(()) => Ok(runtime),
-            Err(err) => Err(err),
-        }
+    pub fn plugins_manager<T: Into<Option<PluginsManager>>>(mut self, plugins_manager: T) -> Self {
+        self.plugins_manager = plugins_manager.into();
+        self
     }
 
-    async fn init_inner(
-        config: Config,
-        #[cfg(all(feature = "unstable", feature = "plugins"))] plugins_manager: PluginsManager,
-    ) -> ZResult<Runtime> {
+    pub async fn build(self) -> ZResult<Runtime> {
+        let RuntimeBuilder {
+            config,
+            #[cfg(all(feature = "unstable", feature = "plugins"))]
+            mut plugins_manager,
+        } = self;
+
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-
         let zid = *config.id();
-
-        tracing::info!("Using PID: {}", zid);
+        tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
         let metadata = config.metadata().clone();
@@ -153,6 +125,11 @@ impl Runtime {
             .zid(zid)
             .build(handler.clone())?;
 
+        // Plugins manager
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        let plugins_manager = plugins_manager
+            .take()
+            .unwrap_or_else(|| crate::plugins::loader::load_plugins(&config));
         // Admin space creation flag
         let start_admin_space = *config.adminspace.enabled();
 
@@ -213,6 +190,37 @@ impl Runtime {
         }
 
         Ok(runtime)
+    }
+}
+
+#[derive(Clone)]
+pub struct Runtime {
+    state: Arc<RuntimeState>,
+}
+
+impl StructVersion for Runtime {
+    fn struct_version() -> u64 {
+        1
+    }
+    fn struct_features() -> &'static str {
+        crate::FEATURES
+    }
+}
+
+impl PluginStartArgs for Runtime {}
+
+impl Runtime {
+    pub async fn new(config: Config) -> ZResult<Runtime> {
+        // Create plugin_manager and load plugins
+        let mut runtime = Runtime::init(config).await?;
+        match runtime.start().await {
+            Ok(()) => Ok(runtime),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
+        RuntimeBuilder::new(config).build().await
     }
 
     #[inline(always)]
