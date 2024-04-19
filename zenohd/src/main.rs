@@ -145,9 +145,11 @@ fn config_from_args(args: &Args) -> Config {
                 .unwrap();
         }
     }
+    config.plugins_loading.set_enabled(true).unwrap();
     if !args.plugin_search_dir.is_empty() {
         config
-            .set_plugins_search_dirs(args.plugin_search_dir.clone())
+            .plugins_loading
+            .set_search_dirs(Some(args.plugin_search_dir.clone()))
             .unwrap();
     }
     for plugin in &args.plugin {
