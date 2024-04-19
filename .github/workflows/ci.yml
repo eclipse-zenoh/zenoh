@@ -81,6 +81,9 @@ jobs:
       - name: Install latest Rust toolchain
         run: rustup show
 
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Set rustflags
         shell: bash
         run: |
