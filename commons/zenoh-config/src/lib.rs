@@ -482,6 +482,9 @@ validated_struct::validator! {
         ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
         /// </div>
         AdminSpaceConf {
+            /// Enable the admin space
+            #[serde(default = "set_false")]
+            pub enabled: bool,
             /// Permissions on the admin space
             pub permissions:
             PermissionsConf {
@@ -509,8 +512,8 @@ validated_struct::validator! {
         /// The executable's current directory will be added to the search paths.
         pub plugins_loading: #[derive(Default)]
         PluginsLoading {
-            enabled: bool,
-            search_dirs: Option<Vec<String>>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
+            pub enabled: bool,
+            pub search_dirs: Option<Vec<String>>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
         },
         #[validated(recursive_accessors)]
         /// The configuration for plugins.

@@ -24,9 +24,9 @@ use super::primitives::DeMux;
 use super::routing;
 use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
-use crate::GIT_VERSION;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::{plugins::sealed::PluginsManager, LONG_VERSION};
+use crate::plugins::sealed::PluginsManager;
+use crate::{GIT_VERSION, LONG_VERSION};
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
@@ -128,6 +128,8 @@ impl Runtime {
         // Create plugin_manager and load plugins
         #[cfg(all(feature = "unstable", feature = "plugins"))]
         let (plugins_manager, plugins) = crate::plugins::loader::load_plugins(&config);
+        // Admin space creation flag
+        let start_admin_space = *config.adminspace.enabled();
 
         let config = Notifier::new(config);
         let runtime = Runtime {
@@ -181,8 +183,9 @@ impl Runtime {
         });
 
         // Admin space
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
-        AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+        if start_admin_space {
+            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+        }
 
         Ok(runtime)
     }

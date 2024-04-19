@@ -145,6 +145,7 @@ fn config_from_args(args: &Args) -> Config {
                 .unwrap();
         }
     }
+    config.adminspace.set_enabled(true).unwrap();
     config.plugins_loading.set_enabled(true).unwrap();
     if !args.plugin_search_dir.is_empty() {
         config
