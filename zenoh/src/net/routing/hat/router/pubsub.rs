@@ -19,7 +19,7 @@ use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::HatPubSubTrait;
+use crate::net::routing::hat::{HatPubSubTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use petgraph::graph::NodeIndex;
@@ -925,8 +925,38 @@ impl HatPubSubTrait for HatCode {
         }
     }
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        hat!(tables).router_subs.iter().cloned().collect()
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        hat!(tables)
+            .router_subs
+            .iter()
+            .map(|s| {
+                (
+                    s.clone(),
+                    Sources {
+                        routers: Vec::from_iter(res_hat!(s).router_subs.iter().cloned()),
+                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
+                            Vec::from_iter(res_hat!(s).peer_subs.iter().cloned())
+                        } else {
+                            s.session_ctxs
+                                .values()
+                                .filter_map(|f| {
+                                    (f.face.whatami == WhatAmI::Peer && f.subs.is_some())
+                                        .then_some(f.face.zid)
+                                })
+                                .collect()
+                        },
+                        clients: s
+                            .session_ctxs
+                            .values()
+                            .filter_map(|f| {
+                                (f.face.whatami == WhatAmI::Client && f.subs.is_some())
+                                    .then_some(f.face.zid)
+                            })
+                            .collect(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn compute_data_route(

@@ -17,11 +17,11 @@ use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::HatPubSubTrait;
+use crate::net::routing::hat::{HatPubSubTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{
@@ -274,11 +274,16 @@ impl HatPubSubTrait for HatCode {
         forget_client_subscription(tables, face, res);
     }
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        let mut subs = HashSet::new();
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut subs = HashMap::new();
         for src_face in tables.faces.values() {
             for sub in &face_hat!(src_face).remote_subs {
-                subs.insert(sub.clone());
+                let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
+                match src_face.whatami {
+                    WhatAmI::Router => srcs.routers.push(src_face.zid),
+                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
+                    WhatAmI::Client => srcs.clients.push(src_face.zid),
+                }
             }
         }
         Vec::from_iter(subs)
