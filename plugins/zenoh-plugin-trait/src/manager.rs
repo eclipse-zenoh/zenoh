@@ -31,6 +31,7 @@ pub trait DeclaredPlugin<StartArgs, Instance>: PluginStatus {
 }
 pub trait LoadedPlugin<StartArgs, Instance>: PluginStatus {
     fn as_status(&self) -> &dyn PluginStatus;
+    fn required(&self) -> bool;
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>>;
     fn started(&self) -> Option<&dyn StartedPlugin<StartArgs, Instance>>;
     fn started_mut(&mut self) -> Option<&mut dyn StartedPlugin<StartArgs, Instance>>;
@@ -126,8 +127,9 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         P: Plugin<StartArgs = StartArgs, Instance = Instance> + Send + Sync,
     >(
         mut self,
+        required: bool,
     ) -> Self {
-        let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new();
+        let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new(required);
         self.plugins.push(PluginRecord::new(plugin_loader));
         tracing::debug!(
             "Declared static plugin {}",
@@ -141,6 +143,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         &mut self,
         name: S,
         plugin_name: &str,
+        required: bool,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
         let plugin_name = format!("{}{}", self.default_lib_prefix, plugin_name);
@@ -150,8 +153,11 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
             .ok_or("Dynamic plugin loading is disabled")?
             .clone();
         tracing::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
-        let loader =
-            DynamicPlugin::new(name, DynamicPluginSource::ByName((libloader, plugin_name)));
+        let loader = DynamicPlugin::new(
+            name,
+            DynamicPluginSource::ByName((libloader, plugin_name)),
+            required,
+        );
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
     }
@@ -161,11 +167,12 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         &mut self,
         name: S,
         paths: &[P],
+        required: bool,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
         let paths = paths.iter().map(|p| p.as_ref().into()).collect();
         tracing::debug!("Declared dynamic plugin {} by paths {:?}", &name, &paths);
-        let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths));
+        let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths), required);
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
     }

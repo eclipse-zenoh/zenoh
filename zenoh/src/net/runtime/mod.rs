@@ -93,6 +93,7 @@ impl PluginStartArgs for Runtime {}
 
 impl Runtime {
     pub async fn new(config: Config) -> ZResult<Runtime> {
+        // Create plugin_manager and load plugins
         let mut runtime = Runtime::init(config).await?;
         match runtime.start().await {
             Ok(()) => Ok(runtime),
@@ -101,6 +102,33 @@ impl Runtime {
     }
 
     pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
+        // Create plugin_manager and load plugins
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        let plugins_manager = crate::plugins::loader::load_plugins(&config);
+        Runtime::init_inner(
+            config,
+            #[cfg(all(feature = "unstable", feature = "plugins"))]
+            plugins_manager,
+        )
+        .await
+    }
+
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    pub async fn new_with_plugins_manager(
+        config: Config,
+        plugins_manager: PluginsManager,
+    ) -> ZResult<Runtime> {
+        let mut runtime = Runtime::init_inner(config, plugins_manager).await?;
+        match runtime.start().await {
+            Ok(()) => Ok(runtime),
+            Err(err) => Err(err),
+        }
+    }
+
+    async fn init_inner(
+        config: Config,
+        #[cfg(all(feature = "unstable", feature = "plugins"))] plugins_manager: PluginsManager,
+    ) -> ZResult<Runtime> {
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
 
         let zid = *config.id();
@@ -125,9 +153,6 @@ impl Runtime {
             .zid(zid)
             .build(handler.clone())?;
 
-        // Create plugin_manager and load plugins
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
-        let (plugins_manager, plugins) = crate::plugins::loader::load_plugins(&config);
         // Admin space creation flag
         let start_admin_space = *config.adminspace.enabled();
 
@@ -153,7 +178,7 @@ impl Runtime {
 
         // Start plugins
         #[cfg(all(feature = "unstable", feature = "plugins"))]
-        crate::plugins::loader::start_plugins(&runtime, plugins);
+        crate::plugins::loader::start_plugins(&runtime);
 
         // Start notifier task
         let receiver = config.subscribe();

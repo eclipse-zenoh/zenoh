@@ -13,7 +13,6 @@
 //
 use super::sealed::{PluginsManager, PLUGIN_PREFIX};
 use crate::runtime::Runtime;
-use std::collections::HashSet;
 use zenoh_config::{Config, PluginLoad};
 use zenoh_result::ZResult;
 
@@ -21,14 +20,15 @@ pub(crate) fn load_plugin(
     plugin_mgr: &mut PluginsManager,
     name: &str,
     paths: &Option<Vec<String>>,
+    required: bool,
 ) -> ZResult<()> {
     let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
         tracing::warn!("Plugin `{}` was already declared", declared.name());
         declared
     } else if let Some(paths) = paths {
-        plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
+        plugin_mgr.declare_dynamic_plugin_by_paths(name, paths, required)?
     } else {
-        plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
+        plugin_mgr.declare_dynamic_plugin_by_name(name, name, required)?
     };
 
     if let Some(loaded) = declared.loaded_mut() {
@@ -43,10 +43,9 @@ pub(crate) fn load_plugin(
     Ok(())
 }
 
-pub(crate) fn load_plugins(config: &Config) -> (PluginsManager, HashSet<String>) {
+pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
     let mut manager = PluginsManager::dynamic(config.libloader(), PLUGIN_PREFIX.to_string());
     // Static plugins are to be added here, with `.add_static::<PluginType>()`
-    let mut plugins = HashSet::new();
     for plugin_load in config.plugins().load_requests() {
         let PluginLoad {
             name,
@@ -57,24 +56,21 @@ pub(crate) fn load_plugins(config: &Config) -> (PluginsManager, HashSet<String>)
             "Loading {req} plugin \"{name}\"",
             req = if required { "required" } else { "" }
         );
-        if let Err(e) = load_plugin(&mut manager, &name, &paths) {
+        if let Err(e) = load_plugin(&mut manager, &name, &paths, required) {
             if required {
                 panic!("Plugin load failure: {}", e)
             } else {
                 tracing::error!("Plugin load failure: {}", e)
             }
         }
-        if required {
-            plugins.insert(name);
-        }
     }
-    (manager, plugins)
+    manager
 }
 
-pub(crate) fn start_plugins(runtime: &Runtime, plugins: HashSet<String>) {
+pub(crate) fn start_plugins(runtime: &Runtime) {
     let mut manager = runtime.plugins_manager();
     for plugin in manager.loaded_plugins_iter_mut() {
-        let required = plugins.contains(plugin.name());
+        let required = plugin.required();
         tracing::info!(
             "Starting {req} plugin \"{name}\"",
             req = if required { "required" } else { "" },

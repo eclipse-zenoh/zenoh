@@ -100,15 +100,16 @@ impl AdminSpace {
         plugin_mgr: &mut plugins::PluginsManager,
         config: &crate::config::PluginLoad,
         start_args: &Runtime,
+        required: bool,
     ) -> ZResult<()> {
         let name = &config.name;
         let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
             tracing::warn!("Plugin `{}` was already declared", declared.name());
             declared
         } else if let Some(paths) = &config.paths {
-            plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
+            plugin_mgr.declare_dynamic_plugin_by_paths(name, paths, required)?
         } else {
-            plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
+            plugin_mgr.declare_dynamic_plugin_by_name(name, name, required)?
         };
 
         let loaded = if let Some(loaded) = declared.loaded_mut() {
@@ -266,6 +267,7 @@ impl AdminSpace {
                                         &mut plugins_mgr,
                                         &plugin,
                                         &admin.context.runtime,
+                                        plugin.required,
                                     ) {
                                         if plugin.required {
                                             panic!("Failed to load plugin `{}`: {}", plugin.name, e)
