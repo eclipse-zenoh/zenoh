@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use super::ext::shm::auth_segment::AuthSegment;
+use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 use crate::{

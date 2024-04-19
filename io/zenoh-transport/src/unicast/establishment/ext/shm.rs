@@ -11,23 +11,98 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub(crate) mod auth_segment;
-pub(crate) mod auth_unicast;
-
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 use async_trait::async_trait;
+use rand::{Rng, SeedableRng};
+use std::ops::Deref;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::bail;
+use zenoh_crypto::PseudoRng;
 use zenoh_protocol::transport::{init, open};
-use zenoh_result::{zerror, Error as ZError};
+use zenoh_result::{zerror, Error as ZError, ZResult};
+use zenoh_shm::{api::common::types::ProtocolID, posix_shm::array::ArrayInSHM};
 
-use auth_segment::{AuthSegment, AuthSegmentID};
+/*************************************/
+/*             Segment               */
+/*************************************/
+const AUTH_SEGMENT_PREFIX: &str = "auth";
 
-use self::auth_unicast::AuthUnicast;
+pub(crate) type AuthSegmentID = u32;
+pub(crate) type AuthChallenge = u64;
+
+#[derive(Debug)]
+pub struct AuthSegment {
+    array: ArrayInSHM<AuthSegmentID, AuthChallenge, usize>,
+}
+
+impl AuthSegment {
+    pub fn create(challenge: AuthChallenge, shm_protocols: &[ProtocolID]) -> ZResult<Self> {
+        let array = ArrayInSHM::<AuthSegmentID, AuthChallenge, usize>::create(
+            1 + shm_protocols.len(),
+            AUTH_SEGMENT_PREFIX,
+        )?;
+        unsafe {
+            (*array.elem_mut(0)) = challenge;
+            for elem in 1..array.elem_count() {
+                (*array.elem_mut(elem)) = shm_protocols[elem - 1] as u64;
+            }
+        };
+        Ok(Self { array })
+    }
+
+    pub fn open(id: AuthSegmentID) -> ZResult<Self> {
+        let array = ArrayInSHM::open(id, AUTH_SEGMENT_PREFIX)?;
+        Ok(Self { array })
+    }
+
+    pub fn challenge(&self) -> AuthChallenge {
+        unsafe { *self.array.elem(0) }
+    }
+
+    pub fn protocols(&self) -> Vec<ProtocolID> {
+        let mut result = vec![];
+        for elem in 1..self.array.elem_count() {
+            result.push(unsafe { *self.array.elem(elem) as u32 });
+        }
+        result
+    }
+
+    pub fn id(&self) -> AuthSegmentID {
+        self.array.id()
+    }
+}
+
+/*************************************/
+/*          Authenticator            */
+/*************************************/
+pub(crate) struct AuthUnicast {
+    segment: AuthSegment,
+}
+
+impl Deref for AuthUnicast {
+    type Target = AuthSegment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.segment
+    }
+}
+
+impl AuthUnicast {
+    pub fn new(shm_protocols: &[ProtocolID]) -> ZResult<Self> {
+        // Create a challenge for session establishment
+        let mut prng = PseudoRng::from_entropy();
+        let nonce = prng.gen();
+
+        // allocate SHM segment with challenge
+        let segment = AuthSegment::create(nonce, shm_protocols)?;
+
+        Ok(Self { segment })
+    }
+}
 
 /*************************************/
 /*             InitSyn               */
@@ -157,7 +232,6 @@ impl StateOpen {
 
     #[cfg(test)]
     pub(crate) fn rand() -> Self {
-        use rand::Rng;
         let mut rng = rand::thread_rng();
         Self {
             negotiated_to_use_shm: rng.gen_bool(0.5),

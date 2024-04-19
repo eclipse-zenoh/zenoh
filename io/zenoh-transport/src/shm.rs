@@ -30,7 +30,7 @@ use zenoh_shm::{
     SharedMemoryBufInfo,
 };
 
-use crate::unicast::establishment::ext::shm::auth_segment::AuthSegment;
+use crate::unicast::establishment::ext::shm::AuthSegment;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportShmConfig {

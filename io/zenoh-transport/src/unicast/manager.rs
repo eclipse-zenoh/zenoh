@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use super::establishment::ext::shm::auth_unicast::AuthUnicast;
+use super::establishment::ext::shm::AuthUnicast;
 use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
