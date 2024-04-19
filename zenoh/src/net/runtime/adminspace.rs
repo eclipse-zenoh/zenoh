@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
-use crate::config::PluginLoad;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::plugins::sealed::{self as plugins};
@@ -64,7 +63,7 @@ pub struct AdminSpace {
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
-    Start(PluginLoad),
+    Start(crate::config::PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -89,7 +88,7 @@ impl ConfigValidator for AdminSpace {
 impl AdminSpace {
     fn start_plugin(
         plugin_mgr: &mut plugins::PluginsManager,
-        config: &PluginLoad,
+        config: &crate::config::PluginLoad,
         start_args: &Runtime,
     ) -> ZResult<()> {
         let name = &config.name;
@@ -101,6 +100,7 @@ impl AdminSpace {
         } else {
             plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
         };
+
         let loaded = if let Some(loaded) = declared.loaded_mut() {
             tracing::warn!(
                 "Plugin `{}` was already loaded from {}",
@@ -111,6 +111,7 @@ impl AdminSpace {
         } else {
             declared.load()?
         };
+
         if let Some(started) = loaded.started_mut() {
             tracing::warn!("Plugin `{}` was already started", started.name());
         } else {
