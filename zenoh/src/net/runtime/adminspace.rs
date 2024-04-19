@@ -75,23 +75,12 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        let mut plugin_mgr = zlock!(self.context.plugins_mgr);
-        let plugin = if let Some(plugin) = plugin_mgr.started_plugin(name) {
-            plugin
-        } else {
-            Self::start_plugin(
-                &mut plugin_mgr,
-                &PluginLoad {
-                    name: name.to_string(),
-                    paths: None,
-                    required: false,
-                },
-                &self.context.runtime,
-            )?;
-            plugin_mgr.started_plugin(name).ok_or(format!(
-                "Internal error: plugin `{}` successfully started but not found in running plugins list",
-                name
-            ))?
+        let plugin_mgr = zlock!(self.context.plugins_mgr);
+        let Some(plugin) = plugin_mgr.started_plugin(name) else {
+            tracing::warn!("Plugin `{}` is not started", name);
+            // If plugin not started, just allow any config. The plugin `name` will be attempted to start with this config
+            // on config comparison (see `PluginDiff`)
+            return Ok(None);
         };
         plugin.instance().config_checker(path, current, new)
     }
