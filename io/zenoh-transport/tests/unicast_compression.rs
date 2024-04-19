@@ -215,10 +215,7 @@ mod tests {
             let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
         }
 
-        let client_transport = client_manager
-            .get_transport_unicast(&router_id)
-            .await
-            .unwrap();
+        let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
 
         // Return the handlers
         (
@@ -357,13 +354,12 @@ mod tests {
         {
             let c_stats = client_transport.get_stats().unwrap().report();
             println!("\tClient: {:?}", c_stats);
-            let r_stats = router_manager
-                .get_transport_unicast(&client_manager.config.zid)
-                .await
-                .unwrap()
-                .get_stats()
-                .map(|s| s.report())
-                .unwrap();
+            let r_stats =
+                ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
+                    .unwrap()
+                    .get_stats()
+                    .map(|s| s.report())
+                    .unwrap();
             println!("\tRouter: {:?}", r_stats);
         }
 

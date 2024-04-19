@@ -151,7 +151,7 @@ async fn openclose_transport(
     println!("Transport Open Close [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Open Close [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Open Close [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 

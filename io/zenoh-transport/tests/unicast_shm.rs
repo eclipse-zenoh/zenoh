@@ -231,17 +231,13 @@ mod tests {
 
         // Retrieve the transports
         println!("Transport SHM [2a]");
-        let peer_shm02_transport = peer_shm01_manager
-            .get_transport_unicast(&peer_shm02)
-            .await
-            .unwrap();
+        let peer_shm02_transport =
+            ztimeout!(peer_shm01_manager.get_transport_unicast(&peer_shm02)).unwrap();
         assert!(peer_shm02_transport.is_shm().unwrap());
 
         println!("Transport SHM [2b]");
-        let peer_net01_transport = peer_shm01_manager
-            .get_transport_unicast(&peer_net01)
-            .await
-            .unwrap();
+        let peer_net01_transport =
+            ztimeout!(peer_shm01_manager.get_transport_unicast(&peer_net01)).unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
         let layout = shm01.alloc_layout().size(MSG_SIZE).res().unwrap();
