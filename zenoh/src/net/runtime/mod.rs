@@ -24,13 +24,16 @@ use super::primitives::DeMux;
 use super::routing;
 use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
-use crate::plugins::sealed::PluginsManager;
-use crate::{GIT_VERSION, LONG_VERSION};
+use crate::GIT_VERSION;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::{plugins::sealed::PluginsManager, LONG_VERSION};
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
-use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::sync::{Arc, Weak};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -58,6 +61,7 @@ pub(crate) struct RuntimeState {
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
     task_controller: TaskController,
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
     plugins_manager: Mutex<PluginsManager>,
 }
 
@@ -122,6 +126,7 @@ impl Runtime {
             .build(handler.clone())?;
 
         // Create plugin_manager and load plugins
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
         let (plugins_manager, plugins) = crate::plugins::loader::load_plugins(&config);
 
         let config = Notifier::new(config);
@@ -137,6 +142,7 @@ impl Runtime {
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
                 task_controller: TaskController::default(),
+                #[cfg(all(feature = "unstable", feature = "plugins"))]
                 plugins_manager: Mutex::new(plugins_manager),
             }),
         };
@@ -144,6 +150,7 @@ impl Runtime {
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
         // Start plugins
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
         crate::plugins::loader::start_plugins(&runtime, plugins);
 
         // Start notifier task
@@ -174,6 +181,7 @@ impl Runtime {
         });
 
         // Admin space
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
         AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
 
         Ok(runtime)
@@ -184,6 +192,7 @@ impl Runtime {
         &self.state.manager
     }
 
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
     #[inline(always)]
     pub(crate) fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
         zlock!(self.state.plugins_manager)

@@ -14,6 +14,7 @@ use super::routing::dispatcher::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
@@ -28,7 +29,9 @@ use std::sync::Mutex;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
@@ -59,6 +62,7 @@ pub struct AdminSpace {
     context: Arc<AdminContext>,
 }
 
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
@@ -73,16 +77,25 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        let plugins_mgr = self.context.runtime.plugins_manager();
-        let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
-            "Plugin `{}` is not running, but its configuration is being changed",
-            name
-        ))?;
-        plugin.instance().config_checker(path, current, new)
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        {
+            let plugins_mgr = self.context.runtime.plugins_manager();
+            let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
+                "Plugin `{}` is not running, but its configuration is being changed",
+                name
+            ))?;
+            plugin.instance().config_checker(path, current, new)
+        }
+        #[cfg(not(all(feature = "unstable", feature = "plugins")))]
+        {
+            let _ = (name, path, current, new);
+            Ok(None)
+        }
     }
 }
 
 impl AdminSpace {
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
     fn start_plugin(
         plugin_mgr: &mut plugins::PluginsManager,
         config: &crate::config::PluginLoad,
@@ -158,10 +171,14 @@ impl AdminSpace {
                 .unwrap(),
             Arc::new(queryables_data),
         );
+
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
         handlers.insert(
             format!("@/router/{zid_str}/plugins/**").try_into().unwrap(),
             Arc::new(plugins_data),
         );
+
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
         handlers.insert(
             format!("@/router/{zid_str}/status/plugins/**")
                 .try_into()
@@ -169,6 +186,7 @@ impl AdminSpace {
             Arc::new(plugins_status),
         );
 
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
@@ -197,72 +215,76 @@ impl AdminSpace {
             .lock()
             .set_plugin_validator(Arc::downgrade(&admin));
 
-        let cfg_rx = admin.context.runtime.state.config.subscribe();
-        tokio::task::spawn({
-            let admin = admin.clone();
-            async move {
-                while let Ok(change) = cfg_rx.recv_async().await {
-                    let change = change.strip_prefix('/').unwrap_or(&change);
-                    if !change.starts_with("plugins") {
-                        continue;
-                    }
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        {
+            let cfg_rx = admin.context.runtime.state.config.subscribe();
 
-                    let requested_plugins = {
-                        let cfg_guard = admin.context.runtime.state.config.lock();
-                        cfg_guard.plugins().load_requests().collect::<Vec<_>>()
-                    };
-                    let mut diffs = Vec::new();
-                    for plugin in active_plugins.keys() {
-                        if !requested_plugins.iter().any(|r| &r.name == plugin) {
-                            diffs.push(PluginDiff::Delete(plugin.clone()))
+            tokio::task::spawn({
+                let admin = admin.clone();
+                async move {
+                    while let Ok(change) = cfg_rx.recv_async().await {
+                        let change = change.strip_prefix('/').unwrap_or(&change);
+                        if !change.starts_with("plugins") {
+                            continue;
                         }
-                    }
-                    for request in requested_plugins {
-                        if let Some(active) = active_plugins.get(&request.name) {
-                            if request
-                                .paths
-                                .as_ref()
-                                .map(|p| p.contains(active))
-                                .unwrap_or(true)
-                            {
-                                continue;
+
+                        let requested_plugins = {
+                            let cfg_guard = admin.context.runtime.state.config.lock();
+                            cfg_guard.plugins().load_requests().collect::<Vec<_>>()
+                        };
+                        let mut diffs = Vec::new();
+                        for plugin in active_plugins.keys() {
+                            if !requested_plugins.iter().any(|r| &r.name == plugin) {
+                                diffs.push(PluginDiff::Delete(plugin.clone()))
                             }
-                            diffs.push(PluginDiff::Delete(request.name.clone()))
                         }
-                        diffs.push(PluginDiff::Start(request))
-                    }
-                    let mut plugins_mgr = admin.context.runtime.plugins_manager();
-                    for diff in diffs {
-                        match diff {
-                            PluginDiff::Delete(name) => {
-                                active_plugins.remove(name.as_str());
-                                if let Some(running) = plugins_mgr.started_plugin_mut(&name) {
-                                    running.stop()
+                        for request in requested_plugins {
+                            if let Some(active) = active_plugins.get(&request.name) {
+                                if request
+                                    .paths
+                                    .as_ref()
+                                    .map(|p| p.contains(active))
+                                    .unwrap_or(true)
+                                {
+                                    continue;
                                 }
+                                diffs.push(PluginDiff::Delete(request.name.clone()))
                             }
-                            PluginDiff::Start(plugin) => {
-                                if let Err(e) = Self::start_plugin(
-                                    &mut plugins_mgr,
-                                    &plugin,
-                                    &admin.context.runtime,
-                                ) {
-                                    if plugin.required {
-                                        panic!("Failed to load plugin `{}`: {}", plugin.name, e)
-                                    } else {
-                                        tracing::error!(
-                                            "Failed to load plugin `{}`: {}",
-                                            plugin.name,
-                                            e
-                                        )
+                            diffs.push(PluginDiff::Start(request))
+                        }
+                        let mut plugins_mgr = admin.context.runtime.plugins_manager();
+                        for diff in diffs {
+                            match diff {
+                                PluginDiff::Delete(name) => {
+                                    active_plugins.remove(name.as_str());
+                                    if let Some(running) = plugins_mgr.started_plugin_mut(&name) {
+                                        running.stop()
+                                    }
+                                }
+                                PluginDiff::Start(plugin) => {
+                                    if let Err(e) = Self::start_plugin(
+                                        &mut plugins_mgr,
+                                        &plugin,
+                                        &admin.context.runtime,
+                                    ) {
+                                        if plugin.required {
+                                            panic!("Failed to load plugin `{}`: {}", plugin.name, e)
+                                        } else {
+                                            tracing::error!(
+                                                "Failed to load plugin `{}`: {}",
+                                                plugin.name,
+                                                e
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    tracing::info!("Running plugins: {:?}", &active_plugins)
                 }
-                tracing::info!("Running plugins: {:?}", &active_plugins)
-            }
-        });
+            });
+        }
 
         let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
@@ -490,6 +512,7 @@ fn router_data(context: &AdminContext, query: Query) {
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
     let plugins: serde_json::Value = {
         let plugins_mgr = context.runtime.plugins_manager();
         plugins_mgr
@@ -497,6 +520,8 @@ fn router_data(context: &AdminContext, query: Query) {
             .map(|rec| (rec.name(), json!({ "path": rec.path() })))
             .collect()
     };
+    #[cfg(not(all(feature = "unstable", feature = "plugins")))]
+    let plugins = serde_json::Value::Null;
 
     // locators info
     let locators: Vec<serde_json::Value> = transport_mgr
@@ -690,6 +715,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
     }
 }
 
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 fn plugins_data(context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!("@/router/{}/plugins", &context.zid_str);
@@ -708,6 +734,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
     }
 }
 
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 fn plugins_status(context: &AdminContext, query: Query) {
     let selector: crate::Selector<'_> = query.selector();
     let guard = context.runtime.plugins_manager();
@@ -776,6 +803,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     }
 }
 
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     prefix: &mut String,
     suffixes: &[&str],

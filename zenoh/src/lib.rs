@@ -141,6 +141,7 @@ pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 pub mod plugins;
 pub mod prelude;
 pub mod publication;
