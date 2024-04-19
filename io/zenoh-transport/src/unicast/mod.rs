@@ -22,7 +22,7 @@ pub(crate) mod universal;
 pub mod test_helpers;
 
 #[cfg(feature = "shared-memory")]
-pub(crate) mod shared_memory_unicast;
+use crate::shm::TransportShmConfig;
 
 use self::transport_unicast_inner::TransportUnicastTrait;
 
@@ -54,7 +54,7 @@ pub(crate) struct TransportConfigUnicast {
     #[cfg(feature = "transport_multilink")]
     pub(crate) multilink: Option<ZPublicKey>,
     #[cfg(feature = "shared-memory")]
-    pub(crate) is_shm: bool,
+    pub(crate) shm: Option<TransportShmConfig>,
     pub(crate) is_lowlatency: bool,
 }
 

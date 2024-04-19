@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use crate::multicast::shm::SharedMemoryMulticast;
 use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
 use crate::TransportManager;
 use std::collections::HashMap;
@@ -61,9 +59,6 @@ pub struct TransportManagerStateMulticast {
     pub(crate) protocols: Arc<Mutex<HashMap<String, LinkManagerMulticast>>>,
     // Established transports
     pub(crate) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
-    // Shared memory
-    #[cfg(feature = "shared-memory")]
-    pub(super) shm: Arc<SharedMemoryMulticast>,
 }
 
 pub struct TransportManagerParamsMulticast {
@@ -143,8 +138,6 @@ impl TransportManagerBuilderMulticast {
         let state = TransportManagerStateMulticast {
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
-            #[cfg(feature = "shared-memory")]
-            shm: Arc::new(SharedMemoryMulticast::make()?),
         };
 
         let params = TransportManagerParamsMulticast { config, state };

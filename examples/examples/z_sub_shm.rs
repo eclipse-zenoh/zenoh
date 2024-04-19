@@ -14,8 +14,8 @@
 use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh::shm::slice::zsliceshm::zsliceshm;
 use zenoh_examples::CommonArgs;
-use zenoh_shm::SharedMemoryBuf;
 
 #[tokio::main]
 async fn main() {
@@ -37,12 +37,12 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        match sample.payload().deserialize::<SharedMemoryBuf>() {
+        match sample.payload().deserialize::<&zsliceshm>() {
             Ok(payload) => println!(
                 ">> [Subscriber] Received {} ('{}': '{:02x?}')",
                 sample.kind(),
                 sample.key_expr().as_str(),
-                payload.as_slice()
+                payload
             ),
             Err(e) => {
                 println!(">> [Subscriber] Not a SharedMemoryBuf: {:?}", e);

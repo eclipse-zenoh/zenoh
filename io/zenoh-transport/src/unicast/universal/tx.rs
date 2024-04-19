@@ -15,6 +15,9 @@ use super::transport::TransportUnicastUniversal;
 use zenoh_core::zread;
 use zenoh_protocol::network::NetworkMessage;
 
+#[cfg(feature = "shared-memory")]
+use crate::shm::map_zmsg_to_partner;
+
 impl TransportUnicastUniversal {
     fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
         macro_rules! zpush {
@@ -61,12 +64,7 @@ impl TransportUnicastUniversal {
     pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
-            let res = if self.config.is_shm {
-                crate::shm::map_zmsg_to_shminfo(&mut msg)
-            } else {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)
-            };
-            if let Err(e) = res {
+            if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
                 tracing::trace!("Failed SHM conversion: {}", e);
                 return false;
             }

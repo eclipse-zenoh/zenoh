@@ -52,6 +52,9 @@ jobs:
       - name: Clippy unstable targets
         run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
 
+      - name: Clippy shared memory without unstable
+        run: cargo +stable clippy --all-targets --features shared-memory -- --deny warnings
+
       - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
         run: cargo +stable clippy --all-targets --all-features -- --deny warnings
@@ -92,8 +95,12 @@ jobs:
         run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM
+        if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
+        run: cargo nextest run -F shared-memory -F unstable -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
+      - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
+        run: cargo nextest run -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}

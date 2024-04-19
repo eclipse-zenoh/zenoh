@@ -135,9 +135,9 @@ impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
         }
     }
 
-    fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
+    fn payload<IntoZBytes>(self, payload: IntoZBytes) -> Self
     where
-        IntoPayload: Into<ZBytes>,
+        IntoZBytes: Into<ZBytes>,
     {
         Self {
             kind: PublicationBuilderPut {
@@ -418,9 +418,9 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     #[inline]
-    pub fn put<IntoPayload>(&self, payload: IntoPayload) -> PublisherPutBuilder<'_>
+    pub fn put<IntoZBytes>(&self, payload: IntoZBytes) -> PublisherPutBuilder<'_>
     where
-        IntoPayload: Into<ZBytes>,
+        IntoZBytes: Into<ZBytes>,
     {
         PublicationBuilder {
             publisher: self,

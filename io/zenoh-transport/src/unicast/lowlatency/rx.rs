@@ -35,8 +35,8 @@ impl TransportUnicastLowlatency {
         if let Some(callback) = callback.as_ref() {
             #[cfg(feature = "shared-memory")]
             {
-                if self.config.is_shm {
-                    crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)?;
+                if self.config.shm.is_some() {
+                    crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)?;
                 }
             }
             callback.handle_message(msg)

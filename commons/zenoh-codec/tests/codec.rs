@@ -360,15 +360,24 @@ fn codec_encoding() {
 #[cfg(feature = "shared-memory")]
 #[test]
 fn codec_shm_info() {
-    use zenoh_shm::SharedMemoryBufInfo;
+    use zenoh_shm::api::provider::chunk::ChunkDescriptor;
+    use zenoh_shm::header::descriptor::HeaderDescriptor;
+    use zenoh_shm::{watchdog::descriptor::Descriptor, SharedMemoryBufInfo};
 
     run!(SharedMemoryBufInfo, {
         let mut rng = rand::thread_rng();
-        let len = rng.gen_range(0..16);
         SharedMemoryBufInfo::new(
+            ChunkDescriptor::new(rng.gen(), rng.gen(), rng.gen()),
             rng.gen(),
             rng.gen(),
-            Alphanumeric.sample_string(&mut rng, len),
+            Descriptor {
+                id: rng.gen(),
+                index_and_bitpos: rng.gen(),
+            },
+            HeaderDescriptor {
+                id: rng.gen(),
+                index: rng.gen(),
+            },
             rng.gen(),
         )
     });

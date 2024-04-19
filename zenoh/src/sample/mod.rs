@@ -59,15 +59,15 @@ pub(crate) struct DataInfo {
 }
 
 pub(crate) trait DataInfoIntoSample {
-    fn into_sample<IntoKeyExpr, IntoPayload>(
+    fn into_sample<IntoKeyExpr, IntoZBytes>(
         self,
         key_expr: IntoKeyExpr,
-        payload: IntoPayload,
+        payload: IntoZBytes,
         #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<ZBytes>;
+        IntoZBytes: Into<ZBytes>;
 }
 
 impl DataInfoIntoSample for DataInfo {
@@ -76,15 +76,15 @@ impl DataInfoIntoSample for DataInfo {
     // The test for it is intentionally not added to avoid inserting extra "if" into hot path.
     // The correctness of the data should be ensured by the caller.
     #[inline]
-    fn into_sample<IntoKeyExpr, IntoPayload>(
+    fn into_sample<IntoKeyExpr, IntoZBytes>(
         self,
         key_expr: IntoKeyExpr,
-        payload: IntoPayload,
+        payload: IntoZBytes,
         #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<ZBytes>,
+        IntoZBytes: Into<ZBytes>,
     {
         Sample {
             key_expr: key_expr.into(),
@@ -106,15 +106,15 @@ impl DataInfoIntoSample for DataInfo {
 
 impl DataInfoIntoSample for Option<DataInfo> {
     #[inline]
-    fn into_sample<IntoKeyExpr, IntoPayload>(
+    fn into_sample<IntoKeyExpr, IntoZBytes>(
         self,
         key_expr: IntoKeyExpr,
-        payload: IntoPayload,
+        payload: IntoZBytes,
         #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoPayload: Into<ZBytes>,
+        IntoZBytes: Into<ZBytes>,
     {
         if let Some(data_info) = self {
             data_info.into_sample(
