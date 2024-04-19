@@ -18,8 +18,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use zenoh::config::{Config, ModeDependentValue, PermissionsConf, ValidatedMap};
-use zenoh::prelude::{EndPoint, WhatAmI};
-use zenoh::runtime::Runtime;
+use zenoh::prelude::r#async::*;
 use zenoh::Result;
 
 #[cfg(feature = "loki")]
@@ -106,7 +105,7 @@ fn main() {
             let config = config_from_args(&args);
             tracing::info!("Initial conf: {}", &config);
 
-            let _runtime = match Runtime::new(config).await {
+            let _session = match zenoh::open(config).res().await {
                 Ok(runtime) => runtime,
                 Err(e) => {
                     println!("{e}. Exiting...");
