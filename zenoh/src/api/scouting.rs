@@ -351,6 +351,7 @@ fn _scout(
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
+/// use zenoh::scouting::WhatAmI;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
 ///     .res()
@@ -376,3 +377,4 @@ where
         handler: DefaultHandler::default(),
     }
 }
+

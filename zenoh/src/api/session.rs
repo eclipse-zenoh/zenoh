@@ -2664,7 +2664,11 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    OpenBuilder { config }
+    OpenBuilder {
+        config,
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+        shm_clients: None,
+    }
 }
 
 /// A builder returned by [`open`] used to open a zenoh [`Session`].
@@ -2685,6 +2689,20 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     config: TryIntoConfig,
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+}
+
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    pub fn with_shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
+        self.shm_clients = Some(shm_clients);
+        self
+    }
 }
 
 impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
@@ -2705,7 +2723,12 @@ where
             .config
             .try_into()
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        Session::new(config).res_sync()
+        Session::new(
+            config,
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            self.shm_clients,
+        )
+        .res_sync()
     }
 }
 
