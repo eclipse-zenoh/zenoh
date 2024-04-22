@@ -207,7 +207,7 @@ impl TransportLinkUnicastRx {
     pub async fn recv_batch<C, T>(&mut self, buff: C) -> ZResult<RBatch>
     where
         C: Fn() -> T + Copy,
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         const ERR: &str = "Read error from link: ";
 
@@ -220,14 +220,14 @@ impl TransportLinkUnicastRx {
 
             // Read the bytes
             let slice = into
-                .as_mut_slice()
+                .as_mut()
                 .get_mut(len.len()..len.len() + l)
                 .ok_or_else(|| zerror!("{ERR}{self}. Invalid batch length or buffer size."))?;
             self.link.read_exact(slice).await?;
             len.len() + l
         } else {
             // Read the bytes
-            self.link.read(into.as_mut_slice()).await?
+            self.link.read(into.as_mut()).await?
         };
 
         // tracing::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);

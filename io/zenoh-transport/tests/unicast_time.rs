@@ -284,7 +284,7 @@ async fn time_ws_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_unixpipe_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/time_unixpipe_only".parse().unwrap();
     time_universal_transport(&endpoint).await;
 }
@@ -293,7 +293,7 @@ async fn time_unixpipe_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_unixpipe_only_with_lowlatency_transport() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/time_unixpipe_only_with_lowlatency_transport"
         .parse()
         .unwrap();
@@ -514,7 +514,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_vsock_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
     time_lowlatency_transport(&endpoint).await;
 }

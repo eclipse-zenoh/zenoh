@@ -115,7 +115,7 @@ impl StorageRuntimeInner {
             .unwrap_or_default();
 
         let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
-            .declare_static_plugin::<MemoryBackend>();
+            .declare_static_plugin::<MemoryBackend>(true);
 
         let session = Arc::new(zenoh::session::init(runtime.clone()).res_sync()?);
 
@@ -201,10 +201,10 @@ impl StorageRuntimeInner {
             declared
         } else if let Some(paths) = config.paths() {
             self.plugins_manager
-                .declare_dynamic_plugin_by_paths(volume_id, paths)?
+                .declare_dynamic_plugin_by_paths(volume_id, paths, true)?
         } else {
             self.plugins_manager
-                .declare_dynamic_plugin_by_name(volume_id, backend_name)?
+                .declare_dynamic_plugin_by_name(volume_id, backend_name, true)?
         };
         let loaded = declared.load()?;
         loaded.start(config)?;

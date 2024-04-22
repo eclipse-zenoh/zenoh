@@ -43,6 +43,9 @@ jobs:
           rustup show
           rustup component add rustfmt clippy
 
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Code format check
         run: cargo fmt --check
 
@@ -51,6 +54,9 @@ jobs:
 
       - name: Clippy unstable targets
         run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
+
+      - name: Clippy shared memory without unstable
+        run: cargo +stable clippy --all-targets --features shared-memory -- --deny warnings
 
       - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
@@ -78,6 +84,9 @@ jobs:
       - name: Install latest Rust toolchain
         run: rustup show
 
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Set rustflags
         shell: bash
         run: |
@@ -92,8 +101,12 @@ jobs:
         run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM
+        if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
+        run: cargo nextest run -F shared-memory -F unstable -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
+      - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
+        run: cargo nextest run -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -102,13 +115,23 @@ jobs:
       - name: Run doctests
         run: cargo test --doc
 
+  valgrind:
+    name: Memory leak checks
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup show
+
       - name: Install valgrind
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: sudo apt-get install -y valgrind
-        shell: bash
+        uses: taiki-e/install-action@valgrind
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Run memory leaks check
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: ci/valgrind-check/run.sh
         shell: bash
 
@@ -120,7 +143,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test]
+    needs: [check, test, valgrind]
     if: always()
     steps:
       - name: Check whether all jobs pass

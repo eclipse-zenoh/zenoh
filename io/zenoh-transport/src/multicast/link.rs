@@ -205,12 +205,12 @@ impl TransportLinkMulticastRx {
     pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<(RBatch, Locator)>
     where
         C: Fn() -> T + Copy,
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         const ERR: &str = "Read error from link: ";
 
         let mut into = (buff)();
-        let (n, locator) = self.inner.link.read(into.as_mut_slice()).await?;
+        let (n, locator) = self.inner.link.read(into.as_mut()).await?;
         let buffer = ZSlice::new(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
         let mut batch = RBatch::new(self.inner.config.batch, buffer);
         batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
@@ -539,7 +539,7 @@ async fn rx_task(
     where
         T: ZSliceBuffer + 'static,
         F: Fn() -> T,
-        RecyclingObject<T>: ZSliceBuffer,
+        RecyclingObject<T>: AsMut<[u8]> + ZSliceBuffer,
     {
         let (rbatch, locator) = link
             .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))

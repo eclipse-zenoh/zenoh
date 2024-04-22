@@ -27,7 +27,7 @@ zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();
 }
 /// A zenoh plugin, when started, must return this type.
-pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
+pub type RunningPlugin = Box<dyn RunningPluginTrait + Send + Sync + 'static>;
 
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
 pub trait ZenohPlugin: Plugin<StartArgs = Runtime, Instance = RunningPlugin> {}

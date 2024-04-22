@@ -82,6 +82,16 @@ extern crate zenoh_result;
 mod api;
 mod net;
 
+
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+pub use zenoh_shm::api as shm;
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
+
+lazy_static::lazy_static!(
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
+);
+
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",

@@ -41,16 +41,14 @@ async fn close_session(session: Session) {
 async fn zenoh_events() {
     let session = open_session(&["tcp/127.0.0.1:18447"], &[]).await;
     let zid = session.zid();
-    let sub1 = session
+    let sub1 = ztimeout!(session
         .declare_subscriber(format!("@/session/{zid}/transport/unicast/*"))
-        .res()
-        .await
-        .unwrap();
-    let sub2 = session
+        .res())
+    .unwrap();
+    let sub2 = ztimeout!(session
         .declare_subscriber(format!("@/session/{zid}/transport/unicast/*/link/*"))
-        .res()
-        .await
-        .unwrap();
+        .res())
+    .unwrap();
 
     let session2 = open_session(&["tcp/127.0.0.1:18448"], &["tcp/127.0.0.1:18447"]).await;
     let zid2 = session2.zid();
@@ -103,7 +101,7 @@ async fn zenoh_events() {
     assert!(key_expr.starts_with(&format!("@/session/{zid}/transport/unicast/{zid2}/link/")));
     assert!(sample.as_ref().unwrap().kind() == SampleKind::Delete);
 
-    sub2.undeclare().res().await.unwrap();
-    sub1.undeclare().res().await.unwrap();
+    ztimeout!(sub2.undeclare().res()).unwrap();
+    ztimeout!(sub1.undeclare().res()).unwrap();
     close_session(session).await;
 }

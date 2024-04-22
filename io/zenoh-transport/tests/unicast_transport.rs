@@ -222,6 +222,11 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
 const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
+#[cfg(any(
+    feature = "transport_tcp",
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
 // Transport Handler for the router
@@ -386,10 +391,7 @@ async fn open_transport_unicast(
         let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
-    let client_transport = client_manager
-        .get_transport_unicast(&router_id)
-        .await
-        .unwrap();
+    let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
 
     // Return the handlers
     (
@@ -529,9 +531,7 @@ async fn run_single(
     {
         let c_stats = client_transport.get_stats().unwrap().report();
         println!("\tClient: {:?}", c_stats);
-        let r_stats = router_manager
-            .get_transport_unicast(&client_manager.config.zid)
-            .await
+        let r_stats = ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
             .unwrap()
             .get_stats()
             .map(|s| s.report())

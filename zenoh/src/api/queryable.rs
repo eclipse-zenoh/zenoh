@@ -148,15 +148,15 @@ impl Query {
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
-    pub fn reply<'b, TryIntoKeyExpr, IntoPayload>(
+    pub fn reply<'b, TryIntoKeyExpr, IntoZBytes>(
         &self,
         key_expr: TryIntoKeyExpr,
-        payload: IntoPayload,
+        payload: IntoZBytes,
     ) -> ReplyBuilder<'_, 'b, ReplyBuilderPut>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<ZBytes>,
+        IntoZBytes: Into<ZBytes>,
     {
         ReplyBuilder {
             query: self,
@@ -533,6 +533,8 @@ impl SyncResolve for ReplyErrBuilder<'_> {
             payload: ResponseBody::Err(zenoh::Err {
                 encoding: self.value.encoding.into(),
                 ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
                 ext_unknown: vec![],
                 payload: self.value.payload.into(),
             }),
