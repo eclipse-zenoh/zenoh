@@ -15,14 +15,8 @@
 //! ZBytes primitives.
 use crate::buffers::ZBuf;
 use std::{
-    borrow::Cow,
-    convert::Infallible,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Deref},
-    str::Utf8Error,
-    string::FromUtf8Error,
-    sync::Arc,
+    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref, str::Utf8Error,
+    string::FromUtf8Error, sync::Arc,
 };
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
@@ -42,62 +36,6 @@ use zenoh_shm::{
     },
     SharedMemoryBuf,
 };
-
-pub enum Cipher {
-    Aes512(ZSlice),
-}
-
-pub enum Compression {
-    LZ4,
-}
-
-#[derive(Default)]
-pub struct Transformation {
-    cipher: Option<Cipher>,
-    compression: Option<Compression>,
-}
-
-impl From<Cipher> for Transformation {
-    fn from(value: Cipher) -> Self {
-        Transformation {
-            cipher: Some(value),
-            ..Default::default()
-        }
-    }
-}
-
-impl From<Compression> for Transformation {
-    fn from(value: Compression) -> Self {
-        Transformation {
-            compression: Some(value),
-            ..Default::default()
-        }
-    }
-}
-
-impl Add<Transformation> for Transformation {
-    type Output = Transformation;
-
-    fn add(mut self, rhs: Self) -> Self::Output {
-        self += rhs;
-        self
-    }
-}
-
-impl AddAssign<Transformation> for Transformation {
-    fn add_assign(&mut self, rhs: Transformation) {
-        fn combine<T>(mut lhs: Option<T>, mut rhs: Option<T>) -> Option<T> {
-            match (lhs.take(), rhs.take()) {
-                (Some(_), Some(r)) => Some(r),
-                (None, r) => r,
-                (l, None) => l,
-            }
-        }
-
-        self.cipher = combine(self.cipher.take(), rhs.cipher);
-        self.compression = combine(self.compression.take(), rhs.compression);
-    }
-}
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
