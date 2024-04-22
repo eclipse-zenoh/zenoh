@@ -10,7 +10,8 @@ test(=zenoh_session_unicast) |
 test(=zenoh_session_multicast) |
 test(=transport_tcp_intermittent) |
 test(=transport_tcp_intermittent_for_lowlatency_transport) |
-test(=three_node_combination)
+test(=three_node_combination) |
+test(=downsampling_by_keyexpr)
 """
 threads-required = 'num-cpus'
 slow-timeout = { period = "60s", terminate-after = 6 }
