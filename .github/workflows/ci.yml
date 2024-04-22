@@ -43,6 +43,9 @@ jobs:
           rustup show
           rustup component add rustfmt clippy
 
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Code format check
         run: cargo fmt --check
 
@@ -77,6 +80,9 @@ jobs:
 
       - name: Install latest Rust toolchain
         run: rustup show
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Set rustflags
         shell: bash
