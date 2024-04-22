@@ -47,7 +47,6 @@ use zenoh_transport::unicast::TransportUnicast;
 
 pub struct AdminContext {
     runtime: Runtime,
-    zid_str: String,
     version: String,
     metadata: serde_json::Value,
 }
@@ -210,12 +209,11 @@ impl AdminSpace {
 
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
-            zid_str,
             version,
             metadata,
         });
         let admin = Arc::new(AdminSpace {
-            zid: runtime.zid(),
+            zid: runtime.state.zid,
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
@@ -370,7 +368,7 @@ impl Primitives for AdminSpace {
 
         if let Some(key) = msg.wire_expr.as_str().strip_prefix(&format!(
             "@/{}/{}/config/",
-            self.context.runtime.state.whatami, &self.context.zid_str
+            self.context.runtime.state.whatami, self.context.runtime.state.zid
         )) {
             match msg.payload {
                 PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
@@ -378,7 +376,7 @@ impl Primitives for AdminSpace {
                         tracing::trace!(
                             "Insert conf value /@/{}/{}/config/{} : {}",
                             self.context.runtime.state.whatami,
-                            &self.context.zid_str,
+                            self.context.runtime.state.zid,
                             key,
                             json
                         );
@@ -387,7 +385,7 @@ impl Primitives for AdminSpace {
                             error!(
                                 "Error inserting conf value /@/{}/{}/config/{} : {} - {}",
                                 self.context.runtime.state.whatami,
-                                &self.context.zid_str,
+                                self.context.runtime.state.zid,
                                 key,
                                 json,
                                 e
@@ -396,14 +394,14 @@ impl Primitives for AdminSpace {
                     }
                     Err(e) => error!(
                         "Received non utf8 conf value on /@/{}/{}/config/{} : {}",
-                        self.context.runtime.state.whatami, &self.context.zid_str, key, e
+                        self.context.runtime.state.whatami, self.context.runtime.state.zid, key, e
                     ),
                 },
                 PushBody::Del(_) => {
                     tracing::trace!(
                         "Deleting conf value /@/{}/{}/config/{}",
                         self.context.runtime.state.whatami,
-                        &self.context.zid_str,
+                        self.context.runtime.state.zid,
                         key
                     );
                     if let Err(e) = self.context.runtime.state.config.remove(key) {
@@ -522,10 +520,12 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
 }
 
 fn local_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr =
-        format!("@/{}/{}", context.runtime.state.whatami, context.zid_str)
-            .try_into()
-            .unwrap();
+    let reply_key: OwnedKeyExpr = format!(
+        "@/{}/{}",
+        context.runtime.state.whatami, context.runtime.state.zid
+    )
+    .try_into()
+    .unwrap();
 
     let transport_mgr = context.runtime.manager().clone();
 
@@ -582,7 +582,7 @@ fn local_data(context: &AdminContext, query: Query) {
 
     #[allow(unused_mut)]
     let mut json = json!({
-        "zid": context.zid_str,
+        "zid": context.runtime.state.zid,
         "version": context.version,
         "metadata": context.metadata,
         "locators": locators,
@@ -618,7 +618,7 @@ fn local_data(context: &AdminContext, query: Query) {
 fn metrics(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/metrics",
-        context.runtime.state.whatami, context.zid_str
+        context.runtime.state.whatami, context.runtime.state.zid
     )
     .try_into()
     .unwrap();
@@ -655,7 +655,7 @@ zenoh_build{{version="{}"}} 1
 fn routers_linkstate_data(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/linkstate/routers",
-        context.runtime.state.whatami, context.zid_str
+        context.runtime.state.whatami, context.runtime.state.zid
     )
     .try_into()
     .unwrap();
@@ -683,7 +683,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 fn peers_linkstate_data(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/linkstate/peers",
-        context.runtime.state.whatami, context.zid_str
+        context.runtime.state.whatami, context.runtime.state.zid
     )
     .try_into()
     .unwrap();
@@ -714,7 +714,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         let key = KeyExpr::try_from(format!(
             "@/{}/{}/subscriber/{}",
             context.runtime.state.whatami,
-            context.zid_str,
+            context.runtime.state.zid,
             sub.expr()
         ))
         .unwrap();
@@ -732,7 +732,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
         let key = KeyExpr::try_from(format!(
             "@/{}/{}/queryable/{}",
             context.runtime.state.whatami,
-            context.zid_str,
+            context.runtime.state.zid,
             qabl.expr()
         ))
         .unwrap();
@@ -749,7 +749,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!(
         "@/{}/{}/plugins",
-        context.runtime.state.whatami, &context.zid_str
+        context.runtime.state.whatami, &context.runtime.state.zid
     );
     let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
     tracing::debug!("requested plugins status {:?}", query.key_expr());
@@ -772,7 +772,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
         "@/{}/{}/status/plugins/",
-        context.runtime.state.whatami, &context.zid_str
+        context.runtime.state.whatami, &context.runtime.state.zid
     );
 
     for plugin in guard.started_plugins_iter() {
