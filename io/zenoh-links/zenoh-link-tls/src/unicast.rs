@@ -1,5 +1,4 @@
-//
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2024 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -10,7 +9,7 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
+
 use crate::{
     base64_decode, config::*, get_tls_addr, get_tls_host, get_tls_server_name,
     TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,

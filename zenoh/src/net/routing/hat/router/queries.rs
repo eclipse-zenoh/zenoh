@@ -1,5 +1,4 @@
-//
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2024 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -10,7 +9,7 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
+
 use super::network::Network;
 use super::{face_hat, face_hat_mut, get_routes_entries, hat, hat_mut, res_hat, res_hat_mut};
 use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};

@@ -1,5 +1,4 @@
-//
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2024 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -10,7 +9,7 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
+
 use super::{
     get_udp_addrs, socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU,
     UDP_MAX_MTU,
