@@ -20,6 +20,7 @@ where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
     instance: Option<Instance>,
+    required: bool,
     phantom: PhantomData<P>,
 }
 
@@ -27,9 +28,10 @@ impl<StartArgs, Instance: PluginInstance, P> StaticPlugin<StartArgs, Instance, P
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
-    pub fn new() -> Self {
+    pub fn new(required: bool) -> Self {
         Self {
             instance: None,
+            required,
             phantom: PhantomData,
         }
     }
@@ -92,12 +94,15 @@ where
     fn as_status(&self) -> &dyn PluginStatus {
         self
     }
+    fn required(&self) -> bool {
+        self.required
+    }
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         if self.instance.is_none() {
-            log::debug!("Plugin `{}` started", self.name());
+            tracing::debug!("Plugin `{}` started", self.name());
             self.instance = Some(P::start(self.name(), args)?);
         } else {
-            log::warn!("Plugin `{}` already started", self.name());
+            tracing::warn!("Plugin `{}` already started", self.name());
         }
         Ok(self)
     }
@@ -126,7 +131,7 @@ where
         self
     }
     fn stop(&mut self) {
-        log::debug!("Plugin `{}` stopped", self.name());
+        tracing::debug!("Plugin `{}` stopped", self.name());
         self.instance = None;
     }
     fn instance(&self) -> &Instance {

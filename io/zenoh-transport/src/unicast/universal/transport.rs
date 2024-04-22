@@ -24,11 +24,11 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
-use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use async_trait::async_trait;
 use std::fmt::DebugStruct;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 
@@ -43,13 +43,6 @@ macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
         $guard.iter().find(|tl| tl.link == $link)
-    };
-}
-
-macro_rules! zlinkgetmut {
-    ($guard:expr, $link:expr) => {
-        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter_mut().find(|tl| tl.link == $link)
     };
 }
 
@@ -137,11 +130,12 @@ impl TransportUnicastUniversal {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) -> ZResult<()> {
-        log::debug!(
+        tracing::debug!(
             "[{}] Closing transport with peer: {}",
             self.manager.config.zid,
             self.config.zid
         );
+
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;
@@ -219,31 +213,13 @@ impl TransportUnicastUniversal {
         }
     }
 
-    pub(crate) fn stop_rx_tx(&self, link: &Link) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, *link) {
-            Some(l) => {
-                l.stop_rx();
-                l.stop_tx();
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not stop Link RX {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
-    }
-
     async fn sync(&self, initial_sn_rx: TransportSn) -> ZResult<()> {
         // Mark the transport as alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = zasynclock!(self.alive);
         if *a_guard {
             let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             return Err(e.into());
         }
 
@@ -329,12 +305,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             // Start the TX loop
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            link.start_tx(
-                transport.clone(),
-                consumer,
-                &self.manager.tx_executor,
-                keep_alive,
-            );
+            link.start_tx(transport.clone(), consumer, keep_alive);
 
             // Start the RX loop
             link.start_rx(transport, other_lease);
@@ -388,7 +359,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*           TERMINATION             */
     /*************************************/
     async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
-        log::trace!("Closing link {} with peer: {}", link, self.config.zid);
+        tracing::trace!("Closing link {} with peer: {}", link, self.config.zid);
 
         let transport_link_pipeline = zlinkget!(zread!(self.links), link)
             .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?
@@ -409,7 +380,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing transport with peer: {}", self.config.zid);
+        tracing::trace!("Closing transport with peer: {}", self.config.zid);
 
         let mut pipelines = zread!(self.links)
             .iter()

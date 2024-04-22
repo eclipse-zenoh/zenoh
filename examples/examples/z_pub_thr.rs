@@ -20,7 +20,7 @@ use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
     let args = Args::parse();
 
     let mut prio = Priority::default();
@@ -44,6 +44,7 @@ fn main() {
         .res()
         .unwrap();
 
+    println!("Press CTRL-C to quit...");
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
     loop {

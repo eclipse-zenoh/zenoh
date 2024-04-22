@@ -11,26 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use x509_parser::prelude::*;
-
 use crate::base64_decode;
 use crate::{
     config::*, get_quic_addr, verify::WebPkiVerifierAnyServerName, ALPN_QUIC_HTTP,
     QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
-use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use async_std::prelude::FutureExt;
-use async_std::sync::Mutex as AsyncMutex;
-use async_std::task;
 use async_trait::async_trait;
 use rustls::{Certificate, PrivateKey};
 use rustls_pemfile::Item;
 use std::fmt;
 use std::io::BufReader;
 use std::net::IpAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio_util::sync::CancellationToken;
+use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkAuthIdBuilder, LinkAuthType, LinkManagerUnicastTrait,
@@ -38,7 +35,6 @@ use zenoh_link_commons::{
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZError, ZResult};
-use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
     connection: quinn::Connection,
@@ -75,11 +71,11 @@ impl LinkUnicastQuic {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastQuic {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing QUIC link: {}", self);
+        tracing::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
         let mut guard = zasynclock!(self.send);
         if let Err(e) = guard.finish().await {
-            log::trace!("Error closing QUIC stream {}: {}", self, e);
+            tracing::trace!("Error closing QUIC stream {}: {}", self, e);
         }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
@@ -88,7 +84,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.send);
         guard.write(buffer).await.map_err(|e| {
-            log::trace!("Write error on QUIC link {}: {}", self, e);
+            tracing::trace!("Write error on QUIC link {}: {}", self, e);
             zerror!(e).into()
         })
     }
@@ -96,7 +92,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.send);
         guard.write_all(buffer).await.map_err(|e| {
-            log::trace!("Write error on QUIC link {}: {}", self, e);
+            tracing::trace!("Write error on QUIC link {}: {}", self, e);
             zerror!(e).into()
         })
     }
@@ -108,7 +104,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
             .await
             .map_err(|e| {
                 let e = zerror!("Read error on QUIC link {}: {}", self, e);
-                log::trace!("{}", &e);
+                tracing::trace!("{}", &e);
                 e
             })?
             .ok_or_else(|| {
@@ -117,7 +113,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
                     self,
                     guard.id()
                 );
-                log::trace!("{}", &e);
+                tracing::trace!("{}", &e);
                 e.into()
             })
     }
@@ -126,7 +122,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         let mut guard = zasynclock!(self.recv);
         guard.read_exact(buffer).await.map_err(|e| {
             let e = zerror!("Read error on QUIC link {}: {}", self, e);
-            log::trace!("{}", &e);
+            tracing::trace!("{}", &e);
             e.into()
         })
     }
@@ -160,6 +156,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     fn is_streamed(&self) -> bool {
         true
     }
+    #[inline(always)]
     fn get_auth_identifier(&self) -> LinkAuthId {
         self.auth_identifier.clone()
     }
@@ -225,7 +222,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .parse()?;
 
         if !server_name_verification {
-            log::warn!("Skipping name verification of servers");
+            tracing::warn!("Skipping name verification of servers");
         }
 
         // Initialize the QUIC connection
@@ -237,7 +234,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else if let Some(b64_certificate) = epconf.get(TLS_ROOT_CA_CERTIFICATE_BASE64) {
             base64_decode(b64_certificate)?
         } else if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-            async_std::fs::read(value)
+            tokio::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
         } else {
@@ -302,7 +299,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .open_bi()
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
-
         let auth_id = get_tls_cert_name(quic_conn.clone())?;
 
         let link = Arc::new(LinkUnicastQuic::new(
@@ -313,6 +309,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             recv,
             auth_id.into(),
         ));
+
         Ok(LinkUnicast(link))
     }
 
@@ -331,7 +328,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else if let Some(b64_certificate) = epconf.get(TLS_SERVER_CERTIFICATE_BASE64) {
             base64_decode(b64_certificate)?
         } else if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_FILE) {
-            async_std::fs::read(value)
+            tokio::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
         } else {
@@ -351,17 +348,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else if let Some(b64_key) = epconf.get(TLS_SERVER_PRIVATE_KEY_BASE64) {
             base64_decode(b64_key)?
         } else if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_FILE) {
-            async_std::fs::read(value)
+            tokio::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
         } else {
             bail!("No QUIC CA private key has been provided.");
         };
         let items: Vec<Item> = rustls_pemfile::read_all(&mut BufReader::new(f.as_slice()))
-            .map(|result| {
-                result.map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))
-            })
-            .collect::<Result<Vec<Item>, ZError>>()?;
+            .collect::<Result<_, _>>()
+            .map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))?;
 
         let private_key = items
             .into_iter()
@@ -409,23 +404,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             endpoint.config(),
         )?;
 
-        let active = Arc::new(AtomicBool::new(true));
-        let signal = Signal::new();
+        // Spawn the accept loop for the listener
+        let token = self.listeners.token.child_token();
+        let c_token = token.clone();
 
-        let c_active = active.clone();
-        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
 
-        let handle =
-            task::spawn(
-                async move { accept_task(quic_endpoint, c_active, c_signal, c_manager).await },
-            );
+        let task = async move { accept_task(quic_endpoint, c_token, c_manager).await };
 
         // Initialize the QuicAcceptor
         let locator = endpoint.to_locator();
 
         self.listeners
-            .add_listener(endpoint, local_addr, active, signal, handle)
+            .add_listener(endpoint, local_addr, task, token)
             .await?;
 
         Ok(locator)
@@ -437,46 +428,32 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         self.listeners.del_listener(addr).await
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
+    async fn get_listeners(&self) -> Vec<EndPoint> {
         self.listeners.get_endpoints()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
+    async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
     }
 }
 
 async fn accept_task(
     endpoint: quinn::Endpoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-    enum Action {
-        Accept(quinn::Connection),
-        Stop,
-    }
-
-    async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<Action> {
-        let mut qc = acceptor
+    async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
+        let qc = acceptor
             .await
             .ok_or_else(|| zerror!("Can not accept QUIC connections: acceptor closed"))?;
-        {
-            let nqc = qc.handshake_data();
-            println!("handshake in accept function is {:?}", nqc.await);
-        }
+
         let conn = qc.await.map_err(|e| {
             let e = zerror!("QUIC acceptor failed: {:?}", e);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
-        Ok(Action::Accept(conn))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok(conn)
     }
 
     let src_addr = endpoint
@@ -484,54 +461,58 @@ async fn accept_task(
         .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
 
     // The accept future
-    log::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
-    while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
-        let quic_conn = match accept(endpoint.accept()).race(stop(signal.clone())).await {
-            Ok(action) => match action {
-                Action::Accept(qc) => qc,
-                Action::Stop => break,
-            },
-            Err(e) => {
-                log::warn!("{} Hint: increase the system open file limit.", e);
-                // Throttle the accept loop upon an error
-                // NOTE: This might be due to various factors. However, the most common case is that
-                //       the process has reached the maximum number of open files in the system. On
-                //       Linux systems this limit can be changed by using the "ulimit" command line
-                //       tool. In case of systemd-based systems, this can be changed by using the
-                //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME)).await;
-                continue;
-            }
-        };
+    tracing::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
 
-        // Get the bideractional streams. Note that we don't allow unidirectional streams.
-        let (send, recv) = match quic_conn.accept_bi().await {
-            Ok(stream) => stream,
-            Err(e) => {
-                log::warn!("QUIC connection has no streams: {:?}", e);
-                continue;
-            }
-        };
-        let auth_id = get_tls_cert_name(quic_conn.clone())?;
-        let dst_addr = quic_conn.remote_address();
-        log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
-        // Create the new link object
-        let link = Arc::new(LinkUnicastQuic::new(
-            quic_conn,
-            src_addr,
-            Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
-            send,
-            recv,
-            auth_id.into(),
-        ));
+    loop {
+        tokio::select! {
+            _ = token.cancelled() => break,
 
-        // Communicate the new link to the initial transport manager
-        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-            log::error!("{}-{}: {}", file!(), line!(), e)
+            res = accept(endpoint.accept()) => {
+                match res {
+                    Ok(quic_conn) => {
+                        // Get the bideractional streams. Note that we don't allow unidirectional streams.
+                        let (send, recv) = match quic_conn.accept_bi().await {
+                            Ok(stream) => stream,
+                            Err(e) => {
+                                tracing::warn!("QUIC connection has no streams: {:?}", e);
+                                continue;
+                            }
+                        };
+
+                        let dst_addr = quic_conn.remote_address();
+                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
+                        // Create the new link object
+                        let auth_id = get_tls_cert_name(quic_conn.clone())?;
+
+                        let link = Arc::new(LinkUnicastQuic::new(
+                            quic_conn,
+                            src_addr,
+                            Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
+                            send,
+                            recv,
+                            auth_id.into()
+                        ));
+
+                        // Communicate the new link to the initial transport manager
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
+                        }
+
+                    }
+                    Err(e) => {
+                        tracing::warn!("{} Hint: increase the system open file limit.", e);
+                        // Throttle the accept loop upon an error
+                        // NOTE: This might be due to various factors. However, the most common case is that
+                        //       the process has reached the maximum number of open files in the system. On
+                        //       Linux systems this limit can be changed by using the "ulimit" command line
+                        //       tool. In case of systemd-based systems, this can be changed by using the
+                        //       "sysctl" command line tool.
+                        tokio::time::sleep(Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME)).await;
+                    }
+                }
+            }
         }
     }
-
     Ok(())
 }
 

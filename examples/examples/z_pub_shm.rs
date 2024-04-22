@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
@@ -22,10 +21,10 @@ use zenoh_examples::CommonArgs;
 const N: usize = 10;
 const K: u32 = 3;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), zenoh::Error> {
     // Initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     let (mut config, path, value) = parse_args();
 
@@ -44,12 +43,13 @@ async fn main() -> Result<(), zenoh::Error> {
     println!("Allocating Shared Memory Buffer...");
     let publisher = session.declare_publisher(&path).res().await.unwrap();
 
+    println!("Press CTRL-C to quit...");
     for idx in 0..(K * N as u32) {
-        sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
         let mut sbuf = match shm.alloc(1024) {
             Ok(buf) => buf,
             Err(_) => {
-                sleep(Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
                 println!(
                     "Afer failing allocation the GC collected: {} bytes -- retrying",
                     shm.garbage_collect()

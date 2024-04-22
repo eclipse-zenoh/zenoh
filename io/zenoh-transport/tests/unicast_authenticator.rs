@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{prelude::FutureExt, task};
 use std::{any::Any, sync::Arc, time::Duration};
-use zenoh_core::{zasync_executor_init, zasyncwrite};
+use zenoh_core::{zasyncwrite, ztimeout};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{EndPoint, WhatAmI, ZenohId},
@@ -31,12 +30,6 @@ use zenoh_transport::{
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 #[cfg(test)]
 struct SHRouterAuthenticator;
@@ -322,7 +315,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     // Add the locator on the router
     ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     println!("Transport Authenticator PubKey [1a2]");
-    let locators = router_manager.get_listeners();
+    let locators = router_manager.get_listeners().await;
     println!("Transport Authenticator PubKey [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -388,7 +381,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -400,8 +393,8 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+        while !router_manager.get_listeners().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -411,7 +404,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     ztimeout!(router_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 #[cfg(feature = "auth_usrpwd")]
@@ -527,7 +520,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     println!("Transport Authenticator UserPassword [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Authenticator UserPassword [1a2]");
-    let locators = router_manager.get_listeners();
+    let locators = router_manager.get_listeners().await;
     println!("Transport Authenticator UserPassword [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -548,7 +541,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -605,7 +598,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -617,13 +610,13 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+        while !router_manager.get_listeners().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
@@ -642,132 +635,93 @@ async fn run_with_lowlatency_transport(endpoint: &EndPoint) {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn authenticator_tcp() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_tcp() {
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn authenticator_tcp_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_tcp_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8100).parse().unwrap();
-    task::block_on(run_with_lowlatency_transport(&endpoint));
+    run_with_lowlatency_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_udp")]
-#[test]
-fn authenticator_udp() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_udp() {
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_udp")]
-#[test]
-fn authenticator_udp_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_udp_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8110).parse().unwrap();
-    task::block_on(run_with_lowlatency_transport(&endpoint));
+    run_with_lowlatency_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn authenticator_unixpipe() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+async fn authenticator_unixpipe() {
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_test".parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn authenticator_unixpipe_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+async fn authenticator_unixpipe_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_with_lowlatency_transport"
         .parse()
         .unwrap();
-    task::block_on(run_with_lowlatency_transport(&endpoint));
+    run_with_lowlatency_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn authenticator_ws() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+async fn authenticator_ws() {
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn authenticator_ws_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+async fn authenticator_ws_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8120).parse().unwrap();
-    task::block_on(run_with_lowlatency_transport(&endpoint));
+    run_with_lowlatency_transport(&endpoint).await;
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-#[test]
-fn authenticator_unix() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_unix() {
+    zenoh_util::try_init_log_from_env();
     let f1 = "zenoh-test-unix-socket-10.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(feature = "transport_tls")]
-#[test]
-fn authenticator_tls() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zenoh_util::try_init_log_from_env();
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -859,18 +813,15 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    task::block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_quic")]
-#[test]
-fn authenticator_quic() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zenoh_util::try_init_log_from_env();
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -962,5 +913,5 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    task::block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }

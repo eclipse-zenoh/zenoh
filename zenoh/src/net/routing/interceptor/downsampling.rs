@@ -21,7 +21,7 @@
 use crate::net::routing::interceptor::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use zenoh_config::{DownsamplingFlow, DownsamplingItemConf, DownsamplingRuleConf};
+use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
 use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
 use zenoh_keyexpr::keyexpr_tree::{support::UnknownWildness, KeBoxTree};
@@ -44,7 +44,7 @@ pub(crate) fn downsampling_interceptor_factories(
 pub struct DownsamplingInterceptorFactory {
     interfaces: Option<Vec<String>>,
     rules: Vec<DownsamplingRuleConf>,
-    flow: DownsamplingFlow,
+    flow: InterceptorFlow,
 }
 
 impl DownsamplingInterceptorFactory {
@@ -62,15 +62,15 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        log::debug!("New downsampler transport unicast {:?}", transport);
+        tracing::debug!("New downsampler transport unicast {:?}", transport);
         if let Some(interfaces) = &self.interfaces {
-            log::debug!(
+            tracing::debug!(
                 "New downsampler transport unicast config interfaces: {:?}",
                 interfaces
             );
             if let Ok(links) = transport.get_links() {
                 for link in links {
-                    log::debug!(
+                    tracing::debug!(
                         "New downsampler transport unicast link interfaces: {:?}",
                         link.interfaces
                     );
@@ -82,13 +82,13 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         };
 
         match self.flow {
-            DownsamplingFlow::Ingress => (
+            InterceptorFlow::Ingress => (
                 Some(Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
                     self.rules.clone(),
                 )))),
                 None,
             ),
-            DownsamplingFlow::Egress => (
+            InterceptorFlow::Egress => (
                 None,
                 Some(Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
                     self.rules.clone(),
@@ -110,8 +110,8 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 }
 
 struct Timestate {
-    pub threshold: std::time::Duration,
-    pub latest_message_timestamp: std::time::Instant,
+    pub threshold: tokio::time::Duration,
+    pub latest_message_timestamp: tokio::time::Instant,
 }
 
 pub(crate) struct DownsamplingInterceptor {
@@ -140,7 +140,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
                     if let Some(id) = id {
                         let mut ke_state = zlock!(self.ke_state);
                         if let Some(state) = ke_state.get_mut(id) {
-                            let timestamp = std::time::Instant::now();
+                            let timestamp = tokio::time::Instant::now();
 
                             if timestamp - state.latest_message_timestamp >= state.threshold {
                                 state.latest_message_timestamp = timestamp;
@@ -149,11 +149,11 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 return None;
                             }
                         } else {
-                            log::debug!("unxpected cache ID {}", id);
+                            tracing::debug!("unxpected cache ID {}", id);
                         }
                     }
                 } else {
-                    log::debug!("unxpected cache type {:?}", ctx.full_expr());
+                    tracing::debug!("unxpected cache type {:?}", ctx.full_expr());
                 }
             }
         }
@@ -169,11 +169,11 @@ impl DownsamplingInterceptor {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
         for (id, rule) in rules.into_iter().enumerate() {
-            let mut threshold = std::time::Duration::MAX;
-            let mut latest_message_timestamp = std::time::Instant::now();
+            let mut threshold = tokio::time::Duration::MAX;
+            let mut latest_message_timestamp = tokio::time::Instant::now();
             if rule.freq != 0.0 {
                 threshold =
-                    std::time::Duration::from_nanos((1. / rule.freq * NANOS_PER_SEC) as u64);
+                    tokio::time::Duration::from_nanos((1. / rule.freq * NANOS_PER_SEC) as u64);
                 latest_message_timestamp -= threshold;
             }
             ke_id.insert(&rule.key_expr, id);

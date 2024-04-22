@@ -18,9 +18,9 @@ use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_ext::group::*;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
     let z = Arc::new(zenoh::open(Config::default()).res().await.unwrap());
     let member = Member::new(z.zid().to_string())
         .unwrap()

@@ -15,13 +15,11 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+
 use include::recursive_include;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
-use serde::{
-    de::{self, MapAccess, Visitor},
-    Deserialize, Serialize,
-};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
@@ -29,7 +27,6 @@ use std::{
     collections::HashSet,
     fmt,
     io::Read,
-    marker::PhantomData,
     net::SocketAddr,
     path::Path,
     sync::{Arc, Mutex, MutexGuard, Weak},
@@ -46,6 +43,12 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
+
+pub mod mode_dependent;
+pub use mode_dependent::*;
+
+pub mod connection_retry;
+pub use connection_retry::*;
 
 // Wrappers for secrecy of values
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -70,9 +73,9 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-pub enum DownsamplingFlow {
+pub enum InterceptorFlow {
     Egress,
     Ingress,
 }
@@ -94,7 +97,48 @@ pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied.
     pub rules: Vec<DownsamplingRuleConf>,
     /// Downsampling flow direction: egress, ingress
-    pub flow: DownsamplingFlow,
+    pub flow: InterceptorFlow,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigRules {
+    pub interfaces: Vec<String>,
+    pub key_exprs: Vec<String>,
+    pub actions: Vec<Action>,
+    pub flows: Vec<InterceptorFlow>,
+    pub permission: Permission,
+}
+
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub struct PolicyRule {
+    pub subject: Subject,
+    pub key_expr: String,
+    pub action: Action,
+    pub permission: Permission,
+    pub flow: InterceptorFlow,
+}
+
+#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[serde(untagged)]
+#[serde(rename_all = "snake_case")]
+pub enum Subject {
+    Interface(String),
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Action {
+    Put,
+    DeclareSubscriber,
+    Get,
+    DeclareQueryable,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Permission {
+    Allow,
+    Deny,
 }
 
 pub trait ConfigValidator: Send + Sync {
@@ -178,12 +222,22 @@ validated_struct::validator! {
         /// Which zenoh nodes to connect to.
         pub connect: #[derive(Default)]
         ConnectConfig {
+            /// global timeout for full connect cycle
+            pub timeout_ms: Option<ModeDependentValue<i64>>,
             pub endpoints: Vec<EndPoint>,
+            /// if connection timeout exceed, exit from application
+            pub exit_on_failure: Option<ModeDependentValue<bool>>,
+            pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
         /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
         pub listen: #[derive(Default)]
         ListenConfig {
+            /// global timeout for full listen cycle
+            pub timeout_ms: Option<ModeDependentValue<i64>>,
             pub endpoints: Vec<EndPoint>,
+            /// if connection timeout exceed, exit from application
+            pub exit_on_failure: Option<ModeDependentValue<bool>>,
+            pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
         pub scouting: #[derive(Default)]
         ScoutingConf {
@@ -339,6 +393,13 @@ validated_struct::validator! {
                             data_low: usize,
                             background: usize,
                         } where (queue_size_validator),
+                        /// Congestion occurs when the queue is empty (no available batch).
+                        /// Using CongestionControl::Block the caller is blocked until a batch is available and re-insterted into the queue.
+                        /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
+                        pub congestion_control: CongestionControlConf {
+                            /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
+                            pub wait_before_drop: u64,
+                        },
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
                         backoff: u64,
@@ -411,6 +472,7 @@ validated_struct::validator! {
                     known_keys_file: Option<String>,
                 },
             },
+
         },
         /// Configuration of the admin space.
         pub adminspace: #[derive(Default)]
@@ -420,6 +482,9 @@ validated_struct::validator! {
         ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
         /// </div>
         AdminSpaceConf {
+            /// Enable the admin space
+            #[serde(default = "set_false")]
+            pub enabled: bool,
             /// Permissions on the admin space
             pub permissions:
             PermissionsConf {
@@ -436,9 +501,20 @@ validated_struct::validator! {
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
 
+        ///Configuration of the access control (ACL)
+        pub access_control: AclConfig {
+            pub enabled: bool,
+            pub default_permission: Permission,
+            pub rules: Option<Vec<AclConfigRules>>
+        },
+
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
-        plugins_search_dirs: Vec<String>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
+        pub plugins_loading: #[derive(Default)]
+        PluginsLoading {
+            pub enabled: bool,
+            pub search_dirs: Option<Vec<String>>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
+        },
         #[validated(recursive_accessors)]
         /// The configuration for plugins.
         ///
@@ -652,10 +728,13 @@ impl Config {
     }
 
     pub fn libloader(&self) -> LibLoader {
-        if self.plugins_search_dirs.is_empty() {
-            LibLoader::default()
+        if self.plugins_loading.enabled {
+            match self.plugins_loading.search_dirs() {
+                Some(dirs) => LibLoader::new(dirs, true),
+                None => LibLoader::default(),
+            }
         } else {
-            LibLoader::new(&self.plugins_search_dirs, true)
+            LibLoader::empty()
         }
     }
 }
@@ -1165,20 +1244,34 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             .unwrap()
             .entry(plugin)
             .or_insert(Value::Null);
-        let mut new_value = value.clone().merge(key, new_value)?;
-        if let Some(validator) = self.validator.upgrade() {
-            match validator.check_config(
-                plugin,
-                key,
-                value.as_object().unwrap(),
-                new_value.as_object().unwrap(),
-            ) {
-                Ok(Some(val)) => new_value = Value::Object(val),
-                Ok(None) => {}
+        let new_value = value.clone().merge(key, new_value)?;
+        *value = if let Some(validator) = self.validator.upgrade() {
+            // New plugin configuration for compare with original configuration.
+            // Return error if it's not an object.
+            // Note: it's ok if original "new_value" is not an object: this can be some subkey of the plugin configuration. But the result of the merge should be an object.
+            // Error occurs  if the original plugin configuration is not an object itself (e.g. null).
+            let Some(new_plugin_config) = new_value.as_object() else {
+                return Err(format!(
+                    "Attempt to provide non-object value as configuration for plugin `{plugin}`"
+                )
+                .into());
+            };
+            // Original plugin configuration for compare with new configuration.
+            // If for some reason it's not defined or not an object, we default to an empty object.
+            // Usually this happens when no plugin with this name defined. Reject then should be performed by the validator with `plugin not found` error.
+            let empty_config = Map::new();
+            let current_plugin_config = value.as_object().unwrap_or(&empty_config);
+            match validator.check_config(plugin, key, current_plugin_config, new_plugin_config) {
+                // Validator made changes to the proposed configuration, take these changes
+                Ok(Some(val)) => Value::Object(val),
+                // Validator accepted the proposed configuration as is
+                Ok(None) => new_value,
+                // Validator rejected the proposed configuration
                 Err(e) => return Err(format!("{e}").into()),
             }
-        }
-        *value = new_value;
+        } else {
+            new_value
+        };
         Ok(())
     }
     fn get<'a>(&'a self, mut key: &str) -> Result<&'a dyn Any, GetError> {
@@ -1242,190 +1335,6 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             }
         }
         Ok(serde_json::to_string(value).unwrap())
-    }
-}
-
-pub trait ModeDependent<T> {
-    fn router(&self) -> Option<&T>;
-    fn peer(&self) -> Option<&T>;
-    fn client(&self) -> Option<&T>;
-    #[inline]
-    fn get(&self, whatami: WhatAmI) -> Option<&T> {
-        match whatami {
-            WhatAmI::Router => self.router(),
-            WhatAmI::Peer => self.peer(),
-            WhatAmI::Client => self.client(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ModeValues<T> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    router: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    peer: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client: Option<T>,
-}
-
-impl<T> ModeDependent<T> for ModeValues<T> {
-    #[inline]
-    fn router(&self) -> Option<&T> {
-        self.router.as_ref()
-    }
-
-    #[inline]
-    fn peer(&self) -> Option<&T> {
-        self.peer.as_ref()
-    }
-
-    #[inline]
-    fn client(&self) -> Option<&T> {
-        self.client.as_ref()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum ModeDependentValue<T> {
-    Unique(T),
-    Dependent(ModeValues<T>),
-}
-
-impl<T> ModeDependent<T> for ModeDependentValue<T> {
-    #[inline]
-    fn router(&self) -> Option<&T> {
-        match self {
-            Self::Unique(v) => Some(v),
-            Self::Dependent(o) => o.router(),
-        }
-    }
-
-    #[inline]
-    fn peer(&self) -> Option<&T> {
-        match self {
-            Self::Unique(v) => Some(v),
-            Self::Dependent(o) => o.peer(),
-        }
-    }
-
-    #[inline]
-    fn client(&self) -> Option<&T> {
-        match self {
-            Self::Unique(v) => Some(v),
-            Self::Dependent(o) => o.client(),
-        }
-    }
-}
-
-impl<T> serde::Serialize for ModeDependentValue<T>
-where
-    T: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            ModeDependentValue::Unique(value) => value.serialize(serializer),
-            ModeDependentValue::Dependent(options) => options.serialize(serializer),
-        }
-    }
-}
-impl<'a> serde::Deserialize<'a> for ModeDependentValue<bool> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'a>,
-    {
-        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
-
-        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<bool>> {
-            type Value = ModeDependentValue<bool>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("bool or mode dependent bool")
-            }
-
-            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                Ok(ModeDependentValue::Unique(value))
-            }
-
-            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
-                    .map(ModeDependentValue::Dependent)
-            }
-        }
-        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
-    }
-}
-
-impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'a>,
-    {
-        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
-
-        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<WhatAmIMatcher>> {
-            type Value = ModeDependentValue<WhatAmIMatcher>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("WhatAmIMatcher or mode dependent WhatAmIMatcher")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                WhatAmIMatcherVisitor {}
-                    .visit_str(value)
-                    .map(ModeDependentValue::Unique)
-            }
-
-            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
-                    .map(ModeDependentValue::Dependent)
-            }
-        }
-        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
-    }
-}
-
-impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
-    #[inline]
-    fn router(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.router(),
-            None => None,
-        }
-    }
-
-    #[inline]
-    fn peer(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.peer(),
-            None => None,
-        }
-    }
-
-    #[inline]
-    fn client(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.client(),
-            None => None,
-        }
     }
 }
 

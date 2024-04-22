@@ -133,7 +133,7 @@ fn send_sourced_queryable_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.as_ref().unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
-                        log::debug!("Send queryable {} on {}", res.expr(), someface);
+                        tracing::debug!("Send queryable {} on {}", res.expr(), someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -152,7 +152,7 @@ fn send_sourced_queryable_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -213,7 +213,7 @@ fn propagate_sourced_queryable(
                     tree_sid.index() as NodeId,
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating qabl {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -221,7 +221,7 @@ fn propagate_sourced_queryable(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating qabl {}: cannot get index of {}!",
             res.expr(),
             source
@@ -240,7 +240,7 @@ fn register_peer_queryable(
     if current_info.is_none() || current_info.unwrap() != qabl_info {
         // Register peer queryable
         {
-            log::debug!("Register peer queryable {} (peer: {})", res.expr(), peer,);
+            tracing::debug!("Register peer queryable {} (peer: {})", res.expr(), peer,);
             res_hat_mut!(res).peer_qabls.insert(peer, *qabl_info);
             hat_mut!(tables).peer_qabls.insert(res.clone());
         }
@@ -275,7 +275,7 @@ fn register_client_queryable(
     // Register queryable
     {
         let res = get_mut_unchecked(res);
-        log::debug!("Register queryable {} (face: {})", res.expr(), face,);
+        tracing::debug!("Register queryable {} (face: {})", res.expr(), face,);
         get_mut_unchecked(res.session_ctxs.entry(face.id).or_insert_with(|| {
             Arc::new(SessionContext {
                 face: face.clone(),
@@ -345,7 +345,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
-                        log::debug!("Send forget queryable {}  on {}", res.expr(), someface);
+                        tracing::debug!("Send forget queryable {}  on {}", res.expr(), someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -363,7 +363,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -410,7 +410,7 @@ fn propagate_forget_sourced_queryable(
                     tree_sid.index() as NodeId,
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating forget qabl {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -418,7 +418,7 @@ fn propagate_forget_sourced_queryable(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating forget qabl {}: cannot get index of {}!",
             res.expr(),
             source
@@ -427,7 +427,7 @@ fn propagate_forget_sourced_queryable(
 }
 
 fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
-    log::debug!("Unregister peer queryable {} (peer: {})", res.expr(), peer,);
+    tracing::debug!("Unregister peer queryable {} (peer: {})", res.expr(), peer,);
     res_hat_mut!(res).peer_qabls.remove(peer);
 
     if res_hat!(res).peer_qabls.is_empty() {
@@ -467,7 +467,7 @@ pub(super) fn undeclare_client_queryable(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
-    log::debug!("Unregister client queryable {} for {}", res.expr(), face);
+    tracing::debug!("Unregister client queryable {} for {}", res.expr(), face);
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(ctx).qabl = None;
         if ctx.qabl.is_none() {
@@ -628,7 +628,7 @@ fn insert_target_for_qabls(
             }
         }
     } else {
-        log::trace!("Tree for node sid:{} not yet ready", source);
+        tracing::trace!("Tree for node sid:{} not yet ready", source);
     }
 }
 
@@ -686,7 +686,7 @@ impl HatQueriesTrait for HatCode {
         if key_expr.ends_with('/') {
             return EMPTY_ROUTE.clone();
         }
-        log::trace!(
+        tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -695,7 +695,7 @@ impl HatQueriesTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return EMPTY_ROUTE.clone();
             }
         };
@@ -769,7 +769,7 @@ impl HatQueriesTrait for HatCode {
             let key_expr = match OwnedKeyExpr::try_from(key_expr) {
                 Ok(ke) => ke,
                 Err(e) => {
-                    log::warn!("Invalid KE reached the system: {}", e);
+                    tracing::warn!("Invalid KE reached the system: {}", e);
                     return result;
                 }
             };

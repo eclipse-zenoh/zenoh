@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use libloading::Library;
-use log::{debug, warn};
 use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use std::ffi::OsString;
 use std::ops::Deref;
 use std::path::PathBuf;
+use tracing::{debug, warn};
 use zenoh_core::zconfigurable;
 use zenoh_result::{bail, ZResult};
 
@@ -26,7 +26,7 @@ zconfigurable! {
     /// The libraries suffix for the current platform (`".dll"` or `".so"` or `".dylib"`...)
     pub static ref LIB_SUFFIX: String = DLL_SUFFIX.to_string();
     /// The default list of paths where to search for libraries to load
-    pub static ref LIB_DEFAULT_SEARCH_PATHS: String = "/usr/local/lib:/usr/lib:/opt/homebrew/lib:~/.zenoh/lib:.".to_string();
+    pub static ref LIB_DEFAULT_SEARCH_PATHS: String = ".:~/.zenoh/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib".to_string();
 }
 
 /// LibLoader allows search for librairies and to load them.
@@ -36,6 +36,13 @@ pub struct LibLoader {
 }
 
 impl LibLoader {
+    /// Return an empty `LibLoader`.
+    pub fn empty() -> LibLoader {
+        LibLoader {
+            search_paths: Vec::new(),
+        }
+    }
+
     /// Returns the list of search paths used by `LibLoader::default()`
     pub fn default_search_paths() -> &'static str {
         &LIB_DEFAULT_SEARCH_PATHS
@@ -111,7 +118,7 @@ impl LibLoader {
     pub unsafe fn search_and_load(&self, name: &str) -> ZResult<(Library, PathBuf)> {
         let filename = format!("{}{}{}", *LIB_PREFIX, name, *LIB_SUFFIX);
         let filename_ostr = OsString::from(&filename);
-        log::debug!(
+        tracing::debug!(
             "Search for library {} to load in {:?}",
             filename,
             self.search_paths
@@ -150,7 +157,7 @@ impl LibLoader {
         prefix: Option<&str>,
     ) -> Vec<(Library, PathBuf, String)> {
         let lib_prefix = format!("{}{}", *LIB_PREFIX, prefix.unwrap_or(""));
-        log::debug!(
+        tracing::debug!(
             "Search for libraries {}*{} to load in {:?}",
             lib_prefix,
             *LIB_SUFFIX,

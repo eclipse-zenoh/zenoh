@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
-use async_std::net::SocketAddr;
 use async_trait::async_trait;
 use core::{
     fmt,
@@ -20,6 +19,7 @@ use core::{
     ops::Deref,
 };
 use serde::Serialize;
+use std::net::SocketAddr;
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::ZResult;
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
@@ -28,8 +28,8 @@ pub trait LinkManagerUnicastTrait: Send + Sync {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast>;
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator>;
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()>;
-    fn get_listeners(&self) -> Vec<EndPoint>;
-    fn get_locators(&self) -> Vec<Locator>;
+    async fn get_listeners(&self) -> Vec<EndPoint>;
+    async fn get_locators(&self) -> Vec<Locator>;
 }
 pub type NewLinkChannelSender = flume::Sender<LinkUnicast>;
 pub trait ConstructibleLinkManagerUnicast<T>: Sized {
@@ -106,11 +106,11 @@ impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
 pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
     match zenoh_util::net::get_interface_names_by_addr(addr.ip()) {
         Ok(interfaces) => {
-            log::trace!("get_interface_names for {:?}: {:?}", addr.ip(), interfaces);
+            tracing::trace!("get_interface_names for {:?}: {:?}", addr.ip(), interfaces);
             interfaces
         }
         Err(e) => {
-            log::debug!("get_interface_names for {:?} failed: {:?}", addr.ip(), e);
+            tracing::debug!("get_interface_names for {:?} failed: {:?}", addr.ip(), e);
             vec![]
         }
     }

@@ -95,7 +95,7 @@ impl Router {
                 )
             })
             .clone();
-        log::debug!("New {}", newface);
+        tracing::debug!("New {}", newface);
 
         let mut face = Face {
             tables: self.tables.clone(),
@@ -148,14 +148,14 @@ impl Router {
                 )
             })
             .clone();
-        log::debug!("New {}", newface);
+        tracing::debug!("New {}", newface);
 
         let mut face = Face {
             tables: self.tables.clone(),
             state: newface,
         };
 
-        let _ = mux.face.set(face.clone());
+        let _ = mux.face.set(Face::downgrade(&face));
 
         ctrl_lock.new_transport_unicast_face(&mut tables, &self.tables, &mut face, &transport)?;
 

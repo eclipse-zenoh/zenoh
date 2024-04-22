@@ -24,24 +24,20 @@ impl TransportUnicastUniversal {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
-                log::trace!("Scheduled: {:?}", $msg);
+                tracing::trace!("Scheduled: {:?}", $msg);
                 return pl.push_network_message($msg);
             };
         }
 
         let guard = zread!(self.links);
         // First try to find the best match between msg and link reliability
-        if let Some(pl) = guard
-            .iter()
-            .filter_map(|tl| {
-                if msg.is_reliable() == tl.link.link.is_reliable() {
-                    Some(&tl.pipeline)
-                } else {
-                    None
-                }
-            })
-            .next()
-        {
+        if let Some(pl) = guard.iter().find_map(|tl| {
+            if msg.is_reliable() == tl.link.link.is_reliable() {
+                Some(&tl.pipeline)
+            } else {
+                None
+            }
+        }) {
             zpush!(guard, pl, msg);
         }
 
@@ -51,7 +47,7 @@ impl TransportUnicastUniversal {
         }
 
         // No Link found
-        log::trace!(
+        tracing::trace!(
             "Message dropped because the transport has no links: {}",
             msg
         );
@@ -71,7 +67,7 @@ impl TransportUnicastUniversal {
                 crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)
             };
             if let Err(e) = res {
-                log::trace!("Failed SHM conversion: {}", e);
+                tracing::trace!("Failed SHM conversion: {}", e);
                 return false;
             }
         }

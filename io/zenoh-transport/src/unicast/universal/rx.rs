@@ -20,7 +20,6 @@ use crate::{
     unicast::transport_unicast_inner::TransportUnicastTrait,
     TransportPeerEventHandler,
 };
-use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
@@ -51,15 +50,12 @@ impl TransportUnicastUniversal {
     }
 
     fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {
-        // Stop now rx and tx tasks before doing the proper cleanup
-        let _ = self.stop_rx_tx(link);
-
         // Delete and clean up
         let c_transport = self.clone();
         let c_link = link.clone();
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
-        task::spawn(async move {
+        zenoh_runtime::ZRuntime::Net.spawn(async move {
             if session {
                 let _ = c_transport.delete().await;
             } else {
@@ -104,7 +100,7 @@ impl TransportUnicastUniversal {
                 self.trigger_callback(callback.as_ref(), msg)?;
             }
         } else {
-            log::debug!(
+            tracing::debug!(
                 "Transport: {}. No callback available, dropping messages: {:?}",
                 self.config.zid,
                 payload
@@ -156,7 +152,7 @@ impl TransportUnicastUniversal {
             if let Some(callback) = callback.as_ref() {
                 return self.trigger_callback(callback.as_ref(), msg);
             } else {
-                log::debug!(
+                tracing::debug!(
                     "Transport: {}. No callback available, dropping messages: {:?}",
                     self.config.zid,
                     msg
@@ -174,7 +170,7 @@ impl TransportUnicastUniversal {
     ) -> ZResult<()> {
         let precedes = guard.sn.roll(sn)?;
         if !precedes {
-            log::debug!(
+            tracing::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
                 self.config.zid,
                 sn,
@@ -197,7 +193,7 @@ impl TransportUnicastUniversal {
                 .decode()
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
-            log::trace!("Received: {:?}", msg);
+            tracing::trace!("Received: {:?}", msg);
 
             #[cfg(feature = "stats")]
             {
@@ -212,7 +208,7 @@ impl TransportUnicastUniversal {
                 }
                 TransportBody::KeepAlive(KeepAlive { .. }) => {}
                 _ => {
-                    log::debug!(
+                    tracing::debug!(
                         "Transport: {}. Message handling not implemented: {:?}",
                         self.config.zid,
                         msg

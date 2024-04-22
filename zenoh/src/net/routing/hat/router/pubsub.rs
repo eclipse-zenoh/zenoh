@@ -53,7 +53,7 @@ fn send_sourced_subscription_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
-                        log::debug!("Send subscription {} on {}", res.expr(), someface);
+                        tracing::debug!("Send subscription {} on {}", res.expr(), someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -72,7 +72,7 @@ fn send_sourced_subscription_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -163,7 +163,7 @@ fn propagate_sourced_subscription(
                     tree_sid.index() as NodeId,
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating sub {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -171,7 +171,7 @@ fn propagate_sourced_subscription(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating sub {}: cannot get index of {}!",
             res.expr(),
             source
@@ -189,7 +189,7 @@ fn register_router_subscription(
     if !res_hat!(res).router_subs.contains(&router) {
         // Register router subscription
         {
-            log::debug!(
+            tracing::debug!(
                 "Register router subscription {} (router: {})",
                 res.expr(),
                 router
@@ -230,7 +230,7 @@ fn register_peer_subscription(
     if !res_hat!(res).peer_subs.contains(&peer) {
         // Register peer subscription
         {
-            log::debug!("Register peer subscription {} (peer: {})", res.expr(), peer);
+            tracing::debug!("Register peer subscription {} (peer: {})", res.expr(), peer);
             res_hat_mut!(res).peer_subs.insert(peer);
             hat_mut!(tables).peer_subs.insert(res.clone());
         }
@@ -263,7 +263,7 @@ fn register_client_subscription(
     // Register subscription
     {
         let res = get_mut_unchecked(res);
-        log::debug!("Register subscription {} for {}", res.expr(), face);
+        tracing::debug!("Register subscription {} for {}", res.expr(), face);
         match res.session_ctxs.get_mut(&face.id) {
             Some(ctx) => match &ctx.subs {
                 Some(info) => {
@@ -356,7 +356,7 @@ fn send_forget_sourced_subscription_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
-                        log::debug!("Send forget subscription {} on {}", res.expr(), someface);
+                        tracing::debug!("Send forget subscription {} on {}", res.expr(), someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -374,7 +374,7 @@ fn send_forget_sourced_subscription_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -462,7 +462,7 @@ fn propagate_forget_sourced_subscription(
                     Some(tree_sid.index() as NodeId),
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating forget sub {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -470,7 +470,7 @@ fn propagate_forget_sourced_subscription(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating forget sub {}: cannot get index of {}!",
             res.expr(),
             source
@@ -479,7 +479,7 @@ fn propagate_forget_sourced_subscription(
 }
 
 fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohId) {
-    log::debug!(
+    tracing::debug!(
         "Unregister router subscription {} (router: {})",
         res.expr(),
         router
@@ -522,7 +522,7 @@ fn forget_router_subscription(
 }
 
 fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
-    log::debug!(
+    tracing::debug!(
         "Unregister peer subscription {} (peer: {})",
         res.expr(),
         peer
@@ -568,7 +568,7 @@ pub(super) fn undeclare_client_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
-    log::debug!("Unregister client subscription {} for {}", res.expr(), face);
+    tracing::debug!("Unregister client subscription {} for {}", res.expr(), face);
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(ctx).subs = None;
     }
@@ -867,7 +867,7 @@ fn insert_faces_for_subs(
             }
         }
     } else {
-        log::trace!("Tree for node sid:{} not yet ready", source);
+        tracing::trace!("Tree for node sid:{} not yet ready", source);
     }
 }
 
@@ -941,7 +941,7 @@ impl HatPubSubTrait for HatCode {
         if key_expr.ends_with('/') {
             return Arc::new(route);
         }
-        log::trace!(
+        tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -950,7 +950,7 @@ impl HatPubSubTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return Arc::new(route);
             }
         };

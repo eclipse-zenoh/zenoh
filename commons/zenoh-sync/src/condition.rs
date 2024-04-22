@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::sync::MutexGuard as AysncMutexGuard;
 use event_listener::{Event, EventListener};
 use std::{pin::Pin, sync::MutexGuard};
+use tokio::sync::MutexGuard as AysncMutexGuard;
 
 pub type ConditionWaiter = Pin<Box<EventListener>>;
 /// This is a Condition Variable similar to that provided by POSIX.

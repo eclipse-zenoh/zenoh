@@ -19,11 +19,11 @@ use crate::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use async_std::{sync::Mutex as AsyncMutex, task};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
 use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
@@ -33,6 +33,7 @@ use zenoh_protocol::{
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
+use zenoh_task::TaskController;
 
 /// # Examples
 /// ```
@@ -73,7 +74,7 @@ use zenoh_result::{bail, ZResult};
 ///         .lease(Duration::from_secs(1))
 ///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
-///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
+///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
@@ -93,6 +94,7 @@ pub struct TransportManagerConfig {
     pub whatami: WhatAmI,
     pub resolution: Resolution,
     pub batch_size: u16,
+    pub wait_before_drop: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
     pub defrag_buff_size: usize,
@@ -121,6 +123,7 @@ pub struct TransportManagerBuilder {
     whatami: WhatAmI,
     resolution: Resolution,
     batch_size: u16,
+    wait_before_drop: Duration,
     queue_size: QueueSizeConf,
     queue_backoff: Duration,
     defrag_buff_size: usize,
@@ -150,6 +153,11 @@ impl TransportManagerBuilder {
 
     pub fn batch_size(mut self, batch_size: u16) -> Self {
         self.batch_size = batch_size;
+        self
+    }
+
+    pub fn wait_before_drop(mut self, wait_before_drop: Duration) -> Self {
+        self.wait_before_drop = wait_before_drop;
         self
     }
 
@@ -211,13 +219,15 @@ impl TransportManagerBuilder {
         self = self.batch_size(*link.tx().batch_size());
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
+        self = self.wait_before_drop(Duration::from_micros(
+            *link.tx().queue().congestion_control().wait_before_drop(),
+        ));
         self = self.queue_size(link.tx().queue().size().clone());
+        self = self.queue_backoff(Duration::from_nanos(*link.tx().queue().backoff()));
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
 
-        let (c, errors) = zenoh_link::LinkConfigurator::default()
-            .configurations(config)
-            .await;
+        let (c, errors) = zenoh_link::LinkConfigurator::default().configurations(config);
         if !errors.is_empty() {
             use std::fmt::Write;
             let mut formatter = String::from("Some protocols reported configuration errors:\r\n");
@@ -232,11 +242,7 @@ impl TransportManagerBuilder {
                 .from_config(config)
                 .await?,
         );
-        self = self.multicast(
-            TransportManagerBuilderMulticast::default()
-                .from_config(config)
-                .await?,
-        );
+        self = self.multicast(TransportManagerBuilderMulticast::default().from_config(config)?);
 
         Ok(self)
     }
@@ -264,6 +270,7 @@ impl TransportManagerBuilder {
             whatami: self.whatami,
             resolution: self.resolution,
             batch_size: self.batch_size,
+            wait_before_drop: self.wait_before_drop,
             queue_size,
             queue_backoff: self.queue_backoff,
             defrag_buff_size: self.defrag_buff_size,
@@ -297,12 +304,14 @@ impl Default for TransportManagerBuilder {
         let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
         let backoff = *queue.backoff();
+        let wait_before_drop = *queue.congestion_control().wait_before_drop();
         Self {
             version: VERSION,
             zid: ZenohId::rand(),
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
+            wait_before_drop: Duration::from_micros(wait_before_drop),
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
@@ -317,39 +326,6 @@ impl Default for TransportManagerBuilder {
 }
 
 #[derive(Clone)]
-pub(crate) struct TransportExecutor {
-    executor: Arc<async_executor::Executor<'static>>,
-    sender: async_std::channel::Sender<()>,
-}
-
-impl TransportExecutor {
-    fn new(num_threads: usize) -> Self {
-        let (sender, receiver) = async_std::channel::bounded(1);
-        let executor = Arc::new(async_executor::Executor::new());
-        for i in 0..num_threads {
-            let exec = executor.clone();
-            let recv = receiver.clone();
-            std::thread::Builder::new()
-                .name(format!("zenoh-tx-{}", i))
-                .spawn(move || async_std::task::block_on(exec.run(recv.recv())))
-                .unwrap();
-        }
-        Self { executor, sender }
-    }
-
-    async fn stop(&self) {
-        let _ = self.sender.send(()).await;
-    }
-
-    pub(crate) fn spawn<T: Send + 'static>(
-        &self,
-        future: impl core::future::Future<Output = T> + Send + 'static,
-    ) -> async_executor::Task<T> {
-        self.executor.spawn(future)
-    }
-}
-
-#[derive(Clone)]
 pub struct TransportManager {
     pub config: Arc<TransportManagerConfig>,
     pub(crate) state: Arc<TransportManagerState>,
@@ -357,9 +333,9 @@ pub struct TransportManager {
     pub(crate) cipher: Arc<BlockCipher>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
-    pub(crate) tx_executor: TransportExecutor,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
+    pub(crate) task_controller: TaskController,
 }
 
 impl TransportManager {
@@ -372,7 +348,6 @@ impl TransportManager {
         // @TODO: this should be moved into the unicast module
         let (new_unicast_link_sender, new_unicast_link_receiver) = flume::unbounded();
 
-        let tx_threads = params.config.tx_threads;
         let this = TransportManager {
             config: Arc::new(params.config),
             state: Arc::new(params.state),
@@ -380,20 +355,29 @@ impl TransportManager {
             cipher: Arc::new(cipher),
             locator_inspector: Default::default(),
             new_unicast_link_sender,
-            tx_executor: TransportExecutor::new(tx_threads),
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
+            task_controller: TaskController::default(),
         };
 
         // @TODO: this should be moved into the unicast module
-        async_std::task::spawn({
-            let this = this.clone();
-            async move {
-                while let Ok(link) = new_unicast_link_receiver.recv_async().await {
-                    this.handle_new_link_unicast(link).await;
+        let cancellation_token = this.task_controller.get_cancellation_token();
+        this.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                let this = this.clone();
+                async move {
+                    loop {
+                        tokio::select! {
+                                res = new_unicast_link_receiver.recv_async() => {
+                                    if let Ok(link) = res {
+                                        this.handle_new_link_unicast(link).await;
+                                    }
+                                }
+                                _ = cancellation_token.cancelled() => { break; }
+                        }
+                    }
                 }
-            }
-        });
+            });
 
         this
     }
@@ -413,7 +397,9 @@ impl TransportManager {
 
     pub async fn close(&self) {
         self.close_unicast().await;
-        self.tx_executor.stop().await;
+        self.task_controller
+            .terminate_all_async(Duration::from_secs(10))
+            .await;
     }
 
     /*************************************/
@@ -443,16 +429,17 @@ impl TransportManager {
         }
     }
 
-    pub fn get_listeners(&self) -> Vec<EndPoint> {
-        let mut lsu = task::block_on(self.get_listeners_unicast());
-        let mut lsm = task::block_on(self.get_listeners_multicast());
+    pub async fn get_listeners(&self) -> Vec<EndPoint> {
+        let mut lsu = self.get_listeners_unicast().await;
+        let mut lsm = self.get_listeners_multicast().await;
         lsu.append(&mut lsm);
         lsu
     }
 
+    // TODO(yuyuan): Can we make this async as above?
     pub fn get_locators(&self) -> Vec<Locator> {
-        let mut lsu = task::block_on(self.get_locators_unicast());
-        let mut lsm = task::block_on(self.get_locators_multicast());
+        let mut lsu = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_unicast());
+        let mut lsm = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }

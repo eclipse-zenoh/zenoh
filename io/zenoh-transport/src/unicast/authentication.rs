@@ -29,7 +29,7 @@ impl From<UsrPwdId> for AuthId {
                 match std::str::from_utf8(&username) {
                     Ok(name) => AuthId::Username(name.to_owned()),
                     Err(e) => {
-                        log::error!("Error in extracting username {}", e);
+                        tracing::error!("Error in extracting username {}", e);
                         AuthId::None
                     }
                 }

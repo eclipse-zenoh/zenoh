@@ -12,92 +12,100 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME;
-use async_std::os::unix::net::{UnixListener, UnixStream};
-use async_std::path::PathBuf;
-use async_std::prelude::FutureExt;
-use async_std::task;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use futures::io::AsyncReadExt;
-use futures::io::AsyncWriteExt;
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::remove_file;
-use std::net::Shutdown;
 use std::os::unix::io::RawFd;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{UnixListener, UnixStream};
+use tokio::sync::RwLock as AsyncRwLock;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
-use zenoh_core::{zread, zwrite};
+use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{zerror, ZResult};
-use zenoh_sync::Signal;
 
 use super::{get_unix_path_as_string, UNIXSOCKSTREAM_DEFAULT_MTU, UNIXSOCKSTREAM_LOCATOR_PREFIX};
 
 pub struct LinkUnicastUnixSocketStream {
-    // The underlying socket as returned from the async-std library
-    socket: UnixStream,
+    // The underlying socket as returned from the tokio library
+    socket: UnsafeCell<UnixStream>,
     // The Unix domain socket source path
     src_locator: Locator,
     // The Unix domain socker destination path (random UUIDv4)
     dst_locator: Locator,
 }
 
+unsafe impl Sync for LinkUnicastUnixSocketStream {}
+
 impl LinkUnicastUnixSocketStream {
     fn new(socket: UnixStream, src_path: &str, dst_path: &str) -> LinkUnicastUnixSocketStream {
         LinkUnicastUnixSocketStream {
-            socket,
+            socket: UnsafeCell::new(socket),
             src_locator: Locator::new(UNIXSOCKSTREAM_LOCATOR_PREFIX, src_path, "").unwrap(),
             dst_locator: Locator::new(UNIXSOCKSTREAM_LOCATOR_PREFIX, dst_path, "").unwrap(),
         }
+    }
+
+    #[allow(clippy::mut_from_ref)]
+    fn get_mut_socket(&self) -> &mut UnixStream {
+        unsafe { &mut *self.socket.get() }
     }
 }
 
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing UnixSocketStream link: {}", self);
+        tracing::trace!("Closing UnixSocketStream link: {}", self);
         // Close the underlying UnixSocketStream socket
-        let res = self.socket.shutdown(Shutdown::Both);
-        log::trace!("UnixSocketStream link shutdown {}: {:?}", self, res);
+        let res = self.get_mut_socket().shutdown().await;
+        tracing::trace!("UnixSocketStream link shutdown {}: {:?}", self, res);
         res.map_err(|e| zerror!(e).into())
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        (&self.socket).write(buffer).await.map_err(|e| {
+        self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        (&self.socket).write_all(buffer).await.map_err(|e| {
+        self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        (&self.socket).read(buffer).await.map_err(|e| {
+        self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        (&self.socket).read_exact(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
-            log::trace!("{}", e);
-            e.into()
-        })
+        self.get_mut_socket()
+            .read_exact(buffer)
+            .await
+            .map(|_len| ())
+            .map_err(|e| {
+                let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
+                tracing::trace!("{}", e);
+                e.into()
+            })
     }
 
     #[inline(always)]
@@ -118,7 +126,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
         // @TODO: Not supported for now
-        log::debug!("The get_interface_names for LinkUnicastUnixSocketStream is not supported");
+        tracing::debug!("The get_interface_names for LinkUnicastUnixSocketStream is not supported");
         vec![]
     }
 
@@ -140,7 +148,8 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
 impl Drop for LinkUnicastUnixSocketStream {
     fn drop(&mut self) {
         // Close the underlying UnixSocketStream socket
-        let _ = self.socket.shutdown(Shutdown::Both);
+        let _ = zenoh_runtime::ZRuntime::Acceptor
+            .block_in_place(async move { self.get_mut_socket().shutdown().await });
     }
 }
 
@@ -165,8 +174,7 @@ impl fmt::Debug for LinkUnicastUnixSocketStream {
 /*************************************/
 struct ListenerUnixSocketStream {
     endpoint: EndPoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     handle: JoinHandle<ZResult<()>>,
     lock_fd: RawFd,
 }
@@ -174,31 +182,33 @@ struct ListenerUnixSocketStream {
 impl ListenerUnixSocketStream {
     fn new(
         endpoint: EndPoint,
-        active: Arc<AtomicBool>,
-        signal: Signal,
+        token: CancellationToken,
         handle: JoinHandle<ZResult<()>>,
         lock_fd: RawFd,
     ) -> ListenerUnixSocketStream {
         ListenerUnixSocketStream {
             endpoint,
-            active,
-            signal,
+            token,
             handle,
             lock_fd,
         }
+    }
+
+    async fn stop(&self) {
+        self.token.cancel();
     }
 }
 
 pub struct LinkManagerUnicastUnixSocketStream {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<String, ListenerUnixSocketStream>>>,
+    listeners: Arc<AsyncRwLock<HashMap<String, ListenerUnixSocketStream>>>,
 }
 
 impl LinkManagerUnicastUnixSocketStream {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
 }
@@ -215,7 +225,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -225,7 +235,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -236,7 +246,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -244,7 +254,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             Some(path) => PathBuf::from(path),
             None => {
                 let e = format!("Can not create a new UnixSocketStream link bound to {path:?}");
-                log::warn!("{}", e);
+                tracing::warn!("{}", e);
                 PathBuf::from(format!("{}", Uuid::new_v4()))
             }
         };
@@ -254,7 +264,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 "Can not create a new UnixSocketStream link bound to {:?}",
                 path
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -308,7 +318,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 "Can not create a new UnixSocketStream listener on {} - Unable to open lock file: {}",
                 path, e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -320,7 +330,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -330,13 +340,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let _ = remove_file(path.clone());
 
         // Bind the Unix socket
-        let socket = UnixListener::bind(&path).await.map_err(|e| {
+        let socket = UnixListener::bind(&path).map_err(|e| {
             let e = zerror!(
                 "Can not create a new UnixSocketStream listener on {}: {}",
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -346,19 +356,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
         let local_path = PathBuf::from(local_addr.as_pathname().ok_or_else(|| {
             let e = zerror!("Can not create a new UnixSocketStream listener on {}", path);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?);
 
         let local_path_str = local_path.to_str().ok_or_else(|| {
             let e = zerror!("Can not create a new UnixSocketStream listener on {}", path);
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -371,24 +381,24 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         )?;
 
         // Spawn the accept loop for the listener
-        let active = Arc::new(AtomicBool::new(true));
-        let signal = Signal::new();
-        let mut listeners = zwrite!(self.listeners);
+        let token = CancellationToken::new();
+        let c_token = token.clone();
+        let mut listeners = zasyncwrite!(self.listeners);
 
-        let c_active = active.clone();
-        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_path = local_path_str.to_owned();
-        let handle = task::spawn(async move {
+
+        let task = async move {
             // Wait for the accept loop to terminate
-            let res = accept_task(socket, c_active, c_signal, c_manager).await;
-            zwrite!(c_listeners).remove(&c_path);
+            let res = accept_task(socket, c_token, c_manager).await;
+            zasyncwrite!(c_listeners).remove(&c_path);
             res
-        });
+        };
+        let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
         let locator = endpoint.to_locator();
-        let listener = ListenerUnixSocketStream::new(endpoint, active, signal, handle, lock_fd);
+        let listener = ListenerUnixSocketStream::new(endpoint, token, handle, lock_fd);
         listeners.insert(local_path_str.to_owned(), listener);
 
         Ok(locator)
@@ -398,19 +408,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let path = get_unix_path_as_string(endpoint.address());
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
+        let listener = zasyncwrite!(self.listeners).remove(&path).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the UnixSocketStream listener because it has not been found: {}",
                 path
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e
         })?;
 
         // Send the stop signal
-        listener.active.store(false, Ordering::Release);
-        listener.signal.trigger();
-        let res = listener.handle.await;
+        listener.stop().await;
+        listener.handle.await??;
 
         //Release the lock
         let _ = nix::fcntl::flock(listener.lock_fd, nix::fcntl::FlockArg::UnlockNonblock);
@@ -420,19 +429,20 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         // Remove the Unix Domain Socket file
         let lock_file_path = format!("{path}.lock");
         let tmp = remove_file(lock_file_path);
-        log::trace!("UnixSocketStream Domain Socket removal result: {:?}", tmp);
-        res
+        tracing::trace!("UnixSocketStream Domain Socket removal result: {:?}", tmp);
+
+        Ok(())
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners)
             .values()
             .map(|x| x.endpoint.clone())
             .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
-        zread!(self.listeners)
+    async fn get_locators(&self) -> Vec<Locator> {
+        zasyncread!(self.listeners)
             .values()
             .map(|x| x.endpoint.to_locator())
             .collect()
@@ -441,28 +451,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
 async fn accept_task(
     socket: UnixListener,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-    enum Action {
-        Accept(UnixStream),
-        Stop,
-    }
-
-    async fn accept(socket: &UnixListener) -> ZResult<Action> {
+    async fn accept(socket: &UnixListener) -> ZResult<UnixStream> {
         let (stream, _) = socket.accept().await.map_err(|e| zerror!(e))?;
-        Ok(Action::Accept(stream))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok(stream)
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
         zerror!("Can not accept UnixSocketStream connections: {}", e);
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
@@ -471,7 +470,7 @@ async fn accept_task(
             "Can not create a new UnixSocketStream link bound to {:?}",
             src_addr
         );
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?);
 
@@ -480,47 +479,50 @@ async fn accept_task(
             "Can not create a new UnixSocketStream link bound to {:?}",
             src_addr
         );
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
     // The accept future
-    log::trace!(
+    tracing::trace!(
         "Ready to accept UnixSocketStream connections on: {}",
         src_path
     );
-    while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
-        let stream = match accept(&socket).race(stop(signal.clone())).await {
-            Ok(action) => match action {
-                Action::Accept(stream) => stream,
-                Action::Stop => break,
-            },
-            Err(e) => {
-                log::warn!("{}. Hint: increase the system open file limit.", e);
-                // Throttle the accept loop upon an error
-                // NOTE: This might be due to various factors. However, the most common case is that
-                //       the process has reached the maximum number of open files in the system. On
-                //       Linux systems this limit can be changed by using the "ulimit" command line
-                //       tool. In case of systemd-based systems, this can be changed by using the
-                //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME)).await;
-                continue;
+
+    loop {
+        tokio::select! {
+            _ = token.cancelled() => break,
+
+            res = accept(&socket) => {
+                match res {
+                    Ok(stream) => {
+                        let dst_path = format!("{}", Uuid::new_v4());
+
+                        tracing::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
+
+                        // Create the new link object
+                        let link = Arc::new(LinkUnicastUnixSocketStream::new(
+                            stream, src_path, &dst_path,
+                        ));
+
+                        // Communicate the new link to the initial transport manager
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
+                        }
+
+                    }
+                    Err(e) => {
+                        tracing::warn!("{}. Hint: increase the system open file limit.", e);
+                        // Throttle the accept loop upon an error
+                        // NOTE: This might be due to various factors. However, the most common case is that
+                        //       the process has reached the maximum number of open files in the system. On
+                        //       Linux systems this limit can be changed by using the "ulimit" command line
+                        //       tool. In case of systemd-based systems, this can be changed by using the
+                        //       "sysctl" command line tool.
+                        tokio::time::sleep(Duration::from_micros(*UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME)).await;
+                    }
+                }
             }
-        };
-
-        let dst_path = format!("{}", Uuid::new_v4());
-
-        log::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
-
-        // Create the new link object
-        let link = Arc::new(LinkUnicastUnixSocketStream::new(
-            stream, src_path, &dst_path,
-        ));
-
-        // Communicate the new link to the initial transport manager
-        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-            log::error!("{}-{}: {}", file!(), line!(), e)
         }
     }
 

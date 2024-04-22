@@ -17,9 +17,15 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+//!
+mod access_control;
+use access_control::acl_interceptor_factories;
+
+mod authorization;
 use super::RoutingContext;
 use crate::KeyExpr;
 use std::any::Any;
+
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
@@ -57,11 +63,10 @@ pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sy
 
 pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorFactory>> {
     let mut res: Vec<InterceptorFactory> = vec![];
-
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
-
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
+    res.extend(acl_interceptor_factories(config.access_control())?);
     res.extend(new_test_interceptor()?);
     Ok(res)
 }
@@ -109,7 +114,7 @@ impl InterceptorTrait for InterceptorsChain {
             match interceptor.intercept(ctx, cache) {
                 Some(newctx) => ctx = newctx,
                 None => {
-                    log::trace!("Msg intercepted!");
+                    tracing::trace!("Msg intercepted!");
                     return None;
                 }
             }
@@ -172,7 +177,7 @@ impl InterceptorTrait for IngressMsgLogger {
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
 
-        log::debug!(
+        tracing::debug!(
             "{} Recv {} Expr:{:?}",
             ctx.inface()
                 .map(|f| f.to_string())
@@ -198,7 +203,7 @@ impl InterceptorTrait for EgressMsgLogger {
         let expr = cache
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
-        log::debug!(
+        tracing::debug!(
             "{} Send {} Expr:{:?}",
             ctx.outface()
                 .map(|f| f.to_string())
@@ -217,7 +222,7 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        log::debug!("New transport unicast {:?}", transport);
+        tracing::debug!("New transport unicast {:?}", transport);
         (
             Some(Box::new(IngressMsgLogger {})),
             Some(Box::new(EgressMsgLogger {})),
@@ -225,12 +230,12 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
     }
 
     fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressInterceptor> {
-        log::debug!("New transport multicast {:?}", transport);
+        tracing::debug!("New transport multicast {:?}", transport);
         Some(Box::new(EgressMsgLogger {}))
     }
 
     fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressInterceptor> {
-        log::debug!("New peer multicast {:?}", transport);
+        tracing::debug!("New peer multicast {:?}", transport);
         Some(Box::new(IngressMsgLogger {}))
     }
 }

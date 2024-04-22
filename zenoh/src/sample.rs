@@ -68,7 +68,10 @@ pub struct SourceInfo {
 #[test]
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 2);
+    assert_eq!(std::mem::size_of::<ZenohId>(), 16);
+    assert_eq!(std::mem::size_of::<Option<ZenohId>>(), 17);
+    assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 16);
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 17 + 16 + 7);
 }
 
 #[zenoh_macros::unstable]
@@ -531,7 +534,7 @@ impl QoS {
         match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
             Err(e) => {
-                log::trace!(
+                tracing::trace!(
                     "Failed to convert priority: {}; replacing with default value",
                     e.to_string()
                 );

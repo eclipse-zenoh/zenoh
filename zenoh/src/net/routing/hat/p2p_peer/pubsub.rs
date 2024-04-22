@@ -89,7 +89,7 @@ fn register_client_subscription(
     // Register subscription
     {
         let res = get_mut_unchecked(res);
-        log::debug!("Register subscription {} for {}", res.expr(), face);
+        tracing::debug!("Register subscription {} for {}", res.expr(), face);
         match res.session_ctxs.get_mut(&face.id) {
             Some(ctx) => match &ctx.subs {
                 Some(info) => {
@@ -194,7 +194,7 @@ pub(super) fn undeclare_client_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
-    log::debug!("Unregister client subscription {} for {}", res.expr(), face);
+    tracing::debug!("Unregister client subscription {} for {}", res.expr(), face);
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(ctx).subs = None;
     }
@@ -297,7 +297,7 @@ impl HatPubSubTrait for HatCode {
         if key_expr.ends_with('/') {
             return Arc::new(route);
         }
-        log::trace!(
+        tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -306,7 +306,7 @@ impl HatPubSubTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return Arc::new(route);
             }
         };

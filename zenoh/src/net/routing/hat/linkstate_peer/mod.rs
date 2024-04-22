@@ -43,11 +43,11 @@ use crate::{
     },
     runtime::Runtime,
 };
-use async_std::task::JoinHandle;
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Duration,
 };
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
@@ -56,6 +56,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
 mod network;
@@ -112,7 +113,16 @@ struct HatTables {
     peer_subs: HashSet<Arc<Resource>>,
     peer_qabls: HashSet<Arc<Resource>>,
     peers_net: Option<Network>,
-    peers_trees_task: Option<JoinHandle<()>>,
+    peers_trees_task: Option<TerminatableTask>,
+}
+
+impl Drop for HatTables {
+    fn drop(&mut self) {
+        if self.peers_trees_task.is_some() {
+            let task = self.peers_trees_task.take().unwrap();
+            task.terminate(Duration::from_secs(10));
+        }
+    }
 }
 
 impl HatTables {
@@ -126,26 +136,30 @@ impl HatTables {
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        log::trace!("Schedule computations");
+        tracing::trace!("Schedule computations");
         if self.peers_trees_task.is_none() {
-            let task = Some(async_std::task::spawn(async move {
-                async_std::task::sleep(std::time::Duration::from_millis(
-                    *TREES_COMPUTATION_DELAY_MS,
-                ))
-                .await;
-                let mut tables = zwrite!(tables_ref.tables);
+            let task = TerminatableTask::spawn(
+                zenoh_runtime::ZRuntime::Net,
+                async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        *TREES_COMPUTATION_DELAY_MS,
+                    ))
+                    .await;
+                    let mut tables = zwrite!(tables_ref.tables);
 
-                log::trace!("Compute trees");
-                let new_childs = hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees();
+                    tracing::trace!("Compute trees");
+                    let new_childs = hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees();
 
-                log::trace!("Compute routes");
-                pubsub::pubsub_tree_change(&mut tables, &new_childs);
-                queries::queries_tree_change(&mut tables, &new_childs);
+                    tracing::trace!("Compute routes");
+                    pubsub::pubsub_tree_change(&mut tables, &new_childs);
+                    queries::queries_tree_change(&mut tables, &new_childs);
 
-                log::trace!("Computations completed");
-                hat_mut!(tables).peers_trees_task = None;
-            }));
-            self.peers_trees_task = task;
+                    tracing::trace!("Computations completed");
+                    hat_mut!(tables).peers_trees_task = None;
+                },
+                TerminatableTask::create_cancellation_token(),
+            );
+            self.peers_trees_task = Some(task);
         }
     }
 }
@@ -412,7 +426,7 @@ impl HatBaseTrait for HatCode {
                     hat_mut!(tables).schedule_compute_trees(tables_ref.clone());
                 };
             }
-            (_, _) => log::error!("Closed transport in session closing!"),
+            (_, _) => tracing::error!("Closed transport in session closing!"),
         }
         Ok(())
     }
@@ -499,7 +513,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
         Some(link) => match link.get_zid(&(nodeid as u64)) {
             Some(router) => Some(*router),
             None => {
-                log::error!(
+                tracing::error!(
                     "Received peer declaration with unknown routing context id {}",
                     nodeid
                 );
@@ -507,7 +521,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
             }
         },
         None => {
-            log::error!(
+            tracing::error!(
                 "Could not find corresponding link in peers network for {}",
                 face
             );

@@ -40,8 +40,6 @@ use crate::Sample;
 use crate::SampleKind;
 use crate::Selector;
 use crate::Value;
-use async_std::task;
-use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -51,6 +49,7 @@ use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
@@ -82,6 +81,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_task::TaskController;
 use zenoh_util::core::AsyncResolve;
 
 zconfigurable! {
@@ -393,6 +393,8 @@ pub struct Session {
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
     pub(crate) alive: bool,
+    owns_runtime: bool,
+    task_controller: TaskController,
 }
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
@@ -413,6 +415,8 @@ impl Session {
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
+                owns_runtime: false,
+                task_controller: TaskController::default(),
             };
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
@@ -439,7 +443,8 @@ impl Session {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -447,12 +452,12 @@ impl Session {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     pub fn into_arc(self) -> Arc<Self> {
         Arc::new(self)
@@ -472,18 +477,19 @@ impl Session {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::Session;
     ///
     /// let session = Session::leak(zenoh::open(config::peer()).res().await.unwrap());
     /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     pub fn leak(s: Self) -> &'static mut Self {
         Box::leak(Box::new(s))
@@ -506,21 +512,27 @@ impl Session {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session.close().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
+    pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
-            self.runtime.close().await?;
-
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
-
+            self.task_controller.terminate_all(Duration::from_secs(10));
+            if self.owns_runtime {
+                self.runtime.close().await?;
+            }
+            let mut state = zwrite!(self.state);
+            state.primitives.as_ref().unwrap().send_close();
+            // clean up to break cyclic references from self.state to itself
+            state.primitives.take();
+            state.queryables.clear();
+            self.alive = false;
             Ok(())
         })
     }
@@ -543,22 +555,24 @@ impl Session {
     /// # Examples
     /// ### Read current zenoh configuration
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let peers = session.config().get("connect/endpoints").unwrap();
-    /// # })
+    /// # }
     /// ```
     ///
     /// ### Modify current zenoh configuration
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
-    /// # })
+    /// # }
     /// ```
     pub fn config(&self) -> &Notifier<Config> {
         self.runtime.config()
@@ -613,12 +627,13 @@ impl Session {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     pub fn declare_keyexpr<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
@@ -674,7 +689,8 @@ impl Session {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -684,7 +700,7 @@ impl Session {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoValue>(
@@ -714,12 +730,13 @@ impl Session {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session.delete("key/expression").res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
@@ -749,7 +766,8 @@ impl Session {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -757,15 +775,15 @@ impl Session {
     /// while let Ok(reply) = replies.recv_async().await {
     ///     println!(">> Received {:?}", reply.sample);
     /// }
-    /// # })
+    /// # }
     /// ```
-    pub fn get<'a, 'b: 'a, IntoSelector>(
+    pub fn get<'a, 'b: 'a, TryIntoSelector>(
         &'a self,
-        selector: IntoSelector,
+        selector: TryIntoSelector,
     ) -> GetBuilder<'a, 'b, DefaultHandler>
     where
-        IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
+        TryIntoSelector: TryInto<Selector<'b>>,
+        <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
         let timeout = {
@@ -795,35 +813,31 @@ impl Session {
             state: self.state.clone(),
             id: self.id,
             alive: false,
+            owns_runtime: self.owns_runtime,
+            task_controller: self.task_controller.clone(),
         }
     }
 
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
-            log::debug!("Config: {:?}", &config);
+            tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            match Runtime::init(config).await {
-                Ok(mut runtime) => {
-                    let session = Self::init(
-                        runtime.clone(),
-                        aggregated_subscribers,
-                        aggregated_publishers,
-                    )
-                    .res_async()
-                    .await;
-                    match runtime.start().await {
-                        Ok(()) => {
-                            // Workaround for the declare_and_shoot problem
-                            task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-                            Ok(session)
-                        }
-                        Err(err) => Err(err),
-                    }
-                }
-                Err(err) => Err(err),
-            }
+            let mut runtime = Runtime::init(config).await?;
+
+            let mut session = Self::init(
+                runtime.clone(),
+                aggregated_subscribers,
+                aggregated_publishers,
+            )
+            .res_async()
+            .await;
+            session.owns_runtime = true;
+            runtime.start().await?;
+            // Workaround for the declare_and_shoot problem
+            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+            Ok(session)
         })
     }
 
@@ -887,7 +901,7 @@ impl Session {
         _key_expr: KeyExpr<'a>,
     ) -> impl Resolve<Result<(), std::convert::Infallible>> + 'a {
         ResolveClosure::new(move || {
-            // log::trace!("declare_publication({:?})", key_expr);
+            // tracing::trace!("declare_publication({:?})", key_expr);
             // let mut state = zwrite!(self.state);
             // if !state.publications.iter().any(|p| **p == **key_expr) {
             //     let declared_pub = if let Some(join_pub) = state
@@ -963,7 +977,7 @@ impl Session {
         info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("subscribe({:?})", key_expr);
+        tracing::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let key_expr = match scope {
             Some(scope) => scope / key_expr,
@@ -1181,7 +1195,7 @@ impl Session {
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("queryable({:?})", key_expr);
+        tracing::trace!("queryable({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let qable_state = Arc::new(QueryableState {
             id,
@@ -1355,7 +1369,7 @@ impl Session {
         key_expr: &KeyExpr,
     ) -> ZResult<Arc<LivelinessTokenState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("declare_liveliness({:?})", key_expr);
+        tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
         let tok_state = Arc::new(LivelinessTokenState {
@@ -1417,7 +1431,7 @@ impl Session {
         let mut state = zwrite!(self.state);
 
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        log::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
+        tracing::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
             current: std::sync::Mutex::new(false),
@@ -1438,7 +1452,7 @@ impl Session {
                     (listener_state.callback)(MatchingStatus { matching: true });
                 }
             }
-            Err(e) => log::error!("Error trying to acquire MathginListener lock: {}", e),
+            Err(e) => tracing::error!("Error trying to acquire MathginListener lock: {}", e),
         }
         Ok(listener_state)
     }
@@ -1489,30 +1503,35 @@ impl Session {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
-                async_std::task::spawn({
-                    let session = self.clone();
-                    let msub = msub.clone();
-                    async move {
-                        match msub.current.lock() {
-                            Ok(mut current) => {
-                                if !*current {
-                                    if let Ok(status) =
-                                        session.matching_status(&msub.key_expr, msub.destination)
-                                    {
-                                        if status.matching_subscribers() {
-                                            *current = true;
-                                            let callback = msub.callback.clone();
-                                            (callback)(status)
+                // TODO: check which ZRuntime should be used
+                self.task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                        let session = self.clone();
+                        let msub = msub.clone();
+                        async move {
+                            match msub.current.lock() {
+                                Ok(mut current) => {
+                                    if !*current {
+                                        if let Ok(status) = session
+                                            .matching_status(&msub.key_expr, msub.destination)
+                                        {
+                                            if status.matching_subscribers() {
+                                                *current = true;
+                                                let callback = msub.callback.clone();
+                                                (callback)(status)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Error trying to acquire MathginListener lock: {}",
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    });
             }
         }
     }
@@ -1522,30 +1541,35 @@ impl Session {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
-                async_std::task::spawn({
-                    let session = self.clone();
-                    let msub = msub.clone();
-                    async move {
-                        match msub.current.lock() {
-                            Ok(mut current) => {
-                                if *current {
-                                    if let Ok(status) =
-                                        session.matching_status(&msub.key_expr, msub.destination)
-                                    {
-                                        if !status.matching_subscribers() {
-                                            *current = false;
-                                            let callback = msub.callback.clone();
-                                            (callback)(status)
+                // TODO: check which ZRuntime should be used
+                self.task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                        let session = self.clone();
+                        let msub = msub.clone();
+                        async move {
+                            match msub.current.lock() {
+                                Ok(mut current) => {
+                                    if *current {
+                                        if let Ok(status) = session
+                                            .matching_status(&msub.key_expr, msub.destination)
+                                        {
+                                            if !status.matching_subscribers() {
+                                                *current = false;
+                                                let callback = msub.callback.clone();
+                                                (callback)(status)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Error trying to acquire MathginListener lock: {}",
+                                        e
+                                    );
+                                }
                             }
                         }
-                    }
-                });
+                    });
             }
         }
     }
@@ -1581,7 +1605,7 @@ impl Session {
                             match &sub.scope {
                                 Some(scope) => {
                                     if !res.key_expr.starts_with(&***scope) {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
                                             res.key_expr,
                                             scope,
@@ -1594,7 +1618,7 @@ impl Session {
                                                 key_expr.into_owned(),
                                             )),
                                             Err(e) => {
-                                                log::warn!(
+                                                tracing::warn!(
                                                     "Error unscoping received Data for `{}`: {}",
                                                     res.key_expr,
                                                     e,
@@ -1610,14 +1634,14 @@ impl Session {
                     }
                 }
                 Some(Resource::Prefix { prefix }) => {
-                    log::error!(
+                    tracing::error!(
                         "Received Data for `{}`, which isn't a key expression",
                         prefix
                     );
                     return;
                 }
                 None => {
-                    log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                    tracing::error!("Received Data for unknown expr_id: {}", key_expr.scope);
                     return;
                 }
             }
@@ -1632,7 +1656,7 @@ impl Session {
                             match &sub.scope {
                                 Some(scope) => {
                                     if !key_expr.starts_with(&***scope) {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
                                             key_expr,
                                             scope,
@@ -1644,7 +1668,7 @@ impl Session {
                                                 key_expr.into_owned(),
                                             )),
                                             Err(e) => {
-                                                log::warn!(
+                                                tracing::warn!(
                                                     "Error unscoping received Data for `{}`: {}",
                                                     key_expr,
                                                     e,
@@ -1660,7 +1684,7 @@ impl Session {
                     }
                 }
                 Err(err) => {
-                    log::error!("Received Data for unkown key_expr: {}", err);
+                    tracing::error!("Received Data for unkown key_expr: {}", err);
                     return;
                 }
             }
@@ -1723,7 +1747,7 @@ impl Session {
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
-        log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
+        tracing::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
             Mode::Auto => {
@@ -1740,27 +1764,34 @@ impl Session {
             Locality::Any => 2,
             _ => 1,
         };
-        task::spawn({
-            let state = self.state.clone();
-            let zid = self.runtime.zid();
-            async move {
-                task::sleep(timeout).await;
-                let mut state = zwrite!(state);
-                if let Some(query) = state.queries.remove(&qid) {
-                    std::mem::drop(state);
-                    log::debug!("Timeout on query {}! Send error and close.", qid);
-                    if query.reception_mode == ConsolidationMode::Latest {
-                        for (_, reply) in query.replies.unwrap().into_iter() {
-                            (query.callback)(reply);
+
+        let token = self.task_controller.get_cancellation_token();
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                let state = self.state.clone();
+                let zid = self.runtime.zid();
+                async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(timeout) => {
+                            let mut state = zwrite!(state);
+                            if let Some(query) = state.queries.remove(&qid) {
+                                std::mem::drop(state);
+                                tracing::debug!("Timeout on query {}! Send error and close.", qid);
+                                if query.reception_mode == ConsolidationMode::Latest {
+                                    for (_, reply) in query.replies.unwrap().into_iter() {
+                                        (query.callback)(reply);
+                                    }
+                                }
+                                (query.callback)(Reply {
+                                    sample: Err("Timeout".into()),
+                                    replier_id: zid,
+                                });
+                            }
                         }
+                        _ = token.cancelled() => {}
                     }
-                    (query.callback)(Reply {
-                        sample: Err("Timeout".into()),
-                        replier_id: zid,
-                    });
                 }
-            }
-        });
+            });
 
         let selector = match scope {
             Some(scope) => Selector {
@@ -1770,7 +1801,7 @@ impl Session {
             None => selector.clone(),
         };
 
-        log::trace!("Register query {} (nb_final = {})", qid, nb_final);
+        tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = selector.key_expr.to_wire(self).to_owned();
         state.queries.insert(
             qid,
@@ -1931,7 +1962,8 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -1939,12 +1971,12 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
@@ -1973,7 +2005,8 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -1981,7 +2014,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(query) = queryable.recv_async().await {
     ///         query.reply(Ok(Sample::try_from(
     ///             "key/expression",
@@ -1989,7 +2022,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///         ).unwrap())).res().await.unwrap();
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &'s self,
@@ -2016,7 +2049,8 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -2025,7 +2059,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///     .await
     ///     .unwrap();
     /// publisher.put("value").res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     fn declare_publisher<'b, TryIntoKeyExpr>(
         &'s self,
@@ -2048,7 +2082,8 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -2058,7 +2093,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     fn liveliness(&'s self) -> Liveliness<'static> {
@@ -2129,7 +2164,10 @@ impl Primitives for Session {
                             }
                         }
                         Err(err) => {
-                            log::error!("Received DeclareSubscriber for unkown wire_expr: {}", err)
+                            tracing::error!(
+                                "Received DeclareSubscriber for unkown wire_expr: {}",
+                                err
+                            )
                         }
                     }
                 }
@@ -2163,7 +2201,10 @@ impl Primitives for Session {
                             }
                         }
                         Err(err) => {
-                            log::error!("Received Forget Subscriber for unkown key_expr: {}", err)
+                            tracing::error!(
+                                "Received Forget Subscriber for unkown key_expr: {}",
+                                err
+                            )
                         }
                     }
                 }
@@ -2248,12 +2289,12 @@ impl Primitives for Session {
         trace!("recv Response {:?}", msg);
         match msg.payload {
             ResponseBody::Ack(_) => {
-                log::warn!(
+                tracing::warn!(
                     "Received a ResponseBody::Ack, but this isn't supported yet. Dropping message."
                 )
             }
             ResponseBody::Put(_) => {
-                log::warn!(
+                tracing::warn!(
                     "Received a ResponseBody::Put, but this isn't supported yet. Dropping message."
                 )
             }
@@ -2284,7 +2325,7 @@ impl Primitives for Session {
                         callback(new_reply);
                     }
                     None => {
-                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                        tracing::warn!("Received ReplyData for unkown Query: {}", msg.rid);
                     }
                 }
             }
@@ -2307,7 +2348,7 @@ impl Primitives for Session {
                             Ok([true])
                         ) && !query.selector.key_expr.intersects(&key_expr)
                         {
-                            log::warn!(
+                            tracing::warn!(
                                 "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
@@ -2318,7 +2359,7 @@ impl Primitives for Session {
                         let key_expr = match &query.scope {
                             Some(scope) => {
                                 if !key_expr.starts_with(&***scope) {
-                                    log::warn!(
+                                    tracing::warn!(
                                         "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
                                         key_expr,
                                         msg.ext_respid,
@@ -2329,7 +2370,7 @@ impl Primitives for Session {
                                 match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
                                     Ok(key_expr) => key_expr,
                                     Err(e) => {
-                                        log::warn!(
+                                        tracing::warn!(
                                             "Error unscoping received Reply for `{}` from `{:?}: {}",
                                             key_expr,
                                             msg.ext_respid,
@@ -2445,7 +2486,7 @@ impl Primitives for Session {
                         }
                     }
                     None => {
-                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                        tracing::warn!("Received ReplyData for unkown Query: {}", msg.rid);
                     }
                 }
             }
@@ -2505,7 +2546,8 @@ impl fmt::Debug for Session {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -2513,12 +2555,12 @@ impl fmt::Debug for Session {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// async_std::task::spawn(async move {
+/// tokio::task::spawn(async move {
 ///     while let Ok(sample) = subscriber.recv_async().await {
 ///         println!("Received: {:?}", sample);
 ///     }
 /// }).await;
-/// # })
+/// # }
 /// ```
 pub trait SessionDeclarations<'s, 'a> {
     /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
@@ -2529,7 +2571,8 @@ pub trait SessionDeclarations<'s, 'a> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -2537,12 +2580,12 @@ pub trait SessionDeclarations<'s, 'a> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
@@ -2561,7 +2604,8 @@ pub trait SessionDeclarations<'s, 'a> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -2569,7 +2613,7 @@ pub trait SessionDeclarations<'s, 'a> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// async_std::task::spawn(async move {
+    /// tokio::task::spawn(async move {
     ///     while let Ok(query) = queryable.recv_async().await {
     ///         query.reply(Ok(Sample::try_from(
     ///             "key/expression",
@@ -2577,7 +2621,7 @@ pub trait SessionDeclarations<'s, 'a> {
     ///         ).unwrap())).res().await.unwrap();
     ///     }
     /// }).await;
-    /// # })
+    /// # }
     /// ```
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &'s self,
@@ -2595,7 +2639,8 @@ pub trait SessionDeclarations<'s, 'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -2604,7 +2649,7 @@ pub trait SessionDeclarations<'s, 'a> {
     ///     .await
     ///     .unwrap();
     /// publisher.put("value").res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     fn declare_publisher<'b, TryIntoKeyExpr>(
         &'s self,
@@ -2618,7 +2663,8 @@ pub trait SessionDeclarations<'s, 'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
@@ -2628,7 +2674,7 @@ pub trait SessionDeclarations<'s, 'a> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     fn liveliness(&'s self) -> Liveliness<'a>;
@@ -2636,12 +2682,13 @@ pub trait SessionDeclarations<'s, 'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let info = session.info();
-    /// # })
+    /// # }
     /// ```
     fn info(&'s self) -> SessionInfo<'a>;
 }

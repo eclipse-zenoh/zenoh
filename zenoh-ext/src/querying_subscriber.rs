@@ -595,7 +595,8 @@ where
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh_ext::*;
 ///
@@ -615,7 +616,7 @@ where
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     println!("Received: {:?}", sample);
 /// }
-/// # })
+/// # }
 /// ```
 pub struct FetchingSubscriber<'a, Receiver> {
     subscriber: Subscriber<'a, ()>,
@@ -666,7 +667,9 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
                 if state.pending_fetches == 0 {
                     callback(s);
                 } else {
-                    log::trace!("Sample received while fetch in progress: push it to merge_queue");
+                    tracing::trace!(
+                        "Sample received while fetch in progress: push it to merge_queue"
+                    );
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
                     s.ensure_timestamp();
@@ -728,7 +731,8 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh_ext::*;
     ///
@@ -758,7 +762,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn fetch<
@@ -790,12 +794,12 @@ impl Drop for RepliesHandler {
     fn drop(&mut self) {
         let mut state = zlock!(self.state);
         state.pending_fetches -= 1;
-        log::trace!(
+        tracing::trace!(
             "Fetch done - {} fetches still in progress",
             state.pending_fetches
         );
         if state.pending_fetches == 0 {
-            log::debug!(
+            tracing::debug!(
                 "All fetches done. Replies and live publications merged - {} samples to propagate",
                 state.merge_queue.len()
             );
@@ -810,7 +814,8 @@ impl Drop for RepliesHandler {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// # use zenoh::prelude::r#async::*;
 /// # use zenoh_ext::*;
 /// #
@@ -839,7 +844,7 @@ impl Drop for RepliesHandler {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct FetchBuilder<
@@ -909,13 +914,13 @@ where
     TryIntoSample: TryInto<Sample>,
     <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
 {
-    log::debug!("Fetch data for FetchingSubscriber");
+    tracing::debug!("Fetch data for FetchingSubscriber");
     (fetch)(Box::new(move |s: TryIntoSample| match s.try_into() {
         Ok(s) => {
             let mut state = zlock!(handler.state);
-            log::trace!("Fetched sample received: push it to merge_queue");
+            tracing::trace!("Fetched sample received: push it to merge_queue");
             state.merge_queue.push(s);
         }
-        Err(e) => log::debug!("Received error fetching data: {}", e.into()),
+        Err(e) => tracing::debug!("Received error fetching data: {}", e.into()),
     }))
 }

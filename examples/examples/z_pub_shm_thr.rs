@@ -18,10 +18,10 @@ use zenoh::publication::CongestionControl;
 use zenoh::shm::SharedMemoryManager;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
     let (mut config, sm_size, size) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm_thr` to operate
@@ -42,6 +42,7 @@ async fn main() {
     // Make sure to not drop messages because of congestion control
     .congestion_control(CongestionControl::Block).res().await.unwrap();
 
+    println!("Press CTRL-C to quit...");
     loop {
         publisher.put(buf.clone()).res().await.unwrap();
     }

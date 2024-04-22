@@ -293,7 +293,8 @@ impl Resource {
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
             if Arc::strong_count(res) <= 3 && res.childs.is_empty() {
-                log::debug!("Unregister resource {}", res.expr());
+                // consider only childless resource held by only one external object (+ 1 strong count for resclone, + 1 strong count for res.parent to a total of 3 )
+                tracing::debug!("Unregister resource {}", res.expr());
                 if let Some(context) = mutres.context.as_mut() {
                     for match_ in &mut context.matches {
                         let mut match_ = match_.upgrade().unwrap();
@@ -306,12 +307,24 @@ impl Resource {
                         }
                     }
                 }
+                mutres.nonwild_prefix.take();
                 {
                     get_mut_unchecked(parent).childs.remove(&res.suffix);
                 }
                 Resource::clean(parent);
             }
         }
+    }
+
+    pub fn close(self: &mut Arc<Resource>) {
+        let r = get_mut_unchecked(self);
+        for c in r.childs.values_mut() {
+            Self::close(c);
+        }
+        r.parent.take();
+        r.childs.clear();
+        r.nonwild_prefix.take();
+        r.session_ctxs.clear();
     }
 
     #[cfg(test)]
@@ -342,8 +355,8 @@ impl Resource {
                 Some(res) => Resource::make_resource(tables, res, rest),
                 None => {
                     let mut new = Arc::new(Resource::new(from, chunk, None));
-                    if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
-                        log::debug!("Register resource {}", new.expr());
+                    if tracing::enabled!(tracing::Level::DEBUG) && rest.is_empty() {
+                        tracing::debug!("Register resource {}", new.expr());
                     }
                     let res = Resource::make_resource(tables, &mut new, rest);
                     get_mut_unchecked(from)
@@ -367,8 +380,8 @@ impl Resource {
                         Some(res) => Resource::make_resource(tables, res, rest),
                         None => {
                             let mut new = Arc::new(Resource::new(from, chunk, None));
-                            if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
-                                log::debug!("Register resource {}", new.expr());
+                            if tracing::enabled!(tracing::Level::DEBUG) && rest.is_empty() {
+                                tracing::debug!("Register resource {}", new.expr());
                             }
                             let res = Resource::make_resource(tables, &mut new, rest);
                             get_mut_unchecked(from)
@@ -628,7 +641,7 @@ impl Resource {
             }
             get_mut_unchecked(res).context_mut().matches = matches;
         } else {
-            log::error!("Call match_resource() on context less res {}", res.expr());
+            tracing::error!("Call match_resource() on context less res {}", res.expr());
         }
     }
 
@@ -667,7 +680,7 @@ pub fn register_expr(
                 let mut fullexpr = prefix.expr();
                 fullexpr.push_str(expr.suffix.as_ref());
                 if res.expr() != fullexpr {
-                    log::error!("Resource {} remapped. Remapping unsupported!", expr_id);
+                    tracing::error!("Resource {} remapped. Remapping unsupported!", expr_id);
                 }
             }
             None => {
@@ -718,7 +731,7 @@ pub fn register_expr(
                 drop(wtables);
             }
         },
-        None => log::error!("Declare resource with unknown scope {}!", expr.scope),
+        None => tracing::error!("Declare resource with unknown scope {}!", expr.scope),
     }
 }
 
@@ -726,7 +739,7 @@ pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: 
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
-        None => log::error!("Undeclare unknown resource!"),
+        None => tracing::error!("Undeclare unknown resource!"),
     }
     drop(wtables);
 }

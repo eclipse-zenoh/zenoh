@@ -11,19 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
-use futures::prelude::*;
-use futures::select;
-use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     let (config, key_expr) = parse_args();
 
@@ -39,31 +35,18 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("Enter 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
-    loop {
-        select!(
-            sample = subscriber.recv_async() => {
-                let sample = sample.unwrap();
-                match sample.kind {
-                    SampleKind::Put => println!(
-                        ">> [LivelinessSubscriber] New alive token ('{}')",
-                        sample.key_expr.as_str()),
-                    SampleKind::Delete => println!(
-                        ">> [LivelinessSubscriber] Dropped token ('{}')",
-                        sample.key_expr.as_str()),
-                }
-            },
-
-            _ = stdin.read_exact(&mut input).fuse() => {
-                match input[0] {
-                    b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
-                    _ => (),
-                }
-            }
-        );
+    println!("Press CTRL-C to quit...");
+    while let Ok(sample) = subscriber.recv_async().await {
+        match sample.kind {
+            SampleKind::Put => println!(
+                ">> [LivelinessSubscriber] New alive token ('{}')",
+                sample.key_expr.as_str()
+            ),
+            SampleKind::Delete => println!(
+                ">> [LivelinessSubscriber] Dropped token ('{}')",
+                sample.key_expr.as_str()
+            ),
+        }
     }
 }
 

@@ -14,12 +14,13 @@
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
 
-use async_std::net::UdpSocket;
-use futures::StreamExt;
+use std::time::Duration;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
+use tokio::net::UdpSocket;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
+use zenoh_task::TerminatableTask;
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub use zenoh_protocol::core::WhatAmI;
@@ -31,7 +32,8 @@ pub use zenoh_protocol::scouting::Hello;
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -42,7 +44,7 @@ pub use zenoh_protocol::scouting::Hello;
 /// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -57,7 +59,8 @@ impl ScoutBuilder<DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -66,7 +69,7 @@ impl ScoutBuilder<DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> ScoutBuilder<Callback>
@@ -92,7 +95,8 @@ impl ScoutBuilder<DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -102,7 +106,7 @@ impl ScoutBuilder<DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
@@ -119,7 +123,8 @@ impl ScoutBuilder<DefaultHandler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -131,7 +136,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// while let Ok(hello) = receiver.recv_async().await {
     ///     println!("{}", hello);
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
@@ -186,7 +191,8 @@ where
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -195,11 +201,11 @@ where
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 pub(crate) struct ScoutInner {
     #[allow(dead_code)]
-    pub(crate) stop_sender: flume::Sender<()>,
+    pub(crate) scout_task: Option<TerminatableTask>,
 }
 
 impl ScoutInner {
@@ -207,7 +213,8 @@ impl ScoutInner {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -217,11 +224,19 @@ impl ScoutInner {
     ///     .await
     ///     .unwrap();
     /// scout.stop();
-    /// # })
+    /// # }
     /// ```
     pub fn stop(self) {
-        // This drops the inner `stop_sender` and hence stops the scouting receiver
         std::mem::drop(self);
+    }
+}
+
+impl Drop for ScoutInner {
+    fn drop(&mut self) {
+        if self.scout_task.is_some() {
+            let task = self.scout_task.take();
+            task.unwrap().terminate(Duration::from_secs(10));
+        }
     }
 }
 
@@ -235,7 +250,8 @@ impl fmt::Debug for ScoutInner {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -247,7 +263,7 @@ impl fmt::Debug for ScoutInner {
 /// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
-/// # })
+/// # }
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
@@ -269,7 +285,8 @@ impl<Receiver> Scout<Receiver> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -280,7 +297,7 @@ impl<Receiver> Scout<Receiver> {
     ///     .unwrap();
     /// let _router = scout.recv_async().await;
     /// scout.stop();
-    /// # })
+    /// # }
     /// ```
     pub fn stop(self) {
         self.scout.stop()
@@ -292,14 +309,13 @@ fn scout(
     config: zenoh_config::Config,
     callback: Callback<'static, Hello>,
 ) -> ZResult<ScoutInner> {
-    log::trace!("scout({}, {})", what, &config);
+    tracing::trace!("scout({}, {})", what, &config);
     let default_addr = SocketAddr::from(zenoh_config::defaults::scouting::multicast::address);
     let addr = config.scouting.multicast.address().unwrap_or(default_addr);
     let ifaces = config.scouting.multicast.interface().as_ref().map_or(
         zenoh_config::defaults::scouting::multicast::interface,
         |s| s.as_ref(),
     );
-    let (stop_sender, stop_receiver) = flume::bounded::<()>(1);
     let ifaces = Runtime::get_interfaces(ifaces);
     if !ifaces.is_empty() {
         let sockets: Vec<UdpSocket> = ifaces
@@ -307,22 +323,29 @@ fn scout(
             .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
             .collect();
         if !sockets.is_empty() {
-            async_std::task::spawn(async move {
-                let mut stop_receiver = stop_receiver.stream();
-                let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
-                    let callback = callback.clone();
-                    async move {
-                        callback(hello);
-                        Loop::Continue
+            let cancellation_token = TerminatableTask::create_cancellation_token();
+            let cancellation_token_clone = cancellation_token.clone();
+            let task = TerminatableTask::spawn(
+                zenoh_runtime::ZRuntime::Acceptor,
+                async move {
+                    let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
+                        let callback = callback.clone();
+                        async move {
+                            callback(hello);
+                            Loop::Continue
+                        }
+                    });
+                    tokio::select! {
+                        _ = scout => {},
+                        _ = cancellation_token_clone.cancelled() => { tracing::trace!("stop scout({}, {})", what, &config); },
                     }
-                });
-                let stop = async move {
-                    stop_receiver.next().await;
-                    log::trace!("stop scout({}, {})", what, &config);
-                };
-                async_std::prelude::FutureExt::race(scout, stop).await;
+                },
+                cancellation_token.clone(),
+            );
+            return Ok(ScoutInner {
+                scout_task: Some(task),
             });
         }
     }
-    Ok(ScoutInner { stop_sender })
+    Ok(ScoutInner { scout_task: None })
 }

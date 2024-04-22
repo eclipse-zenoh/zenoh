@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{prelude::FutureExt, task};
 use std::fmt::Write as _;
 use std::{
     any::Any,
@@ -22,7 +21,7 @@ use std::{
     },
     time::Duration,
 };
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{
@@ -223,13 +222,12 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
 const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
+#[cfg(any(
+    feature = "transport_tcp",
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 // Transport Handler for the router
 struct SHRouter {
@@ -423,7 +421,7 @@ async fn close_transport(
 
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -434,19 +432,19 @@ async fn close_transport(
     }
 
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+        while !router_manager.get_listeners().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 async fn test_transport(
@@ -491,21 +489,21 @@ async fn test_transport(
         Reliability::Reliable => {
             ztimeout!(async {
                 while router_handler.get_count() != MSG_COUNT {
-                    task::sleep(SLEEP_COUNT).await;
+                    tokio::time::sleep(SLEEP_COUNT).await;
                 }
             });
         }
         Reliability::BestEffort => {
             ztimeout!(async {
                 while router_handler.get_count() == 0 {
-                    task::sleep(SLEEP_COUNT).await;
+                    tokio::time::sleep(SLEEP_COUNT).await;
                 }
             });
         }
     };
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 async fn run_single(
@@ -599,12 +597,9 @@ async fn run_with_lowlatency_transport(
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn transport_unicast_tcp_only() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tcp_only() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
@@ -623,21 +618,13 @@ fn transport_unicast_tcp_only() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_ALL,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn transport_unicast_tcp_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tcp_only_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 16100).parse().unwrap()];
@@ -653,21 +640,13 @@ fn transport_unicast_tcp_only_with_lowlatency_transport() {
         },
     ];
     // Run
-    task::block_on(run_with_lowlatency_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_LOWLATENCY,
-    ));
+    run_with_lowlatency_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_LOWLATENCY).await;
 }
 
 #[cfg(feature = "transport_udp")]
-#[test]
-fn transport_unicast_udp_only() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_udp_only() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
@@ -686,21 +665,13 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_NOFRAG,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
 }
 
 #[cfg(feature = "transport_udp")]
-#[test]
-fn transport_unicast_udp_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_udp_only_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 16110).parse().unwrap()];
@@ -716,21 +687,13 @@ fn transport_unicast_udp_only_with_lowlatency_transport() {
         },
     ];
     // Run
-    task::block_on(run_with_lowlatency_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_NOFRAG,
-    ));
+    run_with_lowlatency_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-#[test]
-fn transport_unicast_unix_only() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_unix_only() {
+    zenoh_util::try_init_log_from_env();
 
     let f1 = "zenoh-test-unix-socket-5.sock";
     let _ = std::fs::remove_file(f1);
@@ -748,23 +711,15 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_ALL,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-#[test]
-fn transport_unicast_unix_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_unix_only_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
 
     let f1 = "zenoh-test-unix-socket-5-lowlatency.sock";
     let _ = std::fs::remove_file(f1);
@@ -782,23 +737,15 @@ fn transport_unicast_unix_only_with_lowlatency_transport() {
         },
     ];
     // Run
-    task::block_on(run_with_lowlatency_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_LOWLATENCY,
-    ));
+    run_with_lowlatency_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_LOWLATENCY).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
-fn transport_unicast_ws_only() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_ws_only() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
@@ -825,21 +772,13 @@ fn transport_unicast_ws_only() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_ALL,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
-fn transport_unicast_ws_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_ws_only_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 16120).parse().unwrap()];
@@ -863,21 +802,13 @@ fn transport_unicast_ws_only_with_lowlatency_transport() {
         },
     ];
     // Run
-    task::block_on(run_with_lowlatency_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_LOWLATENCY,
-    ));
+    run_with_lowlatency_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_LOWLATENCY).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
-fn transport_unicast_unixpipe_only() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_unixpipe_only() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
@@ -896,21 +827,13 @@ fn transport_unicast_unixpipe_only() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_ALL,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
-fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
@@ -930,21 +853,13 @@ fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
         },
     ];
     // Run
-    task::block_on(run_with_lowlatency_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_LOWLATENCY,
-    ));
+    run_with_lowlatency_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_LOWLATENCY).await;
 }
 
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
-#[test]
-fn transport_unicast_tcp_udp() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tcp_udp() {
+    zenoh_util::try_init_log_from_env();
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
@@ -965,12 +880,7 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_NOFRAG,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
 }
 
 #[cfg(all(
@@ -978,12 +888,9 @@ fn transport_unicast_tcp_udp() {
     feature = "transport_unixsock-stream",
     target_family = "unix"
 ))]
-#[test]
-fn transport_unicast_tcp_unix() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tcp_unix() {
+    zenoh_util::try_init_log_from_env();
 
     let f1 = "zenoh-test-unix-socket-6.sock";
     let _ = std::fs::remove_file(f1);
@@ -1005,12 +912,7 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_ALL,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -1020,12 +922,9 @@ fn transport_unicast_tcp_unix() {
     feature = "transport_unixsock-stream",
     target_family = "unix"
 ))]
-#[test]
-fn transport_unicast_udp_unix() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_udp_unix() {
+    zenoh_util::try_init_log_from_env();
 
     let f1 = "zenoh-test-unix-socket-7.sock";
     let _ = std::fs::remove_file(f1);
@@ -1047,12 +946,7 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_NOFRAG,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -1063,12 +957,9 @@ fn transport_unicast_udp_unix() {
     feature = "transport_unixsock-stream",
     target_family = "unix"
 ))]
-#[test]
-fn transport_unicast_tcp_udp_unix() {
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tcp_udp_unix() {
+    zenoh_util::try_init_log_from_env();
 
     let f1 = "zenoh-test-unix-socket-8.sock";
     let _ = std::fs::remove_file(f1);
@@ -1092,25 +983,17 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_NOFRAG,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
-#[test]
-fn transport_unicast_tls_only_server() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tls_only_server() {
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zenoh_util::try_init_log_from_env();
 
     // Define the locator
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 16070).parse().unwrap();
@@ -1148,24 +1031,15 @@ fn transport_unicast_tls_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_ALL,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
 }
 
 #[cfg(feature = "transport_quic")]
-#[test]
-fn transport_unicast_quic_only_server() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_only_server() {
     use zenoh_link::quic::config::*;
 
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
+    zenoh_util::try_init_log_from_env();
     // Define the locator
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 16080).parse().unwrap();
     endpoint
@@ -1202,23 +1076,15 @@ fn transport_unicast_quic_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run_with_universal_transport(
-        &endpoints,
-        &endpoints,
-        &channel,
-        &MSG_SIZE_ALL,
-    ));
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
-#[test]
-fn transport_unicast_tls_only_mutual_success() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tls_only_mutual_success() {
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zenoh_util::try_init_log_from_env();
 
     let client_auth = "true";
 
@@ -1275,24 +1141,22 @@ fn transport_unicast_tls_only_mutual_success() {
     // Run
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
-    task::block_on(run_with_universal_transport(
+    run_with_universal_transport(
         &client_endpoints,
         &server_endpoints,
         &channel,
         &MSG_SIZE_ALL,
-    ));
+    )
+    .await;
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
-#[test]
-fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     use std::vec;
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zenoh_util::try_init_log_from_env();
 
     // Define the locator
     let mut client_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
@@ -1343,12 +1207,14 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
     let result = std::panic::catch_unwind(|| {
-        task::block_on(run_with_universal_transport(
-            &client_endpoints,
-            &server_endpoints,
-            &channel,
-            &MSG_SIZE_ALL,
-        ))
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_with_universal_transport(
+                &client_endpoints,
+                &server_endpoints,
+                &channel,
+                &MSG_SIZE_ALL,
+            ))
     });
     assert!(result.is_err());
 }
@@ -1358,10 +1224,7 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
 fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     use zenoh_link::tls::config::*;
 
-    let _ = env_logger::try_init();
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zenoh_util::try_init_log_from_env();
 
     let client_auth = "true";
 
@@ -1423,12 +1286,14 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
     let result = std::panic::catch_unwind(|| {
-        task::block_on(run_with_universal_transport(
-            &client_endpoints,
-            &server_endpoints,
-            &channel,
-            &MSG_SIZE_ALL,
-        ))
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_with_universal_transport(
+                &client_endpoints,
+                &server_endpoints,
+                &channel,
+                &MSG_SIZE_ALL,
+            ))
     });
     assert!(result.is_err());
 }

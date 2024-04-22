@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
 
     steps:
       - name: Clone this repository
@@ -42,6 +42,9 @@ jobs:
         run: |
           rustup show
           rustup component add rustfmt clippy
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Code format check
         run: cargo fmt --check
@@ -69,7 +72,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
 
     steps:
       - name: Clone this repository
@@ -77,6 +80,9 @@ jobs:
 
       - name: Install latest Rust toolchain
         run: rustup show
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Set rustflags
         shell: bash
@@ -90,14 +96,10 @@ jobs:
 
       - name: Run tests
         run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-        env:
-          ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
-        env:
-          ASYNC_STD_THREAD_COUNT: 4
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -105,8 +107,26 @@ jobs:
 
       - name: Run doctests
         run: cargo test --doc
-        env:
-          ASYNC_STD_THREAD_COUNT: 4
+
+  valgrind:
+    name: Memory leak checks
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup show
+
+      - name: Install valgrind
+        uses: taiki-e/install-action@valgrind
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run memory leaks check
+        run: ci/valgrind-check/run.sh
+        shell: bash
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
@@ -116,7 +136,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test]
+    needs: [check, test, valgrind]
     if: always()
     steps:
       - name: Check whether all jobs pass

@@ -62,7 +62,7 @@ impl AlignQueryable {
     }
 
     async fn start(&self) -> Self {
-        log::debug!(
+        tracing::debug!(
             "[ALIGN QUERYABLE] Declaring Queryable on '{}'...",
             self.digest_key
         );
@@ -78,19 +78,19 @@ impl AlignQueryable {
             let query = match queryable.recv_async().await {
                 Ok(query) => query,
                 Err(e) => {
-                    log::error!("Error in receiving query: {}", e);
+                    tracing::error!("Error in receiving query: {}", e);
                     continue;
                 }
             };
-            log::trace!("[ALIGN QUERYABLE] Received Query '{}'", query.selector());
+            tracing::trace!("[ALIGN QUERYABLE] Received Query '{}'", query.selector());
             let diff_required = self.parse_selector(query.selector());
-            log::trace!(
+            tracing::trace!(
                 "[ALIGN QUERYABLE] Parsed selector diff_required:{:?}",
                 diff_required
             );
             if diff_required.is_some() {
                 let values = self.get_value(diff_required.unwrap()).await;
-                log::trace!("[ALIGN QUERYABLE] value for the query is {:?}", values);
+                tracing::trace!("[ALIGN QUERYABLE] value for the query is {:?}", values);
                 for value in values {
                     match value {
                         AlignData::Interval(i, c) => {
@@ -176,7 +176,7 @@ impl AlignQueryable {
 
     fn parse_selector(&self, selector: Selector) -> Option<AlignComponent> {
         let properties = selector.parameters_stringmap().unwrap(); // note: this is a hashmap
-        log::trace!("[ALIGN QUERYABLE] Properties are: {:?}", properties);
+        tracing::trace!("[ALIGN QUERYABLE] Properties are: {:?}", properties);
         if properties.get(super::ERA).is_some() {
             Some(AlignComponent::Era(
                 EraType::from_str(properties.get(super::ERA).unwrap()).unwrap(),
@@ -218,26 +218,41 @@ impl AlignQueryable {
         if let Ok(reply) = replies.recv_async().await {
             match reply.sample {
                 Ok(sample) => {
-                    log::trace!(
-                        "[ALIGN QUERYABLE] Received ('{}': '{}')",
+                    tracing::trace!(
+                        "[ALIGN QUERYABLE] Received ('{}': '{}' @ {:?})",
                         sample.key_expr.as_str(),
-                        sample.value
+                        sample.value,
+                        sample.timestamp
                     );
                     if let Some(timestamp) = sample.timestamp {
                         match timestamp.cmp(&logentry.timestamp) {
-                            Ordering::Greater => return None,
+                            Ordering::Greater => {
+                                tracing::error!(
+                                    "[ALIGN QUERYABLE] Data in the storage is newer than requested."
+                                );
+                                return None;
+                            }
                             Ordering::Less => {
-                                log::error!(
+                                tracing::error!(
                                     "[ALIGN QUERYABLE] Data in the storage is older than requested."
                                 );
                                 return None;
                             }
-                            Ordering::Equal => return Some(sample),
+                            Ordering::Equal => {
+                                tracing::debug!(
+                                    "[ALIGN QUERYABLE] Data in the storage has a good timestamp."
+                                );
+                                return Some(sample);
+                            }
                         }
+                    } else {
+                        tracing::error!(
+                            "[ALIGN QUERYABLE] No timestamp on log entry sample from storage."
+                        );
                     }
                 }
                 Err(err) => {
-                    log::error!(
+                    tracing::error!(
                         "[ALIGN QUERYABLE] Error when requesting storage: {:?}.",
                         err
                     );

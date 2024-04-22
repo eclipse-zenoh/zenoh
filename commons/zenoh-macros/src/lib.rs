@@ -304,9 +304,9 @@ impl syn::parse::Parse for FormatUsage {
 /// Write a set of values into a `Formatter`, stopping as soon as a value doesn't fit the specification for its field.
 /// Contrary to `keformat` doesn't build the Formatter into a Key Expression.
 ///
-/// `kewrite!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.  
-/// `$formatter` must be an expression that dereferences to `&mut Formatter`.  
-/// `$expr` must resolve to a value that implements `core::fmt::Display`.  
+/// `kewrite!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.
+/// `$formatter` must be an expression that dereferences to `&mut Formatter`.
+/// `$expr` must resolve to a value that implements `core::fmt::Display`.
 /// `$expr` defaults to `$ident` if omitted.
 ///
 /// This macro always results in an expression that resolves to `Result<&mut Formatter, FormatSetError>`.
@@ -326,9 +326,9 @@ pub fn kewrite(tokens: TokenStream) -> TokenStream {
 
 /// Write a set of values into a `Formatter` and then builds it into an `OwnedKeyExpr`, stopping as soon as a value doesn't fit the specification for its field.
 ///
-/// `keformat!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.  
-/// `$formatter` must be an expression that dereferences to `&mut Formatter`.  
-/// `$expr` must resolve to a value that implements `core::fmt::Display`.  
+/// `keformat!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.
+/// `$formatter` must be an expression that dereferences to `&mut Formatter`.
+/// `$expr` must resolve to a value that implements `core::fmt::Display`.
 /// `$expr` defaults to `$ident` if omitted.
 ///
 /// This macro always results in an expression that resolves to `ZResult<OwnedKeyExpr>`, and leaves `$formatter` in its written state.
@@ -351,4 +351,39 @@ pub fn ke(tokens: TokenStream) -> TokenStream {
         Ok(_) => quote!(unsafe {::zenoh::key_expr::keyexpr::from_str_unchecked(#ke)}).into(),
         Err(e) => panic!("{}", e),
     }
+}
+
+mod zenoh_runtime_derive;
+use syn::DeriveInput;
+use zenoh_runtime_derive::{derive_generic_runtime_param, derive_register_param};
+
+/// Make the underlying struct `Param` be generic over any `T` satifying a generated `trait DefaultParam { fn param() -> Param; }`
+/// ```rust,ignore
+/// #[derive(GenericRuntimeParam)]
+/// struct Param {
+///    ...
+/// }
+/// ```
+#[proc_macro_derive(GenericRuntimeParam)]
+pub fn generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse_macro_input!(input);
+    derive_generic_runtime_param(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Register the input `Enum` with the struct `Param` specified in the param attribute
+/// ```rust,ignore
+/// #[derive(RegisterParam)]
+/// #[param(Param)]
+/// enum Enum {
+///    ...
+/// }
+/// ```
+#[proc_macro_derive(RegisterParam, attributes(alias, param))]
+pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse_macro_input!(input);
+    derive_register_param(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }

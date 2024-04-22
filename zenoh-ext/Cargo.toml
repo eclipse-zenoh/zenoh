@@ -31,38 +31,20 @@ unstable = []
 default = []
 
 [dependencies]
-async-std = { workspace = true, features = ["attributes", "unstable"] }
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
 bincode = { workspace = true }
-env_logger = { workspace = true }
+zenoh-util = {workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 serde = { workspace = true, features = ["default"] }
 zenoh = { workspace = true, features = ["unstable"], default-features = false }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
-zenoh-util = { workspace = true }
-
-[dev-dependencies]
-clap = { workspace = true, features = ["derive"] }
-
-[[example]]
-name = "z_query_sub"
-path = "examples/z_query_sub.rs"
-
-[[example]]
-name = "z_pub_cache"
-path = "examples/z_pub_cache.rs"
-
-[[example]]
-name = "z_member"
-path = "examples/z_member.rs"
-
-[[example]]
-name = "z_view_size"
-path = "examples/z_view_size.rs"
+zenoh-runtime = { workspace = true }
+zenoh-task = { workspace = true }
 
 [package.metadata.docs.rs]
 features = ["unstable"]

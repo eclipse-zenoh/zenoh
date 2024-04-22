@@ -15,10 +15,10 @@
 use crate::multicast::shm::SharedMemoryMulticast;
 use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
 use crate::TransportManager;
-use async_std::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionMulticastConf;
 #[cfg(feature = "shared-memory")]
@@ -107,10 +107,7 @@ impl TransportManagerBuilderMulticast {
         self
     }
 
-    pub async fn from_config(
-        mut self,
-        config: &Config,
-    ) -> ZResult<TransportManagerBuilderMulticast> {
+    pub fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilderMulticast> {
         self = self.lease(Duration::from_millis(
             *config.transport().link().tx().lease(),
         ));
@@ -173,7 +170,7 @@ impl Default for TransportManagerBuilderMulticast {
             #[cfg(feature = "transport_compression")]
             is_compression: *compression.enabled(),
         };
-        async_std::task::block_on(tmb.from_config(&Config::default())).unwrap()
+        tmb.from_config(&Config::default()).unwrap()
     }
 }
 
@@ -183,7 +180,7 @@ impl TransportManager {
     }
 
     pub async fn close_multicast(&self) {
-        log::trace!("TransportManagerMulticast::clear())");
+        tracing::trace!("TransportManagerMulticast::clear())");
 
         zasynclock!(self.state.multicast.protocols).clear();
 
@@ -303,7 +300,7 @@ impl TransportManager {
 
         res.map(|_| ()).ok_or_else(|| {
             let e = zerror!("Can not delete the transport for locator: {}", locator);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -334,7 +331,7 @@ impl TransportManager {
 
         res.map(|_| ()).ok_or_else(|| {
             let e = zerror!("Can not delete the transport for locator: {}", locator);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
