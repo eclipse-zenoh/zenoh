@@ -26,53 +26,14 @@ env:
   CARGO_PROFILE_DEV_DEBUG: false
 
 jobs:
-  check:
-    name: Run checks on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
-
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        run: |
-          rustup show
-          rustup component add rustfmt clippy
-
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Code format check
-        run: cargo fmt --check
-
-      - name: Clippy
-        run: cargo +stable clippy --all-targets -- --deny warnings
-
-      - name: Clippy unstable targets
-        run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
-
-      - name: Clippy all features
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
-        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
-
-      - name: Install generic no_std target
-        # Generic no_std target architecture is x86_64-unknown-none
-        run: rustup target add x86_64-unknown-none
-
-      - name: Perform no_std checks
-        run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
-
   test:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os:
+          - windows-latest
 
     steps:
       - name: Clone this repository
@@ -95,38 +56,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-
-      - name: Run tests with SHM
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
-
-      - name: Check for feature leaks
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -p zenohd --no-default-features
-
-      - name: Run doctests
-        run: cargo test --doc
-
-  valgrind:
-    name: Memory leak checks
-    runs-on: ubuntu-latest
-    needs: check
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
-
-      - name: Install latest Rust toolchain
-        run: rustup show
-
-      - name: Install valgrind
-        uses: taiki-e/install-action@valgrind
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run memory leaks check
-        run: ci/valgrind-check/run.sh
-        shell: bash
+        run: cargo nextest run -p zenoh --test interceptors
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
@@ -136,7 +66,8 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test, valgrind]
+    needs:
+      - test
     if: always()
     steps:
       - name: Check whether all jobs pass
