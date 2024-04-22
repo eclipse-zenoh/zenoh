@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
@@ -129,6 +129,7 @@ impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
+        let mut config = runtime.config().lock();
         let metadata = runtime.state.metadata.clone();
         let root_key: OwnedKeyExpr = format!("@/{whatami_str}/{zid_str}").try_into().unwrap();
 
@@ -140,18 +141,24 @@ impl AdminSpace {
                 .unwrap(),
             Arc::new(metrics),
         );
-        handlers.insert(
-            format!("@/{whatami_str}/{zid_str}/linkstate/routers")
-                .try_into()
-                .unwrap(),
-            Arc::new(routers_linkstate_data),
-        );
-        handlers.insert(
-            format!("@/{whatami_str}/{zid_str}/linkstate/peers")
-                .try_into()
-                .unwrap(),
-            Arc::new(peers_linkstate_data),
-        );
+        if runtime.state.whatami == WhatAmI::Router {
+            handlers.insert(
+                format!("@/{whatami_str}/{zid_str}/linkstate/routers")
+                    .try_into()
+                    .unwrap(),
+                Arc::new(routers_linkstate_data),
+            );
+        }
+        if runtime.state.whatami != WhatAmI::Client
+            && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate"
+        {
+            handlers.insert(
+                format!("@/{whatami_str}/{zid_str}/linkstate/peers")
+                    .try_into()
+                    .unwrap(),
+                Arc::new(peers_linkstate_data),
+            );
+        }
         handlers.insert(
             format!("@/{whatami_str}/{zid_str}/subscriber/**")
                 .try_into()
@@ -197,13 +204,7 @@ impl AdminSpace {
             context,
         });
 
-        admin
-            .context
-            .runtime
-            .state
-            .config
-            .lock()
-            .set_plugin_validator(Arc::downgrade(&admin));
+        config.set_plugin_validator(Arc::downgrade(&admin));
 
         let cfg_rx = admin.context.runtime.state.config.subscribe();
         tokio::task::spawn({
