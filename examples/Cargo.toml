@@ -157,3 +157,8 @@ path = "examples/z_pong.rs"
 name = "z_alloc_shm"
 path = "examples/z_alloc_shm.rs"
 required-features = ["unstable", "shared-memory"]
+
+[[example]]
+name = "z_payload_shm"
+path = "examples/z_payload_shm.rs"
+required-features = ["unstable", "shared-memory"]
