@@ -715,11 +715,18 @@ fn subscribers_data(context: &AdminContext, query: Query) {
             "@/{}/{}/subscriber/{}",
             context.runtime.state.whatami,
             context.runtime.state.zid,
-            sub.expr()
+            sub.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+            if let Err(e) = query
+                .reply(Ok(Sample::new(
+                    key,
+                    Value::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()))
+                        .encoding(KnownEncoding::AppJson.into()),
+                )))
+                .res()
+            {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -733,11 +740,20 @@ fn queryables_data(context: &AdminContext, query: Query) {
             "@/{}/{}/queryable/{}",
             context.runtime.state.whatami,
             context.runtime.state.zid,
-            qabl.expr()
+            qabl.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+            if let Err(e) = query
+                .reply(Ok(Sample::new(
+                    key,
+                    Value::from(
+                        serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()),
+                    )
+                    .encoding(KnownEncoding::AppJson.into()),
+                )))
+                .res()
+            {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }

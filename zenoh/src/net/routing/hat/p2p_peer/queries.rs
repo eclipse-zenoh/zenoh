@@ -17,12 +17,12 @@ use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::HatQueriesTrait;
+use crate::net::routing::hat::{HatQueriesTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
@@ -272,11 +272,19 @@ impl HatQueriesTrait for HatCode {
         forget_client_queryable(tables, face, res);
     }
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        let mut qabls = HashSet::new();
+    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known queryables (keys)
+        let mut qabls = HashMap::new();
         for src_face in tables.faces.values() {
             for qabl in &face_hat!(src_face).remote_qabls {
-                qabls.insert(qabl.clone());
+                // Insert the key in the list of known queryables
+                let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
+                // Append src_face as a queryable source in the proper list
+                match src_face.whatami {
+                    WhatAmI::Router => srcs.routers.push(src_face.zid),
+                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
+                    WhatAmI::Client => srcs.clients.push(src_face.zid),
+                }
             }
         }
         Vec::from_iter(qabls)

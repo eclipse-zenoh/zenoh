@@ -19,7 +19,7 @@ use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::HatPubSubTrait;
+use crate::net::routing::hat::{HatPubSubTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use petgraph::graph::NodeIndex;
@@ -605,8 +605,31 @@ impl HatPubSubTrait for HatCode {
         }
     }
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        hat!(tables).peer_subs.iter().cloned().collect()
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known suscriptions (keys)
+        hat!(tables)
+            .peer_subs
+            .iter()
+            .map(|s| {
+                (
+                    s.clone(),
+                    // Compute the list of routers, peers and clients that are known
+                    // sources of those subscriptions
+                    Sources {
+                        routers: vec![],
+                        peers: Vec::from_iter(res_hat!(s).peer_subs.iter().cloned()),
+                        clients: s
+                            .session_ctxs
+                            .values()
+                            .filter_map(|f| {
+                                (f.face.whatami == WhatAmI::Client && f.subs.is_some())
+                                    .then_some(f.face.zid)
+                            })
+                            .collect(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn compute_data_route(
