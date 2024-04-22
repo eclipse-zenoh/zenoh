@@ -689,11 +689,18 @@ fn queryables_data(context: &AdminContext, query: Query) {
         let key = KeyExpr::try_from(format!(
             "@/router/{}/queryable/{}",
             context.zid_str,
-            qabl.expr()
+            qabl.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+            if let Err(e) = query
+                .reply(Ok(Sample::new(
+                    key,
+                    Value::from(serde_json::to_string(&qabl.1).unwrap_or("{}".to_string()))
+                        .encoding(KnownEncoding::AppJson.into()),
+                )))
+                .res()
+            {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }

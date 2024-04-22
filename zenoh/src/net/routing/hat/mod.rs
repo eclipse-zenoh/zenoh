@@ -176,7 +176,7 @@ pub(crate) trait HatQueriesTrait {
         node_id: NodeId,
     );
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>>;
+    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_query_route(
         &self,
