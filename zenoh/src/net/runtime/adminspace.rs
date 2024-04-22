@@ -672,7 +672,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
             if let Err(e) = query
                 .reply(Ok(Sample::new(
                     key,
-                    Value::from(serde_json::to_string(&sub.1).unwrap_or("".to_string()))
+                    Value::from(serde_json::to_string(&sub.1).unwrap_or("{}".to_string()))
                         .encoding(KnownEncoding::AppJson.into()),
                 )))
                 .res()
