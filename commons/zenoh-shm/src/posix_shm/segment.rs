@@ -117,6 +117,8 @@ where
         unsafe { *(self.shmem.as_ptr() as *mut usize) }
     }
 
+    // TODO: dead code warning occurs because of `tested_crate_module!()` macro when feature `test` is not enabled. Better to fix that 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         unsafe { *(self.shmem.as_ptr() as *mut usize) == 0 }
     }

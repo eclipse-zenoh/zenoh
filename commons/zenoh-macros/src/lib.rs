@@ -361,3 +361,38 @@ pub fn ke(tokens: TokenStream) -> TokenStream {
         Err(e) => panic!("{}", e),
     }
 }
+
+mod zenoh_runtime_derive;
+use syn::DeriveInput;
+use zenoh_runtime_derive::{derive_generic_runtime_param, derive_register_param};
+
+/// Make the underlying struct `Param` be generic over any `T` satifying a generated `trait DefaultParam { fn param() -> Param; }`
+/// ```rust,ignore
+/// #[derive(GenericRuntimeParam)]
+/// struct Param {
+///    ...
+/// }
+/// ```
+#[proc_macro_derive(GenericRuntimeParam)]
+pub fn generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse_macro_input!(input);
+    derive_generic_runtime_param(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Register the input `Enum` with the struct `Param` specified in the param attribute
+/// ```rust,ignore
+/// #[derive(RegisterParam)]
+/// #[param(Param)]
+/// enum Enum {
+///    ...
+/// }
+/// ```
+#[proc_macro_derive(RegisterParam, attributes(alias, param))]
+pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse_macro_input!(input);
+    derive_register_param(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}

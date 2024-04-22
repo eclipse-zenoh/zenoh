@@ -24,13 +24,17 @@ use super::primitives::DeMux;
 use super::routing;
 use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
-use crate::GIT_VERSION;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::plugins::sealed::PluginsManager;
+use crate::{GIT_VERSION, LONG_VERSION};
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -51,34 +55,7 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-#[derive(Default)]
-pub struct RuntimeBuilder {
-    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
-}
-
-impl RuntimeBuilder {
-    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-    pub fn shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
-        self.shm_clients = Some(shm_clients);
-        self
-    }
-
-    pub async fn build(self, config: Config) -> ZResult<Runtime> {
-        let mut runtime = Runtime::init(
-            config,
-            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-            self.shm_clients,
-        )
-        .await?;
-        match runtime.start().await {
-            Ok(()) => Ok(runtime),
-            Err(err) => Err(err),
-        }
-    }
-}
-
-struct RuntimeState {
+pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
     next_id: AtomicU32,
@@ -90,6 +67,8 @@ struct RuntimeState {
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
     task_controller: TaskController,
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    plugins_manager: Mutex<PluginsManager>,
 }
 
 pub struct WeakRuntime {
@@ -102,42 +81,49 @@ impl WeakRuntime {
     }
 }
 
-#[derive(Clone)]
-pub struct Runtime {
-    state: Arc<RuntimeState>,
+pub struct RuntimeBuilder {
+    config: Config,
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    plugins_manager: Option<PluginsManager>,
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
 }
 
-impl StructVersion for Runtime {
-    fn struct_version() -> u64 {
-        1
-    }
-    fn struct_features() -> &'static str {
-        crate::FEATURES
-    }
-}
-
-impl PluginStartArgs for Runtime {}
-
-impl Runtime {
-    pub async fn new(config: Config) -> ZResult<Runtime> {
-        Self::builder().build(config).await
+impl RuntimeBuilder {
+    pub fn new(config: Config) -> Self {
+        Self {
+            config,
+            #[cfg(all(feature = "unstable", feature = "plugins"))]
+            plugins_manager: None,
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            shm_clients: None,
+        }
     }
 
-    pub fn builder() -> RuntimeBuilder {
-        RuntimeBuilder::default()
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    pub fn plugins_manager<T: Into<Option<PluginsManager>>>(mut self, plugins_manager: T) -> Self {
+        self.plugins_manager = plugins_manager.into();
+        self
     }
 
-    pub(crate) async fn init(
-        config: Config,
-        #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
-            Arc<SharedMemoryClientStorage>,
-        >,
-    ) -> ZResult<Runtime> {
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    pub fn shm_clients(mut self, shm_clients: Option<Arc<SharedMemoryClientStorage>>) -> Self {
+        self.shm_clients = shm_clients;
+        self
+    }
+
+    pub async fn build(self) -> ZResult<Runtime> {
+        let RuntimeBuilder {
+            config,
+            #[cfg(all(feature = "unstable", feature = "plugins"))]
+            mut plugins_manager,
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            shm_clients,
+        } = self;
+
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-
         let zid = *config.id();
-
-        tracing::info!("Using PID: {}", zid);
+        tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
         let metadata = config.metadata().clone();
@@ -167,8 +153,15 @@ impl Runtime {
         #[cfg(not(feature = "unstable"))]
         let transport_manager = transport_manager.build(handler.clone())?;
 
-        let config = Notifier::new(config);
+        // Plugins manager
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        let plugins_manager = plugins_manager
+            .take()
+            .unwrap_or_else(|| crate::plugins::loader::load_plugins(&config));
+        // Admin space creation flag
+        let start_admin_space = *config.adminspace.enabled();
 
+        let config = Notifier::new(config);
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid,
@@ -182,11 +175,18 @@ impl Runtime {
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
                 task_controller: TaskController::default(),
+                #[cfg(all(feature = "unstable", feature = "plugins"))]
+                plugins_manager: Mutex::new(plugins_manager),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
+        // Start plugins
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        crate::plugins::loader::start_plugins(&runtime);
+
+        // Start notifier task
         let receiver = config.subscribe();
         let token = runtime.get_cancellation_token();
         runtime.spawn({
@@ -213,15 +213,70 @@ impl Runtime {
             }
         });
 
+        // Admin space
+        if start_admin_space {
+            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+        }
+
         Ok(runtime)
+    }
+}
+
+#[derive(Clone)]
+pub struct Runtime {
+    state: Arc<RuntimeState>,
+}
+
+impl StructVersion for Runtime {
+    fn struct_version() -> u64 {
+        1
+    }
+    fn struct_features() -> &'static str {
+        crate::FEATURES
+    }
+}
+
+impl PluginStartArgs for Runtime {}
+
+impl Runtime {
+    pub async fn new(config: Config) -> ZResult<Runtime> {
+        // Create plugin_manager and load plugins
+        let mut runtime = Runtime::init(
+            config,
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            None,
+        )
+        .await?;
+        match runtime.start().await {
+            Ok(()) => Ok(runtime),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub(crate) async fn init(
+        config: Config,
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
+            Arc<SharedMemoryClientStorage>,
+        >,
+    ) -> ZResult<Runtime> {
+        let builder = RuntimeBuilder::new(config);
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+        let builder = builder.shm_clients(shm_clients);
+        builder.build().await
     }
 
     #[inline(always)]
-    pub fn manager(&self) -> &TransportManager {
+    pub(crate) fn manager(&self) -> &TransportManager {
         &self.state.manager
     }
 
-    pub fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[inline(always)]
+    pub(crate) fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+        zlock!(self.state.plugins_manager)
+    }
+
+    pub(crate) fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
         zwrite!(self.state.transport_handlers).push(handler);
     }
 
@@ -232,6 +287,7 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         tracing::trace!("Runtime::close())");
+        // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.state
             .task_controller

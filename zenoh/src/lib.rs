@@ -107,6 +107,10 @@ pub use zenoh_result::ZResult as Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
+lazy_static::lazy_static!(
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
+);
+
 pub const FEATURES: &str = concat_enabled_features!(
     prefix = "zenoh",
     features = [
@@ -146,6 +150,7 @@ pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 pub mod plugins;
 pub mod prelude;
 pub mod publication;

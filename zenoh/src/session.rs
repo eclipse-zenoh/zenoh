@@ -844,34 +844,25 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            match Runtime::init(
+            let mut runtime = Runtime::init(
                 config,
                 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
                 shm_clients,
             )
-            .await
-            {
-                Ok(mut runtime) => {
-                    let mut session = Self::init(
-                        runtime.clone(),
-                        aggregated_subscribers,
-                        aggregated_publishers,
-                    )
-                    .res_async()
-                    .await;
-                    session.owns_runtime = true;
-                    match runtime.start().await {
-                        Ok(()) => {
-                            // Workaround for the declare_and_shoot problem
-                            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY))
-                                .await;
-                            Ok(session)
-                        }
-                        Err(err) => Err(err),
-                    }
-                }
-                Err(err) => Err(err),
-            }
+            .await?;
+
+            let mut session = Self::init(
+                runtime.clone(),
+                aggregated_subscribers,
+                aggregated_publishers,
+            )
+            .res_async()
+            .await;
+            session.owns_runtime = true;
+            runtime.start().await?;
+            // Workaround for the declare_and_shoot problem
+            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+            Ok(session)
         })
     }
 

@@ -15,6 +15,7 @@
 // Restricting to macos by default because of no IPv6 support
 // on GitHub CI actions on Linux and Windows.
 #[cfg(target_family = "unix")]
+#[cfg(all(feature = "transport_compression", feature = "transport_udp"))]
 mod tests {
     use std::{
         any::Any,
