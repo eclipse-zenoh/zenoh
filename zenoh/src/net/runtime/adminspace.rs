@@ -128,45 +128,50 @@ impl AdminSpace {
 
     pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
         let zid_str = runtime.state.zid.to_string();
+        let whatami_str = runtime.state.whatami.to_str();
         let metadata = runtime.state.metadata.clone();
-        let root_key: OwnedKeyExpr = format!("@/router/{zid_str}").try_into().unwrap();
+        let root_key: OwnedKeyExpr = format!("@/{whatami_str}/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
-        handlers.insert(root_key.clone(), Arc::new(router_data));
+        handlers.insert(root_key.clone(), Arc::new(local_data));
         handlers.insert(
-            format!("@/router/{zid_str}/metrics").try_into().unwrap(),
-            Arc::new(router_metrics),
+            format!("@/{whatami_str}/{zid_str}/metrics")
+                .try_into()
+                .unwrap(),
+            Arc::new(metrics),
         );
         handlers.insert(
-            format!("@/router/{zid_str}/linkstate/routers")
+            format!("@/{whatami_str}/{zid_str}/linkstate/routers")
                 .try_into()
                 .unwrap(),
             Arc::new(routers_linkstate_data),
         );
         handlers.insert(
-            format!("@/router/{zid_str}/linkstate/peers")
+            format!("@/{whatami_str}/{zid_str}/linkstate/peers")
                 .try_into()
                 .unwrap(),
             Arc::new(peers_linkstate_data),
         );
         handlers.insert(
-            format!("@/router/{zid_str}/subscriber/**")
+            format!("@/{whatami_str}/{zid_str}/subscriber/**")
                 .try_into()
                 .unwrap(),
             Arc::new(subscribers_data),
         );
         handlers.insert(
-            format!("@/router/{zid_str}/queryable/**")
+            format!("@/{whatami_str}/{zid_str}/queryable/**")
                 .try_into()
                 .unwrap(),
             Arc::new(queryables_data),
         );
         handlers.insert(
-            format!("@/router/{zid_str}/plugins/**").try_into().unwrap(),
+            format!("@/{whatami_str}/{zid_str}/plugins/**")
+                .try_into()
+                .unwrap(),
             Arc::new(plugins_data),
         );
         handlers.insert(
-            format!("@/router/{zid_str}/status/plugins/**")
+            format!("@/{whatami_str}/{zid_str}/status/plugins/**")
                 .try_into()
                 .unwrap(),
             Arc::new(plugins_status),
@@ -339,16 +344,16 @@ impl Primitives for AdminSpace {
             }
         }
 
-        if let Some(key) = msg
-            .wire_expr
-            .as_str()
-            .strip_prefix(&format!("@/router/{}/config/", &self.context.zid_str))
-        {
+        if let Some(key) = msg.wire_expr.as_str().strip_prefix(&format!(
+            "@/{}/{}/config/",
+            self.context.runtime.state.whatami, &self.context.zid_str
+        )) {
             match msg.payload {
                 PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
                     Ok(json) => {
                         tracing::trace!(
-                            "Insert conf value /@/router/{}/config/{} : {}",
+                            "Insert conf value /@/{}/{}/config/{} : {}",
+                            self.context.runtime.state.whatami,
                             &self.context.zid_str,
                             key,
                             json
@@ -356,19 +361,24 @@ impl Primitives for AdminSpace {
                         if let Err(e) = (&self.context.runtime.state.config).insert_json5(key, json)
                         {
                             error!(
-                                "Error inserting conf value /@/router/{}/config/{} : {} - {}",
-                                &self.context.zid_str, key, json, e
+                                "Error inserting conf value /@/{}/{}/config/{} : {} - {}",
+                                self.context.runtime.state.whatami,
+                                &self.context.zid_str,
+                                key,
+                                json,
+                                e
                             );
                         }
                     }
                     Err(e) => error!(
-                        "Received non utf8 conf value on /@/router/{}/config/{} : {}",
-                        &self.context.zid_str, key, e
+                        "Received non utf8 conf value on /@/{}/{}/config/{} : {}",
+                        self.context.runtime.state.whatami, &self.context.zid_str, key, e
                     ),
                 },
                 PushBody::Del(_) => {
                     tracing::trace!(
-                        "Deleting conf value /@/router/{}/config/{}",
+                        "Deleting conf value /@/{}/{}/config/{}",
+                        self.context.runtime.state.whatami,
                         &self.context.zid_str,
                         key
                     );
@@ -487,8 +497,11 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 }
 
-fn router_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}", context.zid_str).try_into().unwrap();
+fn local_data(context: &AdminContext, query: Query) {
+    let reply_key: OwnedKeyExpr =
+        format!("@/{}/{}", context.runtime.state.whatami, context.zid_str)
+            .try_into()
+            .unwrap();
 
     let transport_mgr = context.runtime.manager().clone();
 
@@ -575,10 +588,13 @@ fn router_data(context: &AdminContext, query: Query) {
     }
 }
 
-fn router_metrics(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}/metrics", context.zid_str)
-        .try_into()
-        .unwrap();
+fn metrics(context: &AdminContext, query: Query) {
+    let reply_key: OwnedKeyExpr = format!(
+        "@/{}/{}/metrics",
+        context.runtime.state.whatami, context.zid_str
+    )
+    .try_into()
+    .unwrap();
     #[allow(unused_mut)]
     let mut metrics = format!(
         r#"# HELP zenoh_build Informations about zenoh.
@@ -610,9 +626,12 @@ zenoh_build{{version="{}"}} 1
 }
 
 fn routers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/routers", context.zid_str)
-        .try_into()
-        .unwrap();
+    let reply_key: OwnedKeyExpr = format!(
+        "@/{}/{}/linkstate/routers",
+        context.runtime.state.whatami, context.zid_str
+    )
+    .try_into()
+    .unwrap();
 
     let tables = zread!(context.runtime.state.router.tables.tables);
 
@@ -635,9 +654,12 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 }
 
 fn peers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/peers", context.zid_str)
-        .try_into()
-        .unwrap();
+    let reply_key: OwnedKeyExpr = format!(
+        "@/{}/{}/linkstate/peers",
+        context.runtime.state.whatami, context.zid_str
+    )
+    .try_into()
+    .unwrap();
 
     let tables = zread!(context.runtime.state.router.tables.tables);
 
@@ -663,7 +685,8 @@ fn subscribers_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
     for sub in tables.hat_code.get_subscriptions(&tables) {
         let key = KeyExpr::try_from(format!(
-            "@/router/{}/subscriber/{}",
+            "@/{}/{}/subscriber/{}",
+            context.runtime.state.whatami,
             context.zid_str,
             sub.expr()
         ))
@@ -680,7 +703,8 @@ fn queryables_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
     for qabl in tables.hat_code.get_queryables(&tables) {
         let key = KeyExpr::try_from(format!(
-            "@/router/{}/queryable/{}",
+            "@/{}/{}/queryable/{}",
+            context.runtime.state.whatami,
             context.zid_str,
             qabl.expr()
         ))
@@ -695,7 +719,10 @@ fn queryables_data(context: &AdminContext, query: Query) {
 
 fn plugins_data(context: &AdminContext, query: Query) {
     let guard = zlock!(context.plugins_mgr);
-    let root_key = format!("@/router/{}/plugins", &context.zid_str);
+    let root_key = format!(
+        "@/{}/{}/plugins",
+        context.runtime.state.whatami, &context.zid_str
+    );
     let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
     tracing::debug!("requested plugins status {:?}", query.key_expr());
     if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
@@ -714,7 +741,10 @@ fn plugins_data(context: &AdminContext, query: Query) {
 fn plugins_status(context: &AdminContext, query: Query) {
     let selector = query.selector();
     let guard = zlock!(context.plugins_mgr);
-    let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
+    let mut root_key = format!(
+        "@/{}/{}/status/plugins/",
+        context.runtime.state.whatami, &context.zid_str
+    );
 
     for plugin in guard.started_plugins_iter() {
         with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
