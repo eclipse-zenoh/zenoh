@@ -17,6 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../../zenoh/index.html)
+pub(crate) mod loader;
 pub(crate) mod sealed;
 
 #[zenoh_macros::unstable]

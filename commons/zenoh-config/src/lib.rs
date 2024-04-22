@@ -482,6 +482,9 @@ validated_struct::validator! {
         ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
         /// </div>
         AdminSpaceConf {
+            /// Enable the admin space
+            #[serde(default = "set_false")]
+            pub enabled: bool,
             /// Permissions on the admin space
             pub permissions:
             PermissionsConf {
@@ -507,7 +510,11 @@ validated_struct::validator! {
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
-        plugins_search_dirs: Vec<String>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
+        pub plugins_loading: #[derive(Default)]
+        PluginsLoading {
+            pub enabled: bool,
+            pub search_dirs: Option<Vec<String>>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
+        },
         #[validated(recursive_accessors)]
         /// The configuration for plugins.
         ///
@@ -721,10 +728,13 @@ impl Config {
     }
 
     pub fn libloader(&self) -> LibLoader {
-        if self.plugins_search_dirs.is_empty() {
-            LibLoader::default()
+        if self.plugins_loading.enabled {
+            match self.plugins_loading.search_dirs() {
+                Some(dirs) => LibLoader::new(dirs, true),
+                None => LibLoader::default(),
+            }
         } else {
-            LibLoader::new(&self.plugins_search_dirs, true)
+            LibLoader::empty()
         }
     }
 }
