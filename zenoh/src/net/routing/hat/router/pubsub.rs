@@ -926,12 +926,15 @@ impl HatPubSubTrait for HatCode {
     }
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known suscriptions (keys)
         hat!(tables)
             .router_subs
             .iter()
             .map(|s| {
                 (
                     s.clone(),
+                    // Compute the list of routers, peers and clients that are known
+                    // sources of those subscriptions
                     Sources {
                         routers: Vec::from_iter(res_hat!(s).router_subs.iter().cloned()),
                         peers: if hat!(tables).full_net(WhatAmI::Peer) {

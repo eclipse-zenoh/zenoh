@@ -275,10 +275,13 @@ impl HatPubSubTrait for HatCode {
     }
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known suscriptions (keys)
         let mut subs = HashMap::new();
         for src_face in tables.faces.values() {
             for sub in &face_hat!(src_face).remote_subs {
+                // Insert the key in the list of known suscriptions
                 let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
+                // Append src_face as a suscription source in the proper list
                 match src_face.whatami {
                     WhatAmI::Router => srcs.routers.push(src_face.zid),
                     WhatAmI::Peer => srcs.peers.push(src_face.zid),

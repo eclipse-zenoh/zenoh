@@ -671,12 +671,15 @@ impl HatQueriesTrait for HatCode {
     }
 
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known queryables (keys)
         hat!(tables)
             .peer_qabls
             .iter()
             .map(|s| {
                 (
                     s.clone(),
+                    // Compute the list of routers, peers and clients that are known
+                    // sources of those queryables
                     Sources {
                         routers: vec![],
                         peers: Vec::from_iter(res_hat!(s).peer_qabls.keys().cloned()),
