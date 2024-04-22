@@ -19,8 +19,6 @@ use zenoh::prelude::r#async::*;
 async fn main() {
     zenoh_util::init_log_test();
 
-    let _z = zenoh_runtime::ZRuntimePoolGuard;
-
     let pub_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let sub_key_expr = KeyExpr::try_from("test/valgrind/**").unwrap();
 

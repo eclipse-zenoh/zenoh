@@ -24,6 +24,7 @@ use zenoh_transport::{
 };
 
 #[cfg(target_os = "linux")]
+#[cfg(any(feature = "transport_tcp", feature = "transport_udp"))]
 use zenoh_util::net::get_ipv4_ipaddrs;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

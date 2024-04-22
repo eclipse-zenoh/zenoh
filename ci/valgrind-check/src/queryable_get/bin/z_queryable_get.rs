@@ -20,9 +20,7 @@ use zenoh::prelude::r#async::*;
 async fn main() {
     zenoh_util::init_log_test();
 
-    let _z = zenoh_runtime::ZRuntimePoolGuard;
-
-    let queryable_key_expr = keyexpr::new("test/valgrind/data").unwrap();
+    let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();
 
     println!("Declaring Queryable on '{queryable_key_expr}'...");
