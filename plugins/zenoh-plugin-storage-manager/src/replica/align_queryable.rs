@@ -219,21 +219,36 @@ impl AlignQueryable {
             match reply.sample {
                 Ok(sample) => {
                     tracing::trace!(
-                        "[ALIGN QUERYABLE] Received ('{}': '{}')",
+                        "[ALIGN QUERYABLE] Received ('{}': '{}' @ {:?})",
                         sample.key_expr.as_str(),
-                        sample.value
+                        sample.value,
+                        sample.timestamp
                     );
                     if let Some(timestamp) = sample.timestamp {
                         match timestamp.cmp(&logentry.timestamp) {
-                            Ordering::Greater => return None,
+                            Ordering::Greater => {
+                                tracing::error!(
+                                    "[ALIGN QUERYABLE] Data in the storage is newer than requested."
+                                );
+                                return None;
+                            }
                             Ordering::Less => {
                                 tracing::error!(
                                     "[ALIGN QUERYABLE] Data in the storage is older than requested."
                                 );
                                 return None;
                             }
-                            Ordering::Equal => return Some(sample),
+                            Ordering::Equal => {
+                                tracing::debug!(
+                                    "[ALIGN QUERYABLE] Data in the storage has a good timestamp."
+                                );
+                                return Some(sample);
+                            }
                         }
+                    } else {
+                        tracing::error!(
+                            "[ALIGN QUERYABLE] No timestamp on log entry sample from storage."
+                        );
                     }
                 }
                 Err(err) => {

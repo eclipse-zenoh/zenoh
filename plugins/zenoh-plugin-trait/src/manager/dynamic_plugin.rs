@@ -106,6 +106,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
 
 pub struct DynamicPlugin<StartArgs, Instance> {
     name: String,
+    required: bool,
     report: PluginReport,
     source: DynamicPluginSource,
     starter: Option<DynamicPluginStarter<StartArgs, Instance>>,
@@ -113,9 +114,10 @@ pub struct DynamicPlugin<StartArgs, Instance> {
 }
 
 impl<StartArgs, Instance> DynamicPlugin<StartArgs, Instance> {
-    pub fn new(name: String, source: DynamicPluginSource) -> Self {
+    pub fn new(name: String, source: DynamicPluginSource, required: bool) -> Self {
         Self {
             name,
+            required,
             report: PluginReport::new(),
             source,
             starter: None,
@@ -201,6 +203,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArg
 {
     fn as_status(&self) -> &dyn PluginStatus {
         self
+    }
+    fn required(&self) -> bool {
+        self.required
     }
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         let starter = self

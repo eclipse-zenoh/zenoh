@@ -32,6 +32,7 @@ maintenance = { status = "actively-developed" }
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 complete_n = ["zenoh-codec/complete_n"]
+plugins = []
 shared-memory = [
     "zenoh-shm",
     "zenoh-protocol/shared-memory",
@@ -70,7 +71,6 @@ ahash = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 const_format = { workspace = true }
-
 event-listener = { workspace = true }
 flume = { workspace = true }
 form_urlencoded = { workspace = true }
