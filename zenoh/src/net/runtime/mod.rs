@@ -23,9 +23,11 @@ pub mod orchestrator;
 use super::primitives::DeMux;
 use super::routing;
 use super::routing::router::Router;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::api::loader::{load_plugins, start_plugins};
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::plugins::sealed::PluginsManager;
+use crate::api::plugins::PluginsManager;
 use crate::{GIT_VERSION, LONG_VERSION};
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
@@ -39,7 +41,6 @@ use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
@@ -158,7 +159,7 @@ impl RuntimeBuilder {
         #[cfg(all(feature = "unstable", feature = "plugins"))]
         let plugins_manager = plugins_manager
             .take()
-            .unwrap_or_else(|| crate::plugins::loader::load_plugins(&config));
+            .unwrap_or_else(|| load_plugins(&config));
         // Admin space creation flag
         let start_admin_space = *config.adminspace.enabled();
 
@@ -185,7 +186,7 @@ impl RuntimeBuilder {
 
         // Start plugins
         #[cfg(all(feature = "unstable", feature = "plugins"))]
-        crate::plugins::loader::start_plugins(&runtime);
+        start_plugins(&runtime);
 
         // Start notifier task
         let receiver = config.subscribe();

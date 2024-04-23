@@ -82,7 +82,6 @@ extern crate zenoh_result;
 mod api;
 mod net;
 
-
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub use zenoh_shm::api as shm;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
@@ -329,6 +328,7 @@ pub mod time {
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
 pub mod runtime {
+    pub use crate::net::runtime::RuntimeBuilder;
     pub use crate::net::runtime::{AdminSpace, Runtime};
     pub use zenoh_runtime::ZRuntime;
 }
@@ -343,6 +343,7 @@ pub mod config {
 }
 
 #[doc(hidden)]
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 pub mod plugins {
     pub use crate::api::plugins::PluginsManager;
     pub use crate::api::plugins::Response;

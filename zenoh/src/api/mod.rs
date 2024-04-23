@@ -23,6 +23,7 @@ pub(crate) mod info;
 pub(crate) mod key_expr;
 #[cfg(feature = "unstable")]
 pub(crate) mod liveliness;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 pub(crate) mod plugins;
 pub(crate) mod publication;
 pub(crate) mod query;
@@ -34,3 +35,5 @@ pub(crate) mod session;
 pub(crate) mod subscriber;
 pub(crate) mod time;
 pub(crate) mod value;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+pub(crate) mod loader;

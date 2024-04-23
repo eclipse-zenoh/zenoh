@@ -15,19 +15,13 @@ use super::Runtime;
 use crate::api::builders::sample::ValueBuilderTrait;
 use crate::api::bytes::ZBytes;
 use crate::api::key_expr::KeyExpr;
-use crate::api::plugins;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::api::plugins::PluginsManager;
 use crate::api::queryable::Query;
 use crate::api::queryable::QueryInner;
 use crate::api::value::Value;
 use crate::encoding::Encoding;
 use crate::net::primitives::Primitives;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::SyncResolve;
-use crate::queryable::Query;
-use crate::queryable::QueryInner;
-use crate::sample::builder::ValueBuilderTrait;
-use crate::value::Value;
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -37,6 +31,7 @@ use std::sync::Mutex;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_core::SyncResolve;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
@@ -109,7 +104,7 @@ impl ConfigValidator for AdminSpace {
 impl AdminSpace {
     #[cfg(all(feature = "unstable", feature = "plugins"))]
     fn start_plugin(
-        plugin_mgr: &mut plugins::PluginsManager,
+        plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
         start_args: &Runtime,
         required: bool,
