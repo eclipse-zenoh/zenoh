@@ -19,9 +19,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use zenoh::config::EndPoint;
 use zenoh::config::{Config, ModeDependentValue, PermissionsConf, ValidatedMap};
+use zenoh::core::AsyncResolve;
 use zenoh::core::Result;
 use zenoh::scouting::WhatAmI;
-use zenoh::core::AsyncResolve;
 
 #[cfg(feature = "loki")]
 use url::Url;

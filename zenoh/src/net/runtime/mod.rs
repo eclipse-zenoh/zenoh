@@ -25,9 +25,9 @@ use super::routing;
 use super::routing::router::Router;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use crate::api::loader::{load_plugins, start_plugins};
-use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use crate::api::plugins::PluginsManager;
+use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::{GIT_VERSION, LONG_VERSION};
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
