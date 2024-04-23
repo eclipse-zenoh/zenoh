@@ -82,11 +82,6 @@ extern crate zenoh_result;
 mod api;
 mod net;
 
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
-pub use zenoh_shm::api as shm;
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
-pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
-
 lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
@@ -366,7 +361,19 @@ pub mod internal {
     pub use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
 }
 
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub mod shm {
-    pub use zenoh_shm::SharedMemoryManager;
+    pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
+    pub use zenoh_shm::api::slice::zsliceshm::{zsliceshm, ZSliceShm};
+    pub use zenoh_shm::api::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
+    pub use zenoh_shm::api::{
+        protocol_implementations::posix::{
+            posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+            protocol_id::POSIX_PROTOCOL_ID,
+        },
+        provider::shared_memory_provider::SharedMemoryProviderBuilder,
+    };
+    pub use zenoh_shm::api::provider::shared_memory_provider::{
+        BlockOn, GarbageCollect,
+    };
 }
