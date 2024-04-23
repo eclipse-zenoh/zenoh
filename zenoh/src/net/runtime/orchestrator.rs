@@ -13,12 +13,19 @@
 //
 use std::{
     net::{IpAddr, Ipv6Addr, SocketAddr},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
-use tokio::net::UdpSocket;
+use tokio::{
+    net::UdpSocket,
+    sync::{futures::Notified, Notify},
+};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
     writer::HasWriter,
@@ -46,6 +53,28 @@ const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 pub enum Loop {
     Continue,
     Break,
+}
+
+#[derive(Default)]
+struct StartConditions {
+    notify: Notify,
+    peer_connectors: AtomicUsize,
+}
+
+impl StartConditions {
+    fn notified(&self) -> Notified<'_> {
+        self.notify.notified()
+    }
+
+    fn add_peer_connector(&self) {
+        self.peer_connectors.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn terminate_peer_connector(&self) {
+        if self.peer_connectors.fetch_sub(1, Ordering::Relaxed) <= 1 {
+            self.notify.notify_one();
+        }
+    }
 }
 
 impl Runtime {
@@ -91,7 +120,7 @@ impl Runtime {
                     bail!("No peer specified and multicast scouting desactivated!")
                 }
             }
-            _ => self.connect_peers(&peers, true).await,
+            _ => self.connect_peers(&peers, true, None).await,
         }
     }
 
@@ -130,12 +159,22 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        self.connect_peers(&peers, false).await?;
+        let start_conditions = Arc::new(StartConditions::default());
+
+        self.connect_peers(&peers, false, Some(start_conditions.clone()))
+            .await?;
 
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
-        tokio::time::sleep(delay).await;
+
+        if tokio::time::timeout(delay, start_conditions.notified())
+            .await
+            .is_err()
+            && !peers.is_empty()
+        {
+            tracing::warn!("Scouting delay elapsed before start conditions are met.");
+        }
         Ok(())
     }
 
@@ -173,7 +212,7 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        self.connect_peers(&peers, false).await?;
+        self.connect_peers(&peers, false, None).await?;
 
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
@@ -224,13 +263,20 @@ impl Runtime {
         Ok(())
     }
 
-    async fn connect_peers(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+    async fn connect_peers(
+        &self,
+        peers: &[EndPoint],
+        single_link: bool,
+        notify: Option<Arc<StartConditions>>,
+    ) -> ZResult<()> {
         let timeout = self.get_global_connect_timeout();
         if timeout.is_zero() {
-            self.connect_peers_impl(peers, single_link).await
+            self.connect_peers_impl(peers, single_link, notify).await
         } else {
             let res = tokio::time::timeout(timeout, async {
-                self.connect_peers_impl(peers, single_link).await.ok()
+                self.connect_peers_impl(peers, single_link, notify)
+                    .await
+                    .ok()
             })
             .await;
             match res {
@@ -248,11 +294,16 @@ impl Runtime {
         }
     }
 
-    async fn connect_peers_impl(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+    async fn connect_peers_impl(
+        &self,
+        peers: &[EndPoint],
+        single_link: bool,
+        notify: Option<Arc<StartConditions>>,
+    ) -> ZResult<()> {
         if single_link {
             self.connect_peers_single_link(peers).await
         } else {
-            self.connect_peers_multiply_links(peers).await
+            self.connect_peers_multiply_links(peers, notify).await
         }
     }
 
@@ -290,7 +341,11 @@ impl Runtime {
         Err(e.into())
     }
 
-    async fn connect_peers_multiply_links(&self, peers: &[EndPoint]) -> ZResult<()> {
+    async fn connect_peers_multiply_links(
+        &self,
+        peers: &[EndPoint],
+        notify: Option<Arc<StartConditions>>,
+    ) -> ZResult<()> {
         for peer in peers {
             let endpoint = peer.clone();
             let retry_config = self.get_connect_retry_config(&endpoint);
@@ -312,7 +367,7 @@ impl Runtime {
                 self.peer_connector_retry(endpoint).await;
             } else {
                 // try to connect in background
-                self.spawn_peer_connector(endpoint).await?
+                self.spawn_peer_connector(endpoint, notify.clone()).await?
             }
         }
         Ok(())
@@ -375,7 +430,7 @@ impl Runtime {
                     }
                     false
                 }) {
-                    self.spawn_peer_connector(peer).await?;
+                    self.spawn_peer_connector(peer, None).await?;
                 }
             }
         }
@@ -650,13 +705,25 @@ impl Runtime {
         Ok(udp_socket)
     }
 
-    async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {
+    async fn spawn_peer_connector(
+        &self,
+        peer: EndPoint,
+        notify: Option<Arc<StartConditions>>,
+    ) -> ZResult<()> {
         if !LocatorInspector::default()
             .is_multicast(&peer.to_locator())
             .await?
         {
             let this = self.clone();
-            self.spawn(async move { this.peer_connector_retry(peer).await });
+            if let Some(notify) = notify.as_ref() {
+                notify.add_peer_connector();
+            }
+            self.spawn(async move {
+                this.peer_connector_retry(peer).await;
+                if let Some(notify) = notify {
+                    notify.terminate_peer_connector();
+                }
+            });
             Ok(())
         } else {
             bail!("Forbidden multicast endpoint in connect list!")

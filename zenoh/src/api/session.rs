@@ -849,6 +849,7 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
+            let peer_linkstate = unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
             #[cfg(all(feature = "unstable", feature = "shared-memory"))]
@@ -865,7 +866,9 @@ impl Session {
             .await;
             session.owns_runtime = true;
             runtime.start().await?;
-            if runtime.whatami() != WhatAmI::Client {
+            if runtime.whatami() == WhatAmI::Router
+                || (runtime.whatami() == WhatAmI::Peer && peer_linkstate)
+            {
                 // Workaround for the declare_and_shoot problem
                 tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
             }
