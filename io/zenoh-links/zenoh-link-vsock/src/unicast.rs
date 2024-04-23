@@ -24,6 +24,7 @@ use tokio::sync::RwLock as AsyncRwLock;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasyncread, zasyncwrite};
+use zenoh_link_commons::LinkAuthId;
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
