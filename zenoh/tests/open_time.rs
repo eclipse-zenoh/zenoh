@@ -11,9 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::{Duration, Instant};
+use std::{
+    future::IntoFuture,
+    time::{Duration, Instant},
+};
+
 use zenoh_config::Config;
-use zenoh_core::AsyncResolve;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::WhatAmI;
 
@@ -52,7 +55,7 @@ async fn time_open(
         .unwrap();
 
     let start = Instant::now();
-    let router = ztimeout_expected!(zenoh::open(router_config).res()).unwrap();
+    let router = ztimeout_expected!(zenoh::open(router_config).into_future()).unwrap();
     println!(
         "open(mode:{}, listen_endpoint:{}, lowlatency:{}): {:#?}",
         WhatAmI::Router,
@@ -83,7 +86,7 @@ async fn time_open(
     /* [1] */
     // Open a transport from the app to the router
     let start = Instant::now();
-    let app = ztimeout_expected!(zenoh::open(app_config).res()).unwrap();
+    let app = ztimeout_expected!(zenoh::open(app_config).into_future()).unwrap();
     println!(
         "open(mode:{}, connect_endpoint:{}, lowlatency:{}): {:#?}",
         connect_mode,
@@ -95,7 +98,7 @@ async fn time_open(
     /* [2] */
     // Close the open transport on the app
     let start = Instant::now();
-    ztimeout_expected!(app.close().res()).unwrap();
+    ztimeout_expected!(app.close().into_future()).unwrap();
     println!(
         "close(mode:{}, connect_endpoint:{}, lowlatency:{}): {:#?}",
         connect_mode,
@@ -107,7 +110,7 @@ async fn time_open(
     /* [3] */
     // Close the router
     let start = Instant::now();
-    ztimeout_expected!(router.close().res()).unwrap();
+    ztimeout_expected!(router.close().into_future()).unwrap();
     println!(
         "close(mode:{}, listen_endpoint:{}, lowlatency:{}): {:#?}",
         WhatAmI::Router,
