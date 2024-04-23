@@ -163,7 +163,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
 
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
-    #[zenoh::internal::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
@@ -523,7 +523,7 @@ where
 
     /// Restrict the matching publications that will be receive by this [`FetchingSubscriber`]
     /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
-    #[zenoh::internal::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;

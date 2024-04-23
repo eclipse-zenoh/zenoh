@@ -5249,6 +5249,7 @@ dependencies = [
  "tokio",
  "tracing",
  "zenoh",
+ "zenoh-macros",
  "zenoh-util",
 ]
 

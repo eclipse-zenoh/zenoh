@@ -357,7 +357,6 @@ pub mod internal {
     pub use zenoh_core::zerror;
     pub use zenoh_core::zlock;
     pub use zenoh_core::ztimeout;
-    pub use zenoh_macros::unstable;
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
     pub use zenoh_task::TaskController;
