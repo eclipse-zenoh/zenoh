@@ -13,7 +13,7 @@
 //
 use super::{face_hat, face_hat_mut, get_routes_entries};
 use super::{HatCode, HatFace};
-use crate::net::routing::dispatcher::face::FaceState;
+use crate::net::routing::dispatcher::face::{FaceState, InterestState};
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
@@ -248,9 +248,14 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             for res in face_hat_mut!(&mut src_face).remote_sub_interests.values() {
                 let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                 let options = InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS;
-                get_mut_unchecked(face)
-                    .local_interests
-                    .insert(id, (options, res.as_ref().map(|res| (*res).clone()), false));
+                get_mut_unchecked(face).local_interests.insert(
+                    id,
+                    InterestState {
+                        options,
+                        res: res.as_ref().map(|res| (*res).clone()),
+                        finalized: false,
+                    },
+                );
                 let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face));
                 face.primitives.send_interest(RoutingContext::with_expr(
                     Interest {
@@ -293,11 +298,11 @@ impl HatPubSubTrait for HatCode {
             let options = InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS;
             get_mut_unchecked(dst_face).local_interests.insert(
                 id,
-                (
+                InterestState {
                     options,
-                    res.as_ref().map(|res| (*res).clone()),
-                    mode != InterestMode::Future,
-                ),
+                    res: res.as_ref().map(|res| (*res).clone()),
+                    finalized: mode == InterestMode::Future,
+                },
             );
             let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
             dst_face.primitives.send_interest(RoutingContext::with_expr(
@@ -340,8 +345,9 @@ impl HatPubSubTrait for HatCode {
                         .cloned()
                         .collect::<Vec<InterestId>>()
                     {
-                        let (int, res, _) = dst_face.local_interests.get(&id).unwrap();
-                        if int.subscribers() && (*res == interest) {
+                        let local_interest = dst_face.local_interests.get(&id).unwrap();
+                        if local_interest.options.subscribers() && (local_interest.res == interest)
+                        {
                             dst_face.primitives.send_interest(RoutingContext::with_expr(
                                 Interest {
                                     id,
@@ -352,7 +358,11 @@ impl HatPubSubTrait for HatCode {
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
                                 },
-                                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+                                local_interest
+                                    .res
+                                    .as_ref()
+                                    .map(|res| res.expr())
+                                    .unwrap_or_default(),
                             ));
                             get_mut_unchecked(dst_face).local_interests.remove(&id);
                         }
@@ -426,25 +436,22 @@ impl HatPubSubTrait for HatCode {
             .values()
             .filter(|f| f.whatami != WhatAmI::Client)
         {
-            if face
-                .local_interests
-                .values()
-                .any(|(interest, res, finalized)| {
-                    *finalized
-                        && interest.subscribers()
-                        && res
-                            .as_ref()
-                            .map(|res| {
-                                KeyExpr::try_from(res.expr())
-                                    .and_then(|intres| {
-                                        KeyExpr::try_from(expr.full_expr())
-                                            .map(|putres| intres.includes(&putres))
-                                    })
-                                    .unwrap_or(false)
-                            })
-                            .unwrap_or(true)
-                })
-            {
+            if face.local_interests.values().any(|interest| {
+                interest.finalized
+                    && interest.options.subscribers()
+                    && interest
+                        .res
+                        .as_ref()
+                        .map(|res| {
+                            KeyExpr::try_from(res.expr())
+                                .and_then(|intres| {
+                                    KeyExpr::try_from(expr.full_expr())
+                                        .map(|putres| intres.includes(&putres))
+                                })
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(true)
+            }) {
                 if face_hat!(face).remote_subs.values().any(|sub| {
                     KeyExpr::try_from(sub.expr())
                         .and_then(|subres| {

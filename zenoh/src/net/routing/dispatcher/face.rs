@@ -36,6 +36,12 @@ use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
 
+pub(crate) struct InterestState {
+    pub(crate) options: InterestOptions,
+    pub(crate) res: Option<Arc<Resource>>,
+    pub(crate) finalized: bool,
+}
+
 pub struct FaceState {
     pub(crate) id: usize,
     pub(crate) zid: ZenohId,
@@ -43,7 +49,7 @@ pub struct FaceState {
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
-    pub(crate) local_interests: HashMap<InterestId, (InterestOptions, Option<Arc<Resource>>, bool)>,
+    pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
@@ -317,7 +323,7 @@ impl Primitives for Face {
                     get_mut_unchecked(&mut self.state.clone())
                         .local_interests
                         .entry(id)
-                        .and_modify(|interest| interest.2 = true);
+                        .and_modify(|interest| interest.finalized = true);
                 }
             }
         }
