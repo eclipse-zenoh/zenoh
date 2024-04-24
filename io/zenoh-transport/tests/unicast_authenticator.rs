@@ -819,7 +819,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_quic() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link::quic::config::*;
 
     zenoh_util::try_init_log_from_env();
 

@@ -30,8 +30,7 @@ base64 = { workspace = true }
 futures = { workspace = true }
 quinn = { workspace = true }
 rustls-native-certs = { workspace = true }
-rustls-pemfile = { version = "1" }
-rustls-pki-types = { version = "1.0" }
+rustls-pki-types =  { workspace = true }
 rustls-webpki = { workspace = true }
 secrecy = { workspace = true }
 tokio = { workspace = true, features = [
@@ -55,3 +54,4 @@ zenoh-util = { workspace = true }
 # Lock due to quinn not supporting rustls 0.22 yet
 rustls = { version = "0.21", features = ["dangerous_configuration", "quic"] }
 tokio-rustls = "0.24.1"
+rustls-pemfile = { version = "1" }

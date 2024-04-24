@@ -219,7 +219,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
             .await
-            .map_err(|e| zerror!("Cannot create a new QUIC client on {addr}. {e}"))?;
+            .map_err(|e| zerror!("Cannot create a new QUIC client on {addr}: {e}"))?;
 
         client_crypto.client_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
@@ -274,7 +274,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         // Server config
         let mut server_crypto = TlsServerConfig::new(&epconf)
             .await
-            .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}. {e}"))?;
+            .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
         server_crypto.server_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
         let mut server_config =
