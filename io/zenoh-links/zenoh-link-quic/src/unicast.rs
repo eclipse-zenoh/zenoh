@@ -12,16 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::base64_decode;
 use crate::{
-    config::*, get_quic_addr, verify::WebPkiVerifierAnyServerName, ALPN_QUIC_HTTP,
-    QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
+    config::*,
+    utils::{get_quic_addr, TlsClientConfig, TlsServerConfig},
+    ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
 use async_trait::async_trait;
-use rustls::{Certificate, PrivateKey};
-use rustls_pemfile::Item;
 use std::fmt;
-use std::io::BufReader;
 use std::net::IpAddr;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -34,7 +31,7 @@ use zenoh_link_commons::{
     ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{bail, zerror, ZError, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 
 pub struct LinkUnicastQuic {
     connection: quinn::Connection,
@@ -219,55 +216,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         }
 
         // Initialize the QUIC connection
-        let mut root_cert_store = rustls::RootCertStore::empty();
+        let mut client_crypto = TlsClientConfig::new(&epconf)
+            .await
+            .map_err(|e| zerror!("Cannot create a new QUIC client on {addr}: {e}"))?;
 
-        // Read the certificates
-        let f = if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
-            value.as_bytes().to_vec()
-        } else if let Some(b64_certificate) = epconf.get(TLS_ROOT_CA_CERTIFICATE_BASE64) {
-            base64_decode(b64_certificate)?
-        } else if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-            tokio::fs::read(value)
-                .await
-                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
-        } else {
-            vec![]
-        };
-
-        let certificates = if f.is_empty() {
-            rustls_native_certs::load_native_certs()
-                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
-                .drain(..)
-                .map(|x| rustls::Certificate(x.to_vec()))
-                .collect::<Vec<rustls::Certificate>>()
-        } else {
-            rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
-                .map(|result| {
-                    result
-                        .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err))
-                        .map(|der| Certificate(der.to_vec()))
-                })
-                .collect::<Result<Vec<rustls::Certificate>, ZError>>()?
-        };
-        for c in certificates.iter() {
-            root_cert_store.add(c).map_err(|e| zerror!("{}", e))?;
-        }
-
-        let client_crypto = rustls::ClientConfig::builder().with_safe_defaults();
-
-        let mut client_crypto = if server_name_verification {
-            client_crypto
-                .with_root_certificates(root_cert_store)
-                .with_no_client_auth()
-        } else {
-            client_crypto
-                .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
-                    root_cert_store,
-                )))
-                .with_no_client_auth()
-        };
-
-        client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+        client_crypto.client_config.alpn_protocols =
+            ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
         let ip_addr: IpAddr = if addr.is_ipv4() {
             Ipv4Addr::UNSPECIFIED.into()
@@ -276,7 +230,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
         let mut quic_endpoint = quinn::Endpoint::client(SocketAddr::new(ip_addr, 0))
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
-        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_crypto)));
+        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(
+            client_crypto.client_config,
+        )));
 
         let src_addr = quic_endpoint
             .local_addr()
@@ -314,61 +270,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let addr = get_quic_addr(&epaddr).await?;
 
-        let f = if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_RAW) {
-            value.as_bytes().to_vec()
-        } else if let Some(b64_certificate) = epconf.get(TLS_SERVER_CERTIFICATE_BASE64) {
-            base64_decode(b64_certificate)?
-        } else if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_FILE) {
-            tokio::fs::read(value)
-                .await
-                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
-        } else {
-            bail!("No QUIC CA certificate has been provided.");
-        };
-        let certificates = rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
-            .map(|result| {
-                result
-                    .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err))
-                    .map(|der| Certificate(der.to_vec()))
-            })
-            .collect::<Result<Vec<rustls::Certificate>, ZError>>()?;
-
-        // Private keys
-        let f = if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_RAW) {
-            value.as_bytes().to_vec()
-        } else if let Some(b64_key) = epconf.get(TLS_SERVER_PRIVATE_KEY_BASE64) {
-            base64_decode(b64_key)?
-        } else if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_FILE) {
-            tokio::fs::read(value)
-                .await
-                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
-        } else {
-            bail!("No QUIC CA private key has been provided.");
-        };
-        let items: Vec<Item> = rustls_pemfile::read_all(&mut BufReader::new(f.as_slice()))
-            .collect::<Result<_, _>>()
-            .map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))?;
-
-        let private_key = items
-            .into_iter()
-            .filter_map(|x| match x {
-                rustls_pemfile::Item::Pkcs1Key(k) => Some(k.secret_pkcs1_der().to_vec()),
-                rustls_pemfile::Item::Pkcs8Key(k) => Some(k.secret_pkcs8_der().to_vec()),
-                rustls_pemfile::Item::Sec1Key(k) => Some(k.secret_sec1_der().to_vec()),
-                _ => None,
-            })
-            .take(1)
-            .next()
-            .ok_or_else(|| zerror!("No QUIC CA private key has been provided."))
-            .map(PrivateKey)?;
-
         // Server config
-        let mut server_crypto = rustls::ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(certificates, private_key)?;
-        server_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
-        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
+        let mut server_crypto = TlsServerConfig::new(&epconf)
+            .await
+            .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
+        server_crypto.server_config.alpn_protocols =
+            ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+        let mut server_config =
+            quinn::ServerConfig::with_crypto(Arc::new(server_crypto.server_config));
 
         // We do not accept unidireactional streams.
         Arc::get_mut(&mut server_config.transport)
