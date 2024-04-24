@@ -74,6 +74,7 @@
 //!     }
 //! }
 //! ```
+#![deny(missing_debug_implementations)]
 #[macro_use]
 extern crate zenoh_core;
 #[macro_use]
@@ -280,6 +281,7 @@ where
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -357,6 +359,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[doc(hidden)]
 #[zenoh_macros::unstable]
+// TODO impl `fmt::Debug`, but `Runtime` doesn't implement it
 pub struct InitBuilder {
     runtime: Runtime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,

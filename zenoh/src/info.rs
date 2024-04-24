@@ -167,6 +167,7 @@ impl<'a> AsyncResolve for PeersZidBuilder<'a> {
 /// let zid = info.zid().res().await;
 /// # }
 /// ```
+#[derive(Debug)]
 pub struct SessionInfo<'a> {
     pub(crate) session: SessionRef<'a>,
 }

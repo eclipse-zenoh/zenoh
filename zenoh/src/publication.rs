@@ -647,6 +647,7 @@ impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct PublisherUndeclaration<'a> {
     publisher: Publisher<'a>,
 }
@@ -1399,6 +1400,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 /// # }
 /// ```
 #[zenoh_macros::unstable]
+// TODO impl `fmt::Debug`, but `MatchingListenerInner` doesn't implement it
 pub struct MatchingListener<'a, Receiver> {
     pub(crate) listener: MatchingListenerInner<'a>,
     pub(crate) receiver: Receiver,
@@ -1452,6 +1454,7 @@ impl<Receiver> std::ops::DerefMut for MatchingListener<'_, Receiver> {
 }
 
 #[zenoh_macros::unstable]
+// TODO impl `fmt::Debug`, but `MatchingListenerInner` doesn't implement it
 pub struct MatchingListenerUndeclaration<'a> {
     subscriber: MatchingListenerInner<'a>,
 }

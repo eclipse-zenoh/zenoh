@@ -250,6 +250,7 @@ impl fmt::Display for Query {
     }
 }
 
+#[derive(Debug)]
 pub struct ReplySample<'a> {
     query: &'a Query,
     sample: Sample,
@@ -627,6 +628,7 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct QueryableUndeclaration<'a> {
     queryable: CallbackQueryable<'a>,
 }
