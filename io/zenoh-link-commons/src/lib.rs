@@ -22,7 +22,6 @@ extern crate alloc;
 mod listener;
 mod multicast;
 pub mod tls;
-
 mod unicast;
 
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};

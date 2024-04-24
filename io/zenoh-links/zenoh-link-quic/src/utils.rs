@@ -69,7 +69,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             }
             (None, Some(server_private_key)) => {
                 ps.push((
-                    TLS_SERVER_PRIVATE_KEY_BASE_64,
+                    TLS_SERVER_PRIVATE_KEY_BASE64,
                     server_private_key.expose_secret(),
                 ));
             }
@@ -226,7 +226,7 @@ impl TlsServerConfig {
             config,
             TLS_SERVER_PRIVATE_KEY_RAW,
             TLS_SERVER_PRIVATE_KEY_FILE,
-            TLS_SERVER_PRIVATE_KEY_BASE_64,
+            TLS_SERVER_PRIVATE_KEY_BASE64,
         )
         .await
     }

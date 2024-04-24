@@ -76,7 +76,7 @@ pub mod config {
 
     pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = "server_private_key_file";
     pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
-    pub const TLS_SERVER_PRIVATE_KEY_BASE_64: &str = "server_private_key_base64";
+    pub const TLS_SERVER_PRIVATE_KEY_BASE64: &str = "server_private_key_base64";
 
     pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
     pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
