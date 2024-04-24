@@ -18,15 +18,15 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_trait::async_trait;
-use rustls_pki_types::ServerName;
-use std::{convert::TryFrom, net::SocketAddr};
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::{endpoint::Address, Locator};
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_protocol::core::Locator;
+use zenoh_result::ZResult;
 
 mod unicast;
+mod utils;
 pub use unicast::*;
+pub use utils::TlsConfigurator;
 
 // Default MTU (TLS PDU) in bytes.
 // NOTE: Since TLS is a byte-stream oriented transport, theoretically it has
@@ -63,29 +63,28 @@ zconfigurable! {
     static ref TLS_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
-    match tokio::net::lookup_host(address.as_str()).await?.next() {
-        Some(addr) => Ok(addr),
-        None => bail!("Couldn't resolve TLS locator address: {}", address),
-    }
-}
+pub mod config {
+    pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = "root_ca_certificate_file";
+    pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "root_ca_certificate_raw";
+    pub const TLS_ROOT_CA_CERTIFICATE_BASE64: &str = "root_ca_certificate_base64";
 
-pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
-    address
-        .as_str()
-        .split(':')
-        .next()
-        .ok_or_else(|| zerror!("Invalid TLS address").into())
-}
+    pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = "server_private_key_file";
+    pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
+    pub const TLS_SERVER_PRIVATE_KEY_BASE_64: &str = "server_private_key_base64";
 
-pub fn get_tls_server_name<'a>(address: &'a Address<'a>) -> ZResult<ServerName<'a>> {
-    Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
-}
+    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
+    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
+    pub const TLS_SERVER_CERTIFICATE_BASE64: &str = "server_certificate_base64";
 
-pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
-    use base64::engine::general_purpose;
-    use base64::Engine;
-    Ok(general_purpose::STANDARD
-        .decode(data)
-        .map_err(|e| zerror!("Unable to perform base64 decoding: {e:?}"))?)
+    pub const TLS_CLIENT_PRIVATE_KEY_FILE: &str = "client_private_key_file";
+    pub const TLS_CLIENT_PRIVATE_KEY_RAW: &str = "client_private_key_raw";
+    pub const TLS_CLIENT_PRIVATE_KEY_BASE64: &str = "client_private_key_base64";
+
+    pub const TLS_CLIENT_CERTIFICATE_FILE: &str = "client_certificate_file";
+    pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "client_certificate_raw";
+    pub const TLS_CLIENT_CERTIFICATE_BASE64: &str = "client_certificate_base64";
+
+    pub const TLS_CLIENT_AUTH: &str = "client_auth";
+
+    pub const TLS_SERVER_NAME_VERIFICATION: &str = "server_name_verification";
 }

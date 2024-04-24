@@ -12,16 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::base64_decode;
 use crate::{
-    get_quic_addr, verify::WebPkiVerifierAnyServerName, ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME,
-    QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
+    config::*,
+    utils::{get_quic_addr, TlsClientConfig, TlsServerConfig},
+    ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
 use async_trait::async_trait;
-use rustls::{Certificate, PrivateKey};
-use rustls_pemfile::Item;
 use std::fmt;
-use std::io::BufReader;
 use std::net::IpAddr;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -29,19 +26,13 @@ use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use zenoh_core::zasynclock;
-use zenoh_link_commons::tls::config::{
-    TLS_ROOT_CA_CERTIFICATE_BASE64, TLS_ROOT_CA_CERTIFICATE_FILE, TLS_ROOT_CA_CERTIFICATE_RAW,
-    TLS_SERVER_CERTIFICATE_BASE64, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_RAW,
-    TLS_SERVER_NAME_VERIFICATION, TLS_SERVER_NAME_VERIFICATION_DEFAULT,
-    TLS_SERVER_PRIVATE_KEY_FILE, TLS_SERVER_PRIVATE_KEY_RAW,
-};
-use zenoh_link_commons::tls::{TlsClientConfig, TlsServerConfig};
+
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{bail, zerror, ZError, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 
 pub struct LinkUnicastQuic {
     connection: quinn::Connection,

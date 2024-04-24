@@ -12,49 +12,29 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    base64_decode, get_tls_addr, get_tls_host, get_tls_server_name, TLS_ACCEPT_THROTTLE_TIME,
-    TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
+    utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
+    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
+
 use async_trait::async_trait;
-use rustls::{
-    pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
-    server::WebPkiClientVerifier,
-    version::TLS13,
-    ClientConfig, RootCertStore, ServerConfig,
-};
+use std::cell::UnsafeCell;
 use std::convert::TryInto;
 use std::fmt;
-use std::fs::File;
-use std::io::{BufReader, Cursor};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{cell::UnsafeCell, io};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
-use webpki::anchor_from_trusted_cert;
 use zenoh_core::zasynclock;
-use zenoh_link_commons::tls::{
-    config::{
-        TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_BASE64, TLS_CLIENT_CERTIFICATE_FILE,
-        TLS_CLIENT_CERTIFICATE_RAW, TLS_CLIENT_PRIVATE_KEY_BASE64, TLS_CLIENT_PRIVATE_KEY_FILE,
-        TLS_CLIENT_PRIVATE_KEY_RAW, TLS_ROOT_CA_CERTIFICATE_BASE64, TLS_ROOT_CA_CERTIFICATE_FILE,
-        TLS_ROOT_CA_CERTIFICATE_RAW, TLS_SERVER_CERTIFICATE_BASE64, TLS_SERVER_CERTIFICATE_FILE,
-        TLS_SERVER_CERTIFICATE_RAW, TLS_SERVER_NAME_VERIFICATION, TLS_SERVER_PRIVATE_KEY_BASE_64,
-        TLS_SERVER_PRIVATE_KEY_FILE, TLS_SERVER_PRIVATE_KEY_RAW,
-    },
-    TlsClientConfig, TlsServerConfig, WebPkiVerifierAnyServerName,
-};
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
 };
-use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{bail, zerror, ZError, ZResult};
+use zenoh_result::{zerror, ZResult};
 
 pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library

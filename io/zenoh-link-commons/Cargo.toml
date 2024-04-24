@@ -26,20 +26,14 @@ version = { workspace = true }
 
 [features]
 compression = []
-tls = [
-  "base64",
-  "rustls",
-  "rustls-native-certs",
-  "rustls-pemfile",
-  "rustls-webpki",
-  "webpki-roots",
-]
 
 [dependencies]
 async-trait = { workspace = true }
 base64 = { workspace = true, optional = true }
 flume = { workspace = true }
-tracing = {workspace = true}
+futures = { workspace = true }
+rustls = { workspace = true }
+rustls-webpki = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 tokio = { workspace = true, features = [
   "fs",
@@ -49,6 +43,7 @@ tokio = { workspace = true, features = [
   "time",
 ] }
 tokio-util = { workspace = true, features = ["rt"] }
+tracing = { workspace = true }
 webpki-roots = { workspace = true, optional = true }
 zenoh-buffers = { workspace = true }
 zenoh-codec = { workspace = true }

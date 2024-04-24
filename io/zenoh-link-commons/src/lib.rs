@@ -21,7 +21,6 @@ extern crate alloc;
 
 mod listener;
 mod multicast;
-#[cfg(feature = "tls")]
 pub mod tls;
 
 mod unicast;

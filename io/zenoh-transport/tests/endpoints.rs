@@ -255,7 +255,7 @@ async fn endpoint_udp_unix() {
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn endpoint_tls() {
-    use zenoh_link_commons::tls::config::*;
+    use zenoh_link::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
 
@@ -334,7 +334,7 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn endpoint_quic() {
-    use zenoh_link_commons::tls::config::*;
+    use zenoh_link::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
 
