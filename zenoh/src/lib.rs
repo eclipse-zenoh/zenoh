@@ -364,6 +364,7 @@ pub mod internal {
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub mod shm {
     pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
+    pub use zenoh_shm::api::provider::shared_memory_provider::{BlockOn, GarbageCollect};
     pub use zenoh_shm::api::slice::zsliceshm::{zsliceshm, ZSliceShm};
     pub use zenoh_shm::api::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
     pub use zenoh_shm::api::{
@@ -372,8 +373,5 @@ pub mod shm {
             protocol_id::POSIX_PROTOCOL_ID,
         },
         provider::shared_memory_provider::SharedMemoryProviderBuilder,
-    };
-    pub use zenoh_shm::api::provider::shared_memory_provider::{
-        BlockOn, GarbageCollect,
     };
 }
