@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{
-    selector::Selector,
-    session::{Session, Undeclarable},
-};
+use super::session::{Session, Undeclarable};
 use crate::net::primitives::Primitives;
 use std::{
     convert::{TryFrom, TryInto},
