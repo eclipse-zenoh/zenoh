@@ -157,8 +157,6 @@ pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<Runtime>>);
 
 impl ZRuntimePool {
     fn new() -> Self {
-        // NOTE: The atexit handler in DLL cannot spawn the new thread in `cleanup`
-        #[cfg(not(all(target_os = "windows")))]
         // Register a callback to clean the static variables.
         unsafe {
             libc::atexit(cleanup);
@@ -190,13 +188,33 @@ impl Drop for ZRuntimePool {
             .0
             .drain()
             .filter_map(|(_name, mut rt)| {
-                rt.take()
-                    .map(|r| std::thread::spawn(move || r.shutdown_timeout(Duration::from_secs(1))))
+                rt.take().map(|r| {
+                    // NOTE: The error of the atexit handler in DLL (static lib is fine)
+                    // failing to spawn a new thread in `cleanup` has been identified.
+                    std::panic::catch_unwind(|| {
+                        std::thread::spawn(move || r.shutdown_timeout(Duration::from_secs(1)))
+                    })
+                })
             })
             .collect();
 
         for hd in handles {
-            let _ = hd.join();
+            match hd {
+                Ok(handle) => {
+                    if let Err(err) = handle.join() {
+                        tracing::error!(
+                            "The handle failed to join during `ZRuntimePool` drop due to {err:?}"
+                        );
+                    }
+                }
+                #[allow(unused_variables)]
+                Err(err) => {
+                    // WARN: Windows with DLL is expected to panic for the time being.
+                    // Otherwise, report the error.
+                    #[cfg(not(target_os = "windows"))]
+                    tracing::error!("`ZRuntimePool` failed to drop due to {err:?}");
+                }
+            }
         }
     }
 }
