@@ -39,19 +39,19 @@ pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
 #[derive(Clone, Debug)]
-pub struct AuthnSubject {
+pub struct AuthSubject {
     id: usize,
     name: String,
 }
 
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
-    subject: Vec<AuthnSubject>,
+    subject: Vec<AuthSubject>,
     zid: ZenohId,
 }
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
-    subject: Vec<AuthnSubject>,
+    subject: Vec<AuthSubject>,
     zid: ZenohId,
 }
 
@@ -91,13 +91,13 @@ impl InterceptorFactoryTrait for AclEnforcer {
                     AuthId::CertCommonName(name) => {
                         let subject = &Subject::CertCommonName(name.clone());
                         if let Some(val) = enforcer.subject_map.get(subject) {
-                            authn_ids.push(AuthnSubject { id: *val, name });
+                            authn_ids.push(AuthSubject { id: *val, name });
                         }
                     }
                     AuthId::Username(name) => {
                         let subject = &Subject::Username(name.clone());
                         if let Some(val) = enforcer.subject_map.get(subject) {
-                            authn_ids.push(AuthnSubject { id: *val, name });
+                            authn_ids.push(AuthSubject { id: *val, name });
                         }
                     }
                     AuthId::None => {}
@@ -113,7 +113,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                             for face in link.interfaces {
                                 let subject = &Subject::Interface(face.clone());
                                 if let Some(val) = enforcer.subject_map.get(subject) {
-                                    authn_ids.push(AuthnSubject {
+                                    authn_ids.push(AuthSubject {
                                         id: *val,
                                         name: face,
                                     });
@@ -307,10 +307,10 @@ pub trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
     fn zid(&self) -> ZenohId;
     fn flow(&self) -> InterceptorFlow;
-    fn authn_ids(&self) -> Vec<AuthnSubject>;
+    fn authn_ids(&self) -> Vec<AuthSubject>;
     fn action(&self, action: Action, log_msg: &str, key_expr: &str) -> Permission {
         let policy_enforcer = self.policy_enforcer();
-        let authn_ids: Vec<AuthnSubject> = self.authn_ids();
+        let authn_ids: Vec<AuthSubject> = self.authn_ids();
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission;
         for subject in &authn_ids {
@@ -365,7 +365,7 @@ impl AclActionMethods for EgressAclEnforcer {
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Egress
     }
-    fn authn_ids(&self) -> Vec<AuthnSubject> {
+    fn authn_ids(&self) -> Vec<AuthSubject> {
         self.subject.clone()
     }
 }
@@ -380,7 +380,7 @@ impl AclActionMethods for IngressAclEnforcer {
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Ingress
     }
-    fn authn_ids(&self) -> Vec<AuthnSubject> {
+    fn authn_ids(&self) -> Vec<AuthSubject> {
         self.subject.clone()
     }
 }
