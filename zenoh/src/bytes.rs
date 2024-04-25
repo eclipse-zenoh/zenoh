@@ -1694,10 +1694,10 @@ where
 
 impl<'s, A, B> Deserialize<'s, (A, B)> for ZSerde
 where
-    for<'a> A: TryFrom<&'a ZBytes>,
-    for<'a> <A as TryFrom<&'a ZBytes>>::Error: Debug,
-    for<'b> B: TryFrom<&'b ZBytes>,
-    for<'b> <B as TryFrom<&'b ZBytes>>::Error: Debug,
+    A: TryFrom<ZBytes> + 'static,
+    <A as TryFrom<ZBytes>>::Error: Debug + 'static,
+    B: TryFrom<ZBytes> + 'static,
+    <B as TryFrom<ZBytes>>::Error: Debug + 'static,
 {
     type Input = &'s ZBytes;
     type Error = ZError;
@@ -1712,18 +1712,18 @@ where
         let bbuf: ZBuf = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
         let bpld = ZBytes::new(bbuf);
 
-        let a = A::try_from(&apld).map_err(|e| zerror!("{:?}", e))?;
-        let b = B::try_from(&bpld).map_err(|e| zerror!("{:?}", e))?;
+        let a = A::try_from(apld).map_err(|e| zerror!("{:?}", e))?;
+        let b = B::try_from(bpld).map_err(|e| zerror!("{:?}", e))?;
         Ok((a, b))
     }
 }
 
 impl<A, B> TryFrom<ZBytes> for (A, B)
 where
-    A: for<'a> TryFrom<&'a ZBytes>,
-    for<'a> <A as TryFrom<&'a ZBytes>>::Error: Debug,
-    for<'b> B: TryFrom<&'b ZBytes>,
-    for<'b> <B as TryFrom<&'b ZBytes>>::Error: Debug,
+    A: TryFrom<ZBytes> + 'static,
+    <A as TryFrom<ZBytes>>::Error: Debug + 'static,
+    B: TryFrom<ZBytes> + 'static,
+    <B as TryFrom<ZBytes>>::Error: Debug + 'static,
 {
     type Error = ZError;
 
@@ -1734,10 +1734,10 @@ where
 
 impl<A, B> TryFrom<&ZBytes> for (A, B)
 where
-    for<'a> A: TryFrom<&'a ZBytes>,
-    for<'a> <A as TryFrom<&'a ZBytes>>::Error: Debug,
-    for<'b> B: TryFrom<&'b ZBytes>,
-    for<'b> <B as TryFrom<&'b ZBytes>>::Error: Debug,
+    A: TryFrom<ZBytes> + 'static,
+    <A as TryFrom<ZBytes>>::Error: Debug + 'static,
+    B: TryFrom<ZBytes> + 'static,
+    <B as TryFrom<ZBytes>>::Error: Debug + 'static,
 {
     type Error = ZError;
 
@@ -1748,10 +1748,10 @@ where
 
 impl<A, B> TryFrom<&mut ZBytes> for (A, B)
 where
-    for<'a> A: TryFrom<&'a ZBytes>,
-    for<'a> <A as TryFrom<&'a ZBytes>>::Error: Debug,
-    for<'b> B: TryFrom<&'b ZBytes>,
-    for<'b> <B as TryFrom<&'b ZBytes>>::Error: Debug,
+    A: TryFrom<ZBytes> + 'static,
+    <A as TryFrom<ZBytes>>::Error: Debug + 'static,
+    B: TryFrom<ZBytes> + 'static,
+    <B as TryFrom<ZBytes>>::Error: Debug + 'static,
 {
     type Error = ZError;
 
@@ -1977,6 +1977,14 @@ mod tests {
         serialize_deserialize!((usize, usize), (0, 1));
         serialize_deserialize!((usize, String), (0, String::from("a")));
         serialize_deserialize!((String, String), (String::from("a"), String::from("b")));
+        serialize_deserialize!(
+            (Cow<'static, [u8]>, Cow<'static, [u8]>),
+            (Cow::from(vec![0u8; 8]), Cow::from(vec![0u8; 8]))
+        );
+        serialize_deserialize!(
+            (Cow<'static, str>, Cow<'static, str>),
+            (Cow::from("a"), Cow::from("b"))
+        );
 
         // Iterator
         let v: [usize; 5] = [0, 1, 2, 3, 4];
@@ -2060,6 +2068,15 @@ mod tests {
         let p = ZBytes::from_iter(hm.iter());
         println!("Deserialize:\t{:?}\n", p);
         let o = HashMap::from_iter(p.iter::<(String, String)>());
+        assert_eq!(hm, o);
+
+        let mut hm: HashMap<Cow<'static, str>, Cow<'static, str>> = HashMap::new();
+        hm.insert(Cow::from("0"), Cow::from("a"));
+        hm.insert(Cow::from("1"), Cow::from("b"));
+        println!("Serialize:\t{:?}", hm);
+        let p = ZBytes::from_iter(hm.iter());
+        println!("Deserialize:\t{:?}\n", p);
+        let o = HashMap::from_iter(p.iter::<(Cow<'static, str>, Cow<'static, str>)>());
         assert_eq!(hm, o);
     }
 }

@@ -311,10 +311,10 @@ impl Aligner {
 
     async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
         let mut no_err = true;
-        let selector = KeyExpr::from(&self.digest_key)
-            .join(&from)
-            .unwrap()
-            .with_parameters(&properties);
+        let selector = Selector::new(
+            KeyExpr::from(&self.digest_key).join(&from).unwrap(),
+            properties,
+        );
         tracing::trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         match self

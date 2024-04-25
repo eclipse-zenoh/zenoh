@@ -240,7 +240,7 @@ impl TryFrom<String> for Selector<'_> {
             Some(qmark_position) => {
                 let parameters = s[qmark_position + 1..].to_owned();
                 s.truncate(qmark_position);
-                Ok(KeyExpr::try_from(s)?.with_owned_parameters(parameters))
+                Ok(Selector::new(KeyExpr::try_from(s)?, parameters))
             }
             None => Ok(KeyExpr::try_from(s)?.into()),
         }
@@ -253,7 +253,10 @@ impl<'a> TryFrom<&'a str> for Selector<'a> {
         match s.find('?') {
             Some(qmark_position) => {
                 let params = &s[qmark_position + 1..];
-                Ok(KeyExpr::try_from(&s[..qmark_position])?.with_parameters(params))
+                Ok(Selector::new(
+                    KeyExpr::try_from(&s[..qmark_position])?,
+                    params,
+                ))
             }
             None => Ok(KeyExpr::try_from(s)?.into()),
         }

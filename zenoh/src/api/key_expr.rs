@@ -272,20 +272,6 @@ impl<'a> KeyExpr<'a> {
             Ok(r.into())
         }
     }
-
-    pub fn with_parameters(self, selector: &'a str) -> Selector<'a> {
-        Selector {
-            key_expr: self,
-            parameters: selector.into(),
-        }
-    }
-
-    pub fn with_owned_parameters(self, selector: String) -> Selector<'a> {
-        Selector {
-            key_expr: self,
-            parameters: selector.into(),
-        }
-    }
 }
 
 impl FromStr for KeyExpr<'static> {

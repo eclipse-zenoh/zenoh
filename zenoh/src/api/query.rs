@@ -39,13 +39,6 @@ pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 /// The kind of consolidation.
 pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
 
-/// The operation: either manual or automatic.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode<T> {
-    Auto,
-    Manual(T),
-}
-
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
