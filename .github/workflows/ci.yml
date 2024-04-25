@@ -27,7 +27,7 @@ env:
 
 jobs:
   check:
-    name: Lints and documentation tests on ${{ matrix.os }}
+    name: Lints and doc tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
