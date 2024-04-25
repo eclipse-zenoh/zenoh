@@ -406,24 +406,25 @@ impl Network {
                         );
                     }
 
-                    if !self.autoconnect.is_empty() {
+                    if !self.autoconnect.is_empty() && self.autoconnect.matches(whatami) {
                         // Connect discovered peers
-                        if zenoh_runtime::ZRuntime::Acceptor
-                            .block_in_place(strong_runtime.manager().get_transport_unicast(&zid))
-                            .is_none()
-                            && self.autoconnect.matches(whatami)
-                        {
-                            if let Some(locators) = locators {
-                                let runtime = strong_runtime.clone();
-                                strong_runtime.spawn(async move {
+                        if let Some(locators) = locators {
+                            let runtime = strong_runtime.clone();
+                            strong_runtime.spawn(async move {
+                                if runtime
+                                    .manager()
+                                    .get_transport_unicast(&zid)
+                                    .await
+                                    .is_none()
+                                {
                                     // random backoff
                                     tokio::time::sleep(std::time::Duration::from_millis(
                                         rand::random::<u64>() % 100,
                                     ))
                                     .await;
                                     runtime.connect_peer(&zid, &locators).await;
-                                });
-                            }
+                                }
+                            });
                         }
                     }
                 }
