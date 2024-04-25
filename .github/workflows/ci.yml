@@ -66,6 +66,9 @@ jobs:
       - name: Perform no_std checks
         run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
 
+      - name: Run doctests
+        run: cargo test --doc
+
   test:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -104,9 +107,6 @@ jobs:
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -p zenohd --no-default-features
-
-      - name: Run doctests
-        run: cargo test --doc
 
   valgrind:
     name: Memory leak checks
