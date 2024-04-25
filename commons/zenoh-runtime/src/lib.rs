@@ -184,17 +184,10 @@ impl ZRuntimePool {
 // If there are any blocking tasks spawned by ZRuntimes, the function will block until they return.
 impl Drop for ZRuntimePool {
     fn drop(&mut self) {
-        let handles: Vec<_> = self
-            .0
-            .drain()
-            .filter_map(|(_name, mut rt)| {
-                rt.take()
-                    .map(|r| std::thread::spawn(move || r.shutdown_timeout(Duration::from_secs(1))))
-            })
-            .collect();
-
-        for hd in handles {
-            let _ = hd.join();
+        for (_, mut rt) in self.0.drain() {
+            if let Some(rt) = rt.take() {
+                rt.shutdown_timeout(Duration::from_millis(1));
+            }
         }
     }
 }
