@@ -1,4 +1,3 @@
-//
 // Copyright (c) 2024 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
@@ -10,7 +9,7 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
+
 use tracing_subscriber::EnvFilter;
 
 /// This is an utility function to enable the tracing formatting subscriber from

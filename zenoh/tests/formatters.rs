@@ -1,4 +1,3 @@
-//
 // Copyright (c) 2024 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
@@ -10,7 +9,7 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
+
 #[test]
 fn kedefine_reuse() {
     zenoh::kedefine!(

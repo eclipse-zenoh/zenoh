@@ -1,4 +1,3 @@
-//
 // Copyright (c) 2024 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
@@ -10,7 +9,6 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
 
 use async_trait::async_trait;
 use libc::VMADDR_PORT_ANY;

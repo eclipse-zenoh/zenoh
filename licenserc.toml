@@ -10,8 +10,7 @@
 # Contributors:
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 
-[target.x86_64-unknown-linux-musl]
-rustflags = "-Ctarget-feature=-crt-static"
+headerPath = "license-header.txt"
 
-[target.aarch64-unknown-linux-musl]
-rustflags = "-Ctarget-feature=-crt-static"
+[properties]
+year = 2024
