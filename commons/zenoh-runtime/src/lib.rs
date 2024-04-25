@@ -186,7 +186,7 @@ impl Drop for ZRuntimePool {
     fn drop(&mut self) {
         for (_, mut rt) in self.0.drain() {
             if let Some(rt) = rt.take() {
-                rt.shutdown_timeout(Duration::from_millis(1));
+                rt.shutdown_timeout(Duration::from_secs(1));
             }
         }
     }
