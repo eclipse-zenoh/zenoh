@@ -157,6 +157,8 @@ pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<Runtime>>);
 
 impl ZRuntimePool {
     fn new() -> Self {
+        // NOTE: The atexit handler in DLL cannot spawn the new thread in `cleanup`
+        #[cfg(not(all(target_os = "windows")))]
         // Register a callback to clean the static variables.
         unsafe {
             libc::atexit(cleanup);
