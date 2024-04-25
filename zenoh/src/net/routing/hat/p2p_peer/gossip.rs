@@ -16,6 +16,7 @@ use crate::net::protocol::linkstate::{LinkState, LinkStateList};
 use crate::net::runtime::Runtime;
 use crate::runtime::WeakRuntime;
 use petgraph::graph::NodeIndex;
+use rand::Rng;
 use std::convert::TryInto;
 use vec_map::VecMap;
 use zenoh_buffers::writer::{DidntWrite, HasWriter};
@@ -418,10 +419,10 @@ impl Network {
                                     .is_none()
                                 {
                                     // random backoff
-                                    tokio::time::sleep(std::time::Duration::from_millis(
-                                        rand::random::<u64>() % 100,
-                                    ))
-                                    .await;
+                                    let sleep_time = std::time::Duration::from_millis(
+                                        rand::thread_rng().gen_range(0..100),
+                                    );
+                                    tokio::time::sleep(sleep_time).await;
                                     runtime.connect_peer(&zid, &locators).await;
                                 }
                             });
