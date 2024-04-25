@@ -31,6 +31,8 @@ use zenoh_protocol::{
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
     zenoh::{PushBody, RequestBody},
 };
+use zenoh_transport::unicast::authentication::AuthId;
+
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 pub struct AclEnforcer {
@@ -44,11 +46,13 @@ pub struct Interface {
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<Interface>,
+    auth_ids: Vec<AuthId>,
     zid: ZenohId,
 }
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     interface_list: Vec<Interface>,
+    auth_ids: Vec<AuthId>,
     zid: ZenohId,
 }
 
@@ -80,6 +84,23 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
+        let mut auth_ids = vec![];
+        if let Ok(ids) = transport.get_auth_ids() {
+            auth_ids = ids.clone();
+            // for id in ids {
+            //     match id {
+            //         AuthId::CertCommonName(name) => {
+            //             println!("certificate common name {}", name);
+            //         }
+            //         AuthId::Username(name) => {
+            //             println!("user name {}", name);
+            //         }
+            //         AuthId::None => {
+            //             println!("No id was found, will use interface values");
+            //         }
+            //     }
+            // }
+        }
         match transport.get_zid() {
             Ok(zid) => {
                 let mut interface_list: Vec<Interface> = Vec::new();
@@ -107,11 +128,13 @@ impl InterceptorFactoryTrait for AclEnforcer {
                     policy_enforcer: self.enforcer.clone(),
                     interface_list: interface_list.clone(),
                     zid,
+                    auth_ids: auth_ids.clone(),
                 });
                 let egress_interceptor = Box::new(EgressAclEnforcer {
                     policy_enforcer: self.enforcer.clone(),
                     interface_list: interface_list.clone(),
                     zid,
+                    auth_ids,
                 });
                 match (
                     self.enforcer.interface_enabled.ingress,
@@ -285,9 +308,12 @@ pub trait AclActionMethods {
     fn interface_list(&self) -> Vec<Interface>;
     fn zid(&self) -> ZenohId;
     fn flow(&self) -> InterceptorFlow;
+    fn auth_ids(&self) -> Vec<AuthId>;
     fn action(&self, action: Action, log_msg: &str, key_expr: &str) -> Permission {
         let policy_enforcer = self.policy_enforcer();
         let interface_list = self.interface_list();
+        let auth_ids = self.auth_ids();
+        println!("auth_ids are : {:?}", auth_ids);
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission;
         for subject in &interface_list {
@@ -347,6 +373,10 @@ impl AclActionMethods for EgressAclEnforcer {
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Egress
     }
+
+    fn auth_ids(&self) -> Vec<AuthId> {
+        self.auth_ids.clone()
+    }
 }
 
 impl AclActionMethods for IngressAclEnforcer {
@@ -363,5 +393,8 @@ impl AclActionMethods for IngressAclEnforcer {
     }
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Ingress
+    }
+    fn auth_ids(&self) -> Vec<AuthId> {
+        self.auth_ids.clone()
     }
 }

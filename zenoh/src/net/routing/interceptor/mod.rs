@@ -32,9 +32,7 @@ use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub mod downsampling;
-pub mod testing_interceptor;
 use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
-use crate::net::routing::interceptor::testing_interceptor::new_test_interceptor;
 
 pub(crate) trait InterceptorTrait {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>>;
@@ -67,7 +65,6 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     // res.push(Box::new(LoggerInterceptor {}));
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
     res.extend(acl_interceptor_factories(config.access_control())?);
-    res.extend(new_test_interceptor()?);
     Ok(res)
 }
 

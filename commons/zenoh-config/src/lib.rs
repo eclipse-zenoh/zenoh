@@ -123,6 +123,8 @@ pub struct PolicyRule {
 #[serde(rename_all = "snake_case")]
 pub enum Subject {
     Interface(String),
+    CertCommonName(String),
+    Username(String),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
