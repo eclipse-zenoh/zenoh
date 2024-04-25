@@ -102,7 +102,9 @@ pub struct DownsamplingItemConf {
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigRules {
-    pub interfaces: Vec<String>,
+    pub interfaces: Option<Vec<String>>,
+    pub cert_common_names: Option<Vec<String>>,
+    pub usernames: Option<Vec<String>>,
     pub key_exprs: Vec<String>,
     pub actions: Vec<Action>,
     pub flows: Vec<InterceptorFlow>,

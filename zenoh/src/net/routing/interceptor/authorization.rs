@@ -199,17 +199,41 @@ impl PolicyEnforcer {
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
-            for subject in &config_rule.interfaces {
-                for flow in &config_rule.flows {
-                    for action in &config_rule.actions {
-                        for key_expr in &config_rule.key_exprs {
-                            policy_rules.push(PolicyRule {
-                                subject: Subject::Interface(subject.clone()),
-                                key_expr: key_expr.clone(),
-                                action: *action,
-                                permission: config_rule.permission,
-                                flow: *flow,
-                            })
+            for flow in &config_rule.flows {
+                for action in &config_rule.actions {
+                    for key_expr in &config_rule.key_exprs {
+                        if let Some(interface_list) = config_rule.interfaces.clone() {
+                            for interface_subject in interface_list {
+                                policy_rules.push(PolicyRule {
+                                    subject: Subject::Interface(interface_subject.clone()),
+                                    key_expr: key_expr.clone(),
+                                    action: *action,
+                                    permission: config_rule.permission,
+                                    flow: *flow,
+                                });
+                            }
+                        }
+                        if let Some(cert_name_list) = config_rule.cert_common_names.clone() {
+                            for cert_name_subject in cert_name_list {
+                                policy_rules.push(PolicyRule {
+                                    subject: Subject::CertCommonName(cert_name_subject.clone()),
+                                    key_expr: key_expr.clone(),
+                                    action: *action,
+                                    permission: config_rule.permission,
+                                    flow: *flow,
+                                });
+                            }
+                        }
+                        if let Some(username_list) = config_rule.usernames.clone() {
+                            for username_subject in username_list {
+                                policy_rules.push(PolicyRule {
+                                    subject: Subject::Username(username_subject.clone()),
+                                    key_expr: key_expr.clone(),
+                                    action: *action,
+                                    permission: config_rule.permission,
+                                    flow: *flow,
+                                });
+                            }
                         }
                     }
                 }
