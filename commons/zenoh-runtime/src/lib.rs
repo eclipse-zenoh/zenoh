@@ -184,6 +184,10 @@ impl ZRuntimePool {
 // If there are any blocking tasks spawned by ZRuntimes, the function will block until they return.
 impl Drop for ZRuntimePool {
     fn drop(&mut self) {
+        std::panic::set_hook(Box::new(|_| {
+            // To suppress the panic error caught in the following `catch_unwind`.
+        }));
+
         let handles: Vec<_> = self
             .0
             .drain()
@@ -207,12 +211,13 @@ impl Drop for ZRuntimePool {
                         );
                     }
                 }
-                #[allow(unused_variables)]
                 Err(err) => {
                     // WARN: Windows with DLL is expected to panic for the time being.
                     // Otherwise, report the error.
                     #[cfg(not(target_os = "windows"))]
                     tracing::error!("`ZRuntimePool` failed to drop due to {err:?}");
+                    #[cfg(target_os = "windows")]
+                    tracing::trace!("`ZRuntimePool` failed to drop due to {err:?}");
                 }
             }
         }
