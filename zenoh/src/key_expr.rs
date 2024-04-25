@@ -57,7 +57,9 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::{net::primitives::Primitives, prelude::Selector, Session, Undeclarable};
+use crate::{
+    net::primitives::Primitives, prelude::Selector, selector::Parameters, Session, Undeclarable,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
@@ -302,17 +304,10 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    pub fn with_parameters(self, selector: &'a str) -> Selector<'a> {
+    pub fn with_parameters<P: Into<Parameters<'a>>>(self, parameters: P) -> Selector<'a> {
         Selector {
             key_expr: self,
-            parameters: selector.into(),
-        }
-    }
-
-    pub fn with_owned_parameters(self, selector: String) -> Selector<'a> {
-        Selector {
-            key_expr: self,
-            parameters: selector.into(),
+            parameters: parameters.into(),
         }
     }
 }

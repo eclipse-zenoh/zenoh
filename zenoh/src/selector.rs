@@ -239,7 +239,7 @@ impl TryFrom<String> for Selector<'_> {
             Some(qmark_position) => {
                 let parameters = s[qmark_position + 1..].to_owned();
                 s.truncate(qmark_position);
-                Ok(KeyExpr::try_from(s)?.with_owned_parameters(parameters))
+                Ok(KeyExpr::try_from(s)?.with_parameters(parameters))
             }
             None => Ok(KeyExpr::try_from(s)?.into()),
         }
