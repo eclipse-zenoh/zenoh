@@ -41,7 +41,7 @@ pub struct AclEnforcer {
 #[derive(Clone, Debug)]
 pub struct AuthSubject {
     id: usize,
-    name: String,
+    name: String, //make Subject
 }
 
 struct EgressAclEnforcer {
