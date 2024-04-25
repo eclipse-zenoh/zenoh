@@ -489,24 +489,25 @@ impl Network {
                             );
                         }
 
-                        if !self.autoconnect.is_empty() {
+                        if !self.autoconnect.is_empty() && self.autoconnect.matches(whatami) {
                             // Connect discovered peers
-                            if zenoh_runtime::ZRuntime::Net
-                                .block_in_place(self.runtime.manager().get_transport_unicast(&zid))
-                                .is_none()
-                                && self.autoconnect.matches(whatami)
-                            {
-                                if let Some(locators) = locators {
-                                    let runtime = self.runtime.clone();
-                                    self.runtime.spawn(async move {
+                            if let Some(locators) = locators {
+                                let runtime = self.runtime.clone();
+                                self.runtime.spawn(async move {
+                                    if runtime
+                                        .manager()
+                                        .get_transport_unicast(&zid)
+                                        .await
+                                        .is_none()
+                                    {
                                         // random backoff
                                         tokio::time::sleep(std::time::Duration::from_millis(
                                             rand::random::<u64>() % 100,
                                         ))
                                         .await;
                                         runtime.connect_peer(&zid, &locators).await;
-                                    });
-                                }
+                                    }
+                                });
                             }
                         }
                     }
@@ -611,22 +612,25 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if zenoh_runtime::ZRuntime::Net
-                        .block_in_place(self.runtime.manager().get_transport_unicast(&node.zid))
-                        .is_none()
-                        && self.autoconnect.matches(whatami)
-                    {
+                    if self.autoconnect.matches(whatami) {
                         if let Some(locators) = &node.locators {
                             let runtime = self.runtime.clone();
                             let zid = node.zid;
                             let locators = locators.clone();
                             self.runtime.spawn(async move {
-                                // random backoff
-                                tokio::time::sleep(std::time::Duration::from_millis(
-                                    rand::random::<u64>() % 100,
-                                ))
-                                .await;
-                                runtime.connect_peer(&zid, &locators).await;
+                                if runtime
+                                    .manager()
+                                    .get_transport_unicast(&zid)
+                                    .await
+                                    .is_none()
+                                {
+                                    // random backoff
+                                    tokio::time::sleep(std::time::Duration::from_millis(
+                                        rand::random::<u64>() % 100,
+                                    ))
+                                    .await;
+                                    runtime.connect_peer(&zid, &locators).await;
+                                }
                             });
                         }
                     }
