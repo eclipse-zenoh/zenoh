@@ -25,7 +25,6 @@ use zenoh::shm::provider::types::MemoryLayout;
 use zenoh_examples::CommonArgs;
 
 const N: usize = 10;
-const K: u32 = 3;
 
 #[tokio::main]
 async fn main() -> Result<(), zenoh::Error> {
@@ -81,7 +80,9 @@ async fn main() -> Result<(), zenoh::Error> {
         .unwrap();
 
     println!("Press CTRL-C to quit...");
-    for idx in 0..(K * N as u32) {
+    for idx in 0..u32::MAX {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
         let mut sbuf = layout
             .alloc()
             .with_policy::<BlockOn<GarbageCollect>>()
