@@ -21,6 +21,7 @@ use zenoh_collections::RingBuffer;
 use zenoh_result::ZResult;
 
 /// A synchrounous ring channel with a limited size that allows users to keep the last N data.
+#[derive(Debug)]
 pub struct RingChannel {
     capacity: usize,
 }
@@ -43,6 +44,7 @@ struct RingChannelInner<T> {
     not_empty: flume::Receiver<()>,
 }
 
+// TODO impl `fmt::Debug`, but obviously `Weak` implementation is not really user-friendly
 pub struct RingChannelHandler<T> {
     ring: Weak<RingChannelInner<T>>,
 }

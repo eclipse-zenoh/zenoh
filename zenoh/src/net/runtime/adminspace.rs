@@ -58,6 +58,7 @@ pub struct AdminContext {
 
 type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
 
+// TODO impl `fmt::Debug`
 pub struct AdminSpace {
     zid: ZenohId,
     queryable_id: QueryableId,

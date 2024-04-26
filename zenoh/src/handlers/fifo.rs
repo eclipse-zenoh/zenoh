@@ -17,6 +17,7 @@ use super::{callback::Callback, Dyn, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZ
 
 /// The default handler in Zenoh is a FIFO queue.
 
+#[derive(Debug)]
 pub struct FifoChannel {
     capacity: usize,
 }

@@ -37,6 +37,7 @@ const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
 const ROUTER_DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 
+#[derive(Debug)]
 pub enum Loop {
     Continue,
     Break,

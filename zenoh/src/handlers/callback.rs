@@ -60,6 +60,7 @@ impl<T: Send + 'static> IntoHandler<'static, T> for (flume::Sender<T>, flume::Re
 ///   - `callback` will never be called once `drop` has started.
 ///   - `drop` will only be called **once**, and **after every** `callback` has ended.
 ///   - The two previous guarantees imply that `call` and `drop` are never called concurrently.
+#[derive(Debug)]
 pub struct CallbackDrop<Callback, DropFn>
 where
     DropFn: FnMut() + Send + Sync + 'static,

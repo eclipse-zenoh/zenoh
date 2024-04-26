@@ -71,6 +71,7 @@ pub(crate) struct RuntimeState {
     plugins_manager: Mutex<PluginsManager>,
 }
 
+#[derive(Debug)]
 pub struct WeakRuntime {
     state: Weak<RuntimeState>,
 }
@@ -81,6 +82,7 @@ impl WeakRuntime {
     }
 }
 
+// TODO impl `fmt::Debug`, but `PluginsManager` doesn't implement it
 pub struct RuntimeBuilder {
     config: Config,
     #[cfg(all(feature = "unstable", feature = "plugins"))]
@@ -222,6 +224,7 @@ impl RuntimeBuilder {
     }
 }
 
+// TODO impl `fmt::Debug`, but `RuntimeState` doesn't implement it
 #[derive(Clone)]
 pub struct Runtime {
     state: Arc<RuntimeState>,

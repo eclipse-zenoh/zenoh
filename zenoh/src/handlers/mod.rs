@@ -40,7 +40,7 @@ pub trait IntoHandler<'a, T> {
 
 /// The default handler in Zenoh is a FIFO queue.
 #[repr(transparent)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DefaultHandler(FifoChannel);
 
 impl<T: Send + 'static> IntoHandler<'static, T> for DefaultHandler {

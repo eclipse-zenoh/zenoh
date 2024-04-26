@@ -79,6 +79,7 @@ lazy_static::lazy_static!(
 /// # }
 /// ```
 #[zenoh_macros::unstable]
+#[derive(Debug)]
 pub struct Liveliness<'a> {
     pub(crate) session: SessionRef<'a>,
 }
@@ -324,6 +325,7 @@ pub struct LivelinessToken<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
+#[derive(Debug)]
 pub struct LivelinessTokenUndeclaration<'a> {
     token: LivelinessToken<'a>,
 }
