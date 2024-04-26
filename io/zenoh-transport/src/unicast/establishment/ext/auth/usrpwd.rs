@@ -159,8 +159,6 @@ impl StateOpen {
 pub(crate) struct StateAccept {
     nonce: u64,
 }
-
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct UsrPwdId(pub Option<Vec<u8>>);
 

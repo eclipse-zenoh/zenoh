@@ -24,6 +24,7 @@ use zenoh_config::{
 };
 use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
+//use zenoh_link::quic::config;
 use zenoh_result::ZResult;
 type PolicyForSubject = FlowPolicy;
 
@@ -180,6 +181,7 @@ impl PolicyEnforcer {
                             }
                         };
                     }
+                    println!("main policy{}", main_policy.len());
                     self.policy_map = main_policy;
                     self.subject_map = subject_map;
                 }
@@ -197,42 +199,56 @@ impl PolicyEnforcer {
         &self,
         config_rule_set: &Vec<AclConfigRules>,
     ) -> ZResult<PolicyInformation> {
+        println!("start policy info point{:?}", config_rule_set);
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
             for flow in &config_rule.flows {
                 for action in &config_rule.actions {
-                    for key_expr in &config_rule.key_exprs {
-                        if let Some(interface_list) = config_rule.interfaces.clone() {
-                            for interface_subject in interface_list {
-                                policy_rules.push(PolicyRule {
-                                    subject: Subject::Interface(interface_subject.clone()),
-                                    key_expr: key_expr.clone(),
-                                    action: *action,
-                                    permission: config_rule.permission,
-                                    flow: *flow,
-                                });
+                    if !config_rule.key_exprs.is_empty() {
+                        for key_expr in &config_rule.key_exprs {
+                            if key_expr.is_empty() {
+                                continue;
                             }
-                        }
-                        if let Some(cert_name_list) = config_rule.cert_common_names.clone() {
-                            for cert_name_subject in cert_name_list {
-                                policy_rules.push(PolicyRule {
-                                    subject: Subject::CertCommonName(cert_name_subject.clone()),
-                                    key_expr: key_expr.clone(),
-                                    action: *action,
-                                    permission: config_rule.permission,
-                                    flow: *flow,
-                                });
+                            if let Some(interface_list) = config_rule.interfaces.clone() {
+                                if !interface_list.is_empty() {
+                                    for interface_subject in interface_list {
+                                        policy_rules.push(PolicyRule {
+                                            subject: Subject::Interface(interface_subject.clone()),
+                                            key_expr: key_expr.clone(),
+                                            action: *action,
+                                            permission: config_rule.permission,
+                                            flow: *flow,
+                                        });
+                                    }
+                                }
                             }
-                        }
-                        if let Some(username_list) = config_rule.usernames.clone() {
-                            for username_subject in username_list {
-                                policy_rules.push(PolicyRule {
-                                    subject: Subject::Username(username_subject.clone()),
-                                    key_expr: key_expr.clone(),
-                                    action: *action,
-                                    permission: config_rule.permission,
-                                    flow: *flow,
-                                });
+                            if let Some(cert_name_list) = config_rule.cert_common_names.clone() {
+                                if !cert_name_list.is_empty() {
+                                    for cert_name_subject in cert_name_list {
+                                        policy_rules.push(PolicyRule {
+                                            subject: Subject::CertCommonName(
+                                                cert_name_subject.clone(),
+                                            ),
+                                            key_expr: key_expr.clone(),
+                                            action: *action,
+                                            permission: config_rule.permission,
+                                            flow: *flow,
+                                        });
+                                    }
+                                }
+                            }
+                            if let Some(username_list) = config_rule.usernames.clone() {
+                                if !username_list.is_empty() {
+                                    for username_subject in username_list {
+                                        policy_rules.push(PolicyRule {
+                                            subject: Subject::Username(username_subject.clone()),
+                                            key_expr: key_expr.clone(),
+                                            action: *action,
+                                            permission: config_rule.permission,
+                                            flow: *flow,
+                                        });
+                                    }
+                                }
                             }
                         }
                     }
@@ -248,6 +264,7 @@ impl PolicyEnforcer {
                 counter += 1;
             }
         }
+        println!("subject map {:?}policy map{:?}", subject_map, policy_rules);
         Ok(PolicyInformation {
             subject_map,
             policy_rules,
@@ -266,6 +283,9 @@ impl PolicyEnforcer {
         key_expr: &str,
     ) -> ZResult<Permission> {
         let policy_map = &self.policy_map;
+        if policy_map.is_empty() {
+            return Ok(self.default_permission);
+        }
         match policy_map.get(&subject) {
             Some(single_policy) => {
                 let deny_result = single_policy
