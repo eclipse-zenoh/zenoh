@@ -37,17 +37,16 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
+        print!(
+            ">> [Subscriber] Received {} ('{}': ",
+            sample.kind(),
+            sample.key_expr().as_str(),
+        );
         match sample.payload().deserialize::<&zsliceshm>() {
-            Ok(payload) => println!(
-                ">> [Subscriber] Received {} ('{}': '{:02x?}')",
-                sample.kind(),
-                sample.key_expr().as_str(),
-                payload
-            ),
-            Err(e) => {
-                println!(">> [Subscriber] Not a SharedMemoryBuf: {:?}", e);
-            }
+            Ok(payload) => print!("'{}'", String::from_utf8_lossy(payload)),
+            Err(e) => print!("'Not a SharedMemoryBuf: {:?}'", e),
         }
+        println!(")");
     }
 
     // // Try to get a mutable reference to the SHM buffer. If this subscriber is the only subscriber

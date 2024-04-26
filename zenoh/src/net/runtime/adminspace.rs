@@ -462,14 +462,14 @@ impl Primitives for AdminSpace {
                     inner: Arc::new(QueryInner {
                         key_expr: key_expr.clone(),
                         parameters: query.parameters.into(),
-                        value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
                         qid: msg.id,
                         zid,
                         primitives,
-                        #[cfg(feature = "unstable")]
-                        attachment: query.ext_attachment.map(Into::into),
                     }),
                     eid: self.queryable_id,
+                    value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
+                    #[cfg(feature = "unstable")]
+                    attachment: query.ext_attachment.map(Into::into),
                 };
 
                 for (key, handler) in &self.handlers {
