@@ -34,6 +34,7 @@ use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::query::{ConsolidationMode, QueryTarget};
 use zenoh::sample::{Sample, SampleKind, TimestampBuilderTrait};
 use zenoh::sample::{SampleBuilder, ValueBuilderTrait};
+use zenoh::selector::Selector;
 use zenoh::session::SessionDeclarations;
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
