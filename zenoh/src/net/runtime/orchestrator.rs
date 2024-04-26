@@ -43,7 +43,7 @@ pub enum Loop {
 }
 
 impl Runtime {
-    pub(crate) async fn start(&mut self) -> ZResult<()> {
+    pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami() {
             WhatAmI::Client => self.start_client().await,
             WhatAmI::Peer => self.start_peer().await,

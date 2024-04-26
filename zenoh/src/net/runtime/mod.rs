@@ -153,6 +153,11 @@ impl RuntimeBuilder {
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
+        // Admin space
+        if start_admin_space {
+            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+        }
+
         // Start plugins
         #[cfg(all(feature = "unstable", feature = "plugins"))]
         crate::plugins::loader::start_plugins(&runtime);
@@ -184,11 +189,6 @@ impl RuntimeBuilder {
             }
         });
 
-        // Admin space
-        if start_admin_space {
-            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
-        }
-
         Ok(runtime)
     }
 }
@@ -210,19 +210,6 @@ impl StructVersion for Runtime {
 impl PluginStartArgs for Runtime {}
 
 impl Runtime {
-    pub async fn new(config: Config) -> ZResult<Runtime> {
-        // Create plugin_manager and load plugins
-        let mut runtime = Runtime::init(config).await?;
-        match runtime.start().await {
-            Ok(()) => Ok(runtime),
-            Err(err) => Err(err),
-        }
-    }
-
-    pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
-        RuntimeBuilder::new(config).build().await
-    }
-
     #[inline(always)]
     pub(crate) fn manager(&self) -> &TransportManager {
         &self.state.manager
