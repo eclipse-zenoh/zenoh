@@ -127,14 +127,14 @@ impl Task {
 
             // The Queryable task keeps replying to requested messages until all checkpoints are finished.
             Self::Queryable(ke, payload_size) => {
-                let queryable = session.declare_queryable(ke).res_async().await?;
+                let queryable = ztimeout!(session.declare_queryable(ke).res_async())?;
                 let payload = vec![0u8; *payload_size];
 
                 loop {
                     tokio::select! {
                         _  = token.cancelled() => break,
                         query = queryable.recv_async() => {
-                            query?.reply(ke.to_owned(), payload.clone()).res_async().await?;
+                            ztimeout!(query?.reply(ke.to_owned(), payload.clone()).res_async())?;
                         },
                     }
                 }
@@ -279,7 +279,7 @@ impl Recipe {
 
                     // In case of client can't connect to some peers/routers
                     loop {
-                        if let Ok(session) = zenoh::open(config.clone()).res_async().await {
+                        if let Ok(session) = ztimeout!(zenoh::open(config.clone()).res_async()) {
                             break session.into_arc();
                         } else {
                             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -315,11 +315,7 @@ impl Recipe {
                 // node_task_tracker.wait().await;
 
                 // Close the session once all the task assoicated with the node are done.
-                Arc::try_unwrap(session)
-                    .unwrap()
-                    .close()
-                    .res_async()
-                    .await?;
+                ztimeout!(Arc::try_unwrap(session).unwrap().close().res_async())?;
 
                 println!("Node: {} is closed.", &node.name);
                 Result::Ok(())

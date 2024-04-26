@@ -333,7 +333,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool {
-        self.config.is_shm
+        self.config.shm.is_some()
     }
 
     fn is_qos(&self) -> bool {

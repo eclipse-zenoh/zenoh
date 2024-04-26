@@ -36,6 +36,13 @@ pub struct LibLoader {
 }
 
 impl LibLoader {
+    /// Return an empty `LibLoader`.
+    pub fn empty() -> LibLoader {
+        LibLoader {
+            search_paths: Vec::new(),
+        }
+    }
+
     /// Returns the list of search paths used by `LibLoader::default()`
     pub fn default_search_paths() -> &'static str {
         &LIB_DEFAULT_SEARCH_PATHS

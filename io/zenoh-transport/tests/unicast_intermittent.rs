@@ -220,7 +220,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     // Add a listener to the router
     println!("\nTransport Intermittent [1a1]");
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
-    let locators = router_manager.get_listeners().await;
+    let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Intermittent [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -228,7 +228,10 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     // Open a transport from client01 to the router
     let c_ses1 = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone())).unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
-    assert_eq!(client01_manager.get_transports_unicast().await.len(), 1);
+    assert_eq!(
+        ztimeout!(client01_manager.get_transports_unicast()).len(),
+        1
+    );
     assert_eq!(c_ses1.get_zid().unwrap(), router_id);
 
     /* [3] */
@@ -244,7 +247,10 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             let c_ses2 =
                 ztimeout!(c_client02_manager.open_transport_unicast(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
-            assert_eq!(c_client02_manager.get_transports_unicast().await.len(), 1);
+            assert_eq!(
+                ztimeout!(c_client02_manager.get_transports_unicast()).len(),
+                1
+            );
             assert_eq!(c_ses2.get_zid().unwrap(), c_router_id);
 
             tokio::time::sleep(SLEEP).await;
@@ -269,7 +275,10 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             let c_ses3 =
                 ztimeout!(c_client03_manager.open_transport_unicast(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
-            assert_eq!(c_client03_manager.get_transports_unicast().await.len(), 1);
+            assert_eq!(
+                ztimeout!(c_client03_manager.get_transports_unicast()).len(),
+                1
+            );
             assert_eq!(c_ses3.get_zid().unwrap(), c_router_id);
 
             tokio::time::sleep(SLEEP).await;
@@ -361,15 +370,15 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     /* [5] */
     // Close the open transport on the client
     println!("Transport Intermittent [5a1]");
-    for s in client01_manager.get_transports_unicast().await.iter() {
+    for s in ztimeout!(client01_manager.get_transports_unicast()).iter() {
         ztimeout!(s.close()).unwrap();
     }
     println!("Transport Intermittent [5a2]");
-    for s in client02_manager.get_transports_unicast().await.iter() {
+    for s in ztimeout!(client02_manager.get_transports_unicast()).iter() {
         ztimeout!(s.close()).unwrap();
     }
     println!("Transport Intermittent [5a3]");
-    for s in client03_manager.get_transports_unicast().await.iter() {
+    for s in ztimeout!(client03_manager.get_transports_unicast()).iter() {
         ztimeout!(s.close()).unwrap();
     }
 

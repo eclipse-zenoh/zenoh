@@ -88,10 +88,16 @@ use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::Ready;
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+pub use zenoh_shm::api as shm;
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_util::concat_enabled_features;
 
 /// A zenoh error.
@@ -100,6 +106,10 @@ pub use zenoh_result::Error;
 pub use zenoh_result::ZResult as Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
+
+lazy_static::lazy_static!(
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
+);
 
 pub const FEATURES: &str = concat_enabled_features!(
     prefix = "zenoh",
@@ -140,6 +150,7 @@ pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 pub mod plugins;
 pub mod prelude;
 pub mod publication;
@@ -148,8 +159,6 @@ pub mod queryable;
 pub mod sample;
 pub mod subscriber;
 pub mod value;
-#[cfg(feature = "shared-memory")]
-pub use zenoh_shm as shm;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
@@ -252,7 +261,11 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    OpenBuilder { config }
+    OpenBuilder {
+        config,
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+        shm_clients: None,
+    }
 }
 
 /// A builder returned by [`open`] used to open a zenoh [`Session`].
@@ -273,6 +286,20 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     config: TryIntoConfig,
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+}
+
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    pub fn with_shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
+        self.shm_clients = Some(shm_clients);
+        self
+    }
 }
 
 impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
@@ -293,7 +320,12 @@ where
             .config
             .try_into()
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        Session::new(config).res_sync()
+        Session::new(
+            config,
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            self.shm_clients,
+        )
+        .res_sync()
     }
 }
 

@@ -12,10 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
+use zenoh::buffers::ZSlice;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
-use zenoh::shm::SharedMemoryManager;
+use zenoh::shm::protocol_implementations::posix::{
+    posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+    protocol_id::POSIX_PROTOCOL_ID,
+};
+use zenoh::shm::provider::shared_memory_provider::SharedMemoryProviderBuilder;
+use zenoh::shm::provider::types::AllocAlignment;
+use zenoh::shm::provider::types::MemoryLayout;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -30,17 +37,52 @@ async fn main() {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     let z = zenoh::open(config).res().await.unwrap();
-    let id = z.zid();
-    let mut shm = SharedMemoryManager::make(id.to_string(), sm_size).unwrap();
-    let mut buf = shm.alloc(size).unwrap();
-    let bs = unsafe { buf.as_mut_slice() };
-    for b in bs {
+
+    // Construct an SHM backend
+    let backend = {
+        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
+        // The initialisation of SHM backend is completely backend-specific and user is free to do
+        // anything reasonable here. This code is execuated at the provider's first use
+
+        // Alignment for POSIX SHM provider
+        // All allocations will be aligned corresponding to this alignment -
+        // that means that the provider will be able to satisfy allocation layouts
+        // with alignment <= provider_alignment
+        let provider_alignment = AllocAlignment::default();
+
+        // Create layout for POSIX Provider's memory
+        let provider_layout = MemoryLayout::new(sm_size, provider_alignment).unwrap();
+
+        PosixSharedMemoryProviderBackend::builder()
+            .with_layout(provider_layout)
+            .res()
+            .unwrap()
+    };
+
+    // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
+    let shared_memory_provider = SharedMemoryProviderBuilder::builder()
+        .protocol_id::<POSIX_PROTOCOL_ID>()
+        .backend(backend)
+        .res();
+
+    let mut buf = shared_memory_provider
+        .alloc_layout()
+        .size(size)
+        .res()
+        .unwrap()
+        .alloc()
+        .res()
+        .unwrap();
+
+    for b in buf.as_mut() {
         *b = rand::random::<u8>();
     }
 
     let publisher = z.declare_publisher("test/thr")
     // Make sure to not drop messages because of congestion control
     .congestion_control(CongestionControl::Block).res().await.unwrap();
+
+    let buf: ZSlice = buf.into();
 
     println!("Press CTRL-C to quit...");
     loop {

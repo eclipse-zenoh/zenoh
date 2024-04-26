@@ -29,6 +29,7 @@ shared-memory = [
     "zenoh-protocol/shared-memory",
     "zenoh-shm",
     "zenoh-codec/shared-memory",
+    "zenoh-buffers/shared-memory",
 ]
 auth_pubkey = ["transport_auth", "rsa"]
 auth_usrpwd = ["transport_auth"]
@@ -92,3 +93,4 @@ futures-util = { workspace = true }
 zenoh-util = {workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 futures = { workspace = true }
+zenoh-link-commons = { workspace = true }

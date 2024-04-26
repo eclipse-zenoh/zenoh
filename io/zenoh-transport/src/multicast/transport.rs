@@ -13,6 +13,8 @@
 //
 use super::common::priority::{TransportPriorityRx, TransportPriorityTx};
 use super::link::{TransportLinkMulticastConfigUniversal, TransportLinkMulticastUniversal};
+#[cfg(feature = "shared-memory")]
+use crate::shm::MulticastTransportShmConfig;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -88,6 +90,8 @@ pub(crate) struct TransportMulticastInner {
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm: Option<MulticastTransportShmConfig>,
 }
 
 impl TransportMulticastInner {
@@ -109,6 +113,12 @@ impl TransportMulticastInner {
         #[cfg(feature = "stats")]
         let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
 
+        #[cfg(feature = "shared-memory")]
+        let shm = match manager.config.multicast.is_shm {
+            true => Some(MulticastTransportShmConfig),
+            false => None,
+        };
+
         let ti = TransportMulticastInner {
             manager,
             priority_tx: priority_tx.into_boxed_slice().into(),
@@ -119,6 +129,8 @@ impl TransportMulticastInner {
             task_controller: TaskController::default(),
             #[cfg(feature = "stats")]
             stats,
+            #[cfg(feature = "shared-memory")]
+            shm,
         };
 
         let link = TransportLinkMulticastUniversal::new(ti.clone(), config.link);

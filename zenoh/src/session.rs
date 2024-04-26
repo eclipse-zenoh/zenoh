@@ -85,6 +85,8 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_task::TaskController;
 use zenoh_util::core::AsyncResolve;
 
@@ -710,15 +712,15 @@ impl Session {
     /// # }
     /// ```
     #[inline]
-    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoPayload>(
+    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoZBytes>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-        payload: IntoPayload,
+        payload: IntoZBytes,
     ) -> SessionPutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoPayload: Into<ZBytes>,
+        IntoZBytes: Into<ZBytes>,
     {
         PublicationBuilder {
             publisher: self.declare_publisher(key_expr),
@@ -837,33 +839,35 @@ impl Session {
     }
 
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
+    pub(super) fn new(
+        config: Config,
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
+            Arc<SharedMemoryClientStorage>,
+        >,
+    ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            match Runtime::init(config).await {
-                Ok(mut runtime) => {
-                    let mut session = Self::init(
-                        runtime.clone(),
-                        aggregated_subscribers,
-                        aggregated_publishers,
-                    )
-                    .res_async()
-                    .await;
-                    session.owns_runtime = true;
-                    match runtime.start().await {
-                        Ok(()) => {
-                            // Workaround for the declare_and_shoot problem
-                            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY))
-                                .await;
-                            Ok(session)
-                        }
-                        Err(err) => Err(err),
-                    }
-                }
-                Err(err) => Err(err),
-            }
+            let mut runtime = Runtime::init(
+                config,
+                #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+                shm_clients,
+            )
+            .await?;
+
+            let mut session = Self::init(
+                runtime.clone(),
+                aggregated_subscribers,
+                aggregated_publishers,
+            )
+            .res_async()
+            .await;
+            session.owns_runtime = true;
+            runtime.start().await?;
+            // Workaround for the declare_and_shoot problem
+            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+            Ok(session)
         })
     }
 

@@ -19,7 +19,7 @@ use crate::net::routing::dispatcher::queries::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::{CurrentFutureTrait, HatQueriesTrait};
+use crate::net::routing::hat::{CurrentFutureTrait, HatQueriesTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
@@ -1259,8 +1259,41 @@ impl HatQueriesTrait for HatCode {
         }
     }
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        hat!(tables).router_qabls.iter().cloned().collect()
+    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known queryables (keys)
+        hat!(tables)
+            .router_qabls
+            .iter()
+            .map(|s| {
+                (
+                    s.clone(),
+                    // Compute the list of routers, peers and clients that are known
+                    // sources of those queryables
+                    Sources {
+                        routers: Vec::from_iter(res_hat!(s).router_qabls.keys().cloned()),
+                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
+                            Vec::from_iter(res_hat!(s).peer_qabls.keys().cloned())
+                        } else {
+                            s.session_ctxs
+                                .values()
+                                .filter_map(|f| {
+                                    (f.face.whatami == WhatAmI::Peer && f.qabl.is_some())
+                                        .then_some(f.face.zid)
+                                })
+                                .collect()
+                        },
+                        clients: s
+                            .session_ctxs
+                            .values()
+                            .filter_map(|f| {
+                                (f.face.whatami == WhatAmI::Client && f.qabl.is_some())
+                                    .then_some(f.face.zid)
+                            })
+                            .collect(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn compute_query_route(

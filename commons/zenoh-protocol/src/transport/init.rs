@@ -114,6 +114,7 @@ pub struct InitSyn {
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub ext_qos: Option<ext::QoS>,
+    #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLink>,
@@ -134,6 +135,7 @@ pub mod ext {
 
     /// # Shm extension
     /// Used as challenge for probing shared memory capabilities
+    #[cfg(feature = "shared-memory")]
     pub type Shm = zextzbuf!(0x2, false);
 
     /// # Auth extension
@@ -167,6 +169,7 @@ impl InitSyn {
         let resolution = Resolution::rand();
         let batch_size: BatchSize = rng.gen();
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
@@ -180,6 +183,7 @@ impl InitSyn {
             resolution,
             batch_size,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,
@@ -198,6 +202,7 @@ pub struct InitAck {
     pub batch_size: BatchSize,
     pub cookie: ZSlice,
     pub ext_qos: Option<ext::QoS>,
+    #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLink>,
@@ -224,6 +229,7 @@ impl InitAck {
         let batch_size: BatchSize = rng.gen();
         let cookie = ZSlice::rand(64);
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
@@ -238,6 +244,7 @@ impl InitAck {
             batch_size,
             cookie,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,

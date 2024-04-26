@@ -15,7 +15,7 @@
 //! Value primitives.
 use crate::{bytes::ZBytes, encoding::Encoding};
 
-/// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the [`Payload`] should be interpreted.
+/// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the payload's [`ZBytes`] should be interpreted.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Value {
@@ -24,7 +24,7 @@ pub struct Value {
 }
 
 impl Value {
-    /// Creates a new [`Value`] with specified [`Payload`] and  [`Encoding`].
+    /// Creates a new [`Value`] with specified [`ZBytes`] and  [`Encoding`].
     pub fn new<T, E>(payload: T, encoding: E) -> Self
     where
         T: Into<ZBytes>,
@@ -48,7 +48,7 @@ impl Value {
         self.payload.is_empty() && self.encoding == Encoding::default()
     }
 
-    /// Gets binary [`Payload`] of this [`Value`].
+    /// Gets binary [`ZBytes`] of this [`Value`].
     pub fn payload(&self) -> &ZBytes {
         &self.payload
     }

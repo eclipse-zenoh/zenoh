@@ -64,10 +64,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     println!("Opening transport with {endpoint}");
     let _ = ztimeout!(client_manager.open_transport_unicast(endpoint.clone())).unwrap();
 
-    let client_transport = client_manager
-        .get_transport_unicast(&router_id)
-        .await
-        .unwrap();
+    let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
 
     // Create the message to send
     let message: NetworkMessage = Push {

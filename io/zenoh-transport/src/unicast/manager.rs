@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use super::shared_memory_unicast::SharedMemoryUnicast;
+use super::establishment::ext::shm::AuthUnicast;
 use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
@@ -49,6 +49,8 @@ use zenoh_protocol::{
     transport::{close, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::reader::SharedMemoryReader;
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -82,9 +84,10 @@ pub struct TransportManagerStateUnicast {
     // Active authenticators
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Arc<Auth>,
-    // Shared memory
+    // SHM probing
+    // Option will be None if SHM is disabled by Config
     #[cfg(feature = "shared-memory")]
-    pub(super) shm: Arc<SharedMemoryUnicast>,
+    pub(super) auth_shm: Option<AuthUnicast>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -211,6 +214,7 @@ impl TransportManagerBuilderUnicast {
     pub fn build(
         self,
         #[allow(unused)] prng: &mut PseudoRng, // Required for #[cfg(feature = "transport_multilink")]
+        #[cfg(feature = "shared-memory")] shm_reader: &SharedMemoryReader,
     ) -> ZResult<TransportManagerParamsUnicast> {
         if self.is_qos && self.is_lowlatency {
             bail!("'qos' and 'lowlatency' options are incompatible");
@@ -238,10 +242,15 @@ impl TransportManagerBuilderUnicast {
             transports: Arc::new(AsyncMutex::new(HashMap::new())),
             #[cfg(feature = "transport_multilink")]
             multilink: Arc::new(MultiLink::make(prng)?),
-            #[cfg(feature = "shared-memory")]
-            shm: Arc::new(SharedMemoryUnicast::make()?),
             #[cfg(feature = "transport_auth")]
             authenticator: Arc::new(self.authenticator),
+            #[cfg(feature = "shared-memory")]
+            auth_shm: match self.is_shm {
+                true => Some(AuthUnicast::new(
+                    shm_reader.supported_protocols().as_slice(),
+                )?),
+                false => None,
+            },
         };
 
         let params = TransportManagerParamsUnicast { config, state };
@@ -286,11 +295,6 @@ impl Default for TransportManagerBuilderUnicast {
 impl TransportManager {
     pub fn config_unicast() -> TransportManagerBuilderUnicast {
         TransportManagerBuilderUnicast::default()
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub(crate) fn shm(&self) -> &Arc<SharedMemoryUnicast> {
-        &self.state.unicast.shm
     }
 
     pub async fn close_unicast(&self) {
@@ -590,14 +594,14 @@ impl TransportManager {
             "shared-memory",
             {
                 tracing::debug!(
-            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}, lowlatency: {}",
+            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {:?}, multilink: {}, lowlatency: {}",
             self.config.zid,
             config.zid,
             config.whatami,
             config.sn_resolution,
             config.tx_initial_sn,
             config.is_qos,
-            config.is_shm,
+            config.shm,
             is_multilink,
             config.is_lowlatency
         );

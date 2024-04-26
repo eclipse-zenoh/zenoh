@@ -69,7 +69,10 @@ use zenoh_transport::{
 // the key and certificate brought in by the client. Similarly the server's certificate authority
 // will validate the key and certificate brought in by the server in front of the client.
 //
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(
+    any(feature = "transport_tls", feature = "transport_quic"),
+    target_family = "unix"
+))]
 const CLIENT_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAsfqAuhElN4HnyeqLovSd4Qe+nNv5AwCjSO+HFiF30x3vQ1Hi
 qRA0UmyFlSqBnFH3TUHm4Jcad40QfrX8f11NKGZdpvKHsMYqYjZnYkRFGS2s4fQy
@@ -98,7 +101,10 @@ tYsqC2FtWzY51VOEKNpnfH7zH5n+bjoI9nAEAW63TK9ZKkr2hRGsDhJdGzmLfQ7v
 F6/CuIw9EsAq6qIB8O88FXQqald+BZOx6AzB8Oedsz/WtMmIEmr/+Q==
 -----END RSA PRIVATE KEY-----";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(
+    any(feature = "transport_tls", feature = "transport_quic"),
+    target_family = "unix"
+))]
 const CLIENT_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDLjCCAhagAwIBAgIIeUtmIdFQznMwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMxOFoYDzIxMjMw
@@ -120,7 +126,10 @@ p5e60QweRuJsb60aUaCG8HoICevXYK2fFqCQdlb5sIqQqXyN2K6HuKAFywsjsGyJ
 abY=
 -----END CERTIFICATE-----";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(
+    any(feature = "transport_tls", feature = "transport_quic"),
+    target_family = "unix"
+))]
 const CLIENT_CA: &str = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIB42n1ZIkOakwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMwN1oYDzIxMjMw
@@ -222,6 +231,11 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
 const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
+#[cfg(any(
+    feature = "transport_tcp",
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
 // Transport Handler for the router
@@ -386,10 +400,7 @@ async fn open_transport_unicast(
         let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
-    let client_transport = client_manager
-        .get_transport_unicast(&router_id)
-        .await
-        .unwrap();
+    let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
 
     // Return the handlers
     (
@@ -529,9 +540,7 @@ async fn run_single(
     {
         let c_stats = client_transport.get_stats().unwrap().report();
         println!("\tClient: {:?}", c_stats);
-        let r_stats = router_manager
-            .get_transport_unicast(&client_manager.config.zid)
-            .await
+        let r_stats = ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
             .unwrap()
             .get_stats()
             .map(|s| s.report())
@@ -1262,6 +1271,221 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
         },
         Channel {
             priority: Priority::DEFAULT,
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let client_endpoints = vec![client_endpoint];
+    let server_endpoints = vec![server_endpoint];
+    let result = std::panic::catch_unwind(|| {
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_with_universal_transport(
+                &client_endpoints,
+                &server_endpoints,
+                &channel,
+                &MSG_SIZE_ALL,
+            ))
+    });
+    assert!(result.is_err());
+}
+
+#[cfg(all(feature = "transport_quic", target_family = "unix"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_only_mutual_success() {
+    use zenoh_link::quic::config::*;
+
+    zenoh_util::try_init_log_from_env();
+
+    let client_auth = "true";
+
+    // Define the locator
+    let mut client_endpoint: EndPoint = ("quic/localhost:10461").parse().unwrap();
+    client_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
+                (TLS_CLIENT_PRIVATE_KEY_RAW, CLIENT_KEY),
+                (TLS_CLIENT_AUTH, client_auth),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the locator
+    let mut server_endpoint: EndPoint = ("quic/localhost:10461").parse().unwrap();
+    server_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_CLIENT_AUTH, client_auth),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let client_endpoints = vec![client_endpoint];
+    let server_endpoints = vec![server_endpoint];
+    run_with_universal_transport(
+        &client_endpoints,
+        &server_endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    )
+    .await;
+}
+
+#[cfg(all(feature = "transport_quic", target_family = "unix"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_only_mutual_no_client_certs_failure() {
+    use std::vec;
+    use zenoh_link::quic::config::*;
+
+    zenoh_util::try_init_log_from_env();
+
+    // Define the locator
+    let mut client_endpoint: EndPoint = ("quic/localhost:10462").parse().unwrap();
+    client_endpoint
+        .config_mut()
+        .extend_from_iter([(TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA)].iter().copied())
+        .unwrap();
+
+    // Define the locator
+    let mut server_endpoint: EndPoint = ("quic/localhost:10462").parse().unwrap();
+    server_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_CLIENT_AUTH, "true"),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let client_endpoints = vec![client_endpoint];
+    let server_endpoints = vec![server_endpoint];
+    let result = std::panic::catch_unwind(|| {
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_with_universal_transport(
+                &client_endpoints,
+                &server_endpoints,
+                &channel,
+                &MSG_SIZE_ALL,
+            ))
+    });
+    assert!(result.is_err());
+}
+
+#[cfg(all(feature = "transport_quic", target_family = "unix"))]
+#[test]
+fn transport_unicast_quic_only_mutual_wrong_client_certs_failure() {
+    use zenoh_link::quic::config::*;
+
+    zenoh_util::try_init_log_from_env();
+
+    let client_auth = "true";
+
+    // Define the locator
+    let mut client_endpoint: EndPoint = ("quic/localhost:10463").parse().unwrap();
+    client_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                // Using the SERVER_CERT and SERVER_KEY in the client to simulate the case the client has
+                // wrong certificates and keys. The SERVER_CA (cetificate authority) will not recognize
+                // these certificates as it is expecting to receive CLIENT_CERT and CLIENT_KEY from the
+                // client.
+                (TLS_CLIENT_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_CLIENT_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_CLIENT_AUTH, client_auth),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the locator
+    let mut server_endpoint: EndPoint = ("quic/localhost:10463").parse().unwrap();
+    server_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_CLIENT_AUTH, client_auth),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
