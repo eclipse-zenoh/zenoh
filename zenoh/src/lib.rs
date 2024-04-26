@@ -79,8 +79,7 @@ extern crate zenoh_core;
 #[macro_use]
 extern crate zenoh_result;
 
-mod api;
-mod net;
+mod sealed;
 
 lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
@@ -110,8 +109,8 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
 );
 
 // Expose some functions directly to root `zenoh::`` namespace for convenience
-pub use crate::api::scouting::scout;
-pub use crate::api::session::open;
+pub use crate::sealed::api::scouting::scout;
+pub use crate::sealed::api::session::open;
 
 pub mod prelude;
 
@@ -177,7 +176,7 @@ pub mod key_expr {
         };
         pub use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
     }
-    pub use crate::api::key_expr::KeyExpr;
+    pub use crate::sealed::api::key_expr::KeyExpr;
     pub use zenoh_keyexpr::keyexpr;
     pub use zenoh_keyexpr::OwnedKeyExpr;
     pub use zenoh_keyexpr::SetIntersectionLevel;
@@ -193,111 +192,111 @@ pub mod key_expr {
 
 /// Zenoh [`Session`](crate::session::Session) and associated types
 pub mod session {
-    pub use crate::api::builders::publication::SessionDeleteBuilder;
-    pub use crate::api::builders::publication::SessionPutBuilder;
+    pub use crate::sealed::api::builders::publication::SessionDeleteBuilder;
+    pub use crate::sealed::api::builders::publication::SessionPutBuilder;
     #[zenoh_macros::unstable]
     #[doc(hidden)]
-    pub use crate::api::session::init;
-    pub use crate::api::session::open;
-    pub use crate::api::session::Session;
-    pub use crate::api::session::SessionDeclarations;
-    pub use crate::api::session::SessionRef;
+    pub use crate::sealed::api::session::init;
+    pub use crate::sealed::api::session::open;
+    pub use crate::sealed::api::session::Session;
+    pub use crate::sealed::api::session::SessionDeclarations;
+    pub use crate::sealed::api::session::SessionRef;
 }
 
 /// Sample primitives
 pub mod sample {
-    pub use crate::api::builders::sample::QoSBuilderTrait;
-    pub use crate::api::builders::sample::SampleBuilder;
-    pub use crate::api::builders::sample::SampleBuilderTrait;
-    pub use crate::api::builders::sample::TimestampBuilderTrait;
-    pub use crate::api::builders::sample::ValueBuilderTrait;
+    pub use crate::sealed::api::builders::sample::QoSBuilderTrait;
+    pub use crate::sealed::api::builders::sample::SampleBuilder;
+    pub use crate::sealed::api::builders::sample::SampleBuilderTrait;
+    pub use crate::sealed::api::builders::sample::TimestampBuilderTrait;
+    pub use crate::sealed::api::builders::sample::ValueBuilderTrait;
     #[zenoh_macros::unstable]
-    pub use crate::api::sample::Locality;
-    pub use crate::api::sample::Sample;
-    pub use crate::api::sample::SampleKind;
+    pub use crate::sealed::api::sample::Locality;
+    pub use crate::sealed::api::sample::Sample;
+    pub use crate::sealed::api::sample::SampleKind;
     #[zenoh_macros::unstable]
-    pub use crate::api::sample::SourceInfo;
+    pub use crate::sealed::api::sample::SourceInfo;
 }
 
 /// Value primitives
 pub mod value {
-    pub use crate::api::value::Value;
+    pub use crate::sealed::api::value::Value;
 }
 
 /// Encoding support
 pub mod encoding {
-    pub use crate::api::encoding::Encoding;
+    pub use crate::sealed::api::encoding::Encoding;
 }
 
 /// Payload primitives
 pub mod bytes {
-    pub use crate::api::bytes::Deserialize;
-    pub use crate::api::bytes::Serialize;
-    pub use crate::api::bytes::StringOrBase64;
-    pub use crate::api::bytes::ZBytes;
-    pub use crate::api::bytes::ZBytesReader;
-    pub use crate::api::bytes::ZSerde;
+    pub use crate::sealed::api::bytes::Deserialize;
+    pub use crate::sealed::api::bytes::Serialize;
+    pub use crate::sealed::api::bytes::StringOrBase64;
+    pub use crate::sealed::api::bytes::ZBytes;
+    pub use crate::sealed::api::bytes::ZBytesReader;
+    pub use crate::sealed::api::bytes::ZSerde;
 }
 
 /// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 pub mod selector {
-    pub use crate::api::selector::Parameters;
-    pub use crate::api::selector::Selector;
-    pub use crate::api::selector::TIME_RANGE_KEY;
+    pub use crate::sealed::api::selector::Parameters;
+    pub use crate::sealed::api::selector::Selector;
+    pub use crate::sealed::api::selector::TIME_RANGE_KEY;
     pub use zenoh_protocol::core::Properties;
     pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 }
 
 /// Subscribing primitives
 pub mod subscriber {
-    pub use crate::api::subscriber::FlumeSubscriber;
-    pub use crate::api::subscriber::Subscriber;
-    pub use crate::api::subscriber::SubscriberBuilder;
+    pub use crate::sealed::api::subscriber::FlumeSubscriber;
+    pub use crate::sealed::api::subscriber::Subscriber;
+    pub use crate::sealed::api::subscriber::SubscriberBuilder;
     /// The kind of reliability.
     pub use zenoh_protocol::core::Reliability;
 }
 
 /// Publishing primitives
 pub mod publication {
-    pub use crate::api::builders::publication::PublisherBuilder;
+    pub use crate::sealed::api::builders::publication::PublisherBuilder;
     #[zenoh_macros::unstable]
-    pub use crate::api::publication::MatchingListener;
-    pub use crate::api::publication::Priority;
-    pub use crate::api::publication::Publisher;
+    pub use crate::sealed::api::publication::MatchingListener;
+    pub use crate::sealed::api::publication::Priority;
+    pub use crate::sealed::api::publication::Publisher;
     #[zenoh_macros::unstable]
-    pub use crate::api::publication::PublisherDeclarations;
+    pub use crate::sealed::api::publication::PublisherDeclarations;
     pub use zenoh_protocol::core::CongestionControl;
 }
 
 /// Query primitives
 pub mod query {
-    pub use crate::api::query::Reply;
+    pub use crate::sealed::api::query::Reply;
     #[zenoh_macros::unstable]
-    pub use crate::api::query::ReplyKeyExpr;
+    pub use crate::sealed::api::query::ReplyKeyExpr;
     #[zenoh_macros::unstable]
-    pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
-    pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+    pub use crate::sealed::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
+    pub use crate::sealed::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
 }
 
 /// Queryable primitives
 pub mod queryable {
-    pub use crate::api::queryable::Query;
-    pub use crate::api::queryable::Queryable;
-    pub use crate::api::queryable::QueryableBuilder;
+    pub use crate::sealed::api::queryable::Query;
+    pub use crate::sealed::api::queryable::Queryable;
+    pub use crate::sealed::api::queryable::QueryableBuilder;
 }
 
 /// Callback handler trait
 pub mod handlers {
-    pub use crate::api::handlers::locked;
-    pub use crate::api::handlers::DefaultHandler;
-    pub use crate::api::handlers::IntoHandler;
-    pub use crate::api::handlers::RingChannel;
+    pub use crate::sealed::api::handlers::locked;
+    pub use crate::sealed::api::handlers::DefaultHandler;
+    pub use crate::sealed::api::handlers::IntoHandler;
+    pub use crate::sealed::api::handlers::RingChannel;
 }
 
 /// Scouting primitives
 pub mod scouting {
-    pub use crate::api::scouting::scout;
-    pub use crate::api::scouting::ScoutBuilder;
+    pub use crate::sealed::api::scouting::scout;
+    pub use crate::sealed::api::scouting::ScoutBuilder;
     /// Constants and helpers for zenoh `whatami` flags.
     pub use zenoh_protocol::core::WhatAmI;
     /// A zenoh Hello message.
@@ -307,14 +306,14 @@ pub mod scouting {
 /// Liveliness primitives
 #[cfg(feature = "unstable")]
 pub mod liveliness {
-    pub use crate::api::liveliness::Liveliness;
-    pub use crate::api::liveliness::LivelinessSubscriberBuilder;
-    pub use crate::api::liveliness::LivelinessToken;
+    pub use crate::sealed::api::liveliness::Liveliness;
+    pub use crate::sealed::api::liveliness::LivelinessSubscriberBuilder;
+    pub use crate::sealed::api::liveliness::LivelinessToken;
 }
 
 /// Timestamp support
 pub mod time {
-    pub use crate::api::time::new_reception_timestamp;
+    pub use crate::sealed::api::time::new_reception_timestamp;
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 }
 
@@ -322,8 +321,8 @@ pub mod time {
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
 pub mod runtime {
-    pub use crate::net::runtime::RuntimeBuilder;
-    pub use crate::net::runtime::{AdminSpace, Runtime};
+    pub use crate::sealed::net::runtime::RuntimeBuilder;
+    pub use crate::sealed::net::runtime::{AdminSpace, Runtime};
     pub use zenoh_runtime::ZRuntime;
 }
 
@@ -339,10 +338,10 @@ pub mod config {
 #[doc(hidden)]
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 pub mod plugins {
-    pub use crate::api::plugins::PluginsManager;
-    pub use crate::api::plugins::Response;
-    pub use crate::api::plugins::RunningPlugin;
-    pub use crate::api::plugins::{RunningPluginTrait, ZenohPlugin};
+    pub use crate::sealed::api::plugins::PluginsManager;
+    pub use crate::sealed::api::plugins::Response;
+    pub use crate::sealed::api::plugins::RunningPlugin;
+    pub use crate::sealed::api::plugins::{RunningPluginTrait, ZenohPlugin};
 }
 
 #[doc(hidden)]
