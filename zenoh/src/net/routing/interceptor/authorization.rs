@@ -199,10 +199,24 @@ impl PolicyEnforcer {
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
+            // config validation
+            if config_rule.interfaces.is_empty()
+                || config_rule.actions.is_empty()
+                || config_rule.flows.is_empty()
+                || config_rule.key_exprs.is_empty()
+            {
+                bail!("error from bad config");
+            }
             for subject in &config_rule.interfaces {
+                if subject.trim().is_empty() {
+                    bail!("error from bad interface value");
+                }
                 for flow in &config_rule.flows {
                     for action in &config_rule.actions {
                         for key_expr in &config_rule.key_exprs {
+                            if key_expr.trim().is_empty() {
+                                bail!("error from bad key-expression value");
+                            }
                             policy_rules.push(PolicyRule {
                                 subject: Subject::Interface(subject.clone()),
                                 key_expr: key_expr.clone(),
