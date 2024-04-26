@@ -308,6 +308,12 @@ impl Sample {
         &self.payload
     }
 
+    /// Gets the payload of this Sample.
+    #[inline]
+    pub fn payload_mut(&mut self) -> &mut ZBytes {
+        &mut self.payload
+    }
+
     /// Gets the kind of this Sample.
     #[inline]
     pub fn kind(&self) -> SampleKind {
