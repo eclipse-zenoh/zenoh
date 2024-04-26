@@ -22,4 +22,3 @@ zenoh-result = { workspace = true, features = ["std"] }
 zenoh-collections = { workspace = true, features = ["std"] }
 zenoh-macros = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
-tracing = { workspace = true }
