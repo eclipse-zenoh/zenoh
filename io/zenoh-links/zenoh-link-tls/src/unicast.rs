@@ -12,39 +12,30 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    base64_decode, config::*, get_tls_addr, get_tls_host, get_tls_server_name,
+    utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
     TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
+
 use async_trait::async_trait;
-use rustls::{
-    pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
-    server::WebPkiClientVerifier,
-    version::TLS13,
-    ClientConfig, RootCertStore, ServerConfig,
-};
+use std::cell::UnsafeCell;
 use std::convert::TryInto;
 use std::fmt;
-use std::fs::File;
-use std::io::{BufReader, Cursor};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{cell::UnsafeCell, io};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
-use webpki::anchor_from_trusted_cert;
 use zenoh_core::zasynclock;
-use zenoh_link_commons::tls::WebPkiVerifierAnyServerName;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_protocol::{core::endpoint::Config, transport::BatchSize};
-use zenoh_result::{bail, zerror, ZError, ZResult};
+use zenoh_protocol::transport::BatchSize;
+use zenoh_result::{zerror, ZResult};
 
 pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library
@@ -417,312 +408,4 @@ async fn accept_task(
     }
 
     Ok(())
-}
-
-struct TlsServerConfig {
-    server_config: ServerConfig,
-}
-
-impl TlsServerConfig {
-    pub async fn new(config: &Config<'_>) -> ZResult<TlsServerConfig> {
-        let tls_server_client_auth: bool = match config.get(TLS_CLIENT_AUTH) {
-            Some(s) => s
-                .parse()
-                .map_err(|_| zerror!("Unknown client auth argument: {}", s))?,
-            None => false,
-        };
-        let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
-        let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
-
-        let certs: Vec<CertificateDer> =
-            rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
-                .collect::<Result<_, _>>()
-                .map_err(|err| zerror!("Error processing server certificate: {err}."))?;
-
-        let mut keys: Vec<PrivateKeyDer> =
-            rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|x| x.map(PrivateKeyDer::from))
-                .collect::<Result<_, _>>()
-                .map_err(|err| zerror!("Error processing server key: {err}."))?;
-
-        if keys.is_empty() {
-            keys = rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|x| x.map(PrivateKeyDer::from))
-                .collect::<Result<_, _>>()
-                .map_err(|err| zerror!("Error processing server key: {err}."))?;
-        }
-
-        if keys.is_empty() {
-            keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|x| x.map(PrivateKeyDer::from))
-                .collect::<Result<_, _>>()
-                .map_err(|err| zerror!("Error processing server key: {err}."))?;
-        }
-
-        if keys.is_empty() {
-            bail!("No private key found for TLS server.");
-        }
-
-        let sc = if tls_server_client_auth {
-            let root_cert_store = load_trust_anchors(config)?.map_or_else(
-                || {
-                    Err(zerror!(
-                        "Missing root certificates while client authentication is enabled."
-                    ))
-                },
-                Ok,
-            )?;
-            let client_auth = WebPkiClientVerifier::builder(root_cert_store.into()).build()?;
-            ServerConfig::builder_with_protocol_versions(&[&TLS13])
-                .with_client_cert_verifier(client_auth)
-                .with_single_cert(certs, keys.remove(0))
-                .map_err(|e| zerror!(e))?
-        } else {
-            ServerConfig::builder()
-                .with_no_client_auth()
-                .with_single_cert(certs, keys.remove(0))
-                .map_err(|e| zerror!(e))?
-        };
-        Ok(TlsServerConfig { server_config: sc })
-    }
-
-    async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
-        load_tls_key(
-            config,
-            TLS_SERVER_PRIVATE_KEY_RAW,
-            TLS_SERVER_PRIVATE_KEY_FILE,
-            TLS_SERVER_PRIVATE_KEY_BASE_64,
-        )
-        .await
-    }
-
-    async fn load_tls_certificate(config: &Config<'_>) -> ZResult<Vec<u8>> {
-        load_tls_certificate(
-            config,
-            TLS_SERVER_CERTIFICATE_RAW,
-            TLS_SERVER_CERTIFICATE_FILE,
-            TLS_SERVER_CERTIFICATE_BASE64,
-        )
-        .await
-    }
-}
-
-struct TlsClientConfig {
-    client_config: ClientConfig,
-}
-
-impl TlsClientConfig {
-    pub async fn new(config: &Config<'_>) -> ZResult<TlsClientConfig> {
-        let tls_client_server_auth: bool = match config.get(TLS_CLIENT_AUTH) {
-            Some(s) => s
-                .parse()
-                .map_err(|_| zerror!("Unknown client auth argument: {}", s))?,
-            None => false,
-        };
-
-        let tls_server_name_verification: bool = match config.get(TLS_SERVER_NAME_VERIFICATION) {
-            Some(s) => {
-                let s: bool = s
-                    .parse()
-                    .map_err(|_| zerror!("Unknown server name verification argument: {}", s))?;
-                if s {
-                    tracing::warn!("Skipping name verification of servers");
-                }
-                s
-            }
-            None => false,
-        };
-
-        // Allows mixed user-generated CA and webPKI CA
-        tracing::debug!("Loading default Web PKI certificates.");
-        let mut root_cert_store = RootCertStore {
-            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-        };
-
-        if let Some(custom_root_cert) = load_trust_anchors(config)? {
-            tracing::debug!("Loading user-generated certificates.");
-            root_cert_store.extend(custom_root_cert.roots);
-        }
-
-        let cc = if tls_client_server_auth {
-            tracing::debug!("Loading client authentication key and certificate...");
-            let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
-            let tls_client_certificate = TlsClientConfig::load_tls_certificate(config).await?;
-
-            let certs: Vec<CertificateDer> =
-                rustls_pemfile::certs(&mut Cursor::new(&tls_client_certificate))
-                    .collect::<Result<_, _>>()
-                    .map_err(|err| zerror!("Error processing client certificate: {err}."))?;
-
-            let mut keys: Vec<PrivateKeyDer> =
-                rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map(|x| x.map(PrivateKeyDer::from))
-                    .collect::<Result<_, _>>()
-                    .map_err(|err| zerror!("Error processing client key: {err}."))?;
-
-            if keys.is_empty() {
-                keys =
-                    rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_client_private_key))
-                        .map(|x| x.map(PrivateKeyDer::from))
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| zerror!("Error processing client key: {err}."))?;
-            }
-
-            if keys.is_empty() {
-                keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map(|x| x.map(PrivateKeyDer::from))
-                    .collect::<Result<_, _>>()
-                    .map_err(|err| zerror!("Error processing client key: {err}."))?;
-            }
-
-            if keys.is_empty() {
-                bail!("No private key found for TLS client.");
-            }
-
-            let builder = ClientConfig::builder_with_protocol_versions(&[&TLS13]);
-
-            if tls_server_name_verification {
-                builder
-                    .with_root_certificates(root_cert_store)
-                    .with_client_auth_cert(certs, keys.remove(0))
-            } else {
-                builder
-                    .dangerous()
-                    .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
-                        root_cert_store,
-                    )))
-                    .with_client_auth_cert(certs, keys.remove(0))
-            }
-            .map_err(|e| zerror!("Bad certificate/key: {}", e))?
-        } else {
-            let builder = ClientConfig::builder();
-            if tls_server_name_verification {
-                builder
-                    .with_root_certificates(root_cert_store)
-                    .with_no_client_auth()
-            } else {
-                builder
-                    .dangerous()
-                    .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
-                        root_cert_store,
-                    )))
-                    .with_no_client_auth()
-            }
-        };
-        Ok(TlsClientConfig { client_config: cc })
-    }
-
-    async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
-        load_tls_key(
-            config,
-            TLS_CLIENT_PRIVATE_KEY_RAW,
-            TLS_CLIENT_PRIVATE_KEY_FILE,
-            TLS_CLIENT_PRIVATE_KEY_BASE64,
-        )
-        .await
-    }
-
-    async fn load_tls_certificate(config: &Config<'_>) -> ZResult<Vec<u8>> {
-        load_tls_certificate(
-            config,
-            TLS_CLIENT_CERTIFICATE_RAW,
-            TLS_CLIENT_CERTIFICATE_FILE,
-            TLS_CLIENT_CERTIFICATE_BASE64,
-        )
-        .await
-    }
-}
-
-async fn load_tls_key(
-    config: &Config<'_>,
-    tls_private_key_raw_config_key: &str,
-    tls_private_key_file_config_key: &str,
-    tls_private_key_base64_config_key: &str,
-) -> ZResult<Vec<u8>> {
-    if let Some(value) = config.get(tls_private_key_raw_config_key) {
-        return Ok(value.as_bytes().to_vec());
-    }
-
-    if let Some(b64_key) = config.get(tls_private_key_base64_config_key) {
-        return base64_decode(b64_key);
-    }
-
-    if let Some(value) = config.get(tls_private_key_file_config_key) {
-        return Ok(tokio::fs::read(value)
-            .await
-            .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?)
-        .and_then(|result| {
-            if result.is_empty() {
-                Err(zerror!("Empty TLS key.").into())
-            } else {
-                Ok(result)
-            }
-        });
-    }
-    Err(zerror!("Missing TLS private key.").into())
-}
-
-async fn load_tls_certificate(
-    config: &Config<'_>,
-    tls_certificate_raw_config_key: &str,
-    tls_certificate_file_config_key: &str,
-    tls_certificate_base64_config_key: &str,
-) -> ZResult<Vec<u8>> {
-    if let Some(value) = config.get(tls_certificate_raw_config_key) {
-        return Ok(value.as_bytes().to_vec());
-    }
-
-    if let Some(b64_certificate) = config.get(tls_certificate_base64_config_key) {
-        return base64_decode(b64_certificate);
-    }
-
-    if let Some(value) = config.get(tls_certificate_file_config_key) {
-        return Ok(tokio::fs::read(value)
-            .await
-            .map_err(|e| zerror!("Invalid TLS certificate file: {}", e))?);
-    }
-    Err(zerror!("Missing tls certificates.").into())
-}
-
-fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
-    let mut root_cert_store = RootCertStore::empty();
-    if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
-        let mut pem = BufReader::new(value.as_bytes());
-        let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.extend(trust_anchors);
-        return Ok(Some(root_cert_store));
-    }
-
-    if let Some(b64_certificate) = config.get(TLS_ROOT_CA_CERTIFICATE_BASE64) {
-        let certificate_pem = base64_decode(b64_certificate)?;
-        let mut pem = BufReader::new(certificate_pem.as_slice());
-        let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.extend(trust_anchors);
-        return Ok(Some(root_cert_store));
-    }
-
-    if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-        let mut pem = BufReader::new(File::open(filename)?);
-        let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.extend(trust_anchors);
-        return Ok(Some(root_cert_store));
-    }
-    Ok(None)
-}
-
-fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<TrustAnchor<'static>>> {
-    let certs: Vec<CertificateDer> = rustls_pemfile::certs(pem)
-        .map(|result| result.map_err(|err| zerror!("Error processing PEM certificates: {err}.")))
-        .collect::<Result<Vec<CertificateDer>, ZError>>()?;
-
-    let trust_anchors: Vec<TrustAnchor> = certs
-        .into_iter()
-        .map(|cert| {
-            anchor_from_trusted_cert(&cert)
-                .map_err(|err| zerror!("Error processing trust anchor: {err}."))
-                .map(|trust_anchor| trust_anchor.to_owned())
-        })
-        .collect::<Result<Vec<TrustAnchor>, ZError>>()?;
-
-    Ok(trust_anchors)
 }
