@@ -12,31 +12,31 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-link-tls"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-link-tls"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 async-trait = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
-tracing = {workspace = true}
 rustls = { workspace = true }
 rustls-pemfile = { workspace = true }
 rustls-pki-types = { workspace = true }
 rustls-webpki = { workspace = true }
-secrecy = {workspace = true }
-tokio = { workspace = true, features = ["io-util", "net", "fs", "sync"] }
+secrecy = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util", "net", "sync"] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
+tracing = { workspace = true }
 webpki-roots = { workspace = true }
 zenoh-collections = { workspace = true }
 zenoh-config = { workspace = true }

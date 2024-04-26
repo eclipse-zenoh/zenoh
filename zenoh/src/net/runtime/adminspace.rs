@@ -710,11 +710,24 @@ fn subscribers_data(context: &AdminContext, query: Query) {
             "@/{}/{}/subscriber/{}",
             context.runtime.state.whatami,
             context.runtime.state.zid,
-            sub.expr()
+            sub.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, ZBytes::empty()).res() {
+            let payload = match ZBytes::try_from(
+                serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()),
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("Error serializing AdminSpace reply: {:?}", e);
+                    return;
+                }
+            };
+            if let Err(e) = query
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .res_sync()
+            {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -728,11 +741,24 @@ fn queryables_data(context: &AdminContext, query: Query) {
             "@/{}/{}/queryable/{}",
             context.runtime.state.whatami,
             context.runtime.state.zid,
-            qabl.expr()
+            qabl.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, ZBytes::empty()).res() {
+            let payload = match ZBytes::try_from(
+                serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()),
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("Error serializing AdminSpace reply: {:?}", e);
+                    return;
+                }
+            };
+            if let Err(e) = query
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .res_sync()
+            {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
