@@ -271,7 +271,6 @@ pub mod publication {
 
 /// Query primitives
 pub mod query {
-    pub use crate::api::query::Mode;
     pub use crate::api::query::Reply;
     #[zenoh_macros::unstable]
     pub use crate::api::query::ReplyKeyExpr;

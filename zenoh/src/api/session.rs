@@ -22,10 +22,7 @@ use super::{
     info::SessionInfo,
     key_expr::{KeyExpr, KeyExprInner},
     publication::Priority,
-    query::{
-        ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply,
-        _REPLY_KEY_EXPR_ANY_SEL_PARAM,
-    },
+    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::{Selector, TIME_RANGE_KEY},
@@ -87,6 +84,7 @@ use super::{
     liveliness::{Liveliness, LivelinessTokenState},
     publication::Publisher,
     publication::{MatchingListenerState, MatchingStatus},
+    query::_REPLY_KEY_EXPR_ANY_SEL_PARAM,
     sample::SourceInfo,
 };
 

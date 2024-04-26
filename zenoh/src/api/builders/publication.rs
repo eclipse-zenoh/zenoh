@@ -20,7 +20,6 @@ use crate::api::bytes::OptionZBytes;
 use crate::api::bytes::ZBytes;
 use crate::api::key_expr::KeyExpr;
 use crate::api::publication::Priority;
-#[cfg(feature = "unstable")]
 use crate::api::sample::Locality;
 use crate::api::sample::SampleKind;
 #[cfg(feature = "unstable")]
@@ -255,7 +254,6 @@ pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
-    #[cfg(feature = "unstable")]
     pub(crate) destination: Locality,
 }
 
