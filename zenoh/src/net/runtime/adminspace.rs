@@ -714,15 +714,8 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            let payload = match ZBytes::try_from(
-                serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()),
-            ) {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::error!("Error serializing AdminSpace reply: {:?}", e);
-                    return;
-                }
-            };
+            let payload =
+                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
@@ -745,15 +738,8 @@ fn queryables_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            let payload = match ZBytes::try_from(
-                serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()),
-            ) {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::error!("Error serializing AdminSpace reply: {:?}", e);
-                    return;
-                }
-            };
+            let payload =
+                ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
