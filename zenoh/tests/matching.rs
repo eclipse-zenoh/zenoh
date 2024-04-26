@@ -11,13 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::str::FromStr;
-use std::time::Duration;
-use zenoh::prelude::r#async::*;
-use zenoh_core::ztimeout;
-use zenoh_result::ZResult as Result;
+#[cfg(feature = "unstable")]
+use {
+    flume::RecvTimeoutError, std::str::FromStr, std::time::Duration, zenoh::internal::ztimeout,
+    zenoh::prelude::*,
+};
 
+#[cfg(feature = "unstable")]
 const TIMEOUT: Duration = Duration::from_secs(60);
+#[cfg(feature = "unstable")]
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(feature = "unstable")]
@@ -40,9 +42,7 @@ async fn create_session_pair(locator: &str) -> (Session, Session) {
 
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn zenoh_matching_status_any() -> Result<()> {
-    use flume::RecvTimeoutError;
-
+async fn zenoh_matching_status_any() -> ZResult<()> {
     let (session1, session2) = create_session_pair("tcp/127.0.0.1:18001").await;
 
     let publisher1 = ztimeout!(session1
@@ -101,12 +101,10 @@ async fn zenoh_matching_status_any() -> Result<()> {
 
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn zenoh_matching_status_remote() -> Result<()> {
-    use flume::RecvTimeoutError;
+async fn zenoh_matching_status_remote() -> ZResult<()> {
+    let session1 = ztimeout!(zenoh::open(peer()).res_async()).unwrap();
 
-    let session1 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
-
-    let session2 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
+    let session2 = ztimeout!(zenoh::open(peer()).res_async()).unwrap();
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("zenoh_matching_status_remote_test")
@@ -165,9 +163,7 @@ async fn zenoh_matching_status_remote() -> Result<()> {
 
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn zenoh_matching_status_local() -> Result<()> {
-    use flume::RecvTimeoutError;
-
+async fn zenoh_matching_status_local() -> ZResult<()> {
     let session1 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
 
     let session2 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();

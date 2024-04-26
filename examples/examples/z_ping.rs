@@ -13,9 +13,7 @@
 //
 use clap::Parser;
 use std::time::{Duration, Instant};
-use zenoh::config::Config;
 use zenoh::prelude::sync::*;
-use zenoh::publication::CongestionControl;
 use zenoh_examples::CommonArgs;
 
 fn main() {

@@ -15,14 +15,16 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
 use std::time::Duration;
-use zenoh::prelude::r#async::*;
+use zenoh::core::Error;
+use zenoh::core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh::internal::{ResolveFuture, TerminatableTask};
+use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
 use zenoh::queryable::{Query, Queryable};
+use zenoh::runtime::ZRuntime;
+use zenoh::sample::{Locality, Sample};
+use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::SessionRef;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_result::{bail, ZResult};
-use zenoh_task::TerminatableTask;
-use zenoh_util::core::ResolveFuture;
+use zenoh::{core::Result as ZResult, internal::bail};
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
@@ -56,7 +58,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<Error>,
     {
         self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
         self
@@ -170,7 +172,7 @@ impl<'a> PublicationCache<'a> {
         let token = TerminatableTask::create_cancellation_token();
         let token2 = token.clone();
         let task = TerminatableTask::spawn(
-            zenoh_runtime::ZRuntime::Application,
+            ZRuntime::Application,
             async move {
                 let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                     HashMap::with_capacity(resources_limit.unwrap_or(32));

@@ -27,24 +27,27 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
+use zenoh::core::try_init_log_from_env;
+use zenoh::core::Result as ZResult;
+use zenoh::core::SyncResolve;
+use zenoh::internal::zlock;
+use zenoh::internal::LibLoader;
+use zenoh::key_expr::keyexpr;
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
-use zenoh::Session;
+use zenoh::selector::Selector;
+use zenoh::session::Session;
 use zenoh_backend_traits::config::ConfigDiff;
 use zenoh_backend_traits::config::PluginConfig;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::config::VolumeConfig;
 use zenoh_backend_traits::VolumeInstance;
-use zenoh_core::zlock;
 use zenoh_plugin_trait::plugin_long_version;
 use zenoh_plugin_trait::plugin_version;
 use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginReport;
 use zenoh_plugin_trait::PluginStatusRec;
-use zenoh_result::ZResult;
-use zenoh_util::LibLoader;
 
 mod backends_mgt;
 use backends_mgt::*;
@@ -66,7 +69,7 @@ impl Plugin for StoragesPlugin {
     type Instance = zenoh::plugins::RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
-        zenoh_util::try_init_log_from_env();
+        try_init_log_from_env();
         tracing::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
         let config =
             { PluginConfig::try_from((name, runtime.config().lock().plugin(name).unwrap())) }?;
@@ -99,7 +102,7 @@ impl StorageRuntimeInner {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::try_init_log_from_env();
+        try_init_log_from_env();
         let PluginConfig {
             name,
             backend_search_dirs,
@@ -114,7 +117,7 @@ impl StorageRuntimeInner {
         let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
             .declare_static_plugin::<MemoryBackend>(true);
 
-        let session = Arc::new(zenoh::init(runtime.clone()).res_sync()?);
+        let session = Arc::new(zenoh::session::init(runtime.clone()).res_sync()?);
 
         // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
 

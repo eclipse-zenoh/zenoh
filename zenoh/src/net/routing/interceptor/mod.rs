@@ -23,7 +23,7 @@ use access_control::acl_interceptor_factories;
 
 mod authorization;
 use super::RoutingContext;
-use crate::KeyExpr;
+use crate::api::key_expr::KeyExpr;
 use std::any::Any;
 
 use zenoh_config::Config;

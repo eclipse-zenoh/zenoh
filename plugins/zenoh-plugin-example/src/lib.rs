@@ -22,10 +22,13 @@ use std::sync::{
     Arc, Mutex,
 };
 use tracing::{debug, info};
+use zenoh::key_expr::{keyexpr, KeyExpr};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
+use zenoh::sample::Sample;
+use zenoh::session::SessionDeclarations;
 use zenoh_core::zlock;
+use zenoh_core::AsyncResolve;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, ZResult};
 
@@ -144,7 +147,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     zenoh_util::try_init_log_from_env();
 
     // create a zenoh Session that shares the same Runtime than zenohd
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).res().await.unwrap();
 
     // the HasMap used as a storage by this example of storage plugin
     let mut stored: HashMap<String, Sample> = HashMap::new();

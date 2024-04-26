@@ -21,7 +21,7 @@ pub use callback::*;
 pub use fifo::*;
 pub use ring::*;
 
-use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
+use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 /// An alias for `Arc<T>`.
 pub type Dyn<T> = std::sync::Arc<T>;

@@ -13,7 +13,7 @@
 //
 use clap::Parser;
 use std::time::Duration;
-use zenoh::{config::Config, handlers::RingChannel, prelude::r#async::*};
+use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

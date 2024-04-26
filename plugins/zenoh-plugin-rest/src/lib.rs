@@ -29,13 +29,17 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::bytes::StringOrBase64;
+use zenoh::bytes::{StringOrBase64, ZBytes};
+use zenoh::core::{try_init_log_from_env, AsyncResolve};
+use zenoh::encoding::Encoding;
+use zenoh::key_expr::{keyexpr, KeyExpr};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
-use zenoh::selector::TIME_RANGE_KEY;
-use zenoh::Session;
+use zenoh::sample::{Sample, SampleKind, ValueBuilderTrait};
+use zenoh::selector::{Selector, TIME_RANGE_KEY};
+use zenoh::session::{Session, SessionDeclarations};
+use zenoh::value::Value;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -240,7 +244,7 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::try_init_log_from_env();
+        try_init_log_from_env();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -490,10 +494,10 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    zenoh_util::try_init_log_from_env();
+    try_init_log_from_env();
 
     let zid = runtime.zid().to_string();
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).res().await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));
     app.with(

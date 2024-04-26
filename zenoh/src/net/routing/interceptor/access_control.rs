@@ -22,8 +22,8 @@ use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
     InterceptorFactoryTrait, InterceptorTrait,
 };
+use crate::api::key_expr::KeyExpr;
 use crate::net::routing::RoutingContext;
-use crate::KeyExpr;
 use std::any::Any;
 use std::sync::Arc;
 use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject, ZenohId};

@@ -12,17 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::buffers::ZSlice;
-use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::publication::CongestionControl;
-use zenoh::shm::protocol_implementations::posix::{
-    posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-    protocol_id::POSIX_PROTOCOL_ID,
-};
-use zenoh::shm::provider::shared_memory_provider::SharedMemoryProviderBuilder;
-use zenoh::shm::provider::types::AllocAlignment;
-use zenoh::shm::provider::types::MemoryLayout;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
