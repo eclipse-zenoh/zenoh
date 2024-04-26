@@ -14,7 +14,8 @@
 use super::{
     admin,
     builders::publication::{
-        PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+        PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder, SessionDeleteBuilder,
+        SessionPutBuilder,
     },
     bytes::ZBytes,
     encoding::Encoding,
@@ -712,13 +713,13 @@ impl Session {
         &'a self,
         key_expr: TryIntoKeyExpr,
         payload: IntoZBytes,
-    ) -> PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut>
+    ) -> SessionPutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
         IntoZBytes: Into<ZBytes>,
     {
-        PublicationBuilder {
+        SessionPutBuilder {
             publisher: self.declare_publisher(key_expr),
             kind: PublicationBuilderPut {
                 payload: payload.into(),
@@ -752,12 +753,12 @@ impl Session {
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderDelete>
+    ) -> SessionDeleteBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublicationBuilder {
+        SessionDeleteBuilder {
             publisher: self.declare_publisher(key_expr),
             kind: PublicationBuilderDelete,
             timestamp: None,
