@@ -209,7 +209,7 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Creating r1 session runtime: {:?}", endpoints);
-    let r1 = RuntimeBuilder::new(config).build().await.unwrap();
+    let mut r1 = RuntimeBuilder::new(config).build().await.unwrap();
     r1.start().await.unwrap();
 
     let mut config = config::peer();
