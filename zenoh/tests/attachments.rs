@@ -16,7 +16,6 @@
 fn attachment_pubsub() {
     use zenoh::bytes::ZBytes;
     use zenoh::prelude::sync::*;
-
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
         .declare_subscriber("test/attachment")
@@ -58,8 +57,7 @@ fn attachment_pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn attachment_queries() {
-    use zenoh::{bytes::ZBytes, prelude::sync::*, sample::builder::SampleBuilderTrait};
-
+    use zenoh::prelude::sync::*;
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
         .declare_queryable("test/attachment")

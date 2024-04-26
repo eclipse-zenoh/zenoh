@@ -19,7 +19,7 @@ use serde::{
 use std::fmt;
 use std::marker::PhantomData;
 pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, Priority, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
+    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
 };
 
 pub trait ModeDependent<T> {

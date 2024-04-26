@@ -12,33 +12,21 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Liveliness primitives.
-//!
-//! see [`Liveliness`]
-use zenoh_protocol::network::request;
-
-use crate::{query::Reply, Id};
-
-#[zenoh_macros::unstable]
-use {
-    crate::{
-        handlers::locked,
-        handlers::DefaultHandler,
-        prelude::*,
-        subscriber::{Subscriber, SubscriberInner},
-        SessionRef, Undeclarable,
-    },
-    std::convert::TryInto,
-    std::future::Ready,
-    std::sync::Arc,
-    std::time::Duration,
-    zenoh_config::unwrap_or_default,
-    zenoh_core::AsyncResolve,
-    zenoh_core::Resolvable,
-    zenoh_core::Result as ZResult,
-    zenoh_core::SyncResolve,
-    zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo,
+use super::{
+    handlers::{locked, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    query::{QueryConsolidation, QueryTarget, Reply},
+    sample::{Locality, Sample, SourceInfo},
+    session::{Session, SessionRef, Undeclarable},
+    subscriber::{Subscriber, SubscriberInner},
+    Id,
 };
+use std::{convert::TryInto, future::Ready, sync::Arc, time::Duration};
+use zenoh_config::unwrap_or_default;
+use zenoh_core::Resolve;
+use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::network::{declare::subscriber::ext::SubscriberInfo, request};
 
 #[zenoh_macros::unstable]
 pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;
@@ -596,7 +584,6 @@ where
 /// # async fn main() {
 /// # use std::convert::TryFrom;
 /// use zenoh::prelude::r#async::*;
-/// use zenoh::query::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let tokens = session

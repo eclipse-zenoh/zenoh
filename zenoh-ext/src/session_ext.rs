@@ -14,8 +14,11 @@
 use super::PublicationCacheBuilder;
 use std::convert::TryInto;
 use std::sync::Arc;
-use zenoh::prelude::KeyExpr;
-use zenoh::{Session, SessionRef};
+use zenoh::{
+    core::Error,
+    key_expr::KeyExpr,
+    session::{Session, SessionRef},
+};
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
 pub trait SessionExt<'s, 'a> {
@@ -25,7 +28,7 @@ pub trait SessionExt<'s, 'a> {
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>;
 }
 
 impl<'s, 'a> SessionExt<'s, 'a> for SessionRef<'a> {
@@ -35,7 +38,7 @@ impl<'s, 'a> SessionExt<'s, 'a> for SessionRef<'a> {
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
     {
         PublicationCacheBuilder::new(self.clone(), pub_key_expr.try_into().map_err(Into::into))
     }
@@ -48,7 +51,7 @@ impl<'a> SessionExt<'a, 'a> for Session {
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
     {
         SessionRef::Borrow(self).declare_publication_cache(pub_key_expr)
     }
@@ -78,7 +81,7 @@ impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     ) -> PublicationCacheBuilder<'static, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
     {
         SessionRef::Shared(self.clone()).declare_publication_cache(pub_key_expr)
     }

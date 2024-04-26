@@ -14,7 +14,6 @@
 use futures::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_ext::group::*;
 

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::bytes::ZBytes;
+use super::bytes::ZBytes;
 use phf::phf_map;
 use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
 use zenoh_buffers::{ZBuf, ZSlice};

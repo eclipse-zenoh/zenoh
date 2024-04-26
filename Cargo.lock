@@ -5249,12 +5249,7 @@ dependencies = [
  "tokio",
  "tracing",
  "zenoh",
- "zenoh-core",
  "zenoh-macros",
- "zenoh-result",
- "zenoh-runtime",
- "zenoh-sync",
- "zenoh-task",
  "zenoh-util",
 ]
 
@@ -5584,7 +5579,6 @@ dependencies = [
  "zenoh",
  "zenoh-plugin-trait",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5609,12 +5603,7 @@ dependencies = [
  "tracing",
  "urlencoding",
  "zenoh",
- "zenoh-collections",
- "zenoh-core",
- "zenoh-keyexpr",
  "zenoh-plugin-trait",
- "zenoh-result",
- "zenoh-util",
  "zenoh_backend_traits",
 ]
 

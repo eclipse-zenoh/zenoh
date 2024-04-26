@@ -13,9 +13,12 @@
 //
 use clap::{arg, Command};
 use std::time::Duration;
-use zenoh::prelude::r#async::*;
+use zenoh::config::Config;
+use zenoh::core::{try_init_log_from_env, AsyncResolve};
+use zenoh::key_expr::keyexpr;
 use zenoh::publication::CongestionControl;
-use zenoh::{config::Config, key_expr::keyexpr};
+use zenoh::sample::QoSBuilderTrait;
+use zenoh::session::SessionDeclarations;
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -33,7 +36,7 @@ if(typeof(EventSource) !== "undefined") {
 #[async_std::main]
 async fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    try_init_log_from_env();
 
     let config = parse_args();
     let key = keyexpr::new("demo/sse").unwrap();

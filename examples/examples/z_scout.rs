@@ -11,9 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::scouting::WhatAmI;
 
 #[tokio::main]
 async fn main() {
@@ -21,7 +19,7 @@ async fn main() {
     zenoh_util::try_init_log_from_env();
 
     println!("Scouting...");
-    let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
+    let receiver = scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
         .res()
         .await
         .unwrap();

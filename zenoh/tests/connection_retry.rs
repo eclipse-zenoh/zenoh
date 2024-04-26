@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use config::ConnectionRetryConf;
 use zenoh::prelude::sync::*;
 
 #[test]

@@ -11,20 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
+use super::{
+    bytes::ZBytes,
     encoding::Encoding,
-    keyexpr,
-    prelude::sync::{KeyExpr, Locality, SampleKind},
+    key_expr::KeyExpr,
     queryable::Query,
-    sample::DataInfo,
-    Session, ZBytes, ZResult,
+    sample::Locality,
+    sample::{DataInfo, SampleKind},
+    session::Session,
 };
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     sync::Arc,
 };
-use zenoh_core::SyncResolve;
+use zenoh_core::{Result as ZResult, SyncResolve};
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,

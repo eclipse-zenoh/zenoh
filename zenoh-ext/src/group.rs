@@ -24,16 +24,8 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use zenoh::bytes::ZBytesReader;
+use zenoh::internal::{bail, Condition, TaskController};
 use zenoh::prelude::r#async::*;
-use zenoh::publication::Publisher;
-use zenoh::query::ConsolidationMode;
-use zenoh::Error as ZError;
-use zenoh::Result as ZResult;
-use zenoh::Session;
-use zenoh_result::bail;
-use zenoh_sync::Condition;
-use zenoh_task::TaskController;
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";
 const EVENT_POSTFIX: &str = "evt";

@@ -12,25 +12,25 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Subscribing primitives.
-use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
-use crate::key_expr::KeyExpr;
-use crate::prelude::Locality;
-use crate::sample::Sample;
-use crate::Id;
-use crate::Undeclarable;
-use crate::{Result as ZResult, SessionRef};
-use std::fmt;
-use std::future::Ready;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use super::{
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    sample::{Locality, Sample},
+    session::{SessionRef, Undeclarable},
+    Id,
+};
+use std::{
+    fmt,
+    future::Ready,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
+use zenoh_result::ZResult;
+
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-
-/// The kind of reliability.
-pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
@@ -309,7 +309,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Sample>,
+        Handler: IntoHandler<'static, Sample>,
     {
         let SubscriberBuilder {
             session,

@@ -835,7 +835,7 @@ impl Digest {
 #[test]
 fn test_create_digest_empty_initial() {
     async_std::task::block_on(async {
-        zenoh_core::zasync_executor_init!();
+        zenoh::internal::zasync_executor_init!();
     });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -867,7 +867,7 @@ fn test_create_digest_empty_initial() {
 #[test]
 fn test_create_digest_with_initial_hot() {
     async_std::task::block_on(async {
-        zenoh_core::zasync_executor_init!();
+        zenoh::internal::zasync_executor_init!();
     });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -923,7 +923,7 @@ fn test_create_digest_with_initial_hot() {
 #[test]
 fn test_create_digest_with_initial_warm() {
     async_std::task::block_on(async {
-        zenoh_core::zasync_executor_init!();
+        zenoh::internal::zasync_executor_init!();
     });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -979,7 +979,7 @@ fn test_create_digest_with_initial_warm() {
 #[test]
 fn test_create_digest_with_initial_cold() {
     async_std::task::block_on(async {
-        zenoh_core::zasync_executor_init!();
+        zenoh::internal::zasync_executor_init!();
     });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -1035,7 +1035,7 @@ fn test_create_digest_with_initial_cold() {
 #[test]
 fn test_update_digest_add_content() {
     async_std::task::block_on(async {
-        zenoh_core::zasync_executor_init!();
+        zenoh::internal::zasync_executor_init!();
     });
     let created = Digest::update_digest(
         Digest {
@@ -1099,7 +1099,7 @@ fn test_update_digest_add_content() {
 #[test]
 fn test_update_digest_remove_content() {
     async_std::task::block_on(async {
-        zenoh_core::zasync_executor_init!();
+        zenoh::internal::zasync_executor_init!();
     });
     let created = Digest::update_digest(
         Digest {
@@ -1163,7 +1163,7 @@ fn test_update_digest_remove_content() {
 #[test]
 fn test_update_remove_digest() {
     async_std::task::block_on(async {
-        zenoh_core::zasync_executor_init!();
+        zenoh::internal::zasync_executor_init!();
     });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),

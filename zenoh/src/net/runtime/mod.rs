@@ -23,9 +23,11 @@ pub mod orchestrator;
 use super::primitives::DeMux;
 use super::routing;
 use super::routing::router::Router;
-use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::plugins::sealed::PluginsManager;
+use crate::api::loader::{load_plugins, start_plugins};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::api::plugins::PluginsManager;
+use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::{GIT_VERSION, LONG_VERSION};
 pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
@@ -157,7 +159,7 @@ impl RuntimeBuilder {
         #[cfg(all(feature = "unstable", feature = "plugins"))]
         let plugins_manager = plugins_manager
             .take()
-            .unwrap_or_else(|| crate::plugins::loader::load_plugins(&config));
+            .unwrap_or_else(|| load_plugins(&config));
         // Admin space creation flag
         let start_admin_space = *config.adminspace.enabled();
 
@@ -184,7 +186,7 @@ impl RuntimeBuilder {
 
         // Start plugins
         #[cfg(all(feature = "unstable", feature = "plugins"))]
-        crate::plugins::loader::start_plugins(&runtime);
+        start_plugins(&runtime);
 
         // Start notifier task
         let receiver = config.subscribe();

@@ -11,37 +11,43 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-//! Queryable primitives.
-
-use crate::encoding::Encoding;
-use crate::handlers::{locked, DefaultHandler};
-use crate::net::primitives::Primitives;
-use crate::prelude::*;
-use crate::sample::builder::SampleBuilder;
-use crate::sample::QoSBuilder;
-use crate::selector::Parameters;
-use crate::Id;
-use crate::SessionRef;
-use crate::Undeclarable;
-#[cfg(feature = "unstable")]
-use crate::{
-    bytes::{OptionZBytes, ZBytes},
-    query::ReplyKeyExpr,
-    sample::SourceInfo,
+use super::{
+    builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
+    bytes::ZBytes,
+    encoding::Encoding,
+    handlers::{locked, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    publication::Priority,
+    sample::{Locality, QoSBuilder, Sample, SampleKind},
+    selector::{Parameters, Selector},
+    session::{SessionRef, Undeclarable},
+    value::Value,
+    Id,
 };
-use std::fmt;
-use std::future::Ready;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use crate::net::primitives::Primitives;
+use std::{
+    fmt,
+    future::Ready,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 use uhlc::Timestamp;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::{
-    core::{EntityId, WireExpr},
+    core::{CongestionControl, EntityId, WireExpr, ZenohId},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
 use zenoh_result::ZResult;
+
+#[zenoh_macros::unstable]
+use {
+    super::{
+        builders::sample::SampleBuilderTrait, bytes::OptionZBytes, query::ReplyKeyExpr,
+        sample::SourceInfo,
+    },
+    zenoh_protocol::core::EntityGlobalId,
+};
 
 pub(crate) struct QueryInner {
     /// The key expression of this Query.
@@ -146,7 +152,7 @@ impl Query {
         &self,
         key_expr: TryIntoKeyExpr,
         payload: IntoZBytes,
-    ) -> ReplyPutBuilder<'_, 'b>
+    ) -> ReplyBuilder<'_, 'b, ReplyBuilderPut>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -190,7 +196,7 @@ impl Query {
     pub fn reply_del<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> ReplyDeleteBuilder<'_, 'b>
+    ) -> ReplyBuilder<'_, 'b, ReplyBuilderDelete>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -222,7 +228,7 @@ impl Query {
     }
     #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
         Ok(self
             .parameters()
@@ -275,8 +281,8 @@ impl AsyncResolve for ReplySample<'_> {
 
 #[derive(Debug)]
 pub struct ReplyBuilderPut {
-    payload: super::ZBytes,
-    encoding: super::Encoding,
+    payload: ZBytes,
+    encoding: Encoding,
 }
 #[derive(Debug)]
 pub struct ReplyBuilderDelete;
@@ -297,10 +303,6 @@ pub struct ReplyBuilder<'a, 'b, T> {
     #[cfg(feature = "unstable")]
     attachment: Option<ZBytes>,
 }
-
-pub type ReplyPutBuilder<'a, 'b> = ReplyBuilder<'a, 'b, ReplyBuilderPut>;
-
-pub type ReplyDeleteBuilder<'a, 'b> = ReplyBuilder<'a, 'b, ReplyBuilderDelete>;
 
 impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
@@ -667,7 +669,6 @@ impl Drop for CallbackQueryable<'_> {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
-/// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
@@ -777,7 +778,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Query>,
+        Handler: IntoHandler<'static, Query>,
     {
         let QueryableBuilder {
             session,

@@ -12,23 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::shm::protocol_implementations::posix::{
-    posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-    protocol_id::POSIX_PROTOCOL_ID,
-};
-use zenoh::shm::provider::shared_memory_provider::SharedMemoryProviderBuilder;
-use zenoh::shm::provider::shared_memory_provider::{BlockOn, GarbageCollect};
-use zenoh::shm::provider::types::AllocAlignment;
-use zenoh::shm::provider::types::MemoryLayout;
 use zenoh_examples::CommonArgs;
 
 const N: usize = 10;
 const K: u32 = 3;
 
 #[tokio::main]
-async fn main() -> Result<(), zenoh::Error> {
+async fn main() -> Result<(), ZError> {
     // Initiate logging
     zenoh_util::try_init_log_from_env();
 
