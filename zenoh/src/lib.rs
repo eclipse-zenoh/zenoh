@@ -32,13 +32,13 @@
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     session.put("key/expression", "value").res().await.unwrap();
-//!     session.close().res().await.unwrap();
+//!     let session = zenoh::open(config::default()).await.unwrap();
+//!     session.put("key/expression", "value").await.unwrap();
+//!     session.close().await.unwrap();
 //! }
 //! ```
 //!
@@ -46,12 +46,12 @@
 //! The example below shows how to consume values for a key expresison.
 //! ```no_run
 //! use futures::prelude::*;
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+//!     let session = zenoh::open(config::default()).await.unwrap();
+//!     let subscriber = session.declare_subscriber("key/expression").await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
 //!         println!("Received: {:?}", sample);
 //!     };
@@ -63,12 +63,12 @@
 //! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     let replies = session.get("key/expression").res().await.unwrap();
+//!     let session = zenoh::open(config::default()).await.unwrap();
+//!     let replies = session.get("key/expression").await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
 //!         println!(">> Received {:?}", reply.result());
 //!     }
@@ -117,9 +117,11 @@ pub mod prelude;
 
 /// Zenoh core types
 pub mod core {
+    #[allow(deprecated)]
     pub use zenoh_core::AsyncResolve;
     pub use zenoh_core::Resolvable;
     pub use zenoh_core::Resolve;
+    #[allow(deprecated)]
     pub use zenoh_core::SyncResolve;
     /// A zenoh error.
     pub use zenoh_result::Error;

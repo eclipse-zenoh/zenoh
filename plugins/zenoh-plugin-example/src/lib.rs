@@ -28,7 +28,6 @@ use zenoh::runtime::Runtime;
 use zenoh::sample::Sample;
 use zenoh::session::SessionDeclarations;
 use zenoh_core::zlock;
-use zenoh_core::AsyncResolve;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, ZResult};
 
@@ -147,7 +146,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     zenoh_util::try_init_log_from_env();
 
     // create a zenoh Session that shares the same Runtime than zenohd
-    let session = zenoh::session::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).await.unwrap();
 
     // the HasMap used as a storage by this example of storage plugin
     let mut stored: HashMap<String, Sample> = HashMap::new();
@@ -156,11 +155,11 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
 
     // This storage plugin subscribes to the selector and will store in HashMap the received samples
     debug!("Create Subscriber on {}", selector);
-    let sub = session.declare_subscriber(&selector).res().await.unwrap();
+    let sub = session.declare_subscriber(&selector).await.unwrap();
 
     // This storage plugin declares a Queryable that will reply to queries with the samples stored in the HashMap
     debug!("Create Queryable on {}", selector);
-    let queryable = session.declare_queryable(&selector).res().await.unwrap();
+    let queryable = session.declare_queryable(&selector).await.unwrap();
 
     // Plugin's event loop, while the flag is true
     while flag.load(Relaxed) {
@@ -178,7 +177,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
                     if query.selector().key_expr().intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
-                        query.reply_sample(sample.clone()).res().await.unwrap();
+                        query.reply_sample(sample.clone()).await.unwrap();
                     }
                 }
             }

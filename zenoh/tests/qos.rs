@@ -13,40 +13,38 @@
 //
 use std::time::Duration;
 use zenoh::internal::ztimeout;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn pubsub() {
-    let session1 = ztimeout!(zenoh::open(zenoh_config::peer()).res_async()).unwrap();
-    let session2 = ztimeout!(zenoh::open(zenoh_config::peer()).res_async()).unwrap();
+    let session1 = ztimeout!(zenoh::open(zenoh_config::peer())).unwrap();
+    let session2 = ztimeout!(zenoh::open(zenoh_config::peer())).unwrap();
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("test/qos")
         .priority(Priority::DataHigh)
-        .congestion_control(CongestionControl::Drop)
-        .res())
+        .congestion_control(CongestionControl::Drop))
     .unwrap();
 
     let publisher2 = ztimeout!(session1
         .declare_publisher("test/qos")
         .priority(Priority::DataLow)
-        .congestion_control(CongestionControl::Block)
-        .res())
+        .congestion_control(CongestionControl::Block))
     .unwrap();
 
-    let subscriber = ztimeout!(session2.declare_subscriber("test/qos").res()).unwrap();
+    let subscriber = ztimeout!(session2.declare_subscriber("test/qos")).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    ztimeout!(publisher1.put("qos").res_async()).unwrap();
+    ztimeout!(publisher1.put("qos")).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     assert_eq!(sample.priority(), Priority::DataHigh);
     assert_eq!(sample.congestion_control(), CongestionControl::Drop);
 
-    ztimeout!(publisher2.put("qos").res_async()).unwrap();
+    ztimeout!(publisher2.put("qos")).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     assert_eq!(sample.priority(), Priority::DataLow);

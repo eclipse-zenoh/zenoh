@@ -14,12 +14,13 @@
 
 use super::session::{Session, Undeclarable};
 use crate::net::primitives::Primitives;
+use std::future::IntoFuture;
 use std::{
     convert::{TryFrom, TryInto},
     future::Ready,
     str::FromStr,
 };
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
     core::{key_expr::canon::Canonizable, ExprId, WireExpr},
@@ -562,11 +563,11 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
-/// session.undeclare(key_expr).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
+/// session.undeclare(key_expr).await.unwrap();
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
@@ -579,8 +580,8 @@ impl Resolvable for KeyExprUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for KeyExprUndeclaration<'_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Wait for KeyExprUndeclaration<'_> {
+    fn wait(self) -> <Self as Resolvable>::To {
         let KeyExprUndeclaration { session, expr } = self;
         let expr_id = match &expr.0 {
             KeyExprInner::Wire {
@@ -629,11 +630,12 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
     }
 }
 
-impl AsyncResolve for KeyExprUndeclaration<'_> {
-    type Future = Ready<Self::To>;
+impl IntoFuture for KeyExprUndeclaration<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 

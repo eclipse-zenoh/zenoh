@@ -30,7 +30,7 @@ use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::bytes::{StringOrBase64, ZBytes};
-use zenoh::core::{try_init_log_from_env, AsyncResolve};
+use zenoh::core::try_init_log_from_env;
 use zenoh::encoding::Encoding;
 use zenoh::key_expr::{keyexpr, KeyExpr};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
@@ -350,13 +350,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let sub = req
-                        .state()
-                        .0
-                        .declare_subscriber(&key_expr)
-                        .res()
-                        .await
-                        .unwrap();
+                    let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
                         let json_sample =
@@ -374,7 +368,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                                     e,
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -384,7 +378,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                                     "SSE timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -428,7 +422,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 .unwrap_or_default();
             query = query.payload(body).encoding(encoding);
         }
-        match query.res().await {
+        match query.await {
             Ok(receiver) => {
                 if raw {
                     Ok(to_raw_response(receiver).await)
@@ -470,8 +464,8 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             // @TODO: Define the right congestion control value
             let session = &req.state().0;
             let res = match method_to_kind(req.method()) {
-                SampleKind::Put => session.put(&key_expr, bytes).encoding(encoding).res().await,
-                SampleKind::Delete => session.delete(&key_expr).res().await,
+                SampleKind::Put => session.put(&key_expr, bytes).encoding(encoding).await,
+                SampleKind::Delete => session.delete(&key_expr).await,
             };
             match res {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
@@ -497,7 +491,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     try_init_log_from_env();
 
     let zid = runtime.zid().to_string();
-    let session = zenoh::session::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));
     app.with(

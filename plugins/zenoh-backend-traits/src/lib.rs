@@ -29,7 +29,7 @@
 //! ```
 //! use std::sync::Arc;
 //! use async_trait::async_trait;
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
 //!

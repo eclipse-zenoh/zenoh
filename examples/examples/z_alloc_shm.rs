@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 
 #[tokio::main]
 async fn main() {
@@ -94,7 +94,6 @@ async fn run() -> ZResult<()> {
         let _async_alloc = buffer_layout
             .alloc()
             .with_policy::<BlockOn>()
-            .res_async()
             .await
             .unwrap();
 
@@ -120,9 +119,9 @@ async fn run() -> ZResult<()> {
     sbuf[0..8].fill(0);
 
     // Declare Session and Publisher (common code)
-    let session = zenoh::open(Config::default()).res_async().await?;
-    let publisher = session.declare_publisher("my/key/expr").res_async().await?;
+    let session = zenoh::open(Config::default()).await?;
+    let publisher = session.declare_publisher("my/key/expr").await?;
 
     // Publish SHM buffer
-    publisher.put(sbuf).res_async().await
+    publisher.put(sbuf).await
 }

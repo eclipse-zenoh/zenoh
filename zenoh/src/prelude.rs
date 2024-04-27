@@ -18,21 +18,10 @@
 //! almost always want to import its entire contents, but unlike the standard
 //! library's prelude you'll have to do so manually.
 //!
-//! There are three variants of the prelude: full, sync and async. The sync one excludes the [`AsyncResolve`](crate::core::AsyncResolve) trait and the async one excludes the [`SyncResolve`](crate::core::SyncResolve) trait.
-//! When specific sync or async prelude is included, the `res()` function of buildes works synchronously or asynchronously, respectively.
-//!
-//! If root prelude is included, the `res_sync()` or `res_async()` function of builders should be called explicitly.
-//!
 //! Examples:
 //!
 //! ```
 //!use zenoh::prelude::*;
-//! ```
-//! ```
-//!use zenoh::prelude::sync::*;
-//! ```
-//! ```
-//!use zenoh::prelude::r#async::*;
 //! ```
 
 // Reexport API in flat namespace
@@ -81,20 +70,23 @@ pub(crate) mod mods {
     pub use crate::value;
 }
 
-pub use crate::core::AsyncResolve;
-pub use crate::core::SyncResolve;
 pub use flat::*;
 pub use mods::*;
+pub use zenoh_core::Wait;
 
 /// Prelude to import when using Zenoh's sync API.
+#[deprecated = "use `zenoh::prelude` instead"]
 pub mod sync {
     pub use super::flat::*;
     pub use super::mods::*;
-    pub use crate::core::SyncResolve;
+    #[allow(deprecated)]
+    pub use zenoh_core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
+#[deprecated = "use `zenoh::prelude` instead"]
 pub mod r#async {
     pub use super::flat::*;
     pub use super::mods::*;
-    pub use crate::core::AsyncResolve;
+    #[allow(deprecated)]
+    pub use zenoh_core::AsyncResolve;
 }
