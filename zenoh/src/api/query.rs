@@ -12,31 +12,32 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Query primitives.
-#[cfg(feature = "unstable")]
-use crate::bytes::{OptionZBytes, ZBytes};
-use crate::handlers::{locked, Callback, DefaultHandler};
-use crate::prelude::*;
-use crate::sample::QoSBuilder;
-use crate::Session;
-use std::collections::HashMap;
-use std::future::Ready;
-use std::time::Duration;
+use super::{
+    builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
+    bytes::ZBytes,
+    encoding::Encoding,
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    publication::Priority,
+    sample::{Locality, QoSBuilder, Sample},
+    selector::Selector,
+    session::Session,
+    value::Value,
+};
+use std::{collections::HashMap, future::Ready, time::Duration};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_keyexpr::OwnedKeyExpr;
+use zenoh_protocol::core::{CongestionControl, ZenohId};
 use zenoh_result::ZResult;
+
+#[zenoh_macros::unstable]
+use super::{builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.
 pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
-
-/// The operation: either manual or automatic.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode<T> {
-    Auto,
-    Manual(T),
-}
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,7 +121,6 @@ pub(crate) struct QueryState {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::prelude::r#async::*;
-/// use zenoh::query::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let replies = session

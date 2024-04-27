@@ -17,7 +17,7 @@ use schemars::JsonSchema;
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
-use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
+use zenoh::{core::Result as ZResult, key_expr::keyexpr, key_expr::OwnedKeyExpr};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_result::{bail, zerror, Error};
 

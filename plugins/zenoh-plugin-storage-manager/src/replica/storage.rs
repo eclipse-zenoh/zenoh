@@ -21,23 +21,26 @@ use futures::select;
 use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
-use zenoh::buffers::buffer::SplitBuffer;
+use zenoh::buffers::SplitBuffer;
 use zenoh::buffers::ZBuf;
-use zenoh::prelude::r#async::*;
+use zenoh::core::AsyncResolve;
+use zenoh::internal::bail;
+use zenoh::internal::{zenoh_home, Timed, TimedEvent, Timer};
+use zenoh::key_expr::keyexpr_tree::KeyedSetProvider;
+use zenoh::key_expr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
+use zenoh::key_expr::keyexpr_tree::{KeBoxTree, NonWild, UnknownWildness};
+use zenoh::key_expr::KeyExpr;
+use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::query::{ConsolidationMode, QueryTarget};
-use zenoh::sample::builder::SampleBuilder;
-use zenoh::sample::{Sample, SampleKind};
+use zenoh::sample::{Sample, SampleKind, TimestampBuilderTrait};
+use zenoh::sample::{SampleBuilder, ValueBuilderTrait};
+use zenoh::selector::Selector;
+use zenoh::session::SessionDeclarations;
 use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
 use zenoh::value::Value;
-use zenoh::{Result as ZResult, Session};
+use zenoh::{core::Result as ZResult, session::Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
-use zenoh_keyexpr::key_expr::OwnedKeyExpr;
-use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_keyexpr::keyexpr_tree::{support::NonWild, support::UnknownWildness, KeBoxTree};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
-use zenoh_result::bail;
-use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -638,7 +641,7 @@ impl StorageService {
             // with `_time=[..]` to get historical data (in case of time-series)
             let replies = match self
                 .session
-                .get(KeyExpr::from(&self.key_expr).with_parameters("_time=[..]"))
+                .get(Selector::new(&self.key_expr, "_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
                 .res()

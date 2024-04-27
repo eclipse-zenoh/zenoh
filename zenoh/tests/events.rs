@@ -12,14 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
+use zenoh::internal::ztimeout;
 use zenoh::prelude::r#async::*;
-use zenoh::query::Reply;
-use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
-    let mut config = config::peer();
+    let mut config = peer();
     config.listen.endpoints = listen
         .iter()
         .map(|e| e.parse().unwrap())

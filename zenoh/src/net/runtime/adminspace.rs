@@ -12,17 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
-use crate::bytes::ZBytes;
-use crate::encoding::Encoding;
-use crate::key_expr::KeyExpr;
-use crate::net::primitives::Primitives;
+use crate::api::builders::sample::ValueBuilderTrait;
+use crate::api::bytes::ZBytes;
+use crate::api::key_expr::KeyExpr;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::SyncResolve;
-use crate::queryable::Query;
-use crate::queryable::QueryInner;
-use crate::sample::builder::ValueBuilderTrait;
-use crate::value::Value;
+use crate::api::plugins::PluginsManager;
+use crate::api::queryable::Query;
+use crate::api::queryable::QueryInner;
+use crate::api::value::Value;
+use crate::encoding::Encoding;
+use crate::net::primitives::Primitives;
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -32,6 +31,7 @@ use std::sync::Mutex;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_core::SyncResolve;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
@@ -71,7 +71,7 @@ pub struct AdminSpace {
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
-    Start(crate::config::PluginLoad),
+    Start(zenoh_config::PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -104,8 +104,8 @@ impl ConfigValidator for AdminSpace {
 impl AdminSpace {
     #[cfg(all(feature = "unstable", feature = "plugins"))]
     fn start_plugin(
-        plugin_mgr: &mut plugins::PluginsManager,
-        config: &crate::config::PluginLoad,
+        plugin_mgr: &mut PluginsManager,
+        config: &zenoh_config::PluginLoad,
         start_args: &Runtime,
         required: bool,
     ) -> ZResult<()> {
@@ -710,11 +710,17 @@ fn subscribers_data(context: &AdminContext, query: Query) {
             "@/{}/{}/subscriber/{}",
             context.runtime.state.whatami,
             context.runtime.state.zid,
-            sub.expr()
+            sub.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, ZBytes::empty()).res() {
+            let payload =
+                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
+            if let Err(e) = query
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .res_sync()
+            {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
@@ -728,11 +734,17 @@ fn queryables_data(context: &AdminContext, query: Query) {
             "@/{}/{}/queryable/{}",
             context.runtime.state.whatami,
             context.runtime.state.zid,
-            qabl.expr()
+            qabl.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, ZBytes::empty()).res() {
+            let payload =
+                ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
+            if let Err(e) = query
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .res_sync()
+            {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }

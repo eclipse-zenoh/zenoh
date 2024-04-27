@@ -15,7 +15,6 @@ use clap::arg;
 use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::query::ReplyKeyExpr;
 use zenoh_ext::*;
 use zenoh_ext_examples::CommonArgs;
 

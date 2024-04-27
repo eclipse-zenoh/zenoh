@@ -16,12 +16,9 @@ use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicUsize, Arc};
 use std::time::Duration;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh::config::{Config, ModeDependentValue};
+use zenoh::core::Result;
+use zenoh::internal::{bail, ztimeout};
 use zenoh::prelude::r#async::*;
-use zenoh::Result;
-use zenoh_core::ztimeout;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
-use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;

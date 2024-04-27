@@ -13,8 +13,7 @@
 //
 
 //! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
-
-use crate::{prelude::KeyExpr, queryable::Query};
+use super::{key_expr::KeyExpr, queryable::Query};
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -26,7 +25,9 @@ use zenoh_protocol::core::{
     Properties,
 };
 #[cfg(feature = "unstable")]
-use ::{zenoh_result::ZResult, zenoh_util::time_range::TimeRange};
+use zenoh_result::ZResult;
+#[cfg(feature = "unstable")]
+use zenoh_util::time_range::TimeRange;
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of parameters
@@ -239,7 +240,7 @@ impl TryFrom<String> for Selector<'_> {
             Some(qmark_position) => {
                 let parameters = s[qmark_position + 1..].to_owned();
                 s.truncate(qmark_position);
-                Ok(KeyExpr::try_from(s)?.with_owned_parameters(parameters))
+                Ok(Selector::new(KeyExpr::try_from(s)?, parameters))
             }
             None => Ok(KeyExpr::try_from(s)?.into()),
         }
@@ -252,7 +253,10 @@ impl<'a> TryFrom<&'a str> for Selector<'a> {
         match s.find('?') {
             Some(qmark_position) => {
                 let params = &s[qmark_position + 1..];
-                Ok(KeyExpr::try_from(&s[..qmark_position])?.with_parameters(params))
+                Ok(Selector::new(
+                    KeyExpr::try_from(&s[..qmark_position])?,
+                    params,
+                ))
             }
             None => Ok(KeyExpr::try_from(s)?.into()),
         }
@@ -328,7 +332,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 
 #[test]
 fn selector_accessors() {
-    use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
+    use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
 
     for selector in [
         "hello/there?_timetrick",

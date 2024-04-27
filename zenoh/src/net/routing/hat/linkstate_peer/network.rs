@@ -15,9 +15,10 @@ use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
 use crate::net::routing::dispatcher::tables::NodeId;
 use crate::net::runtime::Runtime;
-use crate::runtime::WeakRuntime;
+use crate::net::runtime::WeakRuntime;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{VisitMap, Visitable};
+use rand::Rng;
 use std::convert::TryInto;
 use vec_map::VecMap;
 use zenoh_buffers::writer::{DidntWrite, HasWriter};
@@ -486,26 +487,25 @@ impl Network {
                             );
                         }
 
-                        if !self.autoconnect.is_empty() {
+                        if !self.autoconnect.is_empty() && self.autoconnect.matches(whatami) {
                             // Connect discovered peers
-                            if zenoh_runtime::ZRuntime::Net
-                                .block_in_place(
-                                    strong_runtime.manager().get_transport_unicast(&zid),
-                                )
-                                .is_none()
-                                && self.autoconnect.matches(whatami)
-                            {
-                                if let Some(locators) = locators {
-                                    let runtime = strong_runtime.clone();
-                                    strong_runtime.spawn(async move {
+                            if let Some(locators) = locators {
+                                let runtime = strong_runtime.clone();
+                                strong_runtime.spawn(async move {
+                                    if runtime
+                                        .manager()
+                                        .get_transport_unicast(&zid)
+                                        .await
+                                        .is_none()
+                                    {
                                         // random backoff
-                                        tokio::time::sleep(std::time::Duration::from_millis(
-                                            rand::random::<u64>() % 100,
-                                        ))
-                                        .await;
+                                        let sleep_time = std::time::Duration::from_millis(
+                                            rand::thread_rng().gen_range(0..100),
+                                        );
+                                        tokio::time::sleep(sleep_time).await;
                                         runtime.connect_peer(&zid, &locators).await;
-                                    });
-                                }
+                                    }
+                                });
                             }
                         }
                     }
@@ -610,22 +610,25 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if zenoh_runtime::ZRuntime::Net
-                        .block_in_place(strong_runtime.manager().get_transport_unicast(&node.zid))
-                        .is_none()
-                        && self.autoconnect.matches(whatami)
-                    {
+                    if self.autoconnect.matches(whatami) {
                         if let Some(locators) = &node.locators {
                             let runtime = strong_runtime.clone();
                             let zid = node.zid;
                             let locators = locators.clone();
                             strong_runtime.spawn(async move {
-                                // random backoff
-                                tokio::time::sleep(std::time::Duration::from_millis(
-                                    rand::random::<u64>() % 100,
-                                ))
-                                .await;
-                                runtime.connect_peer(&zid, &locators).await;
+                                if runtime
+                                    .manager()
+                                    .get_transport_unicast(&zid)
+                                    .await
+                                    .is_none()
+                                {
+                                    // random backoff
+                                    let sleep_time = std::time::Duration::from_millis(
+                                        rand::thread_rng().gen_range(0..100),
+                                    );
+                                    tokio::time::sleep(sleep_time).await;
+                                    runtime.connect_peer(&zid, &locators).await;
+                                }
                             });
                         }
                     }

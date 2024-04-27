@@ -20,15 +20,13 @@ use zenoh::prelude::r#async::*;
 async fn main() {
     zenoh_util::init_log_test();
 
-    let _z = zenoh_runtime::ZRuntimePoolGuard;
-
     let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();
 
     println!("Declaring Queryable on '{queryable_key_expr}'...");
     let queryable_session = zenoh::open(Config::default()).res().await.unwrap();
     let _queryable = queryable_session
-        .declare_queryable(queryable_key_expr)
+        .declare_queryable(queryable_key_expr.clone())
         .callback(move |query| {
             println!(">> Handling query '{}'", query.selector());
             let queryable_key_expr = queryable_key_expr.clone();

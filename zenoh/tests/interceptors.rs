@@ -12,7 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::sync::{Arc, Mutex};
-use zenoh_core::zlock;
+use zenoh::internal::zlock;
+use zenoh::prelude::sync::*;
 
 struct IntervalCounter {
     first_tick: bool,
@@ -60,8 +61,6 @@ impl IntervalCounter {
 
 fn downsampling_by_keyexpr_impl(egress: bool) {
     zenoh_util::try_init_log_from_env();
-
-    use zenoh::prelude::sync::*;
 
     let ds_cfg = format!(
         r#"
@@ -178,8 +177,6 @@ fn downsampling_by_keyexpr() {
 fn downsampling_by_interface_impl(egress: bool) {
     zenoh_util::try_init_log_from_env();
 
-    use zenoh::prelude::sync::*;
-
     let ds_cfg = format!(
         r#"
           [
@@ -279,8 +276,6 @@ fn downsampling_by_interface() {
 #[should_panic(expected = "unknown variant `down`")]
 fn downsampling_config_error_wrong_strategy() {
     zenoh_util::try_init_log_from_env();
-
-    use zenoh::prelude::sync::*;
 
     let mut config = Config::default();
     config

@@ -31,3 +31,4 @@ tokio = { workspace = true, features = [
     "sync",
     "time",
 ] }
+tracing = { workspace = true }

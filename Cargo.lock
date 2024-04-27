@@ -3190,9 +3190,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.22.2"
+version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e87c9956bd9807afa1f77e0f7594af32566e830e088a5576d27c5b6f30f49d41"
+checksum = "bf4ef73721ac7bcd79b2b315da7779d8fc09718c6b3d2d1b2d94850eb8c18432"
 dependencies = [
  "log",
  "ring 0.17.6",
@@ -4204,7 +4204,7 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "775e0c0f0adb3a2f22a00c4745d728b479985fc15ee7ca6a2608388c5569860f"
 dependencies = [
- "rustls 0.22.2",
+ "rustls 0.22.4",
  "rustls-pki-types",
  "tokio",
 ]
@@ -5249,12 +5249,7 @@ dependencies = [
  "tokio",
  "tracing",
  "zenoh",
- "zenoh-core",
  "zenoh-macros",
- "zenoh-result",
- "zenoh-runtime",
- "zenoh-sync",
- "zenoh-task",
  "zenoh-util",
 ]
 
@@ -5316,16 +5311,19 @@ name = "zenoh-link-commons"
 version = "0.11.0-dev"
 dependencies = [
  "async-trait",
+ "base64 0.21.4",
  "flume",
  "futures",
- "rustls 0.22.2",
+ "rustls 0.22.4",
  "rustls-webpki 0.102.2",
  "serde",
  "tokio",
  "tokio-util",
  "tracing",
+ "webpki-roots",
  "zenoh-buffers",
  "zenoh-codec",
+ "zenoh-config",
  "zenoh-core",
  "zenoh-protocol",
  "zenoh-result",
@@ -5343,13 +5341,15 @@ dependencies = [
  "quinn",
  "rustls 0.21.7",
  "rustls-native-certs 0.7.0",
- "rustls-pemfile 2.0.0",
+ "rustls-pemfile 1.0.3",
+ "rustls-pki-types",
  "rustls-webpki 0.102.2",
  "secrecy",
  "tokio",
  "tokio-rustls 0.24.1",
  "tokio-util",
  "tracing",
+ "webpki-roots",
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
@@ -5406,7 +5406,7 @@ dependencies = [
  "async-trait",
  "base64 0.21.4",
  "futures",
- "rustls 0.22.2",
+ "rustls 0.22.4",
  "rustls-pemfile 2.0.0",
  "rustls-pki-types",
  "rustls-webpki 0.102.2",
@@ -5579,7 +5579,6 @@ dependencies = [
  "zenoh",
  "zenoh-plugin-trait",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5604,12 +5603,7 @@ dependencies = [
  "tracing",
  "urlencoding",
  "zenoh",
- "zenoh-collections",
- "zenoh-core",
- "zenoh-keyexpr",
  "zenoh-plugin-trait",
- "zenoh-result",
- "zenoh-util",
  "zenoh_backend_traits",
 ]
 
@@ -5660,6 +5654,7 @@ dependencies = [
  "ron",
  "serde",
  "tokio",
+ "tracing",
  "zenoh-collections",
  "zenoh-macros",
  "zenoh-protocol",
@@ -5743,6 +5738,7 @@ dependencies = [
  "zenoh-core",
  "zenoh-crypto",
  "zenoh-link",
+ "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",
@@ -5832,6 +5828,6 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.6.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9"
+checksum = "525b4ec142c6b68a2d10f01f7bbf6755599ca3f81ea53b8431b7dd348f5fdb2d"

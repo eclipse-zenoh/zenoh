@@ -14,7 +14,6 @@
 use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::shm::slice::zsliceshm::zsliceshm;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

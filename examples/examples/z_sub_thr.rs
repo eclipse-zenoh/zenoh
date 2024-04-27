@@ -13,7 +13,6 @@
 //
 use clap::Parser;
 use std::time::Instant;
-use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh_examples::CommonArgs;
 

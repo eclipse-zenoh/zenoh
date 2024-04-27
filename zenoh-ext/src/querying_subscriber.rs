@@ -17,15 +17,17 @@ use std::future::Ready;
 use std::mem::swap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use zenoh::handlers::{locked, DefaultHandler};
-use zenoh::prelude::r#async::*;
+use zenoh::core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh::handlers::{locked, DefaultHandler, IntoHandler};
+use zenoh::internal::zlock;
+use zenoh::key_expr::KeyExpr;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
-use zenoh::sample::builder::SampleBuilder;
+use zenoh::sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait};
+use zenoh::selector::Selector;
+use zenoh::session::{SessionDeclarations, SessionRef};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::{new_reception_timestamp, Timestamp};
-use zenoh::Result as ZResult;
-use zenoh::SessionRef;
-use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
+use zenoh::{core::Error, core::Result as ZResult};
 
 use crate::ExtractSample;
 
@@ -106,7 +108,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
         handler: Handler,
     ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler>
     where
-        Handler: zenoh::prelude::IntoHandler<'static, Sample>,
+        Handler: IntoHandler<'static, Sample>,
     {
         let QueryingSubscriberBuilder {
             session,
@@ -173,7 +175,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
         IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<Error>,
     {
         self.query_selector = Some(query_selector.try_into().map_err(Into::into));
         self
@@ -463,7 +465,7 @@ where
         handler: Handler,
     ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample>
     where
-        Handler: zenoh::prelude::IntoHandler<'static, Sample>,
+        Handler: IntoHandler<'static, Sample>,
     {
         let FetchingSubscriberBuilder {
             session,
