@@ -19,7 +19,7 @@ use super::{
     },
     bytes::ZBytes,
     encoding::Encoding,
-    handlers::{Callback, DefaultHandler},
+    handlers::{callback::Callback, DefaultHandler},
     info::SessionInfo,
     key_expr::{KeyExpr, KeyExprInner},
     publication::Priority,
@@ -92,35 +92,35 @@ use super::{
 };
 
 zconfigurable! {
-    pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub(crate) static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub(crate) static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
-    pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub(crate) static ref API_OPEN_SESSION_DELAY: u64 = 500;
+    pub(in crate::sealed) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub(in crate::sealed) static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub(in crate::sealed) static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
+    pub(in crate::sealed) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub(in crate::sealed) static ref API_OPEN_SESSION_DELAY: u64 = 500;
 }
 
-pub(crate) struct SessionState {
-    pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
-    pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
-    pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) local_resources: HashMap<ExprId, Resource>,
-    pub(crate) remote_resources: HashMap<ExprId, Resource>,
+pub(in crate::sealed) struct SessionState {
+    pub(in crate::sealed) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
+    pub(in crate::sealed) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
+    pub(in crate::sealed) qid_counter: AtomicRequestId,
+    pub(in crate::sealed) local_resources: HashMap<ExprId, Resource>,
+    pub(in crate::sealed) remote_resources: HashMap<ExprId, Resource>,
     #[cfg(feature = "unstable")]
-    pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
-    //pub(crate) publications: Vec<OwnedKeyExpr>,
-    pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
-    pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
+    pub(in crate::sealed) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
+    //pub(in crate::sealed) publications: Vec<OwnedKeyExpr>,
+    pub(in crate::sealed) subscribers: HashMap<Id, Arc<SubscriberState>>,
+    pub(in crate::sealed) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
-    pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
+    pub(in crate::sealed) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
     #[cfg(feature = "unstable")]
-    pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
-    pub(crate) queries: HashMap<RequestId, QueryState>,
-    pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
-    //pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
+    pub(in crate::sealed) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
+    pub(in crate::sealed) queries: HashMap<RequestId, QueryState>,
+    pub(in crate::sealed) aggregated_subscribers: Vec<OwnedKeyExpr>,
+    //pub(in crate::sealed) aggregated_publishers: Vec<OwnedKeyExpr>,
 }
 
 impl SessionState {
-    pub(crate) fn new(
+    pub(in crate::sealed) fn new(
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         _aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
@@ -169,7 +169,10 @@ impl SessionState {
         }
     }
 
-    pub(crate) fn remote_key_to_expr<'a>(&'a self, key_expr: &'a WireExpr) -> ZResult<KeyExpr<'a>> {
+    pub(in crate::sealed) fn remote_key_to_expr<'a>(
+        &'a self,
+        key_expr: &'a WireExpr,
+    ) -> ZResult<KeyExpr<'a>> {
         if key_expr.scope == EMPTY_EXPR_ID {
             Ok(unsafe { keyexpr::from_str_unchecked(key_expr.suffix.as_ref()) }.into())
         } else if key_expr.suffix.is_empty() {
@@ -197,7 +200,7 @@ impl SessionState {
         }
     }
 
-    pub(crate) fn local_wireexpr_to_expr<'a>(
+    pub(in crate::sealed) fn local_wireexpr_to_expr<'a>(
         &'a self,
         key_expr: &'a WireExpr,
     ) -> ZResult<KeyExpr<'a>> {
@@ -228,7 +231,7 @@ impl SessionState {
         }
     }
 
-    pub(crate) fn wireexpr_to_keyexpr<'a>(
+    pub(in crate::sealed) fn wireexpr_to_keyexpr<'a>(
         &'a self,
         key_expr: &'a WireExpr,
         local: bool,
@@ -251,36 +254,36 @@ impl fmt::Debug for SessionState {
     }
 }
 
-pub(crate) struct ResourceNode {
-    pub(crate) key_expr: OwnedKeyExpr,
-    pub(crate) subscribers: Vec<Arc<SubscriberState>>,
+pub(in crate::sealed) struct ResourceNode {
+    pub(in crate::sealed) key_expr: OwnedKeyExpr,
+    pub(in crate::sealed) subscribers: Vec<Arc<SubscriberState>>,
 }
-pub(crate) enum Resource {
+pub(in crate::sealed) enum Resource {
     Prefix { prefix: Box<str> },
     Node(ResourceNode),
 }
 
 impl Resource {
-    pub(crate) fn new(name: Box<str>) -> Self {
+    pub(in crate::sealed) fn new(name: Box<str>) -> Self {
         if keyexpr::new(name.as_ref()).is_ok() {
             Self::for_keyexpr(unsafe { OwnedKeyExpr::from_boxed_string_unchecked(name) })
         } else {
             Self::Prefix { prefix: name }
         }
     }
-    pub(crate) fn for_keyexpr(key_expr: OwnedKeyExpr) -> Self {
+    pub(in crate::sealed) fn for_keyexpr(key_expr: OwnedKeyExpr) -> Self {
         Self::Node(ResourceNode {
             key_expr,
             subscribers: Vec::new(),
         })
     }
-    pub(crate) fn name(&self) -> &str {
+    pub(in crate::sealed) fn name(&self) -> &str {
         match self {
             Resource::Prefix { prefix } => prefix.as_ref(),
             Resource::Node(ResourceNode { key_expr, .. }) => key_expr.as_str(),
         }
     }
-    pub(crate) fn as_node_mut(&mut self) -> Option<&mut ResourceNode> {
+    pub(in crate::sealed) fn as_node_mut(&mut self) -> Option<&mut ResourceNode> {
         match self {
             Resource::Prefix { .. } => None,
             Resource::Node(node) => Some(node),
@@ -398,17 +401,17 @@ where
 /// A zenoh session.
 ///
 pub struct Session {
-    pub(crate) runtime: Runtime,
-    pub(crate) state: Arc<RwLock<SessionState>>,
-    pub(crate) id: u16,
-    pub(crate) alive: bool,
+    pub(in crate::sealed) runtime: Runtime,
+    pub(in crate::sealed) state: Arc<RwLock<SessionState>>,
+    pub(in crate::sealed) id: u16,
+    pub(in crate::sealed) alive: bool,
     owns_runtime: bool,
     task_controller: TaskController,
 }
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
-    pub(crate) fn init(
+    pub fn init(
         runtime: Runtime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
@@ -826,7 +829,7 @@ impl Session {
 }
 
 impl Session {
-    pub(crate) fn clone(&self) -> Self {
+    pub(in crate::sealed) fn clone(&self) -> Self {
         Session {
             runtime: self.runtime.clone(),
             state: self.state.clone(),
@@ -870,7 +873,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<ExprId> + 'a {
+    pub fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<ExprId> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -926,7 +929,7 @@ impl Session {
     /// # Arguments
     ///
     /// * `key_expr` - The key expression to publish
-    pub(crate) fn declare_publication_intent<'a>(
+    pub(in crate::sealed) fn declare_publication_intent<'a>(
         &'a self,
         _key_expr: KeyExpr<'a>,
     ) -> impl Resolve<Result<(), std::convert::Infallible>> + 'a {
@@ -962,7 +965,7 @@ impl Session {
     /// # Arguments
     ///
     /// * `key_expr` - The key expression of the publication to undeclarte
-    pub(crate) fn undeclare_publication_intent<'a>(
+    pub(in crate::sealed) fn undeclare_publication_intent<'a>(
         &'a self,
         _key_expr: KeyExpr<'a>,
     ) -> impl Resolve<ZResult<()>> + 'a {
@@ -998,7 +1001,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_subscriber_inner(
+    pub(in crate::sealed) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
         scope: &Option<KeyExpr>,
@@ -1133,7 +1136,7 @@ impl Session {
         Ok(sub_state)
     }
 
-    pub(crate) fn unsubscribe(&self, sid: Id) -> ZResult<()> {
+    pub(in crate::sealed) fn unsubscribe(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("unsubscribe({:?})", sub_state);
@@ -1193,7 +1196,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn declare_queryable_inner(
+    pub(in crate::sealed) fn declare_queryable_inner(
         &self,
         key_expr: &WireExpr,
         complete: bool,
@@ -1235,7 +1238,7 @@ impl Session {
         Ok(qable_state)
     }
 
-    pub(crate) fn close_queryable(&self, qid: Id) -> ZResult<()> {
+    pub(in crate::sealed) fn close_queryable(&self, qid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("close_queryable({:?})", qable_state);
@@ -1262,7 +1265,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn declare_liveliness_inner(
+    pub(in crate::sealed) fn declare_liveliness_inner(
         &self,
         key_expr: &KeyExpr,
     ) -> ZResult<Arc<LivelinessTokenState>> {
@@ -1293,7 +1296,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn undeclare_liveliness(&self, tid: Id) -> ZResult<()> {
+    pub(in crate::sealed) fn undeclare_liveliness(&self, tid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(tok_state) = state.tokens.remove(&tid) {
             trace!("undeclare_liveliness({:?})", tok_state);
@@ -1321,7 +1324,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn declare_matches_listener_inner(
+    pub(in crate::sealed) fn declare_matches_listener_inner(
         &self,
         publisher: &Publisher,
         callback: Callback<'static, MatchingStatus>,
@@ -1355,7 +1358,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn matching_status(
+    pub(in crate::sealed) fn matching_status(
         &self,
         key_expr: &KeyExpr,
         destination: Locality,
@@ -1396,7 +1399,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn update_status_up(&self, state: &SessionState, key_expr: &KeyExpr) {
+    pub(in crate::sealed) fn update_status_up(&self, state: &SessionState, key_expr: &KeyExpr) {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
@@ -1434,7 +1437,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn update_status_down(&self, state: &SessionState, key_expr: &KeyExpr) {
+    pub(in crate::sealed) fn update_status_down(&self, state: &SessionState, key_expr: &KeyExpr) {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
@@ -1472,7 +1475,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn undeclare_matches_listener_inner(&self, sid: Id) -> ZResult<()> {
+    pub(in crate::sealed) fn undeclare_matches_listener_inner(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(state) = state.matching_listeners.remove(&sid) {
             trace!("undeclare_matches_listener_inner({:?})", state);
@@ -1482,7 +1485,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn handle_data(
+    pub(in crate::sealed) fn handle_data(
         &self,
         local: bool,
         key_expr: &WireExpr,
@@ -1609,7 +1612,7 @@ impl Session {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn query(
+    pub(in crate::sealed) fn query(
         &self,
         selector: &Selector<'_>,
         scope: &Option<KeyExpr<'_>>,
@@ -1752,7 +1755,7 @@ impl Session {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn handle_query(
+    pub(in crate::sealed) fn handle_query(
         &self,
         local: bool,
         key_expr: &WireExpr,

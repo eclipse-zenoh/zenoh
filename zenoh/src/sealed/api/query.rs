@@ -16,7 +16,7 @@ use super::{
     builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
     bytes::ZBytes,
     encoding::Encoding,
-    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    handlers::{callback::locked, callback::Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     publication::Priority,
     sample::{Locality, QoSBuilder, Sample},
@@ -42,7 +42,7 @@ pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
-    pub(crate) mode: ConsolidationMode,
+    pub(in crate::sealed) mode: ConsolidationMode,
 }
 
 impl QueryConsolidation {
@@ -52,7 +52,7 @@ impl QueryConsolidation {
         mode: ConsolidationMode::Auto,
     };
 
-    pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {
+    pub(in crate::sealed) const fn from_mode(mode: ConsolidationMode) -> Self {
         Self { mode }
     }
 
@@ -78,8 +78,8 @@ impl Default for QueryConsolidation {
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
-    pub(crate) result: Result<Sample, Value>,
-    pub(crate) replier_id: ZenohId,
+    pub(in crate::sealed) result: Result<Sample, Value>,
+    pub(in crate::sealed) replier_id: ZenohId,
 }
 
 impl Reply {
@@ -105,13 +105,13 @@ impl From<Reply> for Result<Sample, Value> {
     }
 }
 
-pub(crate) struct QueryState {
-    pub(crate) nb_final: usize,
-    pub(crate) selector: Selector<'static>,
-    pub(crate) scope: Option<KeyExpr<'static>>,
-    pub(crate) reception_mode: ConsolidationMode,
-    pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
-    pub(crate) callback: Callback<'static, Reply>,
+pub(in crate::sealed) struct QueryState {
+    pub(in crate::sealed) nb_final: usize,
+    pub(in crate::sealed) selector: Selector<'static>,
+    pub(in crate::sealed) scope: Option<KeyExpr<'static>>,
+    pub(in crate::sealed) reception_mode: ConsolidationMode,
+    pub(in crate::sealed) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
+    pub(in crate::sealed) callback: Callback<'static, Reply>,
 }
 
 /// A builder for initializing a `query`.
@@ -138,20 +138,20 @@ pub(crate) struct QueryState {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct GetBuilder<'a, 'b, Handler> {
-    pub(crate) session: &'a Session,
-    pub(crate) selector: ZResult<Selector<'b>>,
-    pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
-    pub(crate) target: QueryTarget,
-    pub(crate) consolidation: QueryConsolidation,
-    pub(crate) qos: QoSBuilder,
-    pub(crate) destination: Locality,
-    pub(crate) timeout: Duration,
-    pub(crate) handler: Handler,
-    pub(crate) value: Option<Value>,
+    pub(in crate::sealed) session: &'a Session,
+    pub(in crate::sealed) selector: ZResult<Selector<'b>>,
+    pub(in crate::sealed) scope: ZResult<Option<KeyExpr<'b>>>,
+    pub(in crate::sealed) target: QueryTarget,
+    pub(in crate::sealed) consolidation: QueryConsolidation,
+    pub(in crate::sealed) qos: QoSBuilder,
+    pub(in crate::sealed) destination: Locality,
+    pub(in crate::sealed) timeout: Duration,
+    pub(in crate::sealed) handler: Handler,
+    pub(in crate::sealed) value: Option<Value>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<ZBytes>,
+    pub(in crate::sealed) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(in crate::sealed) source_info: SourceInfo,
 }
 
 #[zenoh_macros::unstable]
@@ -418,7 +418,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 }
 
-pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
+pub(in crate::sealed) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
 #[zenoh_macros::unstable]
 pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 

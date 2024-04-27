@@ -34,45 +34,49 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-pub(crate) type NodeId = u16;
+pub(in crate::sealed) type NodeId = u16;
 
-pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
-pub(crate) type Route = HashMap<usize, Direction>;
-pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
-pub(crate) struct QueryTargetQabl {
-    pub(crate) direction: Direction,
-    pub(crate) complete: u64,
-    pub(crate) distance: f64,
+pub(in crate::sealed) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
+pub(in crate::sealed) type Route = HashMap<usize, Direction>;
+pub(in crate::sealed) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
+pub(in crate::sealed) struct QueryTargetQabl {
+    pub(in crate::sealed) direction: Direction,
+    pub(in crate::sealed) complete: u64,
+    pub(in crate::sealed) distance: f64,
 }
-pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
+pub(in crate::sealed) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 
-pub(crate) struct SessionContext {
-    pub(crate) face: Arc<FaceState>,
-    pub(crate) local_expr_id: Option<ExprId>,
-    pub(crate) remote_expr_id: Option<ExprId>,
-    pub(crate) subs: Option<SubscriberInfo>,
-    pub(crate) qabl: Option<QueryableInfoType>,
-    pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
-    pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
-}
-
-#[derive(Default)]
-pub(crate) struct RoutesIndexes {
-    pub(crate) routers: Vec<NodeId>,
-    pub(crate) peers: Vec<NodeId>,
-    pub(crate) clients: Vec<NodeId>,
+pub(in crate::sealed) struct SessionContext {
+    pub(in crate::sealed) face: Arc<FaceState>,
+    pub(in crate::sealed) local_expr_id: Option<ExprId>,
+    pub(in crate::sealed) remote_expr_id: Option<ExprId>,
+    pub(in crate::sealed) subs: Option<SubscriberInfo>,
+    pub(in crate::sealed) qabl: Option<QueryableInfoType>,
+    pub(in crate::sealed) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
+    pub(in crate::sealed) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
 }
 
 #[derive(Default)]
-pub(crate) struct DataRoutes {
-    pub(crate) routers: Vec<Arc<Route>>,
-    pub(crate) peers: Vec<Arc<Route>>,
-    pub(crate) clients: Vec<Arc<Route>>,
+pub(in crate::sealed) struct RoutesIndexes {
+    pub(in crate::sealed) routers: Vec<NodeId>,
+    pub(in crate::sealed) peers: Vec<NodeId>,
+    pub(in crate::sealed) clients: Vec<NodeId>,
+}
+
+#[derive(Default)]
+pub(in crate::sealed) struct DataRoutes {
+    pub(in crate::sealed) routers: Vec<Arc<Route>>,
+    pub(in crate::sealed) peers: Vec<Arc<Route>>,
+    pub(in crate::sealed) clients: Vec<Arc<Route>>,
 }
 
 impl DataRoutes {
     #[inline]
-    pub(crate) fn get_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
+    pub(in crate::sealed) fn get_route(
+        &self,
+        whatami: WhatAmI,
+        context: NodeId,
+    ) -> Option<Arc<Route>> {
         match whatami {
             WhatAmI::Router => (self.routers.len() > context as usize)
                 .then(|| self.routers[context as usize].clone()),
@@ -86,15 +90,15 @@ impl DataRoutes {
 }
 
 #[derive(Default)]
-pub(crate) struct QueryRoutes {
-    pub(crate) routers: Vec<Arc<QueryTargetQablSet>>,
-    pub(crate) peers: Vec<Arc<QueryTargetQablSet>>,
-    pub(crate) clients: Vec<Arc<QueryTargetQablSet>>,
+pub(in crate::sealed) struct QueryRoutes {
+    pub(in crate::sealed) routers: Vec<Arc<QueryTargetQablSet>>,
+    pub(in crate::sealed) peers: Vec<Arc<QueryTargetQablSet>>,
+    pub(in crate::sealed) clients: Vec<Arc<QueryTargetQablSet>>,
 }
 
 impl QueryRoutes {
     #[inline]
-    pub(crate) fn get_route(
+    pub(in crate::sealed) fn get_route(
         &self,
         whatami: WhatAmI,
         context: NodeId,
@@ -111,13 +115,13 @@ impl QueryRoutes {
     }
 }
 
-pub(crate) struct ResourceContext {
-    pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) valid_data_routes: bool,
-    pub(crate) data_routes: DataRoutes,
-    pub(crate) valid_query_routes: bool,
-    pub(crate) query_routes: QueryRoutes,
+pub(in crate::sealed) struct ResourceContext {
+    pub(in crate::sealed) matches: Vec<Weak<Resource>>,
+    pub(in crate::sealed) hat: Box<dyn Any + Send + Sync>,
+    pub(in crate::sealed) valid_data_routes: bool,
+    pub(in crate::sealed) data_routes: DataRoutes,
+    pub(in crate::sealed) valid_query_routes: bool,
+    pub(in crate::sealed) query_routes: QueryRoutes,
 }
 
 impl ResourceContext {
@@ -132,32 +136,32 @@ impl ResourceContext {
         }
     }
 
-    pub(crate) fn update_data_routes(&mut self, data_routes: DataRoutes) {
+    pub(in crate::sealed) fn update_data_routes(&mut self, data_routes: DataRoutes) {
         self.valid_data_routes = true;
         self.data_routes = data_routes;
     }
 
-    pub(crate) fn disable_data_routes(&mut self) {
+    pub(in crate::sealed) fn disable_data_routes(&mut self) {
         self.valid_data_routes = false;
     }
 
-    pub(crate) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
+    pub(in crate::sealed) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
         self.valid_query_routes = true;
         self.query_routes = query_routes
     }
 
-    pub(crate) fn disable_query_routes(&mut self) {
+    pub(in crate::sealed) fn disable_query_routes(&mut self) {
         self.valid_query_routes = false;
     }
 }
 
-pub struct Resource {
-    pub(crate) parent: Option<Arc<Resource>>,
-    pub(crate) suffix: String,
-    pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(crate) childs: HashMap<String, Arc<Resource>>,
-    pub(crate) context: Option<ResourceContext>,
-    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
+pub(in crate::sealed) struct Resource {
+    pub(in crate::sealed) parent: Option<Arc<Resource>>,
+    pub(in crate::sealed) suffix: String,
+    pub(in crate::sealed) nonwild_prefix: Option<(Arc<Resource>, String)>,
+    pub(in crate::sealed) childs: HashMap<String, Arc<Resource>>,
+    pub(in crate::sealed) context: Option<ResourceContext>,
+    pub(in crate::sealed) session_ctxs: HashMap<usize, Arc<SessionContext>>,
 }
 
 impl PartialEq for Resource {
@@ -196,7 +200,7 @@ impl Resource {
         }
     }
 
-    pub fn expr(&self) -> String {
+    pub(in crate::sealed) fn expr(&self) -> String {
         match &self.parent {
             Some(parent) => parent.expr() + &self.suffix,
             None => String::from(""),
@@ -204,16 +208,18 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(crate) fn context(&self) -> &ResourceContext {
+    pub(in crate::sealed) fn context(&self) -> &ResourceContext {
         self.context.as_ref().unwrap()
     }
 
     #[inline(always)]
-    pub(crate) fn context_mut(&mut self) -> &mut ResourceContext {
+    pub(in crate::sealed) fn context_mut(&mut self) -> &mut ResourceContext {
         self.context.as_mut().unwrap()
     }
 
-    pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
+    pub(in crate::sealed) fn nonwild_prefix(
+        res: &Arc<Resource>,
+    ) -> (Option<Arc<Resource>>, String) {
         match &res.nonwild_prefix {
             None => (Some(res.clone()), "".to_string()),
             Some((nonwild_prefix, wildsuffix)) => {
@@ -227,7 +233,11 @@ impl Resource {
     }
 
     #[inline]
-    pub(crate) fn data_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
+    pub(in crate::sealed) fn data_route(
+        &self,
+        whatami: WhatAmI,
+        context: NodeId,
+    ) -> Option<Arc<Route>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_data_routes {
@@ -242,7 +252,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(crate) fn query_route(
+    pub(in crate::sealed) fn query_route(
         &self,
         whatami: WhatAmI,
         context: NodeId,
@@ -259,7 +269,7 @@ impl Resource {
         }
     }
 
-    pub fn root() -> Arc<Resource> {
+    pub(in crate::sealed) fn root() -> Arc<Resource> {
         Arc::new(Resource {
             parent: None,
             suffix: String::from(""),
@@ -270,7 +280,7 @@ impl Resource {
         })
     }
 
-    pub fn clean(res: &mut Arc<Resource>) {
+    pub(in crate::sealed) fn clean(res: &mut Arc<Resource>) {
         let mut resclone = res.clone();
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
@@ -298,7 +308,7 @@ impl Resource {
         }
     }
 
-    pub fn close(self: &mut Arc<Resource>) {
+    pub(in crate::sealed) fn close(self: &mut Arc<Resource>) {
         let r = get_mut_unchecked(self);
         for c in r.childs.values_mut() {
             Self::close(c);
@@ -310,7 +320,7 @@ impl Resource {
     }
 
     #[cfg(test)]
-    pub fn print_tree(from: &Arc<Resource>) -> String {
+    pub(in crate::sealed) fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr();
         result.push('\n');
         for child in from.childs.values() {
@@ -319,7 +329,7 @@ impl Resource {
         result
     }
 
-    pub fn make_resource(
+    pub(in crate::sealed) fn make_resource(
         tables: &mut Tables,
         from: &mut Arc<Resource>,
         suffix: &str,
@@ -378,7 +388,10 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
+    pub(in crate::sealed) fn get_resource(
+        from: &Arc<Resource>,
+        suffix: &str,
+    ) -> Option<Arc<Resource>> {
         if suffix.is_empty() {
             Some(from.clone())
         } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
@@ -426,7 +439,10 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
+    pub(in crate::sealed) fn decl_key(
+        res: &Arc<Resource>,
+        face: &mut Arc<FaceState>,
+    ) -> WireExpr<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -489,7 +505,11 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> WireExpr<'a> {
+    pub(in crate::sealed) fn get_best_key<'a>(
+        prefix: &Arc<Resource>,
+        suffix: &'a str,
+        sid: usize,
+    ) -> WireExpr<'a> {
         fn get_best_key_<'a>(
             prefix: &Arc<Resource>,
             suffix: &'a str,
@@ -527,7 +547,10 @@ impl Resource {
         get_best_key_(prefix, suffix, sid, true)
     }
 
-    pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
+    pub(in crate::sealed) fn get_matches(
+        tables: &Tables,
+        key_expr: &keyexpr,
+    ) -> Vec<Weak<Resource>> {
         fn recursive_push(from: &Arc<Resource>, matches: &mut Vec<Weak<Resource>>) {
             if from.context.is_some() {
                 matches.push(Arc::downgrade(from));
@@ -612,7 +635,11 @@ impl Resource {
         matches
     }
 
-    pub fn match_resource(_tables: &Tables, res: &mut Arc<Resource>, matches: Vec<Weak<Resource>>) {
+    pub(in crate::sealed) fn match_resource(
+        _tables: &Tables,
+        res: &mut Arc<Resource>,
+        matches: Vec<Weak<Resource>>,
+    ) {
         if res.context.is_some() {
             for match_ in &matches {
                 let mut match_ = match_.upgrade().unwrap();
@@ -627,26 +654,35 @@ impl Resource {
         }
     }
 
-    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
+    pub(in crate::sealed) fn upgrade_resource(
+        res: &mut Arc<Resource>,
+        hat: Box<dyn Any + Send + Sync>,
+    ) {
         if res.context.is_none() {
             get_mut_unchecked(res).context = Some(ResourceContext::new(hat));
         }
     }
 
-    pub(crate) fn get_ingress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
+    pub(in crate::sealed) fn get_ingress_cache(
+        &self,
+        face: &Face,
+    ) -> Option<&Box<dyn Any + Send + Sync>> {
         self.session_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.in_interceptor_cache.as_ref())
     }
 
-    pub(crate) fn get_egress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
+    pub(in crate::sealed) fn get_egress_cache(
+        &self,
+        face: &Face,
+    ) -> Option<&Box<dyn Any + Send + Sync>> {
         self.session_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.e_interceptor_cache.as_ref())
     }
 }
 
-pub fn register_expr(
+pub(in crate::sealed) fn register_expr(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr_id: ExprId,
@@ -724,7 +760,11 @@ pub fn register_expr(
     }
 }
 
-pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
+pub(in crate::sealed) fn unregister_expr(
+    tables: &TablesLock,
+    face: &mut Arc<FaceState>,
+    expr_id: ExprId,
+) {
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),

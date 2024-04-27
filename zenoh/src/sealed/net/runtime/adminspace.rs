@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
-use crate::encoding::Encoding;
 use crate::sealed::api::builders::sample::ValueBuilderTrait;
 use crate::sealed::api::bytes::ZBytes;
+use crate::sealed::api::encoding::Encoding;
 use crate::sealed::api::key_expr::KeyExpr;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use crate::sealed::api::plugins::PluginsManager;
@@ -52,7 +52,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 
-pub struct AdminContext {
+pub(in crate::sealed) struct AdminContext {
     runtime: Runtime,
     version: String,
     metadata: serde_json::Value,
@@ -146,7 +146,7 @@ impl AdminSpace {
         Ok(())
     }
 
-    pub async fn start(runtime: &Runtime, version: String) {
+    pub(in crate::sealed) async fn start(runtime: &Runtime, version: String) {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
         let mut config = runtime.config().lock();
@@ -332,7 +332,10 @@ impl AdminSpace {
         });
     }
 
-    pub fn key_expr_to_string<'a>(&self, key_expr: &'a WireExpr) -> ZResult<KeyExpr<'a>> {
+    pub(in crate::sealed) fn key_expr_to_string<'a>(
+        &self,
+        key_expr: &'a WireExpr,
+    ) -> ZResult<KeyExpr<'a>> {
         if key_expr.scope == EMPTY_EXPR_ID {
             key_expr.suffix.as_ref().try_into()
         } else if key_expr.suffix.is_empty() {

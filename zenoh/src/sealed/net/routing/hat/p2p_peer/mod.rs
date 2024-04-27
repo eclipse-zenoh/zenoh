@@ -94,7 +94,7 @@ impl HatTables {
     }
 }
 
-pub(crate) struct HatCode {}
+pub(in crate::sealed) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) {

@@ -1,1 +1,1 @@
-pub(crate) mod tables;
+pub(in crate::sealed) mod tables;

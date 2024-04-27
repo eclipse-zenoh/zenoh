@@ -141,7 +141,7 @@ impl<T> SampleBuilder<T> {
     }
 
     // Allows to change qos as a whole of [`Sample`]
-    pub(crate) fn qos(self, qos: QoS) -> Self {
+    pub(in crate::sealed) fn qos(self, qos: QoS) -> Self {
         Self {
             sample: Sample { qos, ..self.sample },
             _t: PhantomData::<T>,

@@ -12,28 +12,28 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub(crate) type Id = u32;
+pub type Id = u32;
 
-pub(crate) mod admin;
-pub(crate) mod builders;
-pub(crate) mod bytes;
-pub(crate) mod encoding;
-pub(crate) mod handlers;
-pub(crate) mod info;
-pub(crate) mod key_expr;
+pub mod admin;
+pub mod builders;
+pub mod bytes;
+pub mod encoding;
+pub mod handlers;
+pub mod info;
+pub mod key_expr;
 #[cfg(feature = "unstable")]
-pub(crate) mod liveliness;
+pub mod liveliness;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
-pub(crate) mod loader;
+pub mod loader;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
-pub(crate) mod plugins;
-pub(crate) mod publication;
-pub(crate) mod query;
-pub(crate) mod queryable;
-pub(crate) mod sample;
-pub(crate) mod scouting;
-pub(crate) mod selector;
-pub(crate) mod session;
-pub(crate) mod subscriber;
-pub(crate) mod time;
-pub(crate) mod value;
+pub mod plugins;
+pub mod publication;
+pub mod query;
+pub mod queryable;
+pub mod sample;
+pub mod scouting;
+pub mod selector;
+pub mod session;
+pub mod subscriber;
+pub mod time;
+pub mod value;

@@ -24,14 +24,14 @@ use zenoh_protocol::network::{
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-pub struct Mux {
-    pub handler: TransportUnicast,
-    pub(crate) face: OnceLock<WeakFace>,
-    pub(crate) interceptor: InterceptorsChain,
+pub(in crate::sealed) struct Mux {
+    pub(in crate::sealed) handler: TransportUnicast,
+    pub(in crate::sealed) face: OnceLock<WeakFace>,
+    pub(in crate::sealed) interceptor: InterceptorsChain,
 }
 
 impl Mux {
-    pub(crate) fn new(handler: TransportUnicast, interceptor: InterceptorsChain) -> Mux {
+    pub(in crate::sealed) fn new(handler: TransportUnicast, interceptor: InterceptorsChain) -> Mux {
         Mux {
             handler,
             face: OnceLock::new(),
@@ -328,14 +328,17 @@ impl EPrimitives for Mux {
     }
 }
 
-pub struct McastMux {
-    pub handler: TransportMulticast,
-    pub(crate) face: OnceLock<Face>,
-    pub(crate) interceptor: InterceptorsChain,
+pub(in crate::sealed) struct McastMux {
+    pub(in crate::sealed) handler: TransportMulticast,
+    pub(in crate::sealed) face: OnceLock<Face>,
+    pub(in crate::sealed) interceptor: InterceptorsChain,
 }
 
 impl McastMux {
-    pub(crate) fn new(handler: TransportMulticast, interceptor: InterceptorsChain) -> McastMux {
+    pub(in crate::sealed) fn new(
+        handler: TransportMulticast,
+        interceptor: InterceptorsChain,
+    ) -> McastMux {
         McastMux {
             handler,
             face: OnceLock::new(),

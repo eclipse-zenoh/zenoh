@@ -13,18 +13,15 @@
 //
 
 //! Callback handler trait.
-mod callback;
-mod fifo;
-mod ring;
+pub mod callback;
+pub mod fifo;
+pub mod ring;
 
-pub use callback::*;
-pub use fifo::*;
-pub use ring::*;
-
+use self::{callback::Callback, fifo::FifoChannel};
 use crate::sealed::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 /// An alias for `Arc<T>`.
-pub type Dyn<T> = std::sync::Arc<T>;
+pub(in crate::sealed) type Dyn<T> = std::sync::Arc<T>;
 
 /// A type that can be converted into a [`Callback`]-Handler pair.
 ///

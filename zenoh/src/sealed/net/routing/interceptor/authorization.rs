@@ -80,7 +80,7 @@ impl ActionPolicy {
 }
 
 #[derive(Default)]
-pub struct FlowPolicy {
+pub(in crate::sealed) struct FlowPolicy {
     ingress: ActionPolicy,
     egress: ActionPolicy,
 }
@@ -101,27 +101,27 @@ impl FlowPolicy {
 }
 
 #[derive(Default, Debug)]
-pub struct InterfaceEnabled {
-    pub ingress: bool,
-    pub egress: bool,
+pub(in crate::sealed) struct InterfaceEnabled {
+    pub(in crate::sealed) ingress: bool,
+    pub(in crate::sealed) egress: bool,
 }
 
-pub struct PolicyEnforcer {
-    pub(crate) acl_enabled: bool,
-    pub(crate) default_permission: Permission,
-    pub(crate) subject_map: SubjectMap,
-    pub(crate) policy_map: PolicyMap,
-    pub(crate) interface_enabled: InterfaceEnabled,
+pub(in crate::sealed) struct PolicyEnforcer {
+    pub(in crate::sealed) acl_enabled: bool,
+    pub(in crate::sealed) default_permission: Permission,
+    pub(in crate::sealed) subject_map: SubjectMap,
+    pub(in crate::sealed) policy_map: PolicyMap,
+    pub(in crate::sealed) interface_enabled: InterfaceEnabled,
 }
 
 #[derive(Debug, Clone)]
-pub struct PolicyInformation {
+pub(in crate::sealed) struct PolicyInformation {
     subject_map: SubjectMap,
     policy_rules: Vec<PolicyRule>,
 }
 
 impl PolicyEnforcer {
-    pub fn new() -> PolicyEnforcer {
+    pub(in crate::sealed) fn new() -> PolicyEnforcer {
         PolicyEnforcer {
             acl_enabled: true,
             default_permission: Permission::Deny,
@@ -134,7 +134,7 @@ impl PolicyEnforcer {
     /*
        initializes the policy_enforcer
     */
-    pub fn init(&mut self, acl_config: &AclConfig) -> ZResult<()> {
+    pub(in crate::sealed) fn init(&mut self, acl_config: &AclConfig) -> ZResult<()> {
         self.acl_enabled = acl_config.enabled;
         self.default_permission = acl_config.default_permission;
         if self.acl_enabled {
@@ -193,7 +193,7 @@ impl PolicyEnforcer {
     /*
        converts the sets of rules from config format into individual rules for each subject, key-expr, action, permission
     */
-    pub fn policy_information_point(
+    pub(in crate::sealed) fn policy_information_point(
         &self,
         config_rule_set: &Vec<AclConfigRules>,
     ) -> ZResult<PolicyInformation> {
@@ -234,7 +234,7 @@ impl PolicyEnforcer {
        checks each msg against the ACL ruleset for allow/deny
     */
 
-    pub fn policy_decision_point(
+    pub(in crate::sealed) fn policy_decision_point(
         &self,
         subject: usize,
         flow: InterceptorFlow,

@@ -287,6 +287,7 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
     (r1, r2)
 }
 
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_2sessions_1runtime_init() {
     let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.0.1:17449"]).await;

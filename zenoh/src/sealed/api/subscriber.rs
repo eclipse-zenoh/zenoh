@@ -13,7 +13,7 @@
 //
 
 use super::{
-    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    handlers::{callback::locked, callback::Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     sample::{Locality, Sample},
     session::{SessionRef, Undeclarable},
@@ -32,13 +32,13 @@ use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalId;
 
-pub(crate) struct SubscriberState {
-    pub(crate) id: Id,
-    pub(crate) remote_id: Id,
-    pub(crate) key_expr: KeyExpr<'static>,
-    pub(crate) scope: Option<KeyExpr<'static>>,
-    pub(crate) origin: Locality,
-    pub(crate) callback: Callback<'static, Sample>,
+pub(in crate::sealed) struct SubscriberState {
+    pub(in crate::sealed) id: Id,
+    pub(in crate::sealed) remote_id: Id,
+    pub(in crate::sealed) key_expr: KeyExpr<'static>,
+    pub(in crate::sealed) scope: Option<KeyExpr<'static>>,
+    pub(in crate::sealed) origin: Locality,
+    pub(in crate::sealed) callback: Callback<'static, Sample>,
 }
 
 impl fmt::Debug for SubscriberState {
@@ -75,10 +75,10 @@ impl fmt::Debug for SubscriberState {
 /// # }
 /// ```
 #[derive(Debug)]
-pub(crate) struct SubscriberInner<'a> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) state: Arc<SubscriberState>,
-    pub(crate) alive: bool,
+pub(in crate::sealed) struct SubscriberInner<'a> {
+    pub(in crate::sealed) session: SessionRef<'a>,
+    pub(in crate::sealed) state: Arc<SubscriberState>,
+    pub(in crate::sealed) alive: bool,
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -190,27 +190,27 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     #[cfg(feature = "unstable")]
     pub session: SessionRef<'a>,
     #[cfg(not(feature = "unstable"))]
-    pub(crate) session: SessionRef<'a>,
+    pub(in crate::sealed) session: SessionRef<'a>,
 
     #[cfg(feature = "unstable")]
     pub key_expr: ZResult<KeyExpr<'b>>,
     #[cfg(not(feature = "unstable"))]
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+    pub(in crate::sealed) key_expr: ZResult<KeyExpr<'b>>,
 
     #[cfg(feature = "unstable")]
     pub reliability: Reliability,
     #[cfg(not(feature = "unstable"))]
-    pub(crate) reliability: Reliability,
+    pub(in crate::sealed) reliability: Reliability,
 
     #[cfg(feature = "unstable")]
     pub origin: Locality,
     #[cfg(not(feature = "unstable"))]
-    pub(crate) origin: Locality,
+    pub(in crate::sealed) origin: Locality,
 
     #[cfg(feature = "unstable")]
     pub handler: Handler,
     #[cfg(not(feature = "unstable"))]
-    pub(crate) handler: Handler,
+    pub(in crate::sealed) handler: Handler,
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
@@ -441,8 +441,8 @@ where
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Subscriber<'a, Handler> {
-    pub(crate) subscriber: SubscriberInner<'a>,
-    pub(crate) handler: Handler,
+    pub(in crate::sealed) subscriber: SubscriberInner<'a>,
+    pub(in crate::sealed) handler: Handler,
 }
 
 impl<'a, Handler> Subscriber<'a, Handler> {

@@ -13,7 +13,7 @@
 //
 
 use super::{
-    handlers::{locked, DefaultHandler, IntoHandler},
+    handlers::{callback::locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     query::{QueryConsolidation, QueryTarget, Reply},
     sample::{Locality, Sample, SourceInfo},
@@ -29,11 +29,12 @@ use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::network::{declare::subscriber::ext::SubscriberInfo, request};
 
 #[zenoh_macros::unstable]
-pub(crate) static PREFIX_LIVELINESS: &str = crate::sealed::net::routing::PREFIX_LIVELINESS;
+pub(in crate::sealed) static PREFIX_LIVELINESS: &str =
+    crate::sealed::net::routing::PREFIX_LIVELINESS;
 
 #[zenoh_macros::unstable]
 lazy_static::lazy_static!(
-    pub(crate) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
+    pub(in crate::sealed) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
 );
 
 /// A structure with functions to declare a
@@ -68,7 +69,7 @@ lazy_static::lazy_static!(
 /// ```
 #[zenoh_macros::unstable]
 pub struct Liveliness<'a> {
-    pub(crate) session: SessionRef<'a>,
+    pub(in crate::sealed) session: SessionRef<'a>,
 }
 
 #[zenoh_macros::unstable]
@@ -212,8 +213,8 @@ impl<'a> Liveliness<'a> {
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessTokenBuilder<'a, 'b> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+    pub(in crate::sealed) session: SessionRef<'a>,
+    pub(in crate::sealed) key_expr: ZResult<KeyExpr<'b>>,
 }
 
 #[zenoh_macros::unstable]
@@ -248,9 +249,9 @@ impl AsyncResolve for LivelinessTokenBuilder<'_, '_> {
 
 #[zenoh_macros::unstable]
 #[derive(Debug)]
-pub(crate) struct LivelinessTokenState {
-    pub(crate) id: Id,
-    pub(crate) key_expr: KeyExpr<'static>,
+pub(in crate::sealed) struct LivelinessTokenState {
+    pub(in crate::sealed) id: Id,
+    pub(in crate::sealed) key_expr: KeyExpr<'static>,
 }
 
 /// A token whose liveliness is tied to the Zenoh [`Session`](Session)
@@ -286,9 +287,9 @@ pub(crate) struct LivelinessTokenState {
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessToken<'a> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) state: Arc<LivelinessTokenState>,
-    pub(crate) alive: bool,
+    pub(in crate::sealed) session: SessionRef<'a>,
+    pub(in crate::sealed) state: Arc<LivelinessTokenState>,
+    pub(in crate::sealed) alive: bool,
 }
 
 /// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`](LivelinessToken).
@@ -603,10 +604,10 @@ where
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct LivelinessGetBuilder<'a, 'b, Handler> {
-    pub(crate) session: &'a Session,
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-    pub(crate) timeout: Duration,
-    pub(crate) handler: Handler,
+    pub(in crate::sealed) session: &'a Session,
+    pub(in crate::sealed) key_expr: ZResult<KeyExpr<'b>>,
+    pub(in crate::sealed) timeout: Duration,
+    pub(in crate::sealed) handler: Handler,
 }
 
 impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {

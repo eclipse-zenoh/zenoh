@@ -33,26 +33,27 @@ use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
 
-pub struct FaceState {
-    pub(crate) id: usize,
-    pub(crate) zid: ZenohId,
-    pub(crate) whatami: WhatAmI,
+pub(in crate::sealed) struct FaceState {
+    pub(in crate::sealed) id: usize,
+    pub(in crate::sealed) zid: ZenohId,
+    pub(in crate::sealed) whatami: WhatAmI,
     #[cfg(feature = "stats")]
-    pub(crate) stats: Option<Arc<TransportStats>>,
-    pub(crate) primitives: Arc<dyn crate::sealed::net::primitives::EPrimitives + Send + Sync>,
-    pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
-    pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
-    pub(crate) next_qid: RequestId,
-    pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
-    pub(crate) mcast_group: Option<TransportMulticast>,
-    pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) task_controller: TaskController,
+    pub(in crate::sealed) stats: Option<Arc<TransportStats>>,
+    pub(in crate::sealed) primitives:
+        Arc<dyn crate::sealed::net::primitives::EPrimitives + Send + Sync>,
+    pub(in crate::sealed) local_mappings: HashMap<ExprId, Arc<Resource>>,
+    pub(in crate::sealed) remote_mappings: HashMap<ExprId, Arc<Resource>>,
+    pub(in crate::sealed) next_qid: RequestId,
+    pub(in crate::sealed) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
+    pub(in crate::sealed) mcast_group: Option<TransportMulticast>,
+    pub(in crate::sealed) in_interceptors: Option<Arc<InterceptorsChain>>,
+    pub(in crate::sealed) hat: Box<dyn Any + Send + Sync>,
+    pub(in crate::sealed) task_controller: TaskController,
 }
 
 impl FaceState {
     #[allow(clippy::too_many_arguments)] // @TODO fix warning
-    pub(crate) fn new(
+    pub(in crate::sealed) fn new(
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,
@@ -81,7 +82,7 @@ impl FaceState {
     }
 
     #[inline]
-    pub(crate) fn get_mapping(
+    pub(in crate::sealed) fn get_mapping(
         &self,
         prefixid: &ExprId,
         mapping: Mapping,
@@ -93,7 +94,7 @@ impl FaceState {
     }
 
     #[inline]
-    pub(crate) fn get_sent_mapping(
+    pub(in crate::sealed) fn get_sent_mapping(
         &self,
         prefixid: &ExprId,
         mapping: Mapping,
@@ -104,7 +105,7 @@ impl FaceState {
         }
     }
 
-    pub(crate) fn get_next_local_id(&self) -> ExprId {
+    pub(in crate::sealed) fn get_next_local_id(&self) -> ExprId {
         let mut id = 1;
         while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
             id += 1;
@@ -112,7 +113,7 @@ impl FaceState {
         id
     }
 
-    pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
+    pub(in crate::sealed) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
         if let Ok(expr) = KeyExpr::try_from(res.expr()) {
             if let Some(interceptor) = self.in_interceptors.as_ref() {
                 let cache = interceptor.compute_keyexpr_cache(&expr);
@@ -155,13 +156,13 @@ impl fmt::Display for FaceState {
 }
 
 #[derive(Clone, Debug)]
-pub struct WeakFace {
-    pub(crate) tables: Weak<TablesLock>,
-    pub(crate) state: Weak<FaceState>,
+pub(in crate::sealed) struct WeakFace {
+    pub(in crate::sealed) tables: Weak<TablesLock>,
+    pub(in crate::sealed) state: Weak<FaceState>,
 }
 
 impl WeakFace {
-    pub fn upgrade(&self) -> Option<Face> {
+    pub(in crate::sealed) fn upgrade(&self) -> Option<Face> {
         Some(Face {
             tables: self.tables.upgrade()?,
             state: self.state.upgrade()?,
@@ -170,13 +171,13 @@ impl WeakFace {
 }
 
 #[derive(Clone)]
-pub struct Face {
-    pub(crate) tables: Arc<TablesLock>,
-    pub(crate) state: Arc<FaceState>,
+pub(in crate::sealed) struct Face {
+    pub(in crate::sealed) tables: Arc<TablesLock>,
+    pub(in crate::sealed) state: Arc<FaceState>,
 }
 
 impl Face {
-    pub fn downgrade(&self) -> WeakFace {
+    pub(in crate::sealed) fn downgrade(&self) -> WeakFace {
         WeakFace {
             tables: Arc::downgrade(&self.tables),
             state: Arc::downgrade(&self.state),

@@ -29,7 +29,7 @@ use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
 use zenoh_protocol::network::NetworkBody;
 use zenoh_result::ZResult;
 
-pub(crate) fn downsampling_interceptor_factories(
+pub(in crate::sealed) fn downsampling_interceptor_factories(
     config: &Vec<DownsamplingItemConf>,
 ) -> ZResult<Vec<InterceptorFactory>> {
     let mut res: Vec<InterceptorFactory> = vec![];
@@ -41,14 +41,14 @@ pub(crate) fn downsampling_interceptor_factories(
     Ok(res)
 }
 
-pub struct DownsamplingInterceptorFactory {
+pub(in crate::sealed) struct DownsamplingInterceptorFactory {
     interfaces: Option<Vec<String>>,
     rules: Vec<DownsamplingRuleConf>,
     flow: InterceptorFlow,
 }
 
 impl DownsamplingInterceptorFactory {
-    pub fn new(conf: DownsamplingItemConf) -> Self {
+    pub(in crate::sealed) fn new(conf: DownsamplingItemConf) -> Self {
         Self {
             interfaces: conf.interfaces,
             rules: conf.rules,
@@ -110,11 +110,11 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 }
 
 struct Timestate {
-    pub threshold: tokio::time::Duration,
-    pub latest_message_timestamp: tokio::time::Instant,
+    pub(in crate::sealed) threshold: tokio::time::Duration,
+    pub(in crate::sealed) latest_message_timestamp: tokio::time::Instant,
 }
 
-pub(crate) struct DownsamplingInterceptor {
+pub(in crate::sealed) struct DownsamplingInterceptor {
     ke_id: Arc<Mutex<KeBoxTree<usize, UnknownWildness, KeyedSetProvider>>>,
     ke_state: Arc<Mutex<HashMap<usize, Timestate>>>,
 }
@@ -165,7 +165,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
 const NANOS_PER_SEC: f64 = 1_000_000_000.0;
 
 impl DownsamplingInterceptor {
-    pub fn new(rules: Vec<DownsamplingRuleConf>) -> Self {
+    pub(in crate::sealed) fn new(rules: Vec<DownsamplingRuleConf>) -> Self {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
         for (id, rule) in rules.into_iter().enumerate() {

@@ -46,8 +46,8 @@ pub type PublisherDeleteBuilder<'a> =
 
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderPut {
-    pub(crate) payload: ZBytes,
-    pub(crate) encoding: Encoding,
+    pub(in crate::sealed) payload: ZBytes,
+    pub(in crate::sealed) encoding: Encoding,
 }
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderDelete;
@@ -74,13 +74,13 @@ pub struct PublicationBuilderDelete;
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
 pub struct PublicationBuilder<P, T> {
-    pub(crate) publisher: P,
-    pub(crate) kind: T,
-    pub(crate) timestamp: Option<uhlc::Timestamp>,
+    pub(in crate::sealed) publisher: P,
+    pub(in crate::sealed) kind: T,
+    pub(in crate::sealed) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(in crate::sealed) source_info: SourceInfo,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<ZBytes>,
+    pub(in crate::sealed) attachment: Option<ZBytes>,
 }
 
 impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
@@ -251,12 +251,12 @@ impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBu
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct PublisherBuilder<'a, 'b: 'a> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-    pub(crate) congestion_control: CongestionControl,
-    pub(crate) priority: Priority,
-    pub(crate) is_express: bool,
-    pub(crate) destination: Locality,
+    pub(in crate::sealed) session: SessionRef<'a>,
+    pub(in crate::sealed) key_expr: ZResult<KeyExpr<'b>>,
+    pub(in crate::sealed) congestion_control: CongestionControl,
+    pub(in crate::sealed) priority: Priority,
+    pub(in crate::sealed) is_express: bool,
+    pub(in crate::sealed) destination: Locality,
 }
 
 impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {

@@ -17,8 +17,8 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-pub mod face;
-pub mod pubsub;
-pub mod queries;
-pub mod resource;
-pub mod tables;
+pub(in crate::sealed) mod face;
+pub(in crate::sealed) mod pubsub;
+pub(in crate::sealed) mod queries;
+pub(in crate::sealed) mod resource;
+pub(in crate::sealed) mod tables;

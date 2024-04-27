@@ -28,7 +28,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 #[derive(Clone, Debug)]
-pub(crate) enum KeyExprInner<'a> {
+pub(in crate::sealed) enum KeyExprInner<'a> {
     Borrowed(&'a keyexpr),
     BorrowedWire {
         key_expr: &'a keyexpr,
@@ -54,7 +54,7 @@ pub(crate) enum KeyExprInner<'a> {
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(from = "OwnedKeyExpr")]
 #[serde(into = "OwnedKeyExpr")]
-pub struct KeyExpr<'a>(pub(crate) KeyExprInner<'a>);
+pub struct KeyExpr<'a>(pub(in crate::sealed) KeyExprInner<'a>);
 impl std::ops::Deref for KeyExpr<'_> {
     type Target = keyexpr;
     fn deref(&self) -> &Self::Target {
@@ -487,10 +487,10 @@ impl std::ops::Div<&keyexpr> for &KeyExpr<'_> {
 }
 
 impl<'a> KeyExpr<'a> {
-    //pub(crate) fn is_optimized(&self, session: &Session) -> bool {
+    //pub(in crate::sealed) fn is_optimized(&self, session: &Session) -> bool {
     //    matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
     //}
-    pub(crate) fn is_fully_optimized(&self, session: &Session) -> bool {
+    pub(in crate::sealed) fn is_fully_optimized(&self, session: &Session) -> bool {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,
@@ -507,7 +507,7 @@ impl<'a> KeyExpr<'a> {
             _ => false,
         }
     }
-    pub(crate) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
+    pub(in crate::sealed) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,

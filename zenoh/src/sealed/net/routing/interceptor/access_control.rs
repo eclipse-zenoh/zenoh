@@ -33,11 +33,11 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
-pub struct AclEnforcer {
+pub(in crate::sealed) struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
 #[derive(Clone, Debug)]
-pub struct Interface {
+pub(in crate::sealed) struct Interface {
     id: usize,
     name: String,
 }
@@ -52,7 +52,7 @@ struct IngressAclEnforcer {
     zid: ZenohId,
 }
 
-pub(crate) fn acl_interceptor_factories(
+pub(in crate::sealed) fn acl_interceptor_factories(
     acl_config: &AclConfig,
 ) -> ZResult<Vec<InterceptorFactory>> {
     let mut res: Vec<InterceptorFactory> = vec![];
@@ -280,7 +280,7 @@ impl InterceptorTrait for EgressAclEnforcer {
         Some(ctx)
     }
 }
-pub trait AclActionMethods {
+pub(in crate::sealed) trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
     fn interface_list(&self) -> Vec<Interface>;
     fn zid(&self) -> ZenohId;

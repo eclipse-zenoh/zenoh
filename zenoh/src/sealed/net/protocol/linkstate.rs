@@ -13,9 +13,9 @@
 //
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
 
-pub const PID: u64 = 1; // 0x01
-pub const WAI: u64 = 1 << 1; // 0x02
-pub const LOC: u64 = 1 << 2; // 0x04
+pub(in crate::sealed) const PID: u64 = 1; // 0x01
+pub(in crate::sealed) const WAI: u64 = 1 << 1; // 0x02
+pub(in crate::sealed) const LOC: u64 = 1 << 2; // 0x04
 
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
@@ -34,18 +34,18 @@ pub const LOC: u64 = 1 << 2; // 0x04
 // ~    [links]    ~
 // +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LinkState {
-    pub(crate) psid: u64,
-    pub(crate) sn: u64,
-    pub(crate) zid: Option<ZenohId>,
-    pub(crate) whatami: Option<WhatAmI>,
-    pub(crate) locators: Option<Vec<Locator>>,
-    pub(crate) links: Vec<u64>,
+pub(in crate::sealed) struct LinkState {
+    pub(in crate::sealed) psid: u64,
+    pub(in crate::sealed) sn: u64,
+    pub(in crate::sealed) zid: Option<ZenohId>,
+    pub(in crate::sealed) whatami: Option<WhatAmI>,
+    pub(in crate::sealed) locators: Option<Vec<Locator>>,
+    pub(in crate::sealed) links: Vec<u64>,
 }
 
 impl LinkState {
     #[cfg(feature = "test")]
-    pub fn rand() -> Self {
+    pub(in crate::sealed) fn rand() -> Self {
         use rand::Rng;
 
         const MIN: usize = 1;
@@ -93,13 +93,13 @@ impl LinkState {
 // ~ [link_states] ~
 // +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LinkStateList {
-    pub(crate) link_states: Vec<LinkState>,
+pub(in crate::sealed) struct LinkStateList {
+    pub(in crate::sealed) link_states: Vec<LinkState>,
 }
 
 impl LinkStateList {
     #[cfg(feature = "test")]
-    pub fn rand() -> Self {
+    pub(in crate::sealed) fn rand() -> Self {
         use rand::Rng;
 
         const MIN: usize = 1;

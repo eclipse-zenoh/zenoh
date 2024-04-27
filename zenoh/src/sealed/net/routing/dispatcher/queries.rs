@@ -35,12 +35,12 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
 
-pub(crate) struct Query {
+pub(in crate::sealed) struct Query {
     src_face: Arc<FaceState>,
     src_qid: RequestId,
 }
 
-pub(crate) fn declare_queryable(
+pub(in crate::sealed) fn declare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -109,7 +109,7 @@ pub(crate) fn declare_queryable(
     }
 }
 
-pub(crate) fn undeclare_queryable(
+pub(in crate::sealed) fn undeclare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -207,13 +207,13 @@ fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut R
     }
 }
 
-pub(crate) fn compute_query_routes(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
+pub(in crate::sealed) fn compute_query_routes(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
     let mut routes = QueryRoutes::default();
     compute_query_routes_(tables, &mut routes, &mut RoutingExpr::new(res, ""));
     routes
 }
 
-pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
+pub(in crate::sealed) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
     if res.context.is_some() {
         let mut res_mut = res.clone();
         let res_mut = get_mut_unchecked(&mut res_mut);
@@ -225,7 +225,7 @@ pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
     }
 }
 
-pub(crate) fn update_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(in crate::sealed) fn update_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     update_query_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
@@ -233,7 +233,7 @@ pub(crate) fn update_query_routes_from(tables: &mut Tables, res: &mut Arc<Resour
     }
 }
 
-pub(crate) fn compute_matches_query_routes(
+pub(in crate::sealed) fn compute_matches_query_routes(
     tables: &Tables,
     res: &Arc<Resource>,
 ) -> Vec<(Arc<Resource>, QueryRoutes)> {
@@ -251,7 +251,7 @@ pub(crate) fn compute_matches_query_routes(
     routes
 }
 
-pub(crate) fn update_matches_query_routes(tables: &Tables, res: &Arc<Resource>) {
+pub(in crate::sealed) fn update_matches_query_routes(tables: &Tables, res: &Arc<Resource>) {
     if res.context.is_some() {
         update_query_routes(tables, res);
         for match_ in &res.context().matches {
@@ -345,7 +345,7 @@ struct QueryCleanup {
 }
 
 impl QueryCleanup {
-    pub fn spawn_query_clean_up_task(
+    pub(in crate::sealed) fn spawn_query_clean_up_task(
         face: &Arc<FaceState>,
         tables_ref: &Arc<TablesLock>,
         qid: u32,
@@ -391,7 +391,10 @@ impl Timed for QueryCleanup {
     }
 }
 
-pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(in crate::sealed) fn disable_matches_query_routes(
+    _tables: &mut Tables,
+    res: &mut Arc<Resource>,
+) {
     if res.context.is_some() {
         get_mut_unchecked(res).context_mut().disable_query_routes();
         for match_ in &res.context().matches {
@@ -491,7 +494,7 @@ macro_rules! inc_res_stats {
     };
 }
 
-pub fn route_query(
+pub(in crate::sealed) fn route_query(
     tables_ref: &Arc<TablesLock>,
     face: &Arc<FaceState>,
     expr: &WireExpr,
@@ -665,7 +668,7 @@ pub fn route_query(
     }
 }
 
-pub(crate) fn route_send_response(
+pub(in crate::sealed) fn route_send_response(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
     qid: RequestId,
@@ -719,7 +722,7 @@ pub(crate) fn route_send_response(
     }
 }
 
-pub(crate) fn route_send_response_final(
+pub(in crate::sealed) fn route_send_response_final(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
     qid: RequestId,
@@ -745,7 +748,10 @@ pub(crate) fn route_send_response_final(
     }
 }
 
-pub(crate) fn finalize_pending_queries(tables_ref: &TablesLock, face: &mut Arc<FaceState>) {
+pub(in crate::sealed) fn finalize_pending_queries(
+    tables_ref: &TablesLock,
+    face: &mut Arc<FaceState>,
+) {
     let queries_lock = zwrite!(tables_ref.queries_lock);
     for (_, query) in get_mut_unchecked(face).pending_queries.drain() {
         finalize_pending_query(query);
@@ -753,7 +759,7 @@ pub(crate) fn finalize_pending_queries(tables_ref: &TablesLock, face: &mut Arc<F
     drop(queries_lock);
 }
 
-pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
+pub(in crate::sealed) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
     let (query, cancellation_token) = query;
     cancellation_token.cancel();
     if let Some(query) = Arc::into_inner(query) {

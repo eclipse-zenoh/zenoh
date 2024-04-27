@@ -66,9 +66,9 @@ use zenoh_util::time_range::TimeRange;
 #[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
-    pub(crate) key_expr: KeyExpr<'a>,
+    pub(in crate::sealed) key_expr: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
-    pub(crate) parameters: Parameters<'a>,
+    pub(in crate::sealed) parameters: Parameters<'a>,
 }
 
 pub const TIME_RANGE_KEY: &str = "_time";

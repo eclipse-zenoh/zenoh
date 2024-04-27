@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::face::FaceState;
-pub use super::pubsub::*;
-pub use super::queries::*;
-pub use super::resource::*;
+pub(in crate::sealed) use super::pubsub::*;
+pub(in crate::sealed) use super::queries::*;
+pub(in crate::sealed) use super::resource::*;
 use crate::sealed::net::routing::hat;
 use crate::sealed::net::routing::hat::HatTrait;
 use crate::sealed::net::routing::interceptor::interceptor_factories;
@@ -32,15 +32,15 @@ use zenoh_protocol::network::Mapping;
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 
-pub(crate) struct RoutingExpr<'a> {
-    pub(crate) prefix: &'a Arc<Resource>,
-    pub(crate) suffix: &'a str,
+pub(in crate::sealed) struct RoutingExpr<'a> {
+    pub(in crate::sealed) prefix: &'a Arc<Resource>,
+    pub(in crate::sealed) suffix: &'a str,
     full: Option<String>,
 }
 
 impl<'a> RoutingExpr<'a> {
     #[inline]
-    pub(crate) fn new(prefix: &'a Arc<Resource>, suffix: &'a str) -> Self {
+    pub(in crate::sealed) fn new(prefix: &'a Arc<Resource>, suffix: &'a str) -> Self {
         RoutingExpr {
             prefix,
             suffix,
@@ -49,7 +49,7 @@ impl<'a> RoutingExpr<'a> {
     }
 
     #[inline]
-    pub(crate) fn full_expr(&mut self) -> &str {
+    pub(in crate::sealed) fn full_expr(&mut self) -> &str {
         if self.full.is_none() {
             self.full = Some(self.prefix.expr() + self.suffix);
         }
@@ -57,25 +57,25 @@ impl<'a> RoutingExpr<'a> {
     }
 }
 
-pub struct Tables {
-    pub(crate) zid: ZenohId,
-    pub(crate) whatami: WhatAmI,
-    pub(crate) face_counter: usize,
+pub(in crate::sealed) struct Tables {
+    pub(in crate::sealed) zid: ZenohId,
+    pub(in crate::sealed) whatami: WhatAmI,
+    pub(in crate::sealed) face_counter: usize,
     #[allow(dead_code)]
-    pub(crate) hlc: Option<Arc<HLC>>,
-    pub(crate) drop_future_timestamp: bool,
-    pub(crate) queries_default_timeout: Duration,
-    pub(crate) root_res: Arc<Resource>,
-    pub(crate) faces: HashMap<usize, Arc<FaceState>>,
-    pub(crate) mcast_groups: Vec<Arc<FaceState>>,
-    pub(crate) mcast_faces: Vec<Arc<FaceState>>,
-    pub(crate) interceptors: Vec<InterceptorFactory>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
+    pub(in crate::sealed) hlc: Option<Arc<HLC>>,
+    pub(in crate::sealed) drop_future_timestamp: bool,
+    pub(in crate::sealed) queries_default_timeout: Duration,
+    pub(in crate::sealed) root_res: Arc<Resource>,
+    pub(in crate::sealed) faces: HashMap<usize, Arc<FaceState>>,
+    pub(in crate::sealed) mcast_groups: Vec<Arc<FaceState>>,
+    pub(in crate::sealed) mcast_faces: Vec<Arc<FaceState>>,
+    pub(in crate::sealed) interceptors: Vec<InterceptorFactory>,
+    pub(in crate::sealed) hat: Box<dyn Any + Send + Sync>,
+    pub(in crate::sealed) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
 }
 
 impl Tables {
-    pub fn new(
+    pub(in crate::sealed) fn new(
         zid: ZenohId,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
@@ -106,17 +106,17 @@ impl Tables {
     }
 
     #[doc(hidden)]
-    pub fn _get_root(&self) -> &Arc<Resource> {
+    pub(in crate::sealed) fn _get_root(&self) -> &Arc<Resource> {
         &self.root_res
     }
 
     #[cfg(test)]
-    pub fn print(&self) -> String {
+    pub(in crate::sealed) fn print(&self) -> String {
         Resource::print_tree(&self.root_res)
     }
 
     #[inline]
-    pub(crate) fn get_mapping<'a>(
+    pub(in crate::sealed) fn get_mapping<'a>(
         &'a self,
         face: &'a FaceState,
         expr_id: &ExprId,
@@ -129,7 +129,7 @@ impl Tables {
     }
 
     #[inline]
-    pub(crate) fn get_sent_mapping<'a>(
+    pub(in crate::sealed) fn get_sent_mapping<'a>(
         &'a self,
         face: &'a FaceState,
         expr_id: &ExprId,
@@ -142,7 +142,7 @@ impl Tables {
     }
 
     #[inline]
-    pub(crate) fn get_face(&self, zid: &ZenohId) -> Option<&Arc<FaceState>> {
+    pub(in crate::sealed) fn get_face(&self, zid: &ZenohId) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.zid == *zid)
     }
 
@@ -151,7 +151,7 @@ impl Tables {
         update_query_routes(self, res);
     }
 
-    pub(crate) fn update_matches_routes(&mut self, res: &mut Arc<Resource>) {
+    pub(in crate::sealed) fn update_matches_routes(&mut self, res: &mut Arc<Resource>) {
         if res.context.is_some() {
             self.update_routes(res);
 
@@ -166,7 +166,7 @@ impl Tables {
     }
 }
 
-pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
+pub(in crate::sealed) fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
     match face.upgrade() {
         Some(mut face) => {
             tracing::debug!("Close {}", face);
@@ -178,8 +178,8 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
     }
 }
 
-pub struct TablesLock {
-    pub tables: RwLock<Tables>,
-    pub(crate) ctrl_lock: Mutex<Box<dyn HatTrait + Send + Sync>>,
-    pub queries_lock: RwLock<()>,
+pub(in crate::sealed) struct TablesLock {
+    pub(in crate::sealed) tables: RwLock<Tables>,
+    pub(in crate::sealed) ctrl_lock: Mutex<Box<dyn HatTrait + Send + Sync>>,
+    pub(in crate::sealed) queries_lock: RwLock<()>,
 }

@@ -36,7 +36,7 @@
 //! ```
 
 // Reexport API in flat namespace
-pub(crate) mod flat {
+pub mod flat {
     pub use crate::buffers::*;
     pub use crate::bytes::*;
     pub use crate::config::*;
@@ -59,7 +59,7 @@ pub(crate) mod flat {
 }
 
 // Reexport API in hierarchical namespace
-pub(crate) mod mods {
+pub mod mods {
     pub use crate::buffers;
     pub use crate::bytes;
     pub use crate::config;

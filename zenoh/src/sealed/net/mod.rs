@@ -18,15 +18,15 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 #[doc(hidden)]
-pub(crate) mod codec;
+pub(in crate::sealed) mod codec;
 #[doc(hidden)]
-pub(crate) mod primitives;
+pub(in crate::sealed) mod primitives;
 #[doc(hidden)]
-pub(crate) mod protocol;
+pub(in crate::sealed) mod protocol;
 #[doc(hidden)]
-pub(crate) mod routing;
+pub(in crate::sealed) mod routing;
 #[doc(hidden)]
 pub mod runtime;
 
 #[cfg(test)]
-pub(crate) mod tests;
+pub(in crate::sealed) mod tests;

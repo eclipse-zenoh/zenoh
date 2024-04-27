@@ -38,7 +38,7 @@ pub enum Locality {
 }
 #[cfg(not(feature = "unstable"))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Locality {
+pub(in crate::sealed) enum Locality {
     SessionLocal,
     Remote,
     #[default]
@@ -46,16 +46,16 @@ pub(crate) enum Locality {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct DataInfo {
-    pub kind: SampleKind,
-    pub encoding: Option<Encoding>,
-    pub timestamp: Option<Timestamp>,
-    pub source_id: Option<EntityGlobalId>,
-    pub source_sn: Option<SourceSn>,
-    pub qos: QoS,
+pub(in crate::sealed) struct DataInfo {
+    pub(in crate::sealed) kind: SampleKind,
+    pub(in crate::sealed) encoding: Option<Encoding>,
+    pub(in crate::sealed) timestamp: Option<Timestamp>,
+    pub(in crate::sealed) source_id: Option<EntityGlobalId>,
+    pub(in crate::sealed) source_sn: Option<SourceSn>,
+    pub(in crate::sealed) qos: QoS,
 }
 
-pub(crate) trait DataInfoIntoSample {
+pub(in crate::sealed) trait DataInfoIntoSample {
     fn into_sample<IntoKeyExpr, IntoZBytes>(
         self,
         key_expr: IntoKeyExpr,
@@ -161,13 +161,13 @@ fn source_info_stack_size() {
 
 #[zenoh_macros::unstable]
 impl SourceInfo {
-    pub(crate) fn empty() -> Self {
+    pub(in crate::sealed) fn empty() -> Self {
         SourceInfo {
             source_id: None,
             source_sn: None,
         }
     }
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(in crate::sealed) fn is_empty(&self) -> bool {
         self.source_id.is_none() && self.source_sn.is_none()
     }
 }
@@ -276,18 +276,18 @@ impl From<Sample> for SampleFields {
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Sample {
-    pub(crate) key_expr: KeyExpr<'static>,
-    pub(crate) payload: ZBytes,
-    pub(crate) kind: SampleKind,
-    pub(crate) encoding: Encoding,
-    pub(crate) timestamp: Option<Timestamp>,
-    pub(crate) qos: QoS,
+    pub(in crate::sealed) key_expr: KeyExpr<'static>,
+    pub(in crate::sealed) payload: ZBytes,
+    pub(in crate::sealed) kind: SampleKind,
+    pub(in crate::sealed) encoding: Encoding,
+    pub(in crate::sealed) timestamp: Option<Timestamp>,
+    pub(in crate::sealed) qos: QoS,
 
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(in crate::sealed) source_info: SourceInfo,
 
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<ZBytes>,
+    pub(in crate::sealed) attachment: Option<ZBytes>,
 }
 
 impl Sample {
@@ -359,12 +359,12 @@ impl From<Sample> for Value {
 
 /// Structure containing quality of service data
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub(crate) struct QoS {
+pub(in crate::sealed) struct QoS {
     inner: QoSType,
 }
 
 #[derive(Debug)]
-pub(crate) struct QoSBuilder(QoS);
+pub(in crate::sealed) struct QoSBuilder(QoS);
 
 impl From<QoS> for QoSBuilder {
     fn from(qos: QoS) -> Self {
@@ -406,7 +406,7 @@ impl QoSBuilderTrait for QoSBuilder {
 
 impl QoS {
     /// Gets priority of the message.
-    pub fn priority(&self) -> Priority {
+    pub(in crate::sealed) fn priority(&self) -> Priority {
         match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
             Err(e) => {
@@ -420,12 +420,12 @@ impl QoS {
     }
 
     /// Gets congestion control of the message.
-    pub fn congestion_control(&self) -> CongestionControl {
+    pub(in crate::sealed) fn congestion_control(&self) -> CongestionControl {
         self.inner.get_congestion_control()
     }
 
     /// Gets express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
-    pub fn express(&self) -> bool {
+    pub(in crate::sealed) fn express(&self) -> bool {
         self.inner.is_express()
     }
 }

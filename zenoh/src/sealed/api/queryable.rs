@@ -15,7 +15,7 @@ use super::{
     builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
     bytes::ZBytes,
     encoding::Encoding,
-    handlers::{locked, DefaultHandler, IntoHandler},
+    handlers::{callback::locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     publication::Priority,
     sample::{Locality, QoSBuilder, Sample, SampleKind},
@@ -49,19 +49,19 @@ use {
     zenoh_protocol::core::EntityGlobalId,
 };
 
-pub(crate) struct QueryInner {
+pub(in crate::sealed) struct QueryInner {
     /// The key expression of this Query.
-    pub(crate) key_expr: KeyExpr<'static>,
+    pub(in crate::sealed) key_expr: KeyExpr<'static>,
     /// This Query's selector parameters.
-    pub(crate) parameters: Parameters<'static>,
+    pub(in crate::sealed) parameters: Parameters<'static>,
     /// This Query's body.
-    pub(crate) value: Option<Value>,
+    pub(in crate::sealed) value: Option<Value>,
 
-    pub(crate) qid: RequestId,
-    pub(crate) zid: ZenohId,
-    pub(crate) primitives: Arc<dyn Primitives>,
+    pub(in crate::sealed) qid: RequestId,
+    pub(in crate::sealed) zid: ZenohId,
+    pub(in crate::sealed) primitives: Arc<dyn Primitives>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<ZBytes>,
+    pub(in crate::sealed) attachment: Option<ZBytes>,
 }
 
 impl Drop for QueryInner {
@@ -77,8 +77,8 @@ impl Drop for QueryInner {
 /// Structs received by a [`Queryable`].
 #[derive(Clone)]
 pub struct Query {
-    pub(crate) inner: Arc<QueryInner>,
-    pub(crate) eid: EntityId,
+    pub(in crate::sealed) inner: Arc<QueryInner>,
+    pub(in crate::sealed) eid: EntityId,
 }
 
 impl Query {
@@ -256,21 +256,26 @@ impl fmt::Display for Query {
     }
 }
 
+#[cfg(feature = "unstable")]
+#[doc(hidden)]
 pub struct ReplySample<'a> {
     query: &'a Query,
     sample: Sample,
 }
 
+#[cfg(feature = "unstable")]
 impl Resolvable for ReplySample<'_> {
     type To = ZResult<()>;
 }
 
+#[cfg(feature = "unstable")]
 impl SyncResolve for ReplySample<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         self.query._reply_sample(self.sample)
     }
 }
 
+#[cfg(feature = "unstable")]
 impl AsyncResolve for ReplySample<'_> {
     type Future = Ready<Self::To>;
 
@@ -557,12 +562,12 @@ impl<'a> AsyncResolve for ReplyErrBuilder<'a> {
     }
 }
 
-pub(crate) struct QueryableState {
-    pub(crate) id: Id,
-    pub(crate) key_expr: WireExpr<'static>,
-    pub(crate) complete: bool,
-    pub(crate) origin: Locality,
-    pub(crate) callback: Arc<dyn Fn(Query) + Send + Sync>,
+pub(in crate::sealed) struct QueryableState {
+    pub(in crate::sealed) id: Id,
+    pub(in crate::sealed) key_expr: WireExpr<'static>,
+    pub(in crate::sealed) complete: bool,
+    pub(in crate::sealed) origin: Locality,
+    pub(in crate::sealed) callback: Arc<dyn Fn(Query) + Send + Sync>,
 }
 
 impl fmt::Debug for QueryableState {
@@ -603,10 +608,10 @@ impl fmt::Debug for QueryableState {
 /// # }
 /// ```
 #[derive(Debug)]
-pub(crate) struct CallbackQueryable<'a> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) state: Arc<QueryableState>,
-    pub(crate) alive: bool,
+pub(in crate::sealed) struct CallbackQueryable<'a> {
+    pub(in crate::sealed) session: SessionRef<'a>,
+    pub(in crate::sealed) state: Arc<QueryableState>,
+    pub(in crate::sealed) alive: bool,
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
@@ -677,11 +682,11 @@ impl Drop for CallbackQueryable<'_> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct QueryableBuilder<'a, 'b, Handler> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-    pub(crate) complete: bool,
-    pub(crate) origin: Locality,
-    pub(crate) handler: Handler,
+    pub(in crate::sealed) session: SessionRef<'a>,
+    pub(in crate::sealed) key_expr: ZResult<KeyExpr<'b>>,
+    pub(in crate::sealed) complete: bool,
+    pub(in crate::sealed) origin: Locality,
+    pub(in crate::sealed) handler: Handler,
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
@@ -848,8 +853,8 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Queryable<'a, Handler> {
-    pub(crate) queryable: CallbackQueryable<'a>,
-    pub(crate) handler: Handler,
+    pub(in crate::sealed) queryable: CallbackQueryable<'a>,
+    pub(in crate::sealed) handler: Handler,
 }
 
 impl<'a, Handler> Queryable<'a, Handler> {

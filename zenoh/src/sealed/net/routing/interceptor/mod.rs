@@ -31,10 +31,10 @@ use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-pub mod downsampling;
+pub(in crate::sealed) mod downsampling;
 use crate::sealed::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
 
-pub(crate) trait InterceptorTrait {
+pub(in crate::sealed) trait InterceptorTrait {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>>;
 
     fn intercept(
@@ -44,11 +44,11 @@ pub(crate) trait InterceptorTrait {
     ) -> Option<RoutingContext<NetworkMessage>>;
 }
 
-pub(crate) type Interceptor = Box<dyn InterceptorTrait + Send + Sync>;
-pub(crate) type IngressInterceptor = Interceptor;
-pub(crate) type EgressInterceptor = Interceptor;
+pub(in crate::sealed) type Interceptor = Box<dyn InterceptorTrait + Send + Sync>;
+pub(in crate::sealed) type IngressInterceptor = Interceptor;
+pub(in crate::sealed) type EgressInterceptor = Interceptor;
 
-pub(crate) trait InterceptorFactoryTrait {
+pub(in crate::sealed) trait InterceptorFactoryTrait {
     fn new_transport_unicast(
         &self,
         transport: &TransportUnicast,
@@ -57,9 +57,11 @@ pub(crate) trait InterceptorFactoryTrait {
     fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressInterceptor>;
 }
 
-pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sync>;
+pub(in crate::sealed) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sync>;
 
-pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorFactory>> {
+pub(in crate::sealed) fn interceptor_factories(
+    config: &Config,
+) -> ZResult<Vec<InterceptorFactory>> {
     let mut res: Vec<InterceptorFactory> = vec![];
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
@@ -68,13 +70,13 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     Ok(res)
 }
 
-pub(crate) struct InterceptorsChain {
-    pub(crate) interceptors: Vec<Interceptor>,
+pub(in crate::sealed) struct InterceptorsChain {
+    pub(in crate::sealed) interceptors: Vec<Interceptor>,
 }
 
 impl InterceptorsChain {
     #[allow(dead_code)]
-    pub(crate) fn empty() -> Self {
+    pub(in crate::sealed) fn empty() -> Self {
         Self {
             interceptors: vec![],
         }
@@ -120,13 +122,13 @@ impl InterceptorTrait for InterceptorsChain {
     }
 }
 
-pub(crate) struct ComputeOnMiss<T: InterceptorTrait> {
+pub(in crate::sealed) struct ComputeOnMiss<T: InterceptorTrait> {
     interceptor: T,
 }
 
 impl<T: InterceptorTrait> ComputeOnMiss<T> {
     #[allow(dead_code)]
-    pub(crate) fn new(interceptor: T) -> Self {
+    pub(in crate::sealed) fn new(interceptor: T) -> Self {
         Self { interceptor }
     }
 }
@@ -158,7 +160,7 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
     }
 }
 
-pub(crate) struct IngressMsgLogger {}
+pub(in crate::sealed) struct IngressMsgLogger {}
 
 impl InterceptorTrait for IngressMsgLogger {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
@@ -185,7 +187,7 @@ impl InterceptorTrait for IngressMsgLogger {
         Some(ctx)
     }
 }
-pub(crate) struct EgressMsgLogger {}
+pub(in crate::sealed) struct EgressMsgLogger {}
 
 impl InterceptorTrait for EgressMsgLogger {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
@@ -212,7 +214,7 @@ impl InterceptorTrait for EgressMsgLogger {
     }
 }
 
-pub(crate) struct LoggerInterceptor {}
+pub(in crate::sealed) struct LoggerInterceptor {}
 
 impl InterceptorFactoryTrait for LoggerInterceptor {
     fn new_transport_unicast(

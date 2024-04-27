@@ -17,8 +17,8 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-mod adminspace;
-pub mod orchestrator;
+pub mod adminspace;
+pub(in crate::sealed) mod orchestrator;
 
 use super::primitives::DeMux;
 use super::routing;
@@ -29,7 +29,6 @@ use crate::sealed::api::loader::{load_plugins, start_plugins};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use crate::sealed::api::plugins::PluginsManager;
 use crate::{GIT_VERSION, LONG_VERSION};
-pub use adminspace::AdminSpace;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
@@ -57,7 +56,7 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-pub(crate) struct RuntimeState {
+pub(in crate::sealed) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
     next_id: AtomicU32,
@@ -78,7 +77,7 @@ pub struct WeakRuntime {
 }
 
 impl WeakRuntime {
-    pub fn upgrade(&self) -> Option<Runtime> {
+    pub(in crate::sealed) fn upgrade(&self) -> Option<Runtime> {
         self.state.upgrade().map(|state| Runtime { state })
     }
 }
@@ -217,7 +216,7 @@ impl RuntimeBuilder {
 
         // Admin space
         if start_admin_space {
-            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+            adminspace::AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
         }
 
         Ok(runtime)
@@ -255,7 +254,7 @@ impl Runtime {
         }
     }
 
-    pub(crate) async fn init(
+    pub(in crate::sealed) async fn init(
         config: Config,
         #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
             Arc<SharedMemoryClientStorage>,
@@ -268,17 +267,17 @@ impl Runtime {
     }
 
     #[inline(always)]
-    pub(crate) fn manager(&self) -> &TransportManager {
+    pub(in crate::sealed) fn manager(&self) -> &TransportManager {
         &self.state.manager
     }
 
     #[cfg(all(feature = "unstable", feature = "plugins"))]
     #[inline(always)]
-    pub(crate) fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+    pub(in crate::sealed) fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
         zlock!(self.state.plugins_manager)
     }
 
-    pub(crate) fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
+    pub(in crate::sealed) fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
         zwrite!(self.state.transport_handlers).push(handler);
     }
 
@@ -322,7 +321,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(in crate::sealed) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -334,7 +333,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(in crate::sealed) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -344,7 +343,7 @@ impl Runtime {
             .spawn_abortable_with_rt(zenoh_runtime::ZRuntime::Net, future)
     }
 
-    pub(crate) fn router(&self) -> Arc<Router> {
+    pub(in crate::sealed) fn router(&self) -> Arc<Router> {
         self.state.router.clone()
     }
 

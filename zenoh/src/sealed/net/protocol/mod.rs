@@ -11,4 +11,4 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub(crate) mod linkstate;
+pub(in crate::sealed) mod linkstate;

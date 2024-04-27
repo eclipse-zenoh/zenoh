@@ -37,13 +37,13 @@ const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
 const ROUTER_DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 
-pub enum Loop {
+pub(in crate::sealed) enum Loop {
     Continue,
     Break,
 }
 
 impl Runtime {
-    pub(crate) async fn start(&mut self) -> ZResult<()> {
+    pub(in crate::sealed) async fn start(&mut self) -> ZResult<()> {
         match self.whatami() {
             WhatAmI::Client => self.start_client().await,
             WhatAmI::Peer => self.start_peer().await,
@@ -328,7 +328,7 @@ impl Runtime {
         }
     }
 
-    pub(crate) async fn update_peers(&self) -> ZResult<()> {
+    pub(in crate::sealed) async fn update_peers(&self) -> ZResult<()> {
         let peers = { self.state.config.lock().connect().endpoints().clone() };
         let tranports = self.manager().get_transports_unicast().await;
 
@@ -491,7 +491,7 @@ impl Runtime {
         }
     }
 
-    pub fn get_interfaces(names: &str) -> Vec<IpAddr> {
+    pub(in crate::sealed) fn get_interfaces(names: &str) -> Vec<IpAddr> {
         if names == "auto" {
             let ifaces = zenoh_util::net::get_multicast_interfaces();
             if ifaces.is_empty() {
@@ -525,7 +525,10 @@ impl Runtime {
         }
     }
 
-    pub async fn bind_mcast_port(sockaddr: &SocketAddr, ifaces: &[IpAddr]) -> ZResult<UdpSocket> {
+    pub(in crate::sealed) async fn bind_mcast_port(
+        sockaddr: &SocketAddr,
+        ifaces: &[IpAddr],
+    ) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -610,7 +613,7 @@ impl Runtime {
         Ok(udp_socket)
     }
 
-    pub fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
+    pub(in crate::sealed) fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -703,7 +706,7 @@ impl Runtime {
         }
     }
 
-    pub async fn scout<Fut, F>(
+    pub(in crate::sealed) async fn scout<Fut, F>(
         sockets: &[UdpSocket],
         matcher: WhatAmIMatcher,
         mcast_addr: &SocketAddr,
@@ -861,7 +864,7 @@ impl Runtime {
         false
     }
 
-    pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
+    pub(in crate::sealed) async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
         let manager = self.manager();
         if zid != &manager.zid() {
             let has_unicast = manager.get_transport_unicast(zid).await.is_some();

@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub(crate) mod linkstate;
+pub(in crate::sealed) mod linkstate;
 
 #[derive(Clone, Copy)]
-pub struct Zenoh080Routing;
+pub(in crate::sealed) struct Zenoh080Routing;
 
 impl Zenoh080Routing {
-    pub const fn new() -> Self {
+    pub(in crate::sealed) const fn new() -> Self {
         Self
     }
 }

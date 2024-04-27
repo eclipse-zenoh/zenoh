@@ -16,7 +16,7 @@ use crate::sealed::net::runtime::Runtime;
 use zenoh_config::{Config, PluginLoad};
 use zenoh_result::ZResult;
 
-pub(crate) fn load_plugin(
+pub(in crate::sealed) fn load_plugin(
     plugin_mgr: &mut PluginsManager,
     name: &str,
     paths: &Option<Vec<String>>,
@@ -43,7 +43,7 @@ pub(crate) fn load_plugin(
     Ok(())
 }
 
-pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
+pub(in crate::sealed) fn load_plugins(config: &Config) -> PluginsManager {
     let mut manager = PluginsManager::dynamic(config.libloader(), PLUGIN_PREFIX.to_string());
     // Static plugins are to be added here, with `.add_static::<PluginType>()`
     for plugin_load in config.plugins().load_requests() {
@@ -67,7 +67,7 @@ pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
     manager
 }
 
-pub(crate) fn start_plugins(runtime: &Runtime) {
+pub(in crate::sealed) fn start_plugins(runtime: &Runtime) {
     let mut manager = runtime.plugins_manager();
     for plugin in manager.loaded_plugins_iter_mut() {
         let required = plugin.required();

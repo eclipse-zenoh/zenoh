@@ -28,7 +28,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-pub(crate) fn declare_subscription(
+pub(in crate::sealed) fn declare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -97,7 +97,7 @@ pub(crate) fn declare_subscription(
     }
 }
 
-pub(crate) fn undeclare_subscription(
+pub(in crate::sealed) fn undeclare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -196,13 +196,16 @@ fn compute_data_routes_(tables: &Tables, routes: &mut DataRoutes, expr: &mut Rou
     }
 }
 
-pub(crate) fn compute_data_routes(tables: &Tables, expr: &mut RoutingExpr) -> DataRoutes {
+pub(in crate::sealed) fn compute_data_routes(
+    tables: &Tables,
+    expr: &mut RoutingExpr,
+) -> DataRoutes {
     let mut routes = DataRoutes::default();
     compute_data_routes_(tables, &mut routes, expr);
     routes
 }
 
-pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
+pub(in crate::sealed) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         let mut res_mut = res.clone();
         let res_mut = get_mut_unchecked(&mut res_mut);
@@ -214,7 +217,7 @@ pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
     }
 }
 
-pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(in crate::sealed) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     update_data_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
@@ -222,7 +225,7 @@ pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resourc
     }
 }
 
-pub(crate) fn compute_matches_data_routes<'a>(
+pub(in crate::sealed) fn compute_matches_data_routes<'a>(
     tables: &'a Tables,
     res: &'a Arc<Resource>,
 ) -> Vec<(Arc<Resource>, DataRoutes)> {
@@ -242,7 +245,10 @@ pub(crate) fn compute_matches_data_routes<'a>(
     routes
 }
 
-pub(crate) fn update_matches_data_routes<'a>(tables: &'a mut Tables, res: &'a mut Arc<Resource>) {
+pub(in crate::sealed) fn update_matches_data_routes<'a>(
+    tables: &'a mut Tables,
+    res: &'a mut Arc<Resource>,
+) {
     if res.context.is_some() {
         update_data_routes(tables, res);
         for match_ in &res.context().matches {
@@ -254,7 +260,10 @@ pub(crate) fn update_matches_data_routes<'a>(tables: &'a mut Tables, res: &'a mu
     }
 }
 
-pub(crate) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(in crate::sealed) fn disable_matches_data_routes(
+    _tables: &mut Tables,
+    res: &mut Arc<Resource>,
+) {
     if res.context.is_some() {
         get_mut_unchecked(res).context_mut().disable_data_routes();
         for match_ in &res.context().matches {
@@ -326,7 +335,7 @@ fn get_data_route(
 
 #[zenoh_macros::unstable]
 #[inline]
-pub(crate) fn get_local_data_route(
+pub(in crate::sealed) fn get_local_data_route(
     tables: &Tables,
     res: &Option<Arc<Resource>>,
     expr: &mut RoutingExpr,
@@ -374,7 +383,7 @@ macro_rules! inc_stats {
     };
 }
 
-pub fn full_reentrant_route_data(
+pub(in crate::sealed) fn full_reentrant_route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
     expr: &WireExpr,

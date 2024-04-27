@@ -42,7 +42,7 @@ use zenoh_result::{Error, ZResult};
 
 #[zenoh_macros::unstable]
 use {
-    super::handlers::{Callback, DefaultHandler, IntoHandler},
+    super::handlers::{callback::locked, callback::Callback, DefaultHandler, IntoHandler},
     super::sample::SourceInfo,
     super::Id,
     zenoh_protocol::core::EntityGlobalId,
@@ -111,14 +111,14 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// ```
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
-    pub(crate) session: SessionRef<'a>,
+    pub(in crate::sealed) session: SessionRef<'a>,
     #[cfg(feature = "unstable")]
-    pub(crate) eid: EntityId,
-    pub(crate) key_expr: KeyExpr<'a>,
-    pub(crate) congestion_control: CongestionControl,
-    pub(crate) priority: Priority,
-    pub(crate) is_express: bool,
-    pub(crate) destination: Locality,
+    pub(in crate::sealed) eid: EntityId,
+    pub(in crate::sealed) key_expr: KeyExpr<'a>,
+    pub(in crate::sealed) congestion_control: CongestionControl,
+    pub(in crate::sealed) priority: Priority,
+    pub(in crate::sealed) is_express: bool,
+    pub(in crate::sealed) destination: Locality,
 }
 
 impl<'a> Publisher<'a> {
@@ -531,7 +531,7 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 }
 
 impl Publisher<'_> {
-    pub(crate) fn resolve_put(
+    pub fn resolve_put(
         &self,
         payload: ZBytes,
         kind: SampleKind,
@@ -736,7 +736,7 @@ impl TryFrom<ProtocolPriority> for Priority {
 #[zenoh_macros::unstable]
 #[derive(Copy, Clone, Debug)]
 pub struct MatchingStatus {
-    pub(crate) matching: bool,
+    pub(in crate::sealed) matching: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -768,8 +768,8 @@ impl MatchingStatus {
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct MatchingListenerBuilder<'a, Handler> {
-    pub(crate) publisher: PublisherRef<'a>,
-    pub handler: Handler,
+    pub(in crate::sealed) publisher: PublisherRef<'a>,
+    pub(in crate::sealed) handler: Handler,
 }
 
 #[zenoh_macros::unstable]
@@ -842,7 +842,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     where
         CallbackMut: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
-        self.callback(super::handlers::locked(callback))
+        self.callback(locked(callback))
     }
 
     /// Receive the MatchingStatuses for this listener with a [`Handler`](crate::prelude::IntoHandler).
@@ -931,12 +931,12 @@ where
 }
 
 #[zenoh_macros::unstable]
-pub(crate) struct MatchingListenerState {
-    pub(crate) id: Id,
-    pub(crate) current: std::sync::Mutex<bool>,
-    pub(crate) key_expr: KeyExpr<'static>,
-    pub(crate) destination: Locality,
-    pub(crate) callback: Callback<'static, MatchingStatus>,
+pub struct MatchingListenerState {
+    pub(in crate::sealed) id: Id,
+    pub(in crate::sealed) current: std::sync::Mutex<bool>,
+    pub(in crate::sealed) key_expr: KeyExpr<'static>,
+    pub(in crate::sealed) destination: Locality,
+    pub(in crate::sealed) callback: Callback<'static, MatchingStatus>,
 }
 
 #[zenoh_macros::unstable]
@@ -950,10 +950,10 @@ impl std::fmt::Debug for MatchingListenerState {
 }
 
 #[zenoh_macros::unstable]
-pub(crate) struct MatchingListenerInner<'a> {
-    pub(crate) publisher: PublisherRef<'a>,
-    pub(crate) state: std::sync::Arc<MatchingListenerState>,
-    pub(crate) alive: bool,
+pub(in crate::sealed) struct MatchingListenerInner<'a> {
+    pub(in crate::sealed) publisher: PublisherRef<'a>,
+    pub(in crate::sealed) state: std::sync::Arc<MatchingListenerState>,
+    pub(in crate::sealed) alive: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -994,8 +994,8 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 /// ```
 #[zenoh_macros::unstable]
 pub struct MatchingListener<'a, Receiver> {
-    pub(crate) listener: MatchingListenerInner<'a>,
-    pub(crate) receiver: Receiver,
+    pub(in crate::sealed) listener: MatchingListenerInner<'a>,
+    pub(in crate::sealed) receiver: Receiver,
 }
 
 #[zenoh_macros::unstable]

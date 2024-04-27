@@ -45,7 +45,7 @@ lazy_static::lazy_static!(
     static ref KE_LINK: &'static keyexpr = ke_for_sure!("link");
 );
 
-pub(crate) fn init(session: &Session) {
+pub(in crate::sealed) fn init(session: &Session) {
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
         let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_STARSTAR)
             .to_wire(session)
@@ -63,7 +63,7 @@ pub(crate) fn init(session: &Session) {
     }
 }
 
-pub(crate) fn on_admin_query(session: &Session, query: Query) {
+pub(in crate::sealed) fn on_admin_query(session: &Session, query: Query) {
     fn reply_peer(own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
         let zid = peer.zid.to_string();
         if let Ok(zid) = keyexpr::new(&zid) {
@@ -119,12 +119,12 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
 }
 
 #[derive(Clone)]
-pub(crate) struct Handler {
-    pub(crate) session: Arc<Session>,
+pub(in crate::sealed) struct Handler {
+    pub(in crate::sealed) session: Arc<Session>,
 }
 
 impl Handler {
-    pub(crate) fn new(session: Session) -> Self {
+    pub(in crate::sealed) fn new(session: Session) -> Self {
         Self {
             session: Arc::new(session),
         }
@@ -190,9 +190,9 @@ impl TransportMulticastEventHandler for Handler {
     }
 }
 
-pub(crate) struct PeerHandler {
-    pub(crate) expr: WireExpr<'static>,
-    pub(crate) session: Arc<Session>,
+pub(in crate::sealed) struct PeerHandler {
+    pub(in crate::sealed) expr: WireExpr<'static>,
+    pub(in crate::sealed) session: Arc<Session>,
 }
 
 impl TransportPeerEventHandler for PeerHandler {

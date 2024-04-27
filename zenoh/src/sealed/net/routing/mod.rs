@@ -17,10 +17,10 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-pub mod dispatcher;
-pub mod hat;
-pub mod interceptor;
-pub mod router;
+pub(in crate::sealed) mod dispatcher;
+pub(in crate::sealed) mod hat;
+pub(in crate::sealed) mod interceptor;
+pub(in crate::sealed) mod router;
 
 use std::{cell::OnceCell, sync::Arc};
 
@@ -31,19 +31,19 @@ use self::{dispatcher::face::Face, router::Resource};
 
 use super::runtime;
 
-pub(crate) static PREFIX_LIVELINESS: &str = "@/liveliness";
+pub(in crate::sealed) static PREFIX_LIVELINESS: &str = "@/liveliness";
 
-pub(crate) struct RoutingContext<Msg> {
-    pub(crate) msg: Msg,
-    pub(crate) inface: OnceCell<Face>,
-    pub(crate) outface: OnceCell<Face>,
-    pub(crate) prefix: OnceCell<Arc<Resource>>,
-    pub(crate) full_expr: OnceCell<String>,
+pub(in crate::sealed) struct RoutingContext<Msg> {
+    pub(in crate::sealed) msg: Msg,
+    pub(in crate::sealed) inface: OnceCell<Face>,
+    pub(in crate::sealed) outface: OnceCell<Face>,
+    pub(in crate::sealed) prefix: OnceCell<Arc<Resource>>,
+    pub(in crate::sealed) full_expr: OnceCell<String>,
 }
 
 impl<Msg> RoutingContext<Msg> {
     #[allow(dead_code)]
-    pub(crate) fn new(msg: Msg) -> Self {
+    pub(in crate::sealed) fn new(msg: Msg) -> Self {
         Self {
             msg,
             inface: OnceCell::new(),
@@ -54,7 +54,7 @@ impl<Msg> RoutingContext<Msg> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn new_in(msg: Msg, inface: Face) -> Self {
+    pub(in crate::sealed) fn new_in(msg: Msg, inface: Face) -> Self {
         Self {
             msg,
             inface: OnceCell::from(inface),
@@ -65,7 +65,7 @@ impl<Msg> RoutingContext<Msg> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn new_out(msg: Msg, outface: Face) -> Self {
+    pub(in crate::sealed) fn new_out(msg: Msg, outface: Face) -> Self {
         Self {
             msg,
             inface: OnceCell::new(),
@@ -76,7 +76,7 @@ impl<Msg> RoutingContext<Msg> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn with_expr(msg: Msg, expr: String) -> Self {
+    pub(in crate::sealed) fn with_expr(msg: Msg, expr: String) -> Self {
         Self {
             msg,
             inface: OnceCell::new(),
@@ -87,19 +87,19 @@ impl<Msg> RoutingContext<Msg> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn inface(&self) -> Option<&Face> {
+    pub(in crate::sealed) fn inface(&self) -> Option<&Face> {
         self.inface.get()
     }
 
     #[allow(dead_code)]
-    pub(crate) fn outface(&self) -> Option<&Face> {
+    pub(in crate::sealed) fn outface(&self) -> Option<&Face> {
         self.outface.get()
     }
 }
 
 impl RoutingContext<NetworkMessage> {
     #[inline]
-    pub(crate) fn wire_expr(&self) -> Option<&WireExpr> {
+    pub(in crate::sealed) fn wire_expr(&self) -> Option<&WireExpr> {
         use zenoh_protocol::network::DeclareBody;
         use zenoh_protocol::network::NetworkBody;
         match &self.msg.body {
@@ -124,7 +124,7 @@ impl RoutingContext<NetworkMessage> {
     }
 
     #[inline]
-    pub(crate) fn prefix(&self) -> Option<&Arc<Resource>> {
+    pub(in crate::sealed) fn prefix(&self) -> Option<&Arc<Resource>> {
         if let Some(face) = self.outface.get() {
             if let Some(wire_expr) = self.wire_expr() {
                 let wire_expr = wire_expr.to_owned();
@@ -158,7 +158,7 @@ impl RoutingContext<NetworkMessage> {
 
     #[inline]
     #[allow(dead_code)]
-    pub(crate) fn full_expr(&self) -> Option<&str> {
+    pub(in crate::sealed) fn full_expr(&self) -> Option<&str> {
         if self.full_expr.get().is_some() {
             return Some(self.full_expr.get().as_ref().unwrap());
         }
@@ -172,7 +172,7 @@ impl RoutingContext<NetworkMessage> {
     }
 
     #[inline]
-    pub(crate) fn full_key_expr(&self) -> Option<OwnedKeyExpr> {
+    pub(in crate::sealed) fn full_key_expr(&self) -> Option<OwnedKeyExpr> {
         let full_expr = self.full_expr()?;
         OwnedKeyExpr::new(full_expr).ok()
     }

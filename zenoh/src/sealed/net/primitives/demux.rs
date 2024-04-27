@@ -24,14 +24,14 @@ use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 use zenoh_transport::TransportPeerEventHandler;
 
-pub struct DeMux {
+pub(in crate::sealed) struct DeMux {
     face: Face,
-    pub(crate) transport: Option<TransportUnicast>,
-    pub(crate) interceptor: Arc<InterceptorsChain>,
+    pub(in crate::sealed) transport: Option<TransportUnicast>,
+    pub(in crate::sealed) interceptor: Arc<InterceptorsChain>,
 }
 
 impl DeMux {
-    pub(crate) fn new(
+    pub(in crate::sealed) fn new(
         face: Face,
         transport: Option<TransportUnicast>,
         interceptor: Arc<InterceptorsChain>,

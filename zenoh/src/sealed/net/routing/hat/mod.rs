@@ -47,18 +47,18 @@ mod p2p_peer;
 mod router;
 
 zconfigurable! {
-    pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
+    pub(in crate::sealed) static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
 #[derive(serde::Serialize)]
-pub(crate) struct Sources {
+pub(in crate::sealed) struct Sources {
     routers: Vec<ZenohId>,
     peers: Vec<ZenohId>,
     clients: Vec<ZenohId>,
 }
 
 impl Sources {
-    pub(crate) fn empty() -> Self {
+    pub(in crate::sealed) fn empty() -> Self {
         Self {
             routers: vec![],
             peers: vec![],
@@ -67,9 +67,12 @@ impl Sources {
     }
 }
 
-pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
+pub(in crate::sealed) trait HatTrait:
+    HatBaseTrait + HatPubSubTrait + HatQueriesTrait
+{
+}
 
-pub(crate) trait HatBaseTrait {
+pub(in crate::sealed) trait HatBaseTrait {
     fn as_any(&self) -> &dyn Any;
 
     fn init(&self, tables: &mut Tables, runtime: Runtime);
@@ -132,7 +135,7 @@ pub(crate) trait HatBaseTrait {
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>);
 }
 
-pub(crate) trait HatPubSubTrait {
+pub(in crate::sealed) trait HatPubSubTrait {
     fn declare_subscription(
         &self,
         tables: &mut Tables,
@@ -164,7 +167,7 @@ pub(crate) trait HatPubSubTrait {
     fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
 }
 
-pub(crate) trait HatQueriesTrait {
+pub(in crate::sealed) trait HatQueriesTrait {
     fn declare_queryable(
         &self,
         tables: &mut Tables,
@@ -204,7 +207,10 @@ pub(crate) trait HatQueriesTrait {
     ) -> Vec<(WireExpr<'static>, ZBuf)>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
+pub(in crate::sealed) fn new_hat(
+    whatami: WhatAmI,
+    config: &Config,
+) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
         WhatAmI::Client => Box::new(client::HatCode {}),
         WhatAmI::Peer => {

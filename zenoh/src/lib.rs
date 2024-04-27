@@ -177,6 +177,7 @@ pub mod key_expr {
         pub use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
     }
     pub use crate::sealed::api::key_expr::KeyExpr;
+    pub use crate::sealed::api::key_expr::KeyExprUndeclaration;
     pub use zenoh_keyexpr::keyexpr;
     pub use zenoh_keyexpr::OwnedKeyExpr;
     pub use zenoh_keyexpr::SetIntersectionLevel;
@@ -198,24 +199,42 @@ pub mod session {
     #[doc(hidden)]
     pub use crate::sealed::api::session::init;
     pub use crate::sealed::api::session::open;
+    #[zenoh_macros::unstable]
+    #[doc(hidden)]
+    pub use crate::sealed::api::session::InitBuilder;
+    pub use crate::sealed::api::session::OpenBuilder;
     pub use crate::sealed::api::session::Session;
     pub use crate::sealed::api::session::SessionDeclarations;
     pub use crate::sealed::api::session::SessionRef;
+    pub use crate::sealed::api::session::Undeclarable;
+}
+
+/// Tools to access information about the current zenoh [`Session`](crate::Session).
+pub mod info {
+    pub use crate::sealed::api::info::PeersZidBuilder;
+    pub use crate::sealed::api::info::RoutersZidBuilder;
+    pub use crate::sealed::api::info::SessionInfo;
+    pub use crate::sealed::api::info::ZidBuilder;
 }
 
 /// Sample primitives
 pub mod sample {
     pub use crate::sealed::api::builders::sample::QoSBuilderTrait;
     pub use crate::sealed::api::builders::sample::SampleBuilder;
+    pub use crate::sealed::api::builders::sample::SampleBuilderAny;
+    pub use crate::sealed::api::builders::sample::SampleBuilderDelete;
+    pub use crate::sealed::api::builders::sample::SampleBuilderPut;
     pub use crate::sealed::api::builders::sample::SampleBuilderTrait;
     pub use crate::sealed::api::builders::sample::TimestampBuilderTrait;
     pub use crate::sealed::api::builders::sample::ValueBuilderTrait;
     #[zenoh_macros::unstable]
     pub use crate::sealed::api::sample::Locality;
     pub use crate::sealed::api::sample::Sample;
+    pub use crate::sealed::api::sample::SampleFields;
     pub use crate::sealed::api::sample::SampleKind;
     #[zenoh_macros::unstable]
     pub use crate::sealed::api::sample::SourceInfo;
+    pub use crate::sealed::api::sample::SourceSn;
 }
 
 /// Value primitives
@@ -231,10 +250,14 @@ pub mod encoding {
 /// Payload primitives
 pub mod bytes {
     pub use crate::sealed::api::bytes::Deserialize;
+    pub use crate::sealed::api::bytes::OptionZBytes;
     pub use crate::sealed::api::bytes::Serialize;
     pub use crate::sealed::api::bytes::StringOrBase64;
     pub use crate::sealed::api::bytes::ZBytes;
+    pub use crate::sealed::api::bytes::ZBytesIterator;
     pub use crate::sealed::api::bytes::ZBytesReader;
+    pub use crate::sealed::api::bytes::ZBytesWriter;
+    pub use crate::sealed::api::bytes::ZDeserializeError;
     pub use crate::sealed::api::bytes::ZSerde;
 }
 
@@ -258,18 +281,33 @@ pub mod subscriber {
 
 /// Publishing primitives
 pub mod publication {
+    pub use crate::sealed::api::builders::publication::PublicationBuilderDelete;
+    pub use crate::sealed::api::builders::publication::PublicationBuilderPut;
     pub use crate::sealed::api::builders::publication::PublisherBuilder;
+    pub use crate::sealed::api::builders::publication::PublisherDeleteBuilder;
     #[zenoh_macros::unstable]
     pub use crate::sealed::api::publication::MatchingListener;
+    #[zenoh_macros::unstable]
+    pub use crate::sealed::api::publication::MatchingListenerBuilder;
+    #[zenoh_macros::unstable]
+    pub use crate::sealed::api::publication::MatchingListenerState;
+    #[zenoh_macros::unstable]
+    pub use crate::sealed::api::publication::MatchingListenerUndeclaration;
+    #[zenoh_macros::unstable]
+    pub use crate::sealed::api::publication::MatchingStatus;
     pub use crate::sealed::api::publication::Priority;
     pub use crate::sealed::api::publication::Publisher;
     #[zenoh_macros::unstable]
     pub use crate::sealed::api::publication::PublisherDeclarations;
+    #[zenoh_macros::unstable]
+    pub use crate::sealed::api::publication::PublisherRef;
+    pub use crate::sealed::api::publication::PublisherUndeclaration;
     pub use zenoh_protocol::core::CongestionControl;
 }
 
 /// Query primitives
 pub mod query {
+    pub use crate::sealed::api::query::GetBuilder;
     pub use crate::sealed::api::query::Reply;
     #[zenoh_macros::unstable]
     pub use crate::sealed::api::query::ReplyKeyExpr;
@@ -283,19 +321,31 @@ pub mod queryable {
     pub use crate::sealed::api::queryable::Query;
     pub use crate::sealed::api::queryable::Queryable;
     pub use crate::sealed::api::queryable::QueryableBuilder;
+    pub use crate::sealed::api::queryable::QueryableUndeclaration;
+    pub use crate::sealed::api::queryable::ReplyBuilder;
+    pub use crate::sealed::api::queryable::ReplyBuilderDelete;
+    pub use crate::sealed::api::queryable::ReplyBuilderPut;
+    pub use crate::sealed::api::queryable::ReplyErrBuilder;
+    #[zenoh_macros::unstable]
+    pub use crate::sealed::api::queryable::ReplySample;
 }
 
 /// Callback handler trait
 pub mod handlers {
-    pub use crate::sealed::api::handlers::locked;
+    pub use crate::sealed::api::handlers::callback::locked;
+    pub use crate::sealed::api::handlers::callback::Callback;
+    pub use crate::sealed::api::handlers::callback::CallbackDrop;
+    pub use crate::sealed::api::handlers::fifo::FifoChannel;
+    pub use crate::sealed::api::handlers::ring::RingChannel;
+    pub use crate::sealed::api::handlers::ring::RingChannelHandler;
     pub use crate::sealed::api::handlers::DefaultHandler;
     pub use crate::sealed::api::handlers::IntoHandler;
-    pub use crate::sealed::api::handlers::RingChannel;
 }
 
 /// Scouting primitives
 pub mod scouting {
     pub use crate::sealed::api::scouting::scout;
+    pub use crate::sealed::api::scouting::Scout;
     pub use crate::sealed::api::scouting::ScoutBuilder;
     /// Constants and helpers for zenoh `whatami` flags.
     pub use zenoh_protocol::core::WhatAmI;
@@ -307,8 +357,11 @@ pub mod scouting {
 #[cfg(feature = "unstable")]
 pub mod liveliness {
     pub use crate::sealed::api::liveliness::Liveliness;
+    pub use crate::sealed::api::liveliness::LivelinessGetBuilder;
     pub use crate::sealed::api::liveliness::LivelinessSubscriberBuilder;
     pub use crate::sealed::api::liveliness::LivelinessToken;
+    pub use crate::sealed::api::liveliness::LivelinessTokenBuilder;
+    pub use crate::sealed::api::liveliness::LivelinessTokenUndeclaration;
 }
 
 /// Timestamp support
@@ -322,7 +375,7 @@ pub mod time {
 #[doc(hidden)]
 pub mod runtime {
     pub use crate::sealed::net::runtime::RuntimeBuilder;
-    pub use crate::sealed::net::runtime::{AdminSpace, Runtime};
+    pub use crate::sealed::net::runtime::{adminspace::AdminSpace, Runtime};
     pub use zenoh_runtime::ZRuntime;
 }
 
@@ -341,6 +394,7 @@ pub mod plugins {
     pub use crate::sealed::api::plugins::PluginsManager;
     pub use crate::sealed::api::plugins::Response;
     pub use crate::sealed::api::plugins::RunningPlugin;
+    pub use crate::sealed::api::plugins::PLUGIN_PREFIX;
     pub use crate::sealed::api::plugins::{RunningPluginTrait, ZenohPlugin};
 }
 

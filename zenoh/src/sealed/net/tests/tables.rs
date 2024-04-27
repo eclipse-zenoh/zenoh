@@ -443,20 +443,20 @@ async fn clean_test() {
     assert!(res3.upgrade().is_none());
 }
 
-pub struct ClientPrimitives {
+pub(in crate::sealed) struct ClientPrimitives {
     data: std::sync::Mutex<Option<WireExpr<'static>>>,
     mapping: std::sync::Mutex<std::collections::HashMap<ExprId, String>>,
 }
 
 impl ClientPrimitives {
-    pub fn new() -> ClientPrimitives {
+    pub(in crate::sealed) fn new() -> ClientPrimitives {
         ClientPrimitives {
             data: std::sync::Mutex::new(None),
             mapping: std::sync::Mutex::new(std::collections::HashMap::new()),
         }
     }
 
-    pub fn clear_data(&self) {
+    pub(in crate::sealed) fn clear_data(&self) {
         *self.data.lock().unwrap() = None;
     }
 }

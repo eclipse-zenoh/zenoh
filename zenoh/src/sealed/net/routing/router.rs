@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::dispatcher::face::{Face, FaceState};
-pub use super::dispatcher::pubsub::*;
-pub use super::dispatcher::queries::*;
-pub use super::dispatcher::resource::*;
+pub(in crate::sealed) use super::dispatcher::pubsub::*;
+pub(in crate::sealed) use super::dispatcher::queries::*;
+pub(in crate::sealed) use super::dispatcher::resource::*;
 use super::dispatcher::tables::Tables;
 use super::dispatcher::tables::TablesLock;
 use super::hat;
@@ -39,13 +39,13 @@ use zenoh_transport::TransportPeer;
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;
 
-pub struct Router {
+pub(in crate::sealed) struct Router {
     // whatami: WhatAmI,
-    pub tables: Arc<TablesLock>,
+    pub(in crate::sealed) tables: Arc<TablesLock>,
 }
 
 impl Router {
-    pub fn new(
+    pub(in crate::sealed) fn new(
         zid: ZenohId,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
@@ -62,13 +62,13 @@ impl Router {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn init_link_state(&mut self, runtime: Runtime) {
+    pub(in crate::sealed) fn init_link_state(&mut self, runtime: Runtime) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         ctrl_lock.init(&mut tables, runtime)
     }
 
-    pub(crate) fn new_primitives(
+    pub(in crate::sealed) fn new_primitives(
         &self,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
     ) -> Arc<Face> {
@@ -109,7 +109,10 @@ impl Router {
         Arc::new(face)
     }
 
-    pub fn new_transport_unicast(&self, transport: TransportUnicast) -> ZResult<Arc<DeMux>> {
+    pub(in crate::sealed) fn new_transport_unicast(
+        &self,
+        transport: TransportUnicast,
+    ) -> ZResult<Arc<DeMux>> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
 
@@ -162,7 +165,10 @@ impl Router {
         Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
     }
 
-    pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
+    pub(in crate::sealed) fn new_transport_multicast(
+        &self,
+        transport: TransportMulticast,
+    ) -> ZResult<()> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
@@ -198,7 +204,7 @@ impl Router {
         Ok(())
     }
 
-    pub fn new_peer_multicast(
+    pub(in crate::sealed) fn new_peer_multicast(
         &self,
         transport: TransportMulticast,
         peer: TransportPeer,

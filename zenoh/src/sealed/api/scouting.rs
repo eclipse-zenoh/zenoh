@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::handlers::{locked, Callback, DefaultHandler, IntoHandler};
+use super::handlers::{callback::locked, callback::Callback, DefaultHandler, IntoHandler};
 use crate::sealed::net::runtime::{orchestrator::Loop, Runtime};
 use std::time::Duration;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
@@ -41,9 +41,9 @@ use zenoh_task::TerminatableTask;
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct ScoutBuilder<Handler> {
-    pub(crate) what: WhatAmIMatcher,
-    pub(crate) config: ZResult<crate::config::Config>,
-    pub(crate) handler: Handler,
+    pub(in crate::sealed) what: WhatAmIMatcher,
+    pub(in crate::sealed) config: ZResult<crate::config::Config>,
+    pub(in crate::sealed) handler: Handler,
 }
 
 impl ScoutBuilder<DefaultHandler> {
@@ -191,9 +191,9 @@ where
 ///     .unwrap();
 /// # }
 /// ```
-pub(crate) struct ScoutInner {
+pub(in crate::sealed) struct ScoutInner {
     #[allow(dead_code)]
-    pub(crate) scout_task: Option<TerminatableTask>,
+    pub(in crate::sealed) scout_task: Option<TerminatableTask>,
 }
 
 impl ScoutInner {
@@ -254,8 +254,8 @@ impl fmt::Debug for ScoutInner {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Scout<Receiver> {
-    pub(crate) scout: ScoutInner,
-    pub(crate) receiver: Receiver,
+    pub(in crate::sealed) scout: ScoutInner,
+    pub(in crate::sealed) receiver: Receiver,
 }
 
 impl<Receiver> Deref for Scout<Receiver> {
