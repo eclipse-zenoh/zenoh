@@ -14,7 +14,7 @@
 
 #[test]
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-fn shm_payload_single_buf() {
+fn shm_bytes_single_buf() {
     use zenoh::prelude::r#async::*;
 
     // create an SHM backend...
