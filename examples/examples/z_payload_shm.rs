@@ -11,16 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::shm::slice::zsliceshm::{zsliceshm, ZSliceShm};
-use zenoh::shm::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
 use zenoh::{
     bytes::ZBytes,
     shm::{
-        protocol_implementations::posix::{
-            posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-            protocol_id::POSIX_PROTOCOL_ID,
-        },
-        provider::shared_memory_provider::SharedMemoryProviderBuilder,
+        zsliceshm, zsliceshmmut, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder,
+        ZSliceShm, ZSliceShmMut, POSIX_PROTOCOL_ID,
     },
 };
 

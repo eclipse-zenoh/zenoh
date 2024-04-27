@@ -371,6 +371,7 @@ pub mod shm {
     pub use zenoh_shm::api::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
     pub use zenoh_shm::api::{
         protocol_implementations::posix::{
+            posix_shared_memory_client::PosixSharedMemoryClient,
             posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
             protocol_id::POSIX_PROTOCOL_ID,
         },
