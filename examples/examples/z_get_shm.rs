@@ -12,17 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
+use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
 const N: usize = 10;
 
 #[tokio::main]
-async fn main() -> Result<(), ZError> {
-    // Initiate logging
+async fn main() {
+    // initiate logging
     zenoh_util::try_init_log_from_env();
 
-    let (mut config, path, value) = parse_args();
+    let (mut config, selector, mut value, target, timeout) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
@@ -61,8 +62,6 @@ async fn main() -> Result<(), ZError> {
         .backend(backend)
         .res();
 
-    let publisher = session.declare_publisher(&path).res().await.unwrap();
-
     println!("Allocating Shared Memory Buffer...");
     let layout = shared_memory_provider
         .alloc_layout()
@@ -70,51 +69,90 @@ async fn main() -> Result<(), ZError> {
         .res()
         .unwrap();
 
-    println!("Press CTRL-C to quit...");
-    for idx in 0..u32::MAX {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let mut sbuf = layout
+        .alloc()
+        .with_policy::<BlockOn<GarbageCollect>>()
+        .res_async()
+        .await
+        .unwrap();
 
-        let mut sbuf = layout
-            .alloc()
-            .with_policy::<BlockOn<GarbageCollect>>()
-            .res_async()
-            .await
-            .unwrap();
+    let content = value
+        .take()
+        .unwrap_or_else(|| "Get from SharedMemory Rust!".to_string());
+    sbuf[0..content.len()].copy_from_slice(content.as_bytes());
 
-        // We reserve a small space at the beginning of the buffer to include the iteration index
-        // of the write. This is simply to have the same format as zn_pub.
-        let prefix = format!("[{idx:4}] ");
-        let prefix_len = prefix.as_bytes().len();
-        let slice_len = prefix_len + value.as_bytes().len();
+    println!("Sending Query '{selector}'...");
+    let replies = session
+        .get(&selector)
+        .value(sbuf)
+        .target(target)
+        .timeout(timeout)
+        .res()
+        .await
+        .unwrap();
 
-        sbuf[0..prefix_len].copy_from_slice(prefix.as_bytes());
-        sbuf[prefix_len..slice_len].copy_from_slice(value.as_bytes());
-
-        // Write the data
-        println!(
-            "Put SHM Data ('{}': '{}')",
-            path,
-            String::from_utf8_lossy(&sbuf[0..slice_len])
-        );
-        publisher.put(sbuf).res().await?;
+    while let Ok(reply) = replies.recv_async().await {
+        match reply.result() {
+            Ok(sample) => {
+                print!(">> Received ('{}': ", sample.key_expr().as_str());
+                match sample.payload().deserialize::<&zsliceshm>() {
+                    Ok(payload) => println!("'{}')", String::from_utf8_lossy(payload),),
+                    Err(e) => println!("'Not a SharedMemoryBuf: {:?}')", e),
+                }
+            }
+            Err(err) => {
+                let payload = err
+                    .payload()
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
+                println!(">> Received (ERROR: '{}')", payload);
+            }
+        }
     }
-
-    Ok(())
 }
 
-#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+#[value(rename_all = "SCREAMING_SNAKE_CASE")]
+enum Qt {
+    BestMatching,
+    All,
+    AllComplete,
+}
+
+#[derive(Parser, Clone, Debug)]
 struct Args {
-    #[arg(short, long, default_value = "demo/example/zenoh-rs-pub")]
-    /// The key expression to publish onto.
-    path: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Pub from SharedMemory Rust!")]
-    /// The value of to publish.
-    value: String,
+    #[arg(short, long, default_value = "demo/example/**")]
+    /// The selection of resources to query
+    selector: Selector<'static>,
+    /// The value to publish.
+    value: Option<String>,
+    #[arg(short, long, default_value = "BEST_MATCHING")]
+    /// The target queryables of the query.
+    target: Qt,
+    #[arg(short = 'o', long, default_value = "10000")]
+    /// The query timeout in milliseconds.
+    timeout: u64,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, KeyExpr<'static>, String) {
+fn parse_args() -> (
+    Config,
+    Selector<'static>,
+    Option<String>,
+    QueryTarget,
+    Duration,
+) {
     let args = Args::parse();
-    (args.common.into(), args.path, args.value)
+    (
+        args.common.into(),
+        args.selector,
+        args.value,
+        match args.target {
+            Qt::BestMatching => QueryTarget::BestMatching,
+            Qt::All => QueryTarget::All,
+            Qt::AllComplete => QueryTarget::AllComplete,
+        },
+        Duration::from_millis(args.timeout),
+    )
 }

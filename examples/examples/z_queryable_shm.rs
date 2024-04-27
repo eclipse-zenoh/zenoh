@@ -15,6 +15,8 @@ use clap::Parser;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
+const N: usize = 10;
+
 #[tokio::main]
 async fn main() {
     // initiate logging
@@ -30,13 +32,38 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
+    println!("Creating POSIX SHM backend...");
+    // Construct an SHM backend
+    let backend = {
+        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
+        // The initialisation of SHM backend is completely backend-specific and user is free to do
+        // anything reasonable here. This code is execuated at the provider's first use
+
+        // Alignment for POSIX SHM provider
+        // All allocations will be aligned corresponding to this alignment -
+        // that means that the provider will be able to satisfy allocation layouts
+        // with alignment <= provider_alignment
+        let provider_alignment = AllocAlignment::default();
+
+        // Create layout for POSIX Provider's memory
+        let provider_layout = MemoryLayout::new(N * 1024, provider_alignment).unwrap();
+
+        PosixSharedMemoryProviderBackend::builder()
+            .with_layout(provider_layout)
+            .res()
+            .unwrap()
+    };
+
+    println!("Creating SHM Provider with POSIX backend...");
+    // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
+    let shared_memory_provider = SharedMemoryProviderBuilder::builder()
+        .protocol_id::<POSIX_PROTOCOL_ID>()
+        .backend(backend)
+        .res();
+
     println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
         .declare_queryable(&key_expr)
-        // // By default queryable receives queries from a FIFO. 
-        // // Uncomment this line to use a ring channel instead. 
-        // // More information on the ring channel are available in the z_pull example.
-        // .with(zenoh::handlers::RingChannel::default())
         .complete(complete)
         .res()
         .await
@@ -44,27 +71,42 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(query) = queryable.recv_async().await {
-        match query.value() {
-            None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-            Some(value) => {
-                let payload = value
-                    .payload()
-                    .deserialize::<String>()
-                    .unwrap_or_else(|e| format!("{}", e));
-                println!(
-                    ">> [Queryable ] Received Query '{}' with payload '{}'",
-                    query.selector(),
-                    payload
-                )
+        print!(
+            ">> [Queryable] Received Query '{}' ('{}'",
+            query.selector(),
+            query.key_expr().as_str(),
+        );
+        if let Some(payload) = query.payload() {
+            match payload.deserialize::<&zsliceshm>() {
+                Ok(payload) => print!(": '{}'", String::from_utf8_lossy(payload)),
+                Err(e) => print!(": 'Not a SharedMemoryBuf: {:?}'", e),
             }
         }
+        println!(")");
+
+        println!("Allocating Shared Memory Buffer...");
+        let layout = shared_memory_provider
+            .alloc_layout()
+            .size(1024)
+            .res()
+            .unwrap();
+
+        let mut sbuf = layout
+            .alloc()
+            .with_policy::<BlockOn<GarbageCollect>>()
+            .res_async()
+            .await
+            .unwrap();
+
+        sbuf[0..value.len()].copy_from_slice(value.as_bytes());
+
         println!(
-            ">> [Queryable ] Responding ('{}': '{}')",
+            ">> [Queryable] Responding ('{}': '{}')",
             key_expr.as_str(),
             value,
         );
         query
-            .reply(key_expr.clone(), value.clone())
+            .reply(key_expr.clone(), sbuf)
             .res()
             .await
             .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
@@ -76,7 +118,7 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-queryable")]
     /// The key expression matching queries to reply to.
     key: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Queryable from Rust!")]
+    #[arg(short, long, default_value = "Queryable from SharedMemory Rust!")]
     /// The value to reply to queries.
     value: String,
     #[arg(long)]

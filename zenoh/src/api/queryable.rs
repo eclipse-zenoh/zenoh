@@ -50,18 +50,11 @@ use {
 };
 
 pub(crate) struct QueryInner {
-    /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
-    /// This Query's selector parameters.
     pub(crate) parameters: Parameters<'static>,
-    /// This Query's body.
-    pub(crate) value: Option<Value>,
-
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohId,
     pub(crate) primitives: Arc<dyn Primitives>,
-    #[cfg(feature = "unstable")]
-    pub(crate) attachment: Option<ZBytes>,
 }
 
 impl Drop for QueryInner {
@@ -79,6 +72,9 @@ impl Drop for QueryInner {
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
     pub(crate) eid: EntityId,
+    pub(crate) value: Option<Value>,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachment: Option<ZBytes>,
 }
 
 impl Query {
@@ -106,24 +102,43 @@ impl Query {
     /// This Query's value.
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
-        self.inner.value.as_ref()
+        self.value.as_ref()
+    }
+
+    /// This Query's value.
+    #[inline(always)]
+    pub fn value_mut(&mut self) -> Option<&mut Value> {
+        self.value.as_mut()
     }
 
     /// This Query's payload.
     #[inline(always)]
     pub fn payload(&self) -> Option<&ZBytes> {
-        self.inner.value.as_ref().map(|v| &v.payload)
+        self.value.as_ref().map(|v| &v.payload)
+    }
+
+    /// This Query's payload.
+    #[inline(always)]
+    pub fn payload_mut(&mut self) -> Option<&mut ZBytes> {
+        self.value.as_mut().map(|v| &mut v.payload)
     }
 
     /// This Query's encoding.
     #[inline(always)]
     pub fn encoding(&self) -> Option<&Encoding> {
-        self.inner.value.as_ref().map(|v| &v.encoding)
+        self.value.as_ref().map(|v| &v.encoding)
     }
 
+    /// This Query's attachment.
     #[zenoh_macros::unstable]
     pub fn attachment(&self) -> Option<&ZBytes> {
-        self.inner.attachment.as_ref()
+        self.attachment.as_ref()
+    }
+
+    /// This Query's attachment.
+    #[zenoh_macros::unstable]
+    pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
+        self.attachment.as_mut()
     }
 
     /// Sends a reply in the form of [`Sample`] to this Query.

@@ -32,7 +32,7 @@ async fn main() {
         // // By default get receives replies from a FIFO. 
         // // Uncomment this line to use a ring channel instead. 
         // // More information on the ring channel are available in the z_pull example.
-        .with(zenoh::handlers::RingChannel::default())
+        // .with(zenoh::handlers::RingChannel::default())
         .value(value)
         .target(target)
         .timeout(timeout)

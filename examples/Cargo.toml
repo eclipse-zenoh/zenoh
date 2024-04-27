@@ -101,12 +101,22 @@ name = "z_queryable"
 path = "examples/z_queryable.rs"
 
 [[example]]
+name = "z_queryable_shm"
+path = "examples/z_queryable_shm.rs"
+required-features = ["unstable", "shared-memory"]
+
+[[example]]
 name = "z_storage"
 path = "examples/z_storage.rs"
 
 [[example]]
 name = "z_get"
 path = "examples/z_get.rs"
+
+[[example]]
+name = "z_get_shm"
+path = "examples/z_get_shm.rs"
+required-features = ["unstable", "shared-memory"]
 
 [[example]]
 name = "z_forward"
