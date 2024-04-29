@@ -148,25 +148,6 @@ fn declare_client_token(
     register_client_token(tables, face, id, res);
 
     propagate_simple_token(tables, res, face);
-    // This introduced a buffer overflow on windows
-    // TODO: Let's deactivate this on windows until Fixed
-    #[cfg(not(windows))]
-    for mcast_group in &tables.mcast_groups {
-        mcast_group
-            .primitives
-            .egress_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareToken(DeclareToken {
-                        id,
-                        wire_expr: res.expr().into(),
-                    }),
-                },
-                res.expr(),
-            ))
-    }
 }
 
 #[inline]
