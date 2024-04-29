@@ -178,6 +178,7 @@ pub mod key_expr {
         pub use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
     }
     pub use crate::api::key_expr::KeyExpr;
+    pub use crate::api::key_expr::KeyExprUndeclaration;
     pub use zenoh_keyexpr::keyexpr;
     pub use zenoh_keyexpr::OwnedKeyExpr;
     pub use zenoh_keyexpr::SetIntersectionLevel;
@@ -199,24 +200,42 @@ pub mod session {
     #[doc(hidden)]
     pub use crate::api::session::init;
     pub use crate::api::session::open;
+    #[zenoh_macros::unstable]
+    #[doc(hidden)]
+    pub use crate::api::session::InitBuilder;
+    pub use crate::api::session::OpenBuilder;
     pub use crate::api::session::Session;
     pub use crate::api::session::SessionDeclarations;
     pub use crate::api::session::SessionRef;
+    pub use crate::api::session::Undeclarable;
+}
+
+/// Tools to access information about the current zenoh [`Session`](crate::Session).
+pub mod info {
+    pub use crate::api::info::PeersZidBuilder;
+    pub use crate::api::info::RoutersZidBuilder;
+    pub use crate::api::info::SessionInfo;
+    pub use crate::api::info::ZidBuilder;
 }
 
 /// Sample primitives
 pub mod sample {
     pub use crate::api::builders::sample::QoSBuilderTrait;
     pub use crate::api::builders::sample::SampleBuilder;
+    pub use crate::api::builders::sample::SampleBuilderAny;
+    pub use crate::api::builders::sample::SampleBuilderDelete;
+    pub use crate::api::builders::sample::SampleBuilderPut;
     pub use crate::api::builders::sample::SampleBuilderTrait;
     pub use crate::api::builders::sample::TimestampBuilderTrait;
     pub use crate::api::builders::sample::ValueBuilderTrait;
     #[zenoh_macros::unstable]
     pub use crate::api::sample::Locality;
     pub use crate::api::sample::Sample;
+    pub use crate::api::sample::SampleFields;
     pub use crate::api::sample::SampleKind;
     #[zenoh_macros::unstable]
     pub use crate::api::sample::SourceInfo;
+    pub use crate::api::sample::SourceSn;
 }
 
 /// Value primitives
@@ -232,10 +251,14 @@ pub mod encoding {
 /// Payload primitives
 pub mod bytes {
     pub use crate::api::bytes::Deserialize;
+    pub use crate::api::bytes::OptionZBytes;
     pub use crate::api::bytes::Serialize;
     pub use crate::api::bytes::StringOrBase64;
     pub use crate::api::bytes::ZBytes;
+    pub use crate::api::bytes::ZBytesIterator;
     pub use crate::api::bytes::ZBytesReader;
+    pub use crate::api::bytes::ZBytesWriter;
+    pub use crate::api::bytes::ZDeserializeError;
     pub use crate::api::bytes::ZSerde;
 }
 
@@ -259,18 +282,31 @@ pub mod subscriber {
 
 /// Publishing primitives
 pub mod publication {
+    pub use crate::api::builders::publication::PublicationBuilderDelete;
+    pub use crate::api::builders::publication::PublicationBuilderPut;
     pub use crate::api::builders::publication::PublisherBuilder;
+    pub use crate::api::builders::publication::PublisherDeleteBuilder;
     #[zenoh_macros::unstable]
     pub use crate::api::publication::MatchingListener;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publication::MatchingListenerBuilder;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publication::MatchingListenerUndeclaration;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publication::MatchingStatus;
     pub use crate::api::publication::Priority;
     pub use crate::api::publication::Publisher;
     #[zenoh_macros::unstable]
     pub use crate::api::publication::PublisherDeclarations;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publication::PublisherRef;
+    pub use crate::api::publication::PublisherUndeclaration;
     pub use zenoh_protocol::core::CongestionControl;
 }
 
 /// Query primitives
 pub mod query {
+    pub use crate::api::query::GetBuilder;
     pub use crate::api::query::Reply;
     #[zenoh_macros::unstable]
     pub use crate::api::query::ReplyKeyExpr;
@@ -284,19 +320,31 @@ pub mod queryable {
     pub use crate::api::queryable::Query;
     pub use crate::api::queryable::Queryable;
     pub use crate::api::queryable::QueryableBuilder;
+    pub use crate::api::queryable::QueryableUndeclaration;
+    pub use crate::api::queryable::ReplyBuilder;
+    pub use crate::api::queryable::ReplyBuilderDelete;
+    pub use crate::api::queryable::ReplyBuilderPut;
+    pub use crate::api::queryable::ReplyErrBuilder;
+    #[zenoh_macros::unstable]
+    pub use crate::api::queryable::ReplySample;
 }
 
 /// Callback handler trait
 pub mod handlers {
     pub use crate::api::handlers::locked;
+    pub use crate::api::handlers::Callback;
+    pub use crate::api::handlers::CallbackDrop;
     pub use crate::api::handlers::DefaultHandler;
+    pub use crate::api::handlers::FifoChannel;
     pub use crate::api::handlers::IntoHandler;
     pub use crate::api::handlers::RingChannel;
+    pub use crate::api::handlers::RingChannelHandler;
 }
 
 /// Scouting primitives
 pub mod scouting {
     pub use crate::api::scouting::scout;
+    pub use crate::api::scouting::Scout;
     pub use crate::api::scouting::ScoutBuilder;
     /// Constants and helpers for zenoh `whatami` flags.
     pub use zenoh_protocol::core::WhatAmI;
@@ -308,8 +356,11 @@ pub mod scouting {
 #[cfg(feature = "unstable")]
 pub mod liveliness {
     pub use crate::api::liveliness::Liveliness;
+    pub use crate::api::liveliness::LivelinessGetBuilder;
     pub use crate::api::liveliness::LivelinessSubscriberBuilder;
     pub use crate::api::liveliness::LivelinessToken;
+    pub use crate::api::liveliness::LivelinessTokenBuilder;
+    pub use crate::api::liveliness::LivelinessTokenUndeclaration;
 }
 
 /// Timestamp support
@@ -342,6 +393,7 @@ pub mod plugins {
     pub use crate::api::plugins::PluginsManager;
     pub use crate::api::plugins::Response;
     pub use crate::api::plugins::RunningPlugin;
+    pub use crate::api::plugins::PLUGIN_PREFIX;
     pub use crate::api::plugins::{RunningPluginTrait, ZenohPlugin};
 }
 
