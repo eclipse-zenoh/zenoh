@@ -224,7 +224,7 @@ impl PolicyEnforcer {
                     for action in &config_rule.actions {
                         for key_expr in &config_rule.key_exprs {
                             if key_expr.trim().is_empty() {
-                                bail!("error from bad key-expression value");
+                                bail!("found an empty key-expression value in key_exprs list");
                             }
                             policy_rules.push(PolicyRule {
                                 subject: Subject::Interface(subject.clone()),
