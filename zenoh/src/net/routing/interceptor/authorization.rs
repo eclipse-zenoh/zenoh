@@ -218,7 +218,7 @@ impl PolicyEnforcer {
             }
             for subject in &config_rule.interfaces {
                 if subject.trim().is_empty() {
-                    bail!("error from bad interface value");
+                    bail!("found an empty interface value in interfaces list");
                 }
                 for flow in &config_rule.flows {
                     for action in &config_rule.actions {
