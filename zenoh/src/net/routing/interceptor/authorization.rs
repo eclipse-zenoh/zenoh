@@ -197,12 +197,12 @@ impl PolicyEnforcer {
     */
     pub fn policy_information_point(
         &self,
-        config_rule_set: &Vec<AclConfigRules>,
+        config_rule_set: &[AclConfigRules],
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
-        for rule_offset in 0..config_rule_set.len() {
+        for (rule_offset, config_rule) in config_rule_set.iter().enumerate() {
             // config validation
-            let mut validated_rule = config_rule_set[rule_offset].clone();
+            let mut validated_rule = config_rule.clone();
             let mut validation_err = String::new();
             if validated_rule.interfaces.is_empty() {
                 tracing::warn!("ACL config interfaces list is empty. Applying rule #{} to all network interfaces", rule_offset);
