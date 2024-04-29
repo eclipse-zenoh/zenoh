@@ -2130,7 +2130,7 @@ impl IngressPrimitives for Session {
                 trace!("recv UndeclareKeyExpr {}", m.id);
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
-                log::debug!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
+                trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
@@ -2149,7 +2149,7 @@ impl IngressPrimitives for Session {
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
-                log::debug!("recv UndeclareSubscriber {:?}", m.id);
+                trace!("recv UndeclareSubscriber {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
@@ -2168,7 +2168,7 @@ impl IngressPrimitives for Session {
             }
 
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
-                log::debug!("recv DeclareToken {:?}", m.id);
+                trace!("recv DeclareToken {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
@@ -2205,7 +2205,7 @@ impl IngressPrimitives for Session {
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
-                log::debug!("recv UndeclareToken {:?}", m.id);
+                trace!("recv UndeclareToken {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
