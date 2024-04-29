@@ -800,7 +800,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Err(e) = query
                             .reply(Ok(Sample::new(
                                 key_expr,
-                                Value::from(plugin.path()).encoding(KnownEncoding::AppJson.into()),
+                                serde_json::Value::String(plugin.path().into()),
                             )))
                             .res()
                         {
