@@ -162,14 +162,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                     None
                 }
             })
-            .or_else(|| ctx.full_expr())?;
+            .or_else(|| ctx.full_expr());
 
         match &ctx.msg.body {
             NetworkBody::Push(Push {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                if self.action(Action::Put, "Put (ingress)", key_expr) == Permission::Deny {
+                if self.action(Action::Put, "Put (ingress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -177,7 +177,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(Action::Get, "Get (ingress)", key_expr) == Permission::Deny {
+                if self.action(Action::Get, "Get (ingress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -188,7 +188,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 if self.action(
                     Action::DeclareSubscriber,
                     "Declare Subscriber (ingress)",
-                    key_expr,
+                    key_expr?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -201,7 +201,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 if self.action(
                     Action::DeclareQueryable,
                     "Declare Queryable (ingress)",
-                    key_expr,
+                    key_expr?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -230,14 +230,14 @@ impl InterceptorTrait for EgressAclEnforcer {
                     None
                 }
             })
-            .or_else(|| ctx.full_expr())?;
+            .or_else(|| ctx.full_expr());
 
         match &ctx.msg.body {
             NetworkBody::Push(Push {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                if self.action(Action::Put, "Put (egress)", key_expr) == Permission::Deny {
+                if self.action(Action::Put, "Put (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -245,7 +245,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(Action::Get, "Get (egress)", key_expr) == Permission::Deny {
+                if self.action(Action::Get, "Get (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -256,7 +256,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 if self.action(
                     Action::DeclareSubscriber,
                     "Declare Subscriber (egress)",
-                    key_expr,
+                    key_expr?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -269,7 +269,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 if self.action(
                     Action::DeclareQueryable,
                     "Declare Queryable (egress)",
-                    key_expr,
+                    key_expr?,
                 ) == Permission::Deny
                 {
                     return None;
