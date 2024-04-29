@@ -14,7 +14,7 @@ use super::routing::dispatcher::face::Face;
 use super::Runtime;
 use crate::encoding::Encoding;
 use crate::key_expr::KeyExpr;
-use crate::net::primitives::IngressPrimitives;
+use crate::net::primitives::Primitives;
 use crate::payload::Payload;
 use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
@@ -276,7 +276,7 @@ impl AdminSpace {
         let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives.ingress_declare(Declare {
+        primitives.send_declare(Declare {
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -287,7 +287,7 @@ impl AdminSpace {
             }),
         });
 
-        primitives.ingress_declare(Declare {
+        primitives.send_declare(Declare {
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -316,8 +316,8 @@ impl AdminSpace {
     }
 }
 
-impl IngressPrimitives for AdminSpace {
-    fn ingress_declare(&self, msg: Declare) {
+impl Primitives for AdminSpace {
+    fn send_declare(&self, msg: Declare) {
         log::trace!("Recv declare {:?}", msg);
         if let DeclareBody::DeclareKeyExpr(m) = msg.body {
             match self.key_expr_to_string(&m.wire_expr) {
@@ -329,7 +329,7 @@ impl IngressPrimitives for AdminSpace {
         }
     }
 
-    fn ingress_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push) {
         trace!("recv Push {:?}", msg);
         {
             let conf = self.context.runtime.state.config.lock();
@@ -383,7 +383,7 @@ impl IngressPrimitives for AdminSpace {
         }
     }
 
-    fn ingress_request(&self, msg: Request) {
+    fn send_request(&self, msg: Request) {
         trace!("recv Request {:?}", msg);
         match msg.payload {
             RequestBody::Query(query) => {
@@ -395,7 +395,7 @@ impl IngressPrimitives for AdminSpace {
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
                         msg.wire_expr
                     );
-                        primitives.ingress_response_final(ResponseFinal {
+                        primitives.send_response_final(ResponseFinal {
                             rid: msg.id,
                             ext_qos: ext::QoSType::RESPONSE_FINAL,
                             ext_tstamp: None,
@@ -408,7 +408,7 @@ impl IngressPrimitives for AdminSpace {
                     Ok(key_expr) => key_expr.into_owned(),
                     Err(e) => {
                         log::error!("Unknown KeyExpr: {}", e);
-                        primitives.ingress_response_final(ResponseFinal {
+                        primitives.send_response_final(ResponseFinal {
                             rid: msg.id,
                             ext_qos: ext::QoSType::RESPONSE_FINAL,
                             ext_tstamp: None,
@@ -444,48 +444,48 @@ impl IngressPrimitives for AdminSpace {
         }
     }
 
-    fn ingress_response(&self, msg: Response) {
+    fn send_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
     }
 
-    fn ingress_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: ResponseFinal) {
         trace!("recv ResponseFinal {:?}", msg);
     }
 
-    fn ingress_close(&self) {
+    fn send_close(&self) {
         trace!("recv Close");
     }
 }
 
-impl crate::net::primitives::EgressPrimitives for AdminSpace {
+impl crate::net::primitives::EPrimitives for AdminSpace {
     #[inline]
-    fn egress_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
-        (self as &dyn IngressPrimitives).ingress_declare(ctx.msg)
+    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
+        (self as &dyn Primitives).send_declare(ctx.msg)
     }
 
     #[inline]
-    fn egress_push(&self, msg: Push) {
-        (self as &dyn IngressPrimitives).ingress_push(msg)
+    fn send_push(&self, msg: Push) {
+        (self as &dyn Primitives).send_push(msg)
     }
 
     #[inline]
-    fn egress_request(&self, ctx: crate::net::routing::RoutingContext<Request>) {
-        (self as &dyn IngressPrimitives).ingress_request(ctx.msg)
+    fn send_request(&self, ctx: crate::net::routing::RoutingContext<Request>) {
+        (self as &dyn Primitives).send_request(ctx.msg)
     }
 
     #[inline]
-    fn egress_response(&self, ctx: crate::net::routing::RoutingContext<Response>) {
-        (self as &dyn IngressPrimitives).ingress_response(ctx.msg)
+    fn send_response(&self, ctx: crate::net::routing::RoutingContext<Response>) {
+        (self as &dyn Primitives).send_response(ctx.msg)
     }
 
     #[inline]
-    fn egress_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
-        (self as &dyn IngressPrimitives).ingress_response_final(ctx.msg)
+    fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
+        (self as &dyn Primitives).send_response_final(ctx.msg)
     }
 
     #[inline]
-    fn egress_close(&self) {
-        (self as &dyn IngressPrimitives).ingress_close()
+    fn send_close(&self) {
+        (self as &dyn Primitives).send_close()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

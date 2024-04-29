@@ -477,7 +477,7 @@ impl Resource {
                     get_mut_unchecked(face)
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
-                    face.primitives.egress_declare(RoutingContext::with_expr(
+                    face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,

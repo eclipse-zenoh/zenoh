@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::primitives::{DummyPrimitives, EgressPrimitives, IngressPrimitives};
+use crate::net::primitives::{DummyPrimitives, EPrimitives, Primitives};
 use crate::net::routing::dispatcher::tables::{self, Tables};
 use crate::net::routing::router::*;
 use crate::net::routing::RoutingContext;
@@ -494,8 +494,8 @@ impl ClientPrimitives {
     }
 }
 
-impl IngressPrimitives for ClientPrimitives {
-    fn ingress_declare(&self, msg: zenoh_protocol::network::Declare) {
+impl Primitives for ClientPrimitives {
+    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
                 let name = self.get_name(&d.wire_expr);
@@ -508,21 +508,21 @@ impl IngressPrimitives for ClientPrimitives {
         }
     }
 
-    fn ingress_push(&self, msg: zenoh_protocol::network::Push) {
+    fn send_push(&self, msg: zenoh_protocol::network::Push) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn ingress_request(&self, _msg: zenoh_protocol::network::Request) {}
+    fn send_request(&self, _msg: zenoh_protocol::network::Request) {}
 
-    fn ingress_response(&self, _msg: zenoh_protocol::network::Response) {}
+    fn send_response(&self, _msg: zenoh_protocol::network::Response) {}
 
-    fn ingress_response_final(&self, _msg: zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: zenoh_protocol::network::ResponseFinal) {}
 
-    fn ingress_close(&self) {}
+    fn send_close(&self) {}
 }
 
-impl EgressPrimitives for ClientPrimitives {
-    fn egress_declare(&self, ctx: RoutingContext<zenoh_protocol::network::Declare>) {
+impl EPrimitives for ClientPrimitives {
+    fn send_declare(&self, ctx: RoutingContext<zenoh_protocol::network::Declare>) {
         match ctx.msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
                 let name = self.get_name(&d.wire_expr);
@@ -535,17 +535,17 @@ impl EgressPrimitives for ClientPrimitives {
         }
     }
 
-    fn egress_push(&self, msg: zenoh_protocol::network::Push) {
+    fn send_push(&self, msg: zenoh_protocol::network::Push) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn egress_request(&self, _ctx: RoutingContext<zenoh_protocol::network::Request>) {}
+    fn send_request(&self, _ctx: RoutingContext<zenoh_protocol::network::Request>) {}
 
-    fn egress_response(&self, _ctx: RoutingContext<zenoh_protocol::network::Response>) {}
+    fn send_response(&self, _ctx: RoutingContext<zenoh_protocol::network::Response>) {}
 
-    fn egress_response_final(&self, _ctx: RoutingContext<zenoh_protocol::network::ResponseFinal>) {}
+    fn send_response_final(&self, _ctx: RoutingContext<zenoh_protocol::network::ResponseFinal>) {}
 
-    fn egress_close(&self) {}
+    fn send_close(&self) {}
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -576,7 +576,7 @@ fn client_test() {
         11,
         &"test/client".into(),
     );
-    IngressPrimitives::ingress_declare(
+    Primitives::send_declare(
         primitives0.as_ref(),
         Declare {
             ext_qos: ext::QoSType::DECLARE,
@@ -603,7 +603,7 @@ fn client_test() {
         12,
         &WireExpr::from(11).with_suffix("/z1_pub1"),
     );
-    IngressPrimitives::ingress_declare(
+    Primitives::send_declare(
         primitives0.as_ref(),
         Declare {
             ext_qos: ext::QoSType::DECLARE,
@@ -624,7 +624,7 @@ fn client_test() {
         21,
         &"test/client".into(),
     );
-    IngressPrimitives::ingress_declare(
+    Primitives::send_declare(
         primitives1.as_ref(),
         Declare {
             ext_qos: ext::QoSType::DECLARE,
@@ -651,7 +651,7 @@ fn client_test() {
         22,
         &WireExpr::from(21).with_suffix("/z2_pub1"),
     );
-    IngressPrimitives::ingress_declare(
+    Primitives::send_declare(
         primitives1.as_ref(),
         Declare {
             ext_qos: ext::QoSType::DECLARE,
@@ -672,7 +672,7 @@ fn client_test() {
         31,
         &"test/client".into(),
     );
-    IngressPrimitives::ingress_declare(
+    Primitives::send_declare(
         primitives2.as_ref(),
         Declare {
             ext_qos: ext::QoSType::DECLARE,

@@ -17,7 +17,7 @@ use super::token::{
     declare_token, declare_token_interest, undeclare_token, undeclare_token_interest,
 };
 use super::{resource::*, tables};
-use crate::net::primitives::{IngressPrimitives, McastMux, Mux};
+use crate::net::primitives::{McastMux, Mux, Primitives};
 use crate::net::routing::interceptor::{InterceptorTrait, InterceptorsChain};
 use crate::net::routing::RoutingContext;
 use crate::KeyExpr;
@@ -43,7 +43,7 @@ pub struct FaceState {
     pub(crate) whatami: WhatAmI,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
-    pub(crate) primitives: Arc<dyn crate::net::primitives::EgressPrimitives + Send + Sync>,
+    pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, (Interest, Option<Arc<Resource>>, bool)>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
@@ -62,7 +62,7 @@ impl FaceState {
         zid: ZenohId,
         whatami: WhatAmI,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
-        primitives: Arc<dyn crate::net::primitives::EgressPrimitives + Send + Sync>,
+        primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
         in_interceptors: Option<Arc<InterceptorsChain>>,
         hat: Box<dyn Any + Send + Sync>,
@@ -166,8 +166,8 @@ pub struct Face {
     pub(crate) state: Arc<FaceState>,
 }
 
-impl IngressPrimitives for Face {
-    fn ingress_declare(&self, msg: zenoh_protocol::network::Declare) {
+impl Primitives for Face {
+    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
@@ -284,17 +284,15 @@ impl IngressPrimitives for Face {
                     );
                 }
                 if m.interest.current() {
-                    self.state
-                        .primitives
-                        .egress_declare(RoutingContext::new_out(
-                            Declare {
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::FinalInterest(FinalInterest { id: m.id }),
-                            },
-                            self.clone(),
-                        ));
+                    self.state.primitives.send_declare(RoutingContext::new_out(
+                        Declare {
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::FinalInterest(FinalInterest { id: m.id }),
+                        },
+                        self.clone(),
+                    ));
                 }
             }
             zenoh_protocol::network::DeclareBody::FinalInterest(m) => {
@@ -329,7 +327,7 @@ impl IngressPrimitives for Face {
     }
 
     #[inline]
-    fn ingress_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push) {
         full_reentrant_route_data(
             &self.tables,
             &self.state,
@@ -340,7 +338,7 @@ impl IngressPrimitives for Face {
         );
     }
 
-    fn ingress_request(&self, msg: Request) {
+    fn send_request(&self, msg: Request) {
         match msg.payload {
             RequestBody::Query(_) => {
                 route_query(
@@ -358,7 +356,7 @@ impl IngressPrimitives for Face {
         }
     }
 
-    fn ingress_response(&self, msg: Response) {
+    fn send_response(&self, msg: Response) {
         route_send_response(
             &self.tables,
             &mut self.state.clone(),
@@ -369,11 +367,11 @@ impl IngressPrimitives for Face {
         );
     }
 
-    fn ingress_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
-    fn ingress_close(&self) {
+    fn send_close(&self) {
         tables::close_face(&self.tables, &Arc::downgrade(&self.state));
     }
 }

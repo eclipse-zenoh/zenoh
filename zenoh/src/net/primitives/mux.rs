@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{EgressPrimitives, IngressPrimitives};
+use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::face::Face,
     interceptor::{InterceptorTrait, InterceptorsChain},
@@ -39,8 +39,8 @@ impl Mux {
     }
 }
 
-impl IngressPrimitives for Mux {
-    fn ingress_declare(&self, msg: Declare) {
+impl Primitives for Mux {
+    fn send_declare(&self, msg: Declare) {
         let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
             #[cfg(feature = "stats")]
@@ -64,7 +64,7 @@ impl IngressPrimitives for Mux {
         }
     }
 
-    fn ingress_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
             #[cfg(feature = "stats")]
@@ -88,7 +88,7 @@ impl IngressPrimitives for Mux {
         }
     }
 
-    fn ingress_request(&self, msg: Request) {
+    fn send_request(&self, msg: Request) {
         let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
             #[cfg(feature = "stats")]
@@ -112,7 +112,7 @@ impl IngressPrimitives for Mux {
         }
     }
 
-    fn ingress_response(&self, msg: Response) {
+    fn send_response(&self, msg: Response) {
         let msg = NetworkMessage {
             body: NetworkBody::Response(msg),
             #[cfg(feature = "stats")]
@@ -136,7 +136,7 @@ impl IngressPrimitives for Mux {
         }
     }
 
-    fn ingress_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: ResponseFinal) {
         let msg = NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
             #[cfg(feature = "stats")]
@@ -160,13 +160,13 @@ impl IngressPrimitives for Mux {
         }
     }
 
-    fn ingress_close(&self) {
+    fn send_close(&self) {
         // self.handler.closing().await;
     }
 }
 
-impl EgressPrimitives for Mux {
-    fn egress_declare(&self, ctx: RoutingContext<Declare>) {
+impl EPrimitives for Mux {
+    fn send_declare(&self, ctx: RoutingContext<Declare>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Declare(ctx.msg),
@@ -191,7 +191,7 @@ impl EgressPrimitives for Mux {
         }
     }
 
-    fn egress_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
             #[cfg(feature = "stats")]
@@ -215,7 +215,7 @@ impl EgressPrimitives for Mux {
         }
     }
 
-    fn egress_request(&self, ctx: RoutingContext<Request>) {
+    fn send_request(&self, ctx: RoutingContext<Request>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Request(ctx.msg),
@@ -240,7 +240,7 @@ impl EgressPrimitives for Mux {
         }
     }
 
-    fn egress_response(&self, ctx: RoutingContext<Response>) {
+    fn send_response(&self, ctx: RoutingContext<Response>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Response(ctx.msg),
@@ -265,7 +265,7 @@ impl EgressPrimitives for Mux {
         }
     }
 
-    fn egress_response_final(&self, ctx: RoutingContext<ResponseFinal>) {
+    fn send_response_final(&self, ctx: RoutingContext<ResponseFinal>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::ResponseFinal(ctx.msg),
@@ -290,7 +290,7 @@ impl EgressPrimitives for Mux {
         }
     }
 
-    fn egress_close(&self) {
+    fn send_close(&self) {
         // self.handler.closing().await;
     }
 
@@ -315,8 +315,8 @@ impl McastMux {
     }
 }
 
-impl IngressPrimitives for McastMux {
-    fn ingress_declare(&self, msg: Declare) {
+impl Primitives for McastMux {
+    fn send_declare(&self, msg: Declare) {
         let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
             #[cfg(feature = "stats")]
@@ -340,7 +340,7 @@ impl IngressPrimitives for McastMux {
         }
     }
 
-    fn ingress_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
             #[cfg(feature = "stats")]
@@ -364,7 +364,7 @@ impl IngressPrimitives for McastMux {
         }
     }
 
-    fn ingress_request(&self, msg: Request) {
+    fn send_request(&self, msg: Request) {
         let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
             #[cfg(feature = "stats")]
@@ -388,7 +388,7 @@ impl IngressPrimitives for McastMux {
         }
     }
 
-    fn ingress_response(&self, msg: Response) {
+    fn send_response(&self, msg: Response) {
         let msg = NetworkMessage {
             body: NetworkBody::Response(msg),
             #[cfg(feature = "stats")]
@@ -412,7 +412,7 @@ impl IngressPrimitives for McastMux {
         }
     }
 
-    fn ingress_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: ResponseFinal) {
         let msg = NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
             #[cfg(feature = "stats")]
@@ -436,13 +436,13 @@ impl IngressPrimitives for McastMux {
         }
     }
 
-    fn ingress_close(&self) {
+    fn send_close(&self) {
         // self.handler.closing().await;
     }
 }
 
-impl EgressPrimitives for McastMux {
-    fn egress_declare(&self, ctx: RoutingContext<Declare>) {
+impl EPrimitives for McastMux {
+    fn send_declare(&self, ctx: RoutingContext<Declare>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Declare(ctx.msg),
@@ -467,7 +467,7 @@ impl EgressPrimitives for McastMux {
         }
     }
 
-    fn egress_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
             #[cfg(feature = "stats")]
@@ -491,7 +491,7 @@ impl EgressPrimitives for McastMux {
         }
     }
 
-    fn egress_request(&self, ctx: RoutingContext<Request>) {
+    fn send_request(&self, ctx: RoutingContext<Request>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Request(ctx.msg),
@@ -516,7 +516,7 @@ impl EgressPrimitives for McastMux {
         }
     }
 
-    fn egress_response(&self, ctx: RoutingContext<Response>) {
+    fn send_response(&self, ctx: RoutingContext<Response>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Response(ctx.msg),
@@ -541,7 +541,7 @@ impl EgressPrimitives for McastMux {
         }
     }
 
-    fn egress_response_final(&self, ctx: RoutingContext<ResponseFinal>) {
+    fn send_response_final(&self, ctx: RoutingContext<ResponseFinal>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::ResponseFinal(ctx.msg),
@@ -566,7 +566,7 @@ impl EgressPrimitives for McastMux {
         }
     }
 
-    fn egress_close(&self) {
+    fn send_close(&self) {
         // self.handler.closing().await;
     }
 

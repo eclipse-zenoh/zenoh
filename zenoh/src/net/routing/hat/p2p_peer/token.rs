@@ -46,23 +46,21 @@ fn propagate_simple_token_to(
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
             let key_expr = Resource::decl_key(res, dst_face);
-            dst_face
-                .primitives
-                .egress_declare(RoutingContext::with_expr(
-                    Declare {
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareToken(DeclareToken {
-                            // TODO(fuzzypixelz): In the subscription-based
-                            // implementation of liveliness, there was a comment
-                            // here that stated "use proper SubscriberId"
-                            id: 0,
-                            wire_expr: key_expr,
-                        }),
-                    },
-                    res.expr(),
-                ));
+            dst_face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareToken(DeclareToken {
+                        // TODO(fuzzypixelz): In the subscription-based
+                        // implementation of liveliness, there was a comment
+                        // here that stated "use proper SubscriberId"
+                        id: 0,
+                        wire_expr: key_expr,
+                    }),
+                },
+                res.expr(),
+            ));
         } else {
             let matching_interests = face_hat!(dst_face)
                 .remote_token_interests
@@ -81,20 +79,18 @@ fn propagate_simple_token_to(
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
                     let key_expr = Resource::decl_key(res, dst_face);
-                    dst_face
-                        .primitives
-                        .egress_declare(RoutingContext::with_expr(
-                            Declare {
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareToken(DeclareToken {
-                                    id,
-                                    wire_expr: key_expr,
-                                }),
-                            },
-                            res.expr(),
-                        ));
+                    dst_face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareToken(DeclareToken {
+                                id,
+                                wire_expr: key_expr,
+                            }),
+                        },
+                        res.expr(),
+                    ));
                 }
             }
         }
@@ -174,7 +170,7 @@ fn remote_client_tokens(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
 fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(res) {
-            face.primitives.egress_declare(RoutingContext::with_expr(
+            face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
@@ -198,7 +194,7 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                     .is_some_and(|m| m.context.is_some() && remote_client_tokens(&m, &face))
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
-                    face.primitives.egress_declare(RoutingContext::with_expr(
+                    face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -239,7 +235,7 @@ pub(super) fn undeclare_client_token(
             let mut face = &mut client_tokens[0];
             if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
                 if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
-                    face.primitives.egress_declare(RoutingContext::with_expr(
+                    face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -263,7 +259,7 @@ pub(super) fn undeclare_client_token(
                             .is_some_and(|m| m.context.is_some() && remote_client_tokens(&m, face))
                     }) {
                         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
-                            face.primitives.egress_declare(RoutingContext::with_expr(
+                            face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
@@ -342,7 +338,7 @@ impl HatTokenTrait for HatCode {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                         face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
                         let wire_expr = Resource::decl_key(res, face);
-                        face.primitives.egress_declare(RoutingContext::with_expr(
+                        face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
@@ -365,7 +361,7 @@ impl HatTokenTrait for HatCode {
                                     let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                                     face_hat_mut!(face).local_tokens.insert(token.clone(), id);
                                     let wire_expr = Resource::decl_key(token, face);
-                                    face.primitives.egress_declare(RoutingContext::with_expr(
+                                    face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
                                             ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
@@ -394,7 +390,7 @@ impl HatTokenTrait for HatCode {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                             face_hat_mut!(face).local_tokens.insert(token.clone(), id);
                             let wire_expr = Resource::decl_key(token, face);
-                            face.primitives.egress_declare(RoutingContext::with_expr(
+                            face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,

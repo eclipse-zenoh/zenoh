@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::IngressPrimitives;
+use super::Primitives;
 use crate::net::routing::{
     dispatcher::face::Face,
     interceptor::{InterceptorTrait, InterceptorsChain},
@@ -65,11 +65,11 @@ impl TransportPeerEventHandler for DeMux {
         }
 
         match msg.body {
-            NetworkBody::Push(m) => self.face.ingress_push(m),
-            NetworkBody::Declare(m) => self.face.ingress_declare(m),
-            NetworkBody::Request(m) => self.face.ingress_request(m),
-            NetworkBody::Response(m) => self.face.ingress_response(m),
-            NetworkBody::ResponseFinal(m) => self.face.ingress_response_final(m),
+            NetworkBody::Push(m) => self.face.send_push(m),
+            NetworkBody::Declare(m) => self.face.send_declare(m),
+            NetworkBody::Request(m) => self.face.send_request(m),
+            NetworkBody::Response(m) => self.face.send_response(m),
+            NetworkBody::ResponseFinal(m) => self.face.send_response_final(m),
             NetworkBody::OAM(m) => {
                 if let Some(transport) = self.transport.as_ref() {
                     let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
@@ -87,7 +87,7 @@ impl TransportPeerEventHandler for DeMux {
     fn del_link(&self, _link: Link) {}
 
     fn closing(&self) {
-        self.face.ingress_close();
+        self.face.send_close();
         if let Some(transport) = self.transport.as_ref() {
             let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
             let mut tables = zwrite!(self.face.tables.tables);

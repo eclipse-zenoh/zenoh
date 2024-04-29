@@ -16,7 +16,7 @@
 
 use crate::encoding::Encoding;
 use crate::handlers::{locked, DefaultHandler};
-use crate::net::primitives::IngressPrimitives;
+use crate::net::primitives::Primitives;
 use crate::prelude::*;
 use crate::sample::QoS;
 use crate::sample::SourceInfo;
@@ -48,14 +48,14 @@ pub(crate) struct QueryInner {
 
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohId,
-    pub(crate) primitives: Arc<dyn IngressPrimitives>,
+    pub(crate) primitives: Arc<dyn Primitives>,
     #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
 
 impl Drop for QueryInner {
     fn drop(&mut self) {
-        self.primitives.ingress_response_final(ResponseFinal {
+        self.primitives.send_response_final(ResponseFinal {
             rid: self.qid,
             ext_qos: response::ext::QoSType::RESPONSE_FINAL,
             ext_tstamp: None,
@@ -314,7 +314,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                 })
             }
         }
-        self.query.inner.primitives.ingress_response(Response {
+        self.query.inner.primitives.send_response(Response {
             rid: self.query.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,
@@ -374,7 +374,7 @@ impl<'a> Resolvable for ReplyErrBuilder<'a> {
 
 impl SyncResolve for ReplyErrBuilder<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        self.query.inner.primitives.ingress_response(Response {
+        self.query.inner.primitives.send_response(Response {
             rid: self.query.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,

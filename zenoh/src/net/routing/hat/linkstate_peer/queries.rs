@@ -124,23 +124,21 @@ fn send_sourced_queryable_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.as_ref().unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
-                        someface
-                            .primitives
-                            .egress_declare(RoutingContext::with_expr(
-                                Declare {
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType {
-                                        node_id: routing_context,
-                                    },
-                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id: 0, // Sourced queryables do not use ids
-                                        wire_expr: key_expr,
-                                        ext_info: *qabl_info,
-                                    }),
+                        someface.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType {
+                                    node_id: routing_context,
                                 },
-                                res.expr(),
-                            ));
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id: 0, // Sourced queryables do not use ids
+                                    wire_expr: key_expr,
+                                    ext_info: *qabl_info,
+                                }),
+                            },
+                            res.expr(),
+                        ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -173,21 +171,19 @@ fn propagate_simple_queryable(
                 .local_qabls
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(res, &mut dst_face);
-            dst_face
-                .primitives
-                .egress_declare(RoutingContext::with_expr(
-                    Declare {
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                            id,
-                            wire_expr: key_expr,
-                            ext_info: info,
-                        }),
-                    },
-                    res.expr(),
-                ));
+            dst_face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                        id,
+                        wire_expr: key_expr,
+                        ext_info: info,
+                    }),
+                },
+                res.expr(),
+            ));
         }
     }
 }
@@ -344,22 +340,20 @@ fn send_forget_sourced_queryable_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
-                        someface
-                            .primitives
-                            .egress_declare(RoutingContext::with_expr(
-                                Declare {
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType {
-                                        node_id: routing_context,
-                                    },
-                                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                        id: 0,
-                                        ext_wire_expr: WireExprType { wire_expr },
-                                    }),
+                        someface.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType {
+                                    node_id: routing_context,
                                 },
-                                res.expr(),
-                            ));
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id: 0,
+                                    ext_wire_expr: WireExprType { wire_expr },
+                                }),
+                            },
+                            res.expr(),
+                        ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -371,7 +365,7 @@ fn send_forget_sourced_queryable_to_net_childs(
 fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
     for mut face in tables.faces.values().cloned() {
         if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
-            face.primitives.egress_declare(RoutingContext::with_expr(
+            face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
@@ -397,7 +391,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                 })
             }) {
                 if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
-                    face.primitives.egress_declare(RoutingContext::with_expr(
+                    face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
@@ -512,7 +506,7 @@ pub(super) fn undeclare_client_queryable(
         if client_qabls.len() == 1 && !peer_qabls {
             let mut face = &mut client_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
-                face.primitives.egress_declare(RoutingContext::with_expr(
+                face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
@@ -538,7 +532,7 @@ pub(super) fn undeclare_client_queryable(
                     })
                 }) {
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
-                        face.primitives.egress_declare(RoutingContext::with_expr(
+                        face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
@@ -695,7 +689,7 @@ impl HatQueriesTrait for HatCode {
                             .local_qabls
                             .insert((*res).clone(), (id, info));
                         let wire_expr = Resource::decl_key(res, face);
-                        face.primitives.egress_declare(RoutingContext::with_expr(
+                        face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
@@ -721,7 +715,7 @@ impl HatQueriesTrait for HatCode {
                                 .local_qabls
                                 .insert(qabl.clone(), (id, info));
                             let key_expr = Resource::decl_key(qabl, face);
-                            face.primitives.egress_declare(RoutingContext::with_expr(
+                            face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
@@ -748,7 +742,7 @@ impl HatQueriesTrait for HatCode {
                             .local_qabls
                             .insert(qabl.clone(), (id, info));
                         let key_expr = Resource::decl_key(qabl, face);
-                        face.primitives.egress_declare(RoutingContext::with_expr(
+                        face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
