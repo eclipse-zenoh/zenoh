@@ -1209,7 +1209,7 @@ impl Session {
             // to have prevented liveliness subscribers from being declared
             // since they have @/liveliness/* key expressions?
 
-            if sub_state.origin != Locality::SessionLocal {
+            if sub_state.origin != Locality::SessionLocal && kind == SubscriberKind::Subscriber {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
                 if !state.subscribers(kind).values().any(|s| {
@@ -1233,9 +1233,7 @@ impl Session {
                         self.update_status_down(&state, &sub_state.key_expr)
                     }
                 }
-            }
-
-            if kind == SubscriberKind::LivelinessSubscriber {
+            } else if kind == SubscriberKind::LivelinessSubscriber {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
 
