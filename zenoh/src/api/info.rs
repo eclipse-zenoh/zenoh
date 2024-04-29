@@ -33,21 +33,21 @@ use zenoh_protocol::core::{WhatAmI, ZenohId};
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct ZidBuilder<'a> {
+pub struct ZenohIdBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }
 
-impl<'a> Resolvable for ZidBuilder<'a> {
+impl<'a> Resolvable for ZenohIdBuilder<'a> {
     type To = ZenohId;
 }
 
-impl<'a> Wait for ZidBuilder<'a> {
+impl<'a> Wait for ZenohIdBuilder<'a> {
     fn wait(self) -> Self::To {
         self.session.runtime.zid()
     }
 }
 
-impl<'a> IntoFuture for ZidBuilder<'a> {
+impl<'a> IntoFuture for ZenohIdBuilder<'a> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -73,15 +73,15 @@ impl<'a> IntoFuture for ZidBuilder<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct RoutersZidBuilder<'a> {
+pub struct RoutersZenohIdBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }
 
-impl<'a> Resolvable for RoutersZidBuilder<'a> {
+impl<'a> Resolvable for RoutersZenohIdBuilder<'a> {
     type To = Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
 }
 
-impl<'a> Wait for RoutersZidBuilder<'a> {
+impl<'a> Wait for RoutersZenohIdBuilder<'a> {
     fn wait(self) -> Self::To {
         Box::new(
             zenoh_runtime::ZRuntime::Application
@@ -97,7 +97,7 @@ impl<'a> Wait for RoutersZidBuilder<'a> {
     }
 }
 
-impl<'a> IntoFuture for RoutersZidBuilder<'a> {
+impl<'a> IntoFuture for RoutersZenohIdBuilder<'a> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -123,15 +123,15 @@ impl<'a> IntoFuture for RoutersZidBuilder<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct PeersZidBuilder<'a> {
+pub struct PeersZenohIdBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }
 
-impl<'a> Resolvable for PeersZidBuilder<'a> {
+impl<'a> Resolvable for PeersZenohIdBuilder<'a> {
     type To = Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
 }
 
-impl<'a> Wait for PeersZidBuilder<'a> {
+impl<'a> Wait for PeersZenohIdBuilder<'a> {
     fn wait(self) -> <Self as Resolvable>::To {
         Box::new(
             zenoh_runtime::ZRuntime::Application
@@ -147,7 +147,7 @@ impl<'a> Wait for PeersZidBuilder<'a> {
     }
 }
 
-impl<'a> IntoFuture for PeersZidBuilder<'a> {
+impl<'a> IntoFuture for PeersZenohIdBuilder<'a> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -187,8 +187,8 @@ impl SessionInfo<'_> {
     /// let zid = session.info().zid().await;
     /// # }
     /// ```
-    pub fn zid(&self) -> ZidBuilder<'_> {
-        ZidBuilder {
+    pub fn zid(&self) -> ZenohIdBuilder<'_> {
+        ZenohIdBuilder {
             session: self.session.clone(),
         }
     }
@@ -207,8 +207,8 @@ impl SessionInfo<'_> {
     /// while let Some(router_zid) = routers_zid.next() {}
     /// # }
     /// ```
-    pub fn routers_zid(&self) -> RoutersZidBuilder<'_> {
-        RoutersZidBuilder {
+    pub fn routers_zid(&self) -> RoutersZenohIdBuilder<'_> {
+        RoutersZenohIdBuilder {
             session: self.session.clone(),
         }
     }
@@ -226,8 +226,8 @@ impl SessionInfo<'_> {
     /// while let Some(peer_zid) = peers_zid.next() {}
     /// # }
     /// ```
-    pub fn peers_zid(&self) -> PeersZidBuilder<'_> {
-        PeersZidBuilder {
+    pub fn peers_zid(&self) -> PeersZenohIdBuilder<'_> {
+        PeersZenohIdBuilder {
             session: self.session.clone(),
         }
     }
