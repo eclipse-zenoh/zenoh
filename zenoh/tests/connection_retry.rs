@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::prelude::sync::*;
+use zenoh::prelude::*;
 
 #[test]
 fn retry_config_overriding() {
@@ -164,7 +164,7 @@ fn listen_no_retry() {
         .unwrap();
 
     config.insert_json5("listen/timeout_ms", "0").unwrap();
-    zenoh::open(config).res().unwrap();
+    zenoh::open(config).wait().unwrap();
 }
 
 #[test]
@@ -177,5 +177,5 @@ fn listen_with_retry() {
 
     config.insert_json5("listen/timeout_ms", "1000").unwrap();
 
-    zenoh::open(config).res().unwrap();
+    zenoh::open(config).wait().unwrap();
 }

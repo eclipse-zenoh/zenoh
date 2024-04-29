@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -26,7 +26,7 @@ async fn main() {
     // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
     config.transport.shared_memory.set_enabled(true).unwrap();
 
-    let z = zenoh::open(config).res().await.unwrap();
+    let z = zenoh::open(config).await.unwrap();
 
     // Construct an SHM backend
     let backend = {
@@ -68,15 +68,18 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let publisher = z.declare_publisher("test/thr")
-    // Make sure to not drop messages because of congestion control
-    .congestion_control(CongestionControl::Block).res().await.unwrap();
+    let publisher = z
+        .declare_publisher("test/thr")
+        // Make sure to not drop messages because of congestion control
+        .congestion_control(CongestionControl::Block)
+        .await
+        .unwrap();
 
     let buf: ZSlice = buf.into();
 
     println!("Press CTRL-C to quit...");
     loop {
-        publisher.put(buf.clone()).res().await.unwrap();
+        publisher.put(buf.clone()).await.unwrap();
     }
 }
 

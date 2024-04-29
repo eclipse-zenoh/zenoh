@@ -16,7 +16,7 @@ mod test {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use tokio::runtime::Handle;
-    use zenoh::prelude::r#async::*;
+    use zenoh::prelude::*;
     use zenoh_core::{zlock, ztimeout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -46,22 +46,22 @@ mod test {
 
     async fn close_router_session(s: Session) {
         println!("Closing router session");
-        ztimeout!(s.close().res_async()).unwrap();
+        ztimeout!(s.close()).unwrap();
     }
 
     async fn get_client_sessions() -> (Session, Session) {
         println!("Opening client sessions");
         let config = config::client(["tcp/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
-        let s01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+        let s01 = ztimeout!(zenoh::open(config)).unwrap();
         let config = config::client(["tcp/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
-        let s02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+        let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
     }
 
     async fn close_sessions(s01: Session, s02: Session) {
         println!("Closing client sessions");
-        ztimeout!(s01.close().res_async()).unwrap();
-        ztimeout!(s02.close().res_async()).unwrap();
+        ztimeout!(s01.close()).unwrap();
+        ztimeout!(s02.close()).unwrap();
     }
 
     async fn test_pub_sub_deny() {
@@ -82,15 +82,11 @@ mod test {
             .unwrap();
         println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router).res_async()).unwrap();
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
         let (sub_session, pub_session) = get_client_sessions().await;
         {
-            let publisher = pub_session
-                .declare_publisher(KEY_EXPR)
-                .res_async()
-                .await
-                .unwrap();
+            let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
             let temp_recv_value = received_value.clone();
             let subscriber = sub_session
@@ -99,15 +95,14 @@ mod test {
                     let mut temp_value = zlock!(temp_recv_value);
                     *temp_value = sample.payload().deserialize::<String>().unwrap();
                 })
-                .res_async()
                 .await
                 .unwrap();
 
             tokio::time::sleep(SLEEP).await;
-            publisher.put(VALUE).res_async().await.unwrap();
+            publisher.put(VALUE).await.unwrap();
             tokio::time::sleep(SLEEP).await;
             assert_ne!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare().res_async()).unwrap();
+            ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_sessions(sub_session, pub_session).await;
         close_router_session(session).await;
@@ -132,28 +127,28 @@ mod test {
             .unwrap();
         println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router).res_async()).unwrap();
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
         let (sub_session, pub_session) = get_client_sessions().await;
         {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR).res_async()).unwrap();
+            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
             let temp_recv_value = received_value.clone();
-            let subscriber = ztimeout!(sub_session
-                .declare_subscriber(KEY_EXPR)
-                .callback(move |sample| {
-                    let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.payload().deserialize::<String>().unwrap();
-                })
-                .res_async())
-            .unwrap();
+            let subscriber =
+                ztimeout!(sub_session
+                    .declare_subscriber(KEY_EXPR)
+                    .callback(move |sample| {
+                        let mut temp_value = zlock!(temp_recv_value);
+                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    }))
+                .unwrap();
 
             tokio::time::sleep(SLEEP).await;
 
-            ztimeout!(publisher.put(VALUE).res_async()).unwrap();
+            ztimeout!(publisher.put(VALUE)).unwrap();
             tokio::time::sleep(SLEEP).await;
 
             assert_eq!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare().res_async()).unwrap();
+            ztimeout!(subscriber.undeclare()).unwrap();
         }
 
         close_sessions(sub_session, pub_session).await;
@@ -193,28 +188,28 @@ mod test {
             .unwrap();
         println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router).res_async()).unwrap();
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
         let (sub_session, pub_session) = get_client_sessions().await;
         {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR).res_async()).unwrap();
+            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
             let temp_recv_value = received_value.clone();
-            let subscriber = ztimeout!(sub_session
-                .declare_subscriber(KEY_EXPR)
-                .callback(move |sample| {
-                    let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.payload().deserialize::<String>().unwrap();
-                })
-                .res_async())
-            .unwrap();
+            let subscriber =
+                ztimeout!(sub_session
+                    .declare_subscriber(KEY_EXPR)
+                    .callback(move |sample| {
+                        let mut temp_value = zlock!(temp_recv_value);
+                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    }))
+                .unwrap();
 
             tokio::time::sleep(SLEEP).await;
 
-            ztimeout!(publisher.put(VALUE).res_async()).unwrap();
+            ztimeout!(publisher.put(VALUE)).unwrap();
             tokio::time::sleep(SLEEP).await;
 
             assert_ne!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare().res_async()).unwrap();
+            ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_sessions(sub_session, pub_session).await;
         close_router_session(session).await;
@@ -253,28 +248,28 @@ mod test {
             .unwrap();
         println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router).res_async()).unwrap();
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
         let (sub_session, pub_session) = get_client_sessions().await;
         {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR).res_async()).unwrap();
+            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
             let temp_recv_value = received_value.clone();
-            let subscriber = ztimeout!(sub_session
-                .declare_subscriber(KEY_EXPR)
-                .callback(move |sample| {
-                    let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.payload().deserialize::<String>().unwrap();
-                })
-                .res_async())
-            .unwrap();
+            let subscriber =
+                ztimeout!(sub_session
+                    .declare_subscriber(KEY_EXPR)
+                    .callback(move |sample| {
+                        let mut temp_value = zlock!(temp_recv_value);
+                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    }))
+                .unwrap();
 
             tokio::time::sleep(SLEEP).await;
 
-            ztimeout!(publisher.put(VALUE).res_async()).unwrap();
+            ztimeout!(publisher.put(VALUE)).unwrap();
             tokio::time::sleep(SLEEP).await;
 
             assert_eq!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare().res_async()).unwrap();
+            ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_sessions(sub_session, pub_session).await;
         close_router_session(session).await;
@@ -298,7 +293,7 @@ mod test {
             .unwrap();
         println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router).res_async()).unwrap();
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
         let (get_session, qbl_session) = get_client_sessions().await;
         {
@@ -309,15 +304,14 @@ mod test {
                 .callback(move |sample| {
                     tokio::task::block_in_place(move || {
                         Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE).res_async()).unwrap()
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
                         });
                     });
-                })
-                .res_async())
+                }))
             .unwrap();
 
             tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR).res_async()).unwrap();
+            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
@@ -329,7 +323,7 @@ mod test {
             }
             tokio::time::sleep(SLEEP).await;
             assert_ne!(received_value, VALUE);
-            ztimeout!(qbl.undeclare().res_async()).unwrap();
+            ztimeout!(qbl.undeclare()).unwrap();
         }
         close_sessions(get_session, qbl_session).await;
         close_router_session(session).await;
@@ -353,7 +347,7 @@ mod test {
             .unwrap();
         println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router).res_async()).unwrap();
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
         let (get_session, qbl_session) = get_client_sessions().await;
         {
@@ -364,15 +358,14 @@ mod test {
                 .callback(move |sample| {
                     tokio::task::block_in_place(move || {
                         Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE).res_async()).unwrap()
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
                         });
                     });
-                })
-                .res_async())
+                }))
             .unwrap();
 
             tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR).res_async()).unwrap();
+            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
@@ -384,7 +377,7 @@ mod test {
             }
             tokio::time::sleep(SLEEP).await;
             assert_eq!(received_value, VALUE);
-            ztimeout!(qbl.undeclare().res_async()).unwrap();
+            ztimeout!(qbl.undeclare()).unwrap();
         }
         close_sessions(get_session, qbl_session).await;
         close_router_session(session).await;
@@ -423,7 +416,7 @@ mod test {
 
         println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router).res_async()).unwrap();
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
         let (get_session, qbl_session) = get_client_sessions().await;
         {
@@ -434,15 +427,14 @@ mod test {
                 .callback(move |sample| {
                     tokio::task::block_in_place(move || {
                         Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE).res_async()).unwrap()
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
                         });
                     });
-                })
-                .res_async())
+                }))
             .unwrap();
 
             tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR).res_async()).unwrap();
+            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
@@ -454,7 +446,7 @@ mod test {
             }
             tokio::time::sleep(SLEEP).await;
             assert_eq!(received_value, VALUE);
-            ztimeout!(qbl.undeclare().res_async()).unwrap();
+            ztimeout!(qbl.undeclare()).unwrap();
         }
         close_sessions(get_session, qbl_session).await;
         close_router_session(session).await;
@@ -492,7 +484,7 @@ mod test {
             .unwrap();
         println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router).res_async()).unwrap();
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
         let (get_session, qbl_session) = get_client_sessions().await;
         {
@@ -503,15 +495,14 @@ mod test {
                 .callback(move |sample| {
                     tokio::task::block_in_place(move || {
                         Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE).res_async()).unwrap()
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
                         });
                     });
-                })
-                .res_async())
+                }))
             .unwrap();
 
             tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR).res_async()).unwrap();
+            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
@@ -523,7 +514,7 @@ mod test {
             }
             tokio::time::sleep(SLEEP).await;
             assert_ne!(received_value, VALUE);
-            ztimeout!(qbl.undeclare().res_async()).unwrap();
+            ztimeout!(qbl.undeclare()).unwrap();
         }
         close_sessions(get_session, qbl_session).await;
         close_router_session(session).await;

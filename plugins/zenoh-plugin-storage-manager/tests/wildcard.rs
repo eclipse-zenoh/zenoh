@@ -22,29 +22,23 @@ use std::thread::sleep;
 // use std::collections::HashMap;
 use async_std::task;
 use zenoh::internal::zasync_executor_init;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
     println!("Putting Data ('{key_expr}': '{value}')...");
     //  @TODO: how to add timestamp metadata with put, not manipulating sample...
-    session.put(key_expr, value).res().await.unwrap();
+    session.put(key_expr, value).await.unwrap();
 }
 
 async fn delete_data(session: &Session, key_expr: &str, _timestamp: Timestamp) {
     println!("Deleting Data '{key_expr}'...");
     //  @TODO: how to add timestamp metadata with delete, not manipulating sample...
-    session.delete(key_expr).res().await.unwrap();
+    session.delete(key_expr).await.unwrap();
 }
 
 async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
-    let replies: Vec<Reply> = session
-        .get(key_expr)
-        .res()
-        .await
-        .unwrap()
-        .into_iter()
-        .collect();
+    let replies: Vec<Reply> = session.get(key_expr).await.unwrap().into_iter().collect();
     println!("Getting replies on '{key_expr}': '{replies:?}'...");
     let mut samples = Vec::new();
     for reply in replies {
@@ -81,7 +75,7 @@ async fn test_wild_card_in_order() {
     let storage =
         zenoh_plugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
 
-    let session = zenoh::session::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).await.unwrap();
     sleep(std::time::Duration::from_secs(1));
 
     // put *, ts: 1

@@ -1,5 +1,3 @@
-use std::future::Ready;
-
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
@@ -27,7 +25,8 @@ use crate::api::sample::SourceInfo;
 use crate::api::session::SessionRef;
 use crate::api::value::Value;
 use crate::api::{encoding::Encoding, publication::Publisher};
-use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use std::future::{IntoFuture, Ready};
+use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::network::Mapping;
 
@@ -57,14 +56,13 @@ pub struct PublicationBuilderDelete;
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// session
 ///     .put("key/expression", "payload")
 ///     .encoding(Encoding::TEXT_PLAIN)
 ///     .congestion_control(CongestionControl::Block)
-///     .res()
 ///     .await
 ///     .unwrap();
 /// # }
@@ -179,9 +177,9 @@ impl<P, T> Resolvable for PublicationBuilder<P, T> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
+impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
     #[inline]
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let publisher = self.publisher.create_one_shot_publisher()?;
         publisher.resolve_put(
             self.kind.payload,
@@ -196,9 +194,9 @@ impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBui
     }
 }
 
-impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
+impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
     #[inline]
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let publisher = self.publisher.create_one_shot_publisher()?;
         publisher.resolve_put(
             ZBytes::empty(),
@@ -213,19 +211,21 @@ impl SyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBui
     }
 }
 
-impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
-    type Future = Ready<Self::To>;
+impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
-impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
-    type Future = Ready<Self::To>;
+impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
@@ -235,13 +235,12 @@ impl AsyncResolve for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBu
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let publisher = session
 ///     .declare_publisher("key/expression")
 ///     .congestion_control(CongestionControl::Block)
-///     .res()
 ///     .await
 ///     .unwrap();
 /// # }
@@ -327,12 +326,12 @@ impl<'a, 'b> Resolvable for PublisherBuilder<'a, 'b> {
     type To = ZResult<Publisher<'a>>;
 }
 
-impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
+    fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
         if !key_expr.is_fully_optimized(&self.session) {
             let session_id = self.session.id;
-            let expr_id = self.session.declare_prefix(key_expr.as_str()).res_sync();
+            let expr_id = self.session.declare_prefix(key_expr.as_str()).wait();
             let prefix_len = key_expr
                 .len()
                 .try_into()
@@ -362,7 +361,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
         }
         self.session
             .declare_publication_intent(key_expr.clone())
-            .res_sync()?;
+            .wait()?;
         #[cfg(feature = "unstable")]
         let eid = self.session.runtime.next_id();
         let publisher = Publisher {
@@ -380,16 +379,17 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
-    type Future = Ready<Self::To>;
+impl<'a, 'b> IntoFuture for PublisherBuilder<'a, 'b> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
-impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
+    fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.resolve_put(
             self.kind.payload,
             SampleKind::Put,
@@ -403,8 +403,8 @@ impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     }
 }
 
-impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
+    fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.resolve_put(
             ZBytes::empty(),
             SampleKind::Delete,
@@ -418,18 +418,20 @@ impl SyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete
     }
 }
 
-impl AsyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
-    type Future = Ready<Self::To>;
+impl IntoFuture for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
-impl AsyncResolve for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
-    type Future = Ready<Self::To>;
+impl IntoFuture for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
