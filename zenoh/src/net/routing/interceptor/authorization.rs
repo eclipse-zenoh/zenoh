@@ -19,12 +19,14 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use ahash::RandomState;
 use std::collections::HashMap;
+use std::net::Ipv4Addr;
 use zenoh_config::{
     AclConfig, AclConfigRules, Action, InterceptorFlow, Permission, PolicyRule, Subject,
 };
 use zenoh_keyexpr::keyexpr;
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
+use zenoh_util::net::get_interface_names_by_addr;
 type PolicyForSubject = FlowPolicy;
 
 type PolicyMap = HashMap<usize, PolicyForSubject, RandomState>;
@@ -200,29 +202,36 @@ impl PolicyEnforcer {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
             // config validation
+            let mut validated_rule = config_rule.clone();
             let mut validation_err = String::new();
-            if config_rule.interfaces.is_empty() {
-                validation_err.push_str("ACL config interfaces list is empty. ");
+            if validated_rule.interfaces.is_empty() {
+                if let Ok(all_interfaces) =
+                    get_interface_names_by_addr(Ipv4Addr::UNSPECIFIED.into())
+                {
+                    validated_rule.interfaces = all_interfaces;
+                }
             }
-            if config_rule.actions.is_empty() {
+            if validated_rule.flows.is_empty() {
+                validated_rule
+                    .flows
+                    .extend([InterceptorFlow::Ingress, InterceptorFlow::Egress]);
+            }
+            if validated_rule.actions.is_empty() {
                 validation_err.push_str("ACL config actions list is empty. ");
             }
-            if config_rule.flows.is_empty() {
-                validation_err.push_str("ACL config flows list is empty. ");
-            }
-            if config_rule.key_exprs.is_empty() {
+            if validated_rule.key_exprs.is_empty() {
                 validation_err.push_str("ACL config key_exprs list is empty. ");
             }
             if !validation_err.is_empty() {
                 bail!("{}", validation_err);
             }
-            for subject in &config_rule.interfaces {
+            for subject in &validated_rule.interfaces {
                 if subject.trim().is_empty() {
                     bail!("found an empty interface value in interfaces list");
                 }
-                for flow in &config_rule.flows {
-                    for action in &config_rule.actions {
-                        for key_expr in &config_rule.key_exprs {
+                for flow in &validated_rule.flows {
+                    for action in &validated_rule.actions {
+                        for key_expr in &validated_rule.key_exprs {
                             if key_expr.trim().is_empty() {
                                 bail!("found an empty key-expression value in key_exprs list");
                             }
@@ -230,7 +239,7 @@ impl PolicyEnforcer {
                                 subject: Subject::Interface(subject.clone()),
                                 key_expr: key_expr.clone(),
                                 action: *action,
-                                permission: config_rule.permission,
+                                permission: validated_rule.permission,
                                 flow: *flow,
                             })
                         }
