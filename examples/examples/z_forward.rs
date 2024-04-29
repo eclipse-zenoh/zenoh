@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 use zenoh_ext::SubscriberForward;
 
@@ -24,12 +24,12 @@ async fn main() {
     let (config, key_expr, forward) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Subscriber on '{key_expr}'...");
-    let mut subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
+    let mut subscriber = session.declare_subscriber(&key_expr).await.unwrap();
     println!("Declaring Publisher on '{forward}'...");
-    let publisher = session.declare_publisher(&forward).res().await.unwrap();
+    let publisher = session.declare_publisher(&forward).await.unwrap();
     println!("Forwarding data from '{key_expr}' to '{forward}'...");
     subscriber.forward(publisher).await.unwrap();
 }

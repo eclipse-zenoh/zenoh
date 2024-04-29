@@ -25,7 +25,7 @@ use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
-use zenoh_core::{Result as ZResult, SyncResolve};
+use zenoh_core::{Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
@@ -72,7 +72,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
                     match ZBytes::try_from(value) {
                         Ok(zbuf) => {
-                            let _ = query.reply(key_expr, zbuf).res_sync();
+                            let _ = query.reply(key_expr, zbuf).wait();
                         }
                         Err(e) => tracing::debug!("Admin query error: {}", e),
                     }
@@ -89,7 +89,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         if let Ok(value) = serde_json::value::to_value(link) {
                             match ZBytes::try_from(value) {
                                 Ok(zbuf) => {
-                                    let _ = query.reply(key_expr, zbuf).res_sync();
+                                    let _ = query.reply(key_expr, zbuf).wait();
                                 }
                                 Err(e) => tracing::debug!("Admin query error: {}", e),
                             }

@@ -14,7 +14,7 @@
 use clap::{arg, Command};
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::core::{try_init_log_from_env, AsyncResolve};
+use zenoh::core::try_init_log_from_env;
 use zenoh::key_expr::keyexpr;
 use zenoh::publication::CongestionControl;
 use zenoh::sample::QoSBuilderTrait;
@@ -43,16 +43,16 @@ async fn main() {
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Queryable on '{key}'...");
-    let queryable = session.declare_queryable(key).res().await.unwrap();
+    let queryable = session.declare_queryable(key).await.unwrap();
 
     async_std::task::spawn({
         let receiver = queryable.handler().clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
-                request.reply(key, HTML).res().await.unwrap();
+                request.reply(key, HTML).await.unwrap();
             }
         }
     });
@@ -63,7 +63,6 @@ async fn main() {
     let publisher = session
         .declare_publisher(&event_key)
         .congestion_control(CongestionControl::Block)
-        .res()
         .await
         .unwrap();
 
@@ -74,7 +73,7 @@ async fn main() {
 
     println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{key}");
     loop {
-        publisher.put(value).res().await.unwrap();
+        publisher.put(value).await.unwrap();
         async_std::task::sleep(Duration::from_secs(1)).await;
     }
 }

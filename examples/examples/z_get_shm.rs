@@ -13,7 +13,7 @@
 //
 use clap::Parser;
 use std::time::Duration;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 const N: usize = 10;
@@ -31,7 +31,7 @@ async fn main() {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Creating POSIX SHM backend...");
     // Construct an SHM backend
@@ -87,7 +87,6 @@ async fn main() {
         .value(sbuf)
         .target(target)
         .timeout(timeout)
-        .res()
         .await
         .unwrap();
 

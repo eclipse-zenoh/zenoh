@@ -18,7 +18,7 @@ use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
 use std::str;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 
 pub struct Aligner {
     session: Arc<Session>,
@@ -322,7 +322,6 @@ impl Aligner {
             .get(&selector)
             .consolidation(zenoh::query::ConsolidationMode::None)
             .accept_replies(zenoh::query::ReplyKeyExpr::Any)
-            .res()
             .await
         {
             Ok(replies) => {

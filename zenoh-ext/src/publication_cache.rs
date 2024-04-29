@@ -13,12 +13,13 @@
 //
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
-use std::future::Ready;
+use std::future::{IntoFuture, Ready};
 use std::time::Duration;
 use zenoh::core::Error;
-use zenoh::core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh::core::{Resolvable, Resolve};
 use zenoh::internal::{ResolveFuture, TerminatableTask};
 use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
+use zenoh::prelude::Wait;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::runtime::ZRuntime;
 use zenoh::sample::{Locality, Sample};
@@ -96,17 +97,18 @@ impl<'a> Resolvable for PublicationCacheBuilder<'a, '_, '_> {
     type To = ZResult<PublicationCache<'a>>;
 }
 
-impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Wait for PublicationCacheBuilder<'_, '_, '_> {
+    fn wait(self) -> <Self as Resolvable>::To {
         PublicationCache::new(self)
     }
 }
 
-impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
-    type Future = Ready<Self::To>;
+impl<'a> IntoFuture for PublicationCacheBuilder<'a, '_, '_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
@@ -149,7 +151,7 @@ impl<'a> PublicationCache<'a> {
             .session
             .declare_subscriber(&key_expr)
             .allowed_origin(Locality::SessionLocal)
-            .res_sync()?;
+            .wait()?;
 
         // declare the queryable which returns the cached publications
         let mut queryable = conf.session.declare_queryable(&queryable_key_expr);
@@ -159,7 +161,7 @@ impl<'a> PublicationCache<'a> {
         if let Some(complete) = conf.complete {
             queryable = queryable.complete(complete);
         }
-        let queryable = queryable.res_sync()?;
+        let queryable = queryable.wait()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.handler().clone();
@@ -215,7 +217,7 @@ impl<'a> PublicationCache<'a> {
                                                     continue;
                                                 }
                                             }
-                                            if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
+                                            if let Err(e) = query.reply_sample(sample.clone()).await {
                                                 tracing::warn!("Error replying to query: {}", e);
                                             }
                                         }
@@ -229,7 +231,7 @@ impl<'a> PublicationCache<'a> {
                                                         continue;
                                                     }
                                                 }
-                                                if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
+                                                if let Err(e) = query.reply_sample(sample.clone()).await {
                                                     tracing::warn!("Error replying to query: {}", e);
                                                 }
                                             }
@@ -261,8 +263,8 @@ impl<'a> PublicationCache<'a> {
                 local_sub,
                 task,
             } = self;
-            _queryable.undeclare().res_async().await?;
-            local_sub.undeclare().res_async().await?;
+            _queryable.undeclare().await?;
+            local_sub.undeclare().await?;
             task.terminate(Duration::from_secs(10));
             Ok(())
         })

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 const N: usize = 10;
@@ -30,7 +30,7 @@ async fn main() {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Creating POSIX SHM backend...");
     // Construct an SHM backend
@@ -65,7 +65,6 @@ async fn main() {
     let queryable = session
         .declare_queryable(&key_expr)
         .complete(complete)
-        .res()
         .await
         .unwrap();
 
@@ -107,7 +106,6 @@ async fn main() {
         );
         query
             .reply(key_expr.clone(), sbuf)
-            .res()
             .await
             .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
     }

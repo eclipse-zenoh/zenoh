@@ -15,7 +15,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::internal::ztimeout;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
+#[cfg(feature = "unstable")]
 use zenoh::runtime::Runtime;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -33,7 +34,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
-    let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
     config.connect.endpoints = endpoints
@@ -42,7 +43,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
-    let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
     (peer01, peer02)
 }
@@ -53,22 +54,22 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
     config.listen.endpoints = vec![endpoint01.parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
-    let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
     config.listen.endpoints = vec![endpoint02.parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);
-    let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
     (peer01, peer02)
 }
 
 async fn close_session(peer01: Session, peer02: Session) {
     println!("[  ][01d] Closing peer01 session");
-    ztimeout!(peer01.close().res_async()).unwrap();
+    ztimeout!(peer01.close()).unwrap();
     println!("[  ][02d] Closing peer02 session");
-    ztimeout!(peer02.close().res_async()).unwrap();
+    ztimeout!(peer02.close()).unwrap();
 }
 
 async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Reliability) {
@@ -85,13 +86,10 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         // Subscribe to data
         println!("[PS][01b] Subscribing on peer01 session");
         let c_msgs = msgs.clone();
-        let sub = ztimeout!(peer01
-            .declare_subscriber(key_expr)
-            .callback(move |sample| {
-                assert_eq!(sample.payload().len(), size);
-                c_msgs.fetch_add(1, Ordering::Relaxed);
-            })
-            .res_async())
+        let sub = ztimeout!(peer01.declare_subscriber(key_expr).callback(move |sample| {
+            assert_eq!(sample.payload().len(), size);
+            c_msgs.fetch_add(1, Ordering::Relaxed);
+        }))
         .unwrap();
 
         // Wait for the declaration to propagate
@@ -102,8 +100,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         for _ in 0..msg_count {
             ztimeout!(peer02
                 .put(key_expr, vec![0u8; size])
-                .congestion_control(CongestionControl::Block)
-                .res_async())
+                .congestion_control(CongestionControl::Block))
             .unwrap();
         }
 
@@ -123,7 +120,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         tokio::time::sleep(SLEEP).await;
 
         println!("[PS][03b] Unsubscribing on peer01 session");
-        ztimeout!(sub.undeclare().res_async()).unwrap();
+        ztimeout!(sub.undeclare()).unwrap();
 
         // Wait for the declaration to propagate
         tokio::time::sleep(SLEEP).await;
@@ -144,43 +141,36 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         // Queryable to data
         println!("[QR][01c] Queryable on peer01 session");
         let c_msgs = msgs.clone();
-        let qbl = ztimeout!(peer01
-            .declare_queryable(key_expr)
-            .callback(move |query| {
-                c_msgs.fetch_add(1, Ordering::Relaxed);
-                match query.parameters().as_str() {
-                    "ok_put" => {
-                        tokio::task::block_in_place(|| {
-                            tokio::runtime::Handle::current().block_on(async {
-                                ztimeout!(query
-                                    .reply(
-                                        KeyExpr::try_from(key_expr).unwrap(),
-                                        vec![0u8; size].to_vec()
-                                    )
-                                    .res_async())
-                                .unwrap()
-                            })
-                        });
-                    }
-                    "ok_del" => {
-                        tokio::task::block_in_place(|| {
-                            tokio::runtime::Handle::current().block_on(async {
-                                ztimeout!(query.reply_del(key_expr).res_async()).unwrap()
-                            })
-                        });
-                    }
-                    "err" => {
-                        let rep = Value::from(vec![0u8; size]);
-                        tokio::task::block_in_place(|| {
-                            tokio::runtime::Handle::current().block_on(async {
-                                ztimeout!(query.reply_err(rep).res_async()).unwrap()
-                            })
-                        });
-                    }
-                    _ => panic!("Unknown query parameter"),
+        let qbl = ztimeout!(peer01.declare_queryable(key_expr).callback(move |query| {
+            c_msgs.fetch_add(1, Ordering::Relaxed);
+            match query.parameters().as_str() {
+                "ok_put" => {
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            ztimeout!(query.reply(
+                                KeyExpr::try_from(key_expr).unwrap(),
+                                vec![0u8; size].to_vec()
+                            ))
+                            .unwrap()
+                        })
+                    });
                 }
-            })
-            .res_async())
+                "ok_del" => {
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current()
+                            .block_on(async { ztimeout!(query.reply_del(key_expr)).unwrap() })
+                    });
+                }
+                "err" => {
+                    let rep = Value::from(vec![0u8; size]);
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current()
+                            .block_on(async { ztimeout!(query.reply_err(rep)).unwrap() })
+                    });
+                }
+                _ => panic!("Unknown query parameter"),
+            }
+        }))
         .unwrap();
 
         // Wait for the declaration to propagate
@@ -191,7 +181,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         let mut cnt = 0;
         for _ in 0..msg_count {
             let selector = format!("{}?ok_put", key_expr);
-            let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
+            let rs = ztimeout!(peer02.get(selector)).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Put);
@@ -209,7 +199,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         let mut cnt = 0;
         for _ in 0..msg_count {
             let selector = format!("{}?ok_del", key_expr);
-            let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
+            let rs = ztimeout!(peer02.get(selector)).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Delete);
@@ -227,7 +217,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         let mut cnt = 0;
         for _ in 0..msg_count {
             let selector = format!("{}?err", key_expr);
-            let rs = ztimeout!(peer02.get(selector).res_async()).unwrap();
+            let rs = ztimeout!(peer02.get(selector)).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let e = s.result().unwrap_err();
                 assert_eq!(e.payload().len(), size);
@@ -239,7 +229,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         assert_eq!(cnt, msg_count);
 
         println!("[PS][03c] Unqueryable on peer01 session");
-        ztimeout!(qbl.undeclare().res_async()).unwrap();
+        ztimeout!(qbl.undeclare()).unwrap();
 
         // Wait for the declaration to propagate
         tokio::time::sleep(SLEEP).await;
@@ -264,6 +254,7 @@ async fn zenoh_session_multicast() {
     close_session(peer01, peer02).await;
 }
 
+#[cfg(feature = "unstable")]
 async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
     // Open the sessions
     let mut config = config::peer();
@@ -287,15 +278,16 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
     (r1, r2)
 }
 
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_2sessions_1runtime_init() {
     let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.0.1:17449"]).await;
     println!("[RI][02a] Creating peer01 session from runtime 1");
-    let peer01 = zenoh::session::init(r1.clone()).res_async().await.unwrap();
+    let peer01 = zenoh::session::init(r1.clone()).await.unwrap();
     println!("[RI][02b] Creating peer02 session from runtime 2");
-    let peer02 = zenoh::session::init(r2.clone()).res_async().await.unwrap();
+    let peer02 = zenoh::session::init(r2.clone()).await.unwrap();
     println!("[RI][02c] Creating peer01a session from runtime 1");
-    let peer01a = zenoh::session::init(r1.clone()).res_async().await.unwrap();
+    let peer01a = zenoh::session::init(r1.clone()).await.unwrap();
     println!("[RI][03c] Closing peer01a session");
     std::mem::drop(peer01a);
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;

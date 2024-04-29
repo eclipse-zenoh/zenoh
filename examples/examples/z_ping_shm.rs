@@ -13,7 +13,7 @@
 //
 use clap::Parser;
 use std::time::{Duration, Instant};
-use zenoh::prelude::sync::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 fn main() {
@@ -27,7 +27,7 @@ fn main() {
     // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
     config.transport.shared_memory.set_enabled(true).unwrap();
 
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     // The key expression to publish data on
     let key_expr_ping = keyexpr::new("test/ping").unwrap();
@@ -35,11 +35,11 @@ fn main() {
     // The key expression to wait the response back
     let key_expr_pong = keyexpr::new("test/pong").unwrap();
 
-    let sub = session.declare_subscriber(key_expr_pong).res().unwrap();
+    let sub = session.declare_subscriber(key_expr_pong).wait().unwrap();
     let publisher = session
         .declare_publisher(key_expr_ping)
         .congestion_control(CongestionControl::Block)
-        .res()
+        .wait()
         .unwrap();
 
     let mut samples = Vec::with_capacity(n);
@@ -87,14 +87,14 @@ fn main() {
     println!("Warming up for {warmup:?}...");
     let now = Instant::now();
     while now.elapsed() < warmup {
-        publisher.put(buf.clone()).res().unwrap();
+        publisher.put(buf.clone()).wait().unwrap();
         let _ = sub.recv().unwrap();
     }
 
     for _ in 0..n {
         let buf = buf.clone();
         let write_time = Instant::now();
-        publisher.put(buf).res().unwrap();
+        publisher.put(buf).wait().unwrap();
 
         let _ = sub.recv();
         let ts = write_time.elapsed().as_micros();

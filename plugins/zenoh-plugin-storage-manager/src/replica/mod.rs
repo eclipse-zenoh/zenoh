@@ -26,7 +26,7 @@ use std::str;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use urlencoding::encode;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
 pub mod align_queryable;
@@ -206,7 +206,6 @@ impl Replica {
             .session
             .declare_subscriber(&digest_key)
             .allowed_origin(Locality::Remote)
-            .res()
             .await
             .unwrap();
         loop {
@@ -265,12 +264,7 @@ impl Replica {
             .unwrap();
 
         tracing::debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
-        let publisher = self
-            .session
-            .declare_publisher(digest_key)
-            .res()
-            .await
-            .unwrap();
+        let publisher = self.session.declare_publisher(digest_key).await.unwrap();
 
         // Ensure digest gets published every interval, accounting for
         // time it takes to publish.
@@ -287,7 +281,7 @@ impl Replica {
             drop(digest);
 
             tracing::trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
-            match publisher.put(digest_json).res().await {
+            match publisher.put(digest_json).await {
                 Ok(()) => {}
                 Err(e) => tracing::error!("[DIGEST_PUB] Digest publication failed: {}", e),
             }

@@ -32,7 +32,7 @@ use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, SyncResolve};
+use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, Wait};
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_protocol::transport::BatchSize;
 use zenoh_runtime::ZRuntime;
@@ -331,7 +331,7 @@ impl UnicastPipeListener {
 
     fn stop_listening(self) {
         self.token.cancel();
-        let _ = ResolveFuture::new(self.handle).res_sync();
+        let _ = ResolveFuture::new(self.handle).wait();
     }
 }
 

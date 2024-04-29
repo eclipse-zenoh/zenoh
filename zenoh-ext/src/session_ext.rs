@@ -62,14 +62,14 @@ impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::config::ModeDependentValue::Unique;
     /// use zenoh_ext::SessionExt;
     ///
     /// let mut config = config::default();
     /// config.timestamping.set_enabled(Some(Unique(true)));
-    /// let session = zenoh::open(config).res().await.unwrap().into_arc();
-    /// let publication_cache = session.declare_publication_cache("key/expression").res().await.unwrap();
+    /// let session = zenoh::open(config).await.unwrap().into_arc();
+    /// let publication_cache = session.declare_publication_cache("key/expression").await.unwrap();
     /// tokio::task::spawn(async move {
     ///     publication_cache.key_expr();
     /// }).await;

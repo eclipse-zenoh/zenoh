@@ -31,7 +31,7 @@ use std::sync::Mutex;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
-use zenoh_core::SyncResolve;
+use zenoh_core::Wait;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
@@ -630,7 +630,7 @@ fn local_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(reply_key, payload)
         .encoding(Encoding::APPLICATION_JSON)
-        .res_sync()
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -662,7 +662,7 @@ zenoh_build{{version="{}"}} 1
             .openmetrics_text(),
     );
 
-    if let Err(e) = query.reply(reply_key, metrics).res() {
+    if let Err(e) = query.reply(reply_key, metrics).wait() {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
@@ -679,7 +679,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
-        .res()
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -697,7 +697,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
-        .res()
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -719,7 +719,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
-                .res_sync()
+                .wait()
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
@@ -743,7 +743,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
-                .res_sync()
+                .wait()
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
@@ -768,7 +768,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
             let status = serde_json::to_value(status).unwrap();
             match ZBytes::try_from(status) {
                 Ok(zbuf) => {
-                    if let Err(e) = query.reply(key, zbuf).res_sync() {
+                    if let Err(e) = query.reply(key, zbuf).wait() {
                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                     }
                 }
@@ -793,7 +793,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
-                        if let Err(e) = query.reply(key_expr, plugin.path()).res() {
+                        if let Err(e) = query.reply(key_expr, plugin.path()).wait() {
                             tracing::error!("Error sending AdminSpace reply: {:?}", e);
                         }
                     }
@@ -817,7 +817,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             match ZBytes::try_from(response.value) {
                                 Ok(zbuf) => {
-                                    if let Err(e) = query.reply(key_expr, zbuf).res_sync() {
+                                    if let Err(e) = query.reply(key_expr, zbuf).wait() {
                                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
                                 },

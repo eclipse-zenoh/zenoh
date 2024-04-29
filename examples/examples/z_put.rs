@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -23,10 +23,10 @@ async fn main() {
     let (config, key_expr, value) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Putting Data ('{key_expr}': '{value}')...");
-    session.put(&key_expr, value).res().await.unwrap();
+    session.put(&key_expr, value).await.unwrap();
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
