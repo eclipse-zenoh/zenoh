@@ -142,7 +142,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
         if let Some(starter) = &self.starter {
             starter.path()
         } else {
-            "__not_loaded__>"
+            "__not_loaded__"
         }
     }
     fn state(&self) -> PluginState {
