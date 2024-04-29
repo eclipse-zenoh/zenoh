@@ -355,6 +355,13 @@ impl Sample {
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
+
+    /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
+        self.attachment.as_mut()
+    }
 }
 
 impl From<Sample> for Value {
