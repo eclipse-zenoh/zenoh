@@ -94,6 +94,7 @@ async fn run() -> ZResult<()> {
         let _async_alloc = buffer_layout
             .alloc()
             .with_policy::<BlockOn>()
+            .res_async()
             .await
             .unwrap();
 

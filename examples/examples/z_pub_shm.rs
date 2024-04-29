@@ -76,6 +76,7 @@ async fn main() -> Result<(), ZError> {
         let mut sbuf = layout
             .alloc()
             .with_policy::<BlockOn<GarbageCollect>>()
+            .res_async()
             .await
             .unwrap();
 
