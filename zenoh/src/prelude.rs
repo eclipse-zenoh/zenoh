@@ -70,9 +70,13 @@ pub(crate) mod mods {
     pub use crate::value;
 }
 
+#[allow(deprecated)]
+pub use crate::core::AsyncResolve;
+#[allow(deprecated)]
+pub use crate::core::SyncResolve;
+pub use crate::core::Wait;
 pub use flat::*;
 pub use mods::*;
-pub use zenoh_core::Wait;
 
 /// Prelude to import when using Zenoh's sync API.
 #[deprecated = "use `zenoh::prelude` instead"]
@@ -80,7 +84,7 @@ pub mod sync {
     pub use super::flat::*;
     pub use super::mods::*;
     #[allow(deprecated)]
-    pub use zenoh_core::SyncResolve;
+    pub use crate::core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
 #[deprecated = "use `zenoh::prelude` instead"]
@@ -88,5 +92,5 @@ pub mod r#async {
     pub use super::flat::*;
     pub use super::mods::*;
     #[allow(deprecated)]
-    pub use zenoh_core::AsyncResolve;
+    pub use crate::core::AsyncResolve;
 }

@@ -123,6 +123,7 @@ pub mod core {
     pub use zenoh_core::Resolve;
     #[allow(deprecated)]
     pub use zenoh_core::SyncResolve;
+    pub use zenoh_core::Wait;
     /// A zenoh error.
     pub use zenoh_result::Error;
     /// A zenoh result.
