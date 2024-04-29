@@ -124,8 +124,11 @@ mod tests {
             println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
             for c in 0..msg_count {
                 // Allocate new message
-                let sbuf =
-                    ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
+                let sbuf = ztimeout!(layout
+                    .alloc()
+                    .with_policy::<BlockOn<GarbageCollect>>()
+                    .res_async())
+                .unwrap();
                 println!("{c} created");
 
                 // Publish this message
