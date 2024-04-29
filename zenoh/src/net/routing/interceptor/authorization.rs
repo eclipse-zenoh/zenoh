@@ -200,12 +200,21 @@ impl PolicyEnforcer {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
             // config validation
-            if config_rule.interfaces.is_empty()
-                || config_rule.actions.is_empty()
-                || config_rule.flows.is_empty()
-                || config_rule.key_exprs.is_empty()
-            {
-                bail!("error from bad config");
+            let mut validation_err = String::new();
+            if config_rule.interfaces.is_empty() {
+                validation_err.push_str("ACL config interfaces list is empty. ");
+            }
+            if config_rule.actions.is_empty() {
+                validation_err.push_str("ACL config rules list is empty. ");
+            }
+            if config_rule.flows.is_empty() {
+                validation_err.push_str("ACL config flows list is empty. ");
+            }
+            if config_rule.key_exprs.is_empty() {
+                validation_err.push_str("ACL config key_exprs list is empty. ");
+            }
+            if !validation_err.is_empty() {
+                bail!("{}", validation_err);
             }
             for subject in &config_rule.interfaces {
                 if subject.trim().is_empty() {
