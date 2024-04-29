@@ -255,7 +255,7 @@ pub trait HatTokenTrait {
         id: TokenId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-    );
+    ) -> Option<Arc<Resource>>;
 
     #[allow(clippy::too_many_arguments)] // TODO refactor
     fn declare_token_interest(

@@ -302,9 +302,16 @@ pub(super) fn undeclare_client_token(
     }
 }
 
-fn forget_client_token(tables: &mut Tables, face: &mut Arc<FaceState>, id: TokenId) {
+fn forget_client_token(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    id: TokenId,
+) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_tokens.remove(&id) {
         undeclare_client_token(tables, face, &mut res);
+        Some(res)
+    } else {
+        None
     }
 }
 
@@ -327,7 +334,7 @@ impl HatTokenTrait for HatCode {
         id: TokenId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
-    ) {
+    ) -> Option<Arc<Resource>> {
         forget_client_token(tables, face, id)
     }
 

@@ -19,8 +19,12 @@ use zenoh_protocol::{
     core::WireExpr,
     network::declare::{common::ext, InterestId, TokenId},
 };
+use zenoh_sync::get_mut_unchecked;
 
-use crate::net::routing::{hat::HatTrait, router::Resource};
+use crate::net::routing::{
+    hat::HatTrait,
+    router::{compute_matches_data_routes, disable_matches_data_routes, Resource},
+};
 
 use super::{
     face::FaceState,
@@ -120,10 +124,26 @@ pub(crate) fn undeclare_token(
     };
 
     let mut wtables = zwrite!(tables.tables);
-    hat_code.undeclare_token(&mut wtables, face, id, res, node_id);
+    if let Some(mut res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id) {
+        log::debug!("{} Undeclare token {} ({})", face, id, res.expr());
+        disable_matches_data_routes(&mut wtables, &mut res);
+        drop(wtables);
 
-    // NOTE(fuzzypixelz): I removed all data route handling.
-    // NOTE(fuzzypixelz): Unlike in `undeclare_liveliness` this doesn't return the ressource.
+        let rtables = zread!(tables.tables);
+        let matches_data_routes = compute_matches_data_routes(&rtables, &res);
+        drop(rtables);
+
+        let wtables = zwrite!(tables.tables);
+        for (mut res, data_routes) in matches_data_routes {
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_data_routes(data_routes);
+        }
+        Resource::clean(&mut res);
+        drop(wtables);
+    } else {
+        log::error!("{} Undeclare unknown token {}", face, id);
+    }
 }
 
 #[allow(clippy::too_many_arguments)] // TODO refactor
