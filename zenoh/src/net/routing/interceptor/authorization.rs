@@ -205,7 +205,7 @@ impl PolicyEnforcer {
                 validation_err.push_str("ACL config interfaces list is empty. ");
             }
             if config_rule.actions.is_empty() {
-                validation_err.push_str("ACL config rules list is empty. ");
+                validation_err.push_str("ACL config actions list is empty. ");
             }
             if config_rule.flows.is_empty() {
                 validation_err.push_str("ACL config flows list is empty. ");
