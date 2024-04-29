@@ -200,11 +200,12 @@ impl PolicyEnforcer {
         config_rule_set: &Vec<AclConfigRules>,
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
-        for config_rule in config_rule_set {
+        for rule_offset in 0..config_rule_set.len() {
             // config validation
-            let mut validated_rule = config_rule.clone();
+            let mut validated_rule = config_rule_set[rule_offset].clone();
             let mut validation_err = String::new();
             if validated_rule.interfaces.is_empty() {
+                tracing::warn!("ACL config interfaces list is empty. Applying rule #{} to all network interfaces", rule_offset);
                 if let Ok(all_interfaces) =
                     get_interface_names_by_addr(Ipv4Addr::UNSPECIFIED.into())
                 {
@@ -212,6 +213,7 @@ impl PolicyEnforcer {
                 }
             }
             if validated_rule.flows.is_empty() {
+                tracing::warn!("ACL config flows list is empty. Applying rule #{} to both Ingress and Egress flows", rule_offset);
                 validated_rule
                     .flows
                     .extend([InterceptorFlow::Ingress, InterceptorFlow::Egress]);
