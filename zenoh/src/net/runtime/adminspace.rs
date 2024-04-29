@@ -10,24 +10,13 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-use super::routing::dispatcher::face::Face;
-use super::Runtime;
-use crate::api::builders::sample::ValueBuilderTrait;
-use crate::api::bytes::ZBytes;
-use crate::api::key_expr::KeyExpr;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::api::plugins::PluginsManager;
-use crate::api::queryable::Query;
-use crate::api::queryable::QueryInner;
-use crate::api::value::Value;
-use crate::encoding::Encoding;
-use crate::net::primitives::Primitives;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    sync::{Arc, Mutex},
+};
+
 use serde_json::json;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::sync::Arc;
-use std::sync::Mutex;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
@@ -36,19 +25,34 @@ use zenoh_core::Wait;
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::network::declare::QueryableId;
-use zenoh_protocol::network::Interest;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
-        declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
-        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
-        ResponseFinal,
+        declare::{
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+        },
+        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
+        Response, ResponseFinal,
     },
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
+
+use super::{routing::dispatcher::face::Face, Runtime};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::api::plugins::PluginsManager;
+use crate::{
+    api::{
+        builders::sample::ValueBuilderTrait,
+        bytes::ZBytes,
+        key_expr::KeyExpr,
+        queryable::{Query, QueryInner},
+        value::Value,
+    },
+    encoding::Encoding,
+    net::primitives::Primitives,
+};
 
 pub struct AdminContext {
     runtime: Runtime,

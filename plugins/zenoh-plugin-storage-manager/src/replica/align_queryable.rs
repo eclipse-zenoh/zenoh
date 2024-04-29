@@ -11,14 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::digest::*;
-use super::Snapshotter;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeSet, HashMap, HashSet},
+    str,
+    str::FromStr,
+};
+
 use async_std::sync::Arc;
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::str;
-use std::str::FromStr;
 use zenoh::prelude::*;
+
+use super::{digest::*, Snapshotter};
 
 pub struct AlignQueryable {
     session: Arc<Session>,

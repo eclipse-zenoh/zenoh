@@ -11,24 +11,28 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::collections::{btree_map, BTreeMap, VecDeque};
-use std::convert::TryInto;
-use std::future::{IntoFuture, Ready};
-use std::mem::swap;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use zenoh::core::{Resolvable, Resolve};
-use zenoh::handlers::{locked, DefaultHandler, IntoHandler};
-use zenoh::internal::zlock;
-use zenoh::key_expr::KeyExpr;
-use zenoh::prelude::Wait;
-use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
-use zenoh::sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait};
-use zenoh::selector::Selector;
-use zenoh::session::{SessionDeclarations, SessionRef};
-use zenoh::subscriber::{Reliability, Subscriber};
-use zenoh::time::{new_reception_timestamp, Timestamp};
-use zenoh::{core::Error, core::Result as ZResult};
+use std::{
+    collections::{btree_map, BTreeMap, VecDeque},
+    convert::TryInto,
+    future::{IntoFuture, Ready},
+    mem::swap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use zenoh::{
+    core::{Error, Resolvable, Resolve, Result as ZResult},
+    handlers::{locked, DefaultHandler, IntoHandler},
+    internal::zlock,
+    key_expr::KeyExpr,
+    prelude::Wait,
+    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
+    sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
+    selector::Selector,
+    session::{SessionDeclarations, SessionRef},
+    subscriber::{Reliability, Subscriber},
+    time::{new_reception_timestamp, Timestamp},
+};
 
 use crate::ExtractSample;
 

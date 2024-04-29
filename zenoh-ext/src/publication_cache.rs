@@ -11,21 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::collections::{HashMap, VecDeque};
-use std::convert::TryInto;
-use std::future::{IntoFuture, Ready};
-use std::time::Duration;
-use zenoh::core::Error;
-use zenoh::core::{Resolvable, Resolve};
-use zenoh::internal::{ResolveFuture, TerminatableTask};
-use zenoh::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-use zenoh::prelude::Wait;
-use zenoh::queryable::{Query, Queryable};
-use zenoh::runtime::ZRuntime;
-use zenoh::sample::{Locality, Sample};
-use zenoh::session::{SessionDeclarations, SessionRef};
-use zenoh::subscriber::FlumeSubscriber;
-use zenoh::{core::Result as ZResult, internal::bail};
+use std::{
+    collections::{HashMap, VecDeque},
+    convert::TryInto,
+    future::{IntoFuture, Ready},
+    time::Duration,
+};
+
+use zenoh::{
+    core::{Error, Resolvable, Resolve, Result as ZResult},
+    internal::{bail, ResolveFuture, TerminatableTask},
+    key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
+    prelude::Wait,
+    queryable::{Query, Queryable},
+    runtime::ZRuntime,
+    sample::{Locality, Sample},
+    session::{SessionDeclarations, SessionRef},
+    subscriber::FlumeSubscriber,
+};
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]

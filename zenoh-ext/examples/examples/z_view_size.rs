@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{sync::Arc, time::Duration};
+
 use clap::{arg, Parser};
-use std::sync::Arc;
-use std::time::Duration;
 use zenoh::config::Config;
 use zenoh_ext::group::*;
 use zenoh_ext_examples::CommonArgs;

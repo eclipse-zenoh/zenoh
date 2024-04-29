@@ -17,14 +17,14 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use core::ptr::NonNull;
 
-use crate::keyexpr;
-use crate::keyexpr_tree::{
-    support::{IWildness, NonWild, UnknownWildness},
-    *,
+use super::{impls::KeyedSetProvider, support::IterOrOption};
+use crate::{
+    keyexpr,
+    keyexpr_tree::{
+        support::{IWildness, NonWild, UnknownWildness},
+        *,
+    },
 };
-
-use super::impls::KeyedSetProvider;
-use super::support::IterOrOption;
 
 /// A fully owned KeTree.
 ///

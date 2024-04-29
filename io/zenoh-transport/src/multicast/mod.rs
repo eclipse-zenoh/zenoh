@@ -17,17 +17,14 @@ pub(crate) mod rx;
 pub(crate) mod transport;
 pub(crate) mod tx;
 
-use super::common;
-use crate::{
-    multicast::link::TransportLinkMulticast, TransportMulticastEventHandler, TransportPeer,
-};
-pub use manager::{
-    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
-    TransportManagerParamsMulticast,
-};
 use std::{
     fmt::{self, Write},
     sync::{Arc, Weak},
+};
+
+pub use manager::{
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerParamsMulticast,
 };
 use transport::TransportMulticastInner;
 use zenoh_core::{zcondfeat, zread};
@@ -38,6 +35,11 @@ use zenoh_protocol::{
     transport::{close, PrioritySn},
 };
 use zenoh_result::{zerror, ZResult};
+
+use super::common;
+use crate::{
+    multicast::link::TransportLinkMulticast, TransportMulticastEventHandler, TransportPeer,
+};
 
 /*************************************/
 /*       TRANSPORT MULTICAST         */

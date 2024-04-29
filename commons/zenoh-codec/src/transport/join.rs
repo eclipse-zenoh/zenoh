@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use alloc::boxed::Box;
 use core::time::Duration;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -27,6 +27,8 @@ use zenoh_protocol::{
         BatchSize, PrioritySn, TransportSn,
     },
 };
+
+use crate::{common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
 impl LCodec<&PrioritySn> for Zenoh080 {
     fn w_len(self, p: &PrioritySn) -> usize {

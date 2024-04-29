@@ -26,71 +26,59 @@
 
 // Reexport API in flat namespace
 pub(crate) mod flat {
-    pub use crate::buffers::*;
-    pub use crate::bytes::*;
-    pub use crate::config::*;
-    pub use crate::core::{Error as ZError, Resolvable, Resolve, Result as ZResult};
-    pub use crate::encoding::*;
-    pub use crate::handlers::*;
-    pub use crate::key_expr::*;
-    pub use crate::publication::*;
-    pub use crate::query::*;
-    pub use crate::queryable::*;
-    pub use crate::sample::*;
-    pub use crate::scouting::*;
-    pub use crate::selector::*;
-    pub use crate::session::*;
     #[cfg(feature = "shared-memory")]
     pub use crate::shm::*;
-    pub use crate::subscriber::*;
-    pub use crate::time::*;
-    pub use crate::value::*;
+    pub use crate::{
+        buffers::*,
+        bytes::*,
+        config::*,
+        core::{Error as ZError, Resolvable, Resolve, Result as ZResult},
+        encoding::*,
+        handlers::*,
+        key_expr::*,
+        publication::*,
+        query::*,
+        queryable::*,
+        sample::*,
+        scouting::*,
+        selector::*,
+        session::*,
+        subscriber::*,
+        time::*,
+        value::*,
+    };
 }
 
 // Reexport API in hierarchical namespace
 pub(crate) mod mods {
-    pub use crate::buffers;
-    pub use crate::bytes;
-    pub use crate::config;
-    pub use crate::core;
-    pub use crate::encoding;
-    pub use crate::handlers;
-    pub use crate::key_expr;
-    pub use crate::publication;
-    pub use crate::query;
-    pub use crate::queryable;
-    pub use crate::sample;
-    pub use crate::scouting;
-    pub use crate::selector;
-    pub use crate::session;
     #[cfg(feature = "shared-memory")]
     pub use crate::shm;
-    pub use crate::subscriber;
-    pub use crate::time;
-    pub use crate::value;
+    pub use crate::{
+        buffers, bytes, config, core, encoding, handlers, key_expr, publication, query, queryable,
+        sample, scouting, selector, session, subscriber, time, value,
+    };
 }
+
+pub use flat::*;
+pub use mods::*;
 
 #[allow(deprecated)]
 pub use crate::core::AsyncResolve;
 #[allow(deprecated)]
 pub use crate::core::SyncResolve;
 pub use crate::core::Wait;
-pub use flat::*;
-pub use mods::*;
 
 /// Prelude to import when using Zenoh's sync API.
 #[deprecated = "use `zenoh::prelude` instead"]
 pub mod sync {
-    pub use super::flat::*;
-    pub use super::mods::*;
+    pub use super::{flat::*, mods::*};
     #[allow(deprecated)]
     pub use crate::core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
 #[deprecated = "use `zenoh::prelude` instead"]
 pub mod r#async {
-    pub use super::flat::*;
-    pub use super::mods::*;
+    pub use super::{flat::*, mods::*};
     #[allow(deprecated)]
     pub use crate::core::AsyncResolve;
 }

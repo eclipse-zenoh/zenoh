@@ -14,18 +14,22 @@
 
 //! To manage groups and group memeberships
 
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    ops::Add,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use flume::{Receiver, Sender};
-use futures::prelude::*;
-use futures::select;
+use futures::{prelude::*, select};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::ops::Add;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use zenoh::internal::{bail, Condition, TaskController};
-use zenoh::prelude::*;
+use zenoh::{
+    internal::{bail, Condition, TaskController},
+    prelude::*,
+};
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";
 const EVENT_POSTFIX: &str = "evt";

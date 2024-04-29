@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -20,6 +19,8 @@ use zenoh_protocol::{
     common::imsg,
     core::encoding::{flag, Encoding, EncodingId},
 };
+
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 
 impl LCodec<&Encoding> for Zenoh080 {
     fn w_len(self, x: &Encoding) -> usize {

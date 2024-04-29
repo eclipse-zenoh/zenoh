@@ -13,16 +13,18 @@
 //
 
 //! Sample primitives
-use super::{
-    builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
-    publication::Priority, value::Value,
-};
+use std::{convert::TryFrom, fmt};
+
 #[cfg(feature = "unstable")]
 use serde::Serialize;
-use std::{convert::TryFrom, fmt};
 use zenoh_protocol::{
     core::{CongestionControl, EntityGlobalId, Timestamp},
     network::declare::ext::QoSType,
+};
+
+use super::{
+    builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
+    publication::Priority, value::Value,
 };
 
 pub type SourceSn = u64;
@@ -150,8 +152,9 @@ pub struct SourceInfo {
 #[test]
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
-    use crate::api::sample::{SourceInfo, SourceSn};
     use zenoh_protocol::core::ZenohId;
+
+    use crate::api::sample::{SourceInfo, SourceSn};
 
     assert_eq!(std::mem::size_of::<ZenohId>(), 16);
     assert_eq!(std::mem::size_of::<Option<ZenohId>>(), 17);

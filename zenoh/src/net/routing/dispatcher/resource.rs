@@ -11,17 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::face::FaceState;
-use super::tables::{Tables, TablesLock};
-use crate::net::routing::dispatcher::face::Face;
-use crate::net::routing::RoutingContext;
-use std::any::Any;
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Weak};
+use std::{
+    any::Any,
+    collections::HashMap,
+    convert::TryInto,
+    hash::{Hash, Hasher},
+    sync::{Arc, Weak},
+};
+
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::RequestId;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
@@ -29,10 +27,16 @@ use zenoh_protocol::{
             ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
             DeclareBody, DeclareKeyExpr,
         },
-        Mapping,
+        Mapping, RequestId,
     },
 };
 use zenoh_sync::get_mut_unchecked;
+
+use super::{
+    face::FaceState,
+    tables::{Tables, TablesLock},
+};
+use crate::net::routing::{dispatcher::face::Face, RoutingContext};
 
 pub(crate) type NodeId = u16;
 

@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use api::{common::types::ProtocolID, provider::chunk::ChunkDescriptor};
-use header::descriptor::{HeaderDescriptor, OwnedHeaderDescriptor};
 use std::{
     any::Any,
     sync::{
@@ -20,6 +18,9 @@ use std::{
         Arc,
     },
 };
+
+use api::{common::types::ProtocolID, provider::chunk::ChunkDescriptor};
+use header::descriptor::{HeaderDescriptor, OwnedHeaderDescriptor};
 use watchdog::{confirmator::ConfirmedDescriptor, descriptor::Descriptor};
 use zenoh_buffers::ZSliceBuffer;
 

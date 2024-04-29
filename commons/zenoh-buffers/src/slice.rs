@@ -11,18 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    buffer::{Buffer, SplitBuffer},
-    reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
-    writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
-    ZSlice,
-};
 use core::{
     marker::PhantomData,
     mem,
     num::NonZeroUsize,
     option,
     slice::{self},
+};
+
+use crate::{
+    buffer::{Buffer, SplitBuffer},
+    reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
+    writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
+    ZSlice,
 };
 
 // Buffer

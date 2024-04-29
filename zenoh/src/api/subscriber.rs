@@ -12,6 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
+
+use zenoh_core::{Resolvable, Wait};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::EntityGlobalId;
+use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
+use zenoh_result::ZResult;
+
 use super::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
@@ -19,19 +32,6 @@ use super::{
     session::{SessionRef, Undeclarable},
     Id,
 };
-use std::future::IntoFuture;
-use std::{
-    fmt,
-    future::Ready,
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
-use zenoh_core::{Resolvable, Wait};
-use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
-use zenoh_result::ZResult;
-
-#[cfg(feature = "unstable")]
-use zenoh_protocol::core::EntityGlobalId;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,

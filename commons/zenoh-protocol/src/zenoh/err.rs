@@ -11,9 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::ZExtUnknown, core::Encoding};
 use alloc::vec::Vec;
+
 use zenoh_buffers::ZBuf;
+
+use crate::{common::ZExtUnknown, core::Encoding};
 
 /// # Err message
 ///
@@ -71,8 +73,9 @@ pub mod ext {
 impl Err {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::iext;
         use rand::Rng;
+
+        use crate::common::iext;
         let mut rng = rand::thread_rng();
 
         let encoding = Encoding::rand();

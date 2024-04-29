@@ -16,9 +16,8 @@ use std::fmt::Display;
 
 use zenoh_result::{bail, ZResult};
 
-use crate::api::slice::zsliceshmmut::ZSliceShmMut;
-
 use super::chunk::AllocatedChunk;
+use crate::api::slice::zsliceshmmut::ZSliceShmMut;
 
 /// Allocation errors
 ///

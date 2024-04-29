@@ -11,41 +11,43 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::config;
+use std::{
+    cell::UnsafeCell,
+    collections::HashMap,
+    fmt,
+    fs::{File, OpenOptions},
+    io::{ErrorKind, Read, Write},
+    os::unix::fs::OpenOptionsExt,
+    sync::Arc,
+};
+
 #[cfg(not(target_os = "macos"))]
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
 use async_trait::async_trait;
 use filepath::FilePath;
-use nix::libc;
-use nix::unistd::unlink;
+use nix::{libc, unistd::unlink};
 use rand::Rng;
-use std::cell::UnsafeCell;
-use std::collections::HashMap;
-use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::io::ErrorKind;
-use std::io::{Read, Write};
-use std::os::unix::fs::OpenOptionsExt;
-use std::sync::Arc;
-use tokio::fs::remove_file;
-use tokio::io::unix::AsyncFd;
-use tokio::io::Interest;
-use tokio::task::JoinHandle;
+use tokio::{
+    fs::remove_file,
+    io::{unix::AsyncFd, Interest},
+    task::JoinHandle,
+};
 use tokio_util::sync::CancellationToken;
-use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, Wait};
-use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_protocol::transport::BatchSize;
-use zenoh_runtime::ZRuntime;
-
 use unix_named_pipe::{create, open_write};
-
+use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, Wait};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
 };
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{bail, ZResult};
+use zenoh_runtime::ZRuntime;
 
 use super::FILE_ACCESS_MASK;
+use crate::config;
 
 const LINUX_PIPE_MAX_MTU: BatchSize = BatchSize::MAX;
 const LINUX_PIPE_DEDICATE_TRIES: usize = 100;

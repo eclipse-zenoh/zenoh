@@ -11,21 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::time::Duration;
+
 use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
-use std::time::Duration;
-use zenoh::core::Result as ZResult;
-use zenoh::query::ReplyKeyExpr;
-use zenoh::sample::Locality;
 use zenoh::{
+    core::Result as ZResult,
     liveliness::LivelinessSubscriberBuilder,
-    query::{QueryConsolidation, QueryTarget},
-    sample::Sample,
+    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
+    sample::{Locality, Sample},
     subscriber::{Reliability, Subscriber, SubscriberBuilder},
 };
 
-use crate::ExtractSample;
-use crate::{querying_subscriber::QueryingSubscriberBuilder, FetchingSubscriberBuilder};
+use crate::{
+    querying_subscriber::QueryingSubscriberBuilder, ExtractSample, FetchingSubscriberBuilder,
+};
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
 pub trait SubscriberForward<'a, S> {

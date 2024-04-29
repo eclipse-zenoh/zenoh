@@ -11,13 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use zenoh_buffers::{
     buffer::Buffer,
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     ZBuf,
 };
+
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 
 // ZBuf bounded
 macro_rules! zbuf_impl {
@@ -100,9 +101,10 @@ impl LCodec<&ZBuf> for Zenoh080 {
 // ZBuf sliced
 #[cfg(feature = "shared-memory")]
 mod shm {
+    use zenoh_buffers::{ZSlice, ZSliceKind};
+
     use super::*;
     use crate::Zenoh080Sliced;
-    use zenoh_buffers::{ZSlice, ZSliceKind};
 
     const RAW: u8 = 0;
     const SHM_PTR: u8 = 1;

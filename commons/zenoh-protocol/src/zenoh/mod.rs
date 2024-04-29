@@ -17,12 +17,13 @@ pub mod put;
 pub mod query;
 pub mod reply;
 
-use crate::core::Encoding;
 pub use del::Del;
 pub use err::Err;
 pub use put::Put;
 pub use query::{Consolidation, Query};
 pub use reply::Reply;
+
+use crate::core::Encoding;
 
 pub mod id {
     pub const OAM: u8 = 0x00;

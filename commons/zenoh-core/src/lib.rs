@@ -27,8 +27,7 @@ pub use zenoh_result::{bail, to_zerror, zerror};
 pub mod zresult {
     pub use zenoh_result::*;
 }
-pub use zresult::Error;
-pub use zresult::ZResult as Result;
+pub use zresult::{Error, ZResult as Result};
 
 /// A resolvable execution, either sync or async
 pub trait Resolvable {

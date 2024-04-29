@@ -12,14 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::session::{Session, Undeclarable};
-use crate::net::primitives::Primitives;
-use std::future::IntoFuture;
 use std::{
     convert::{TryFrom, TryInto},
-    future::Ready,
+    future::{IntoFuture, Ready},
     str::FromStr,
 };
+
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
@@ -27,6 +25,9 @@ use zenoh_protocol::{
     network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
+
+use super::session::{Session, Undeclarable};
+use crate::net::primitives::Primitives;
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {

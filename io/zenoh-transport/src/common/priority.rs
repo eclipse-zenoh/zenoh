@@ -11,15 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::defragmentation::DefragBuffer;
-use super::seq_num::{SeqNum, SeqNumGenerator};
 use std::sync::{Arc, Mutex};
+
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{Bits, Reliability},
     transport::{PrioritySn, TransportSn},
 };
 use zenoh_result::ZResult;
+
+use super::{
+    defragmentation::DefragBuffer,
+    seq_num::{SeqNum, SeqNumGenerator},
+};
 
 #[derive(Debug)]
 pub(crate) struct TransportChannelTx {

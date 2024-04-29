@@ -16,21 +16,19 @@ pub(crate) mod pubkey;
 #[cfg(feature = "auth_usrpwd")]
 pub(crate) mod usrpwd;
 
-use crate::unicast::establishment::{AcceptFsm, OpenFsm};
+use std::{convert::TryInto, marker::PhantomData};
+
 use async_trait::async_trait;
 #[cfg(feature = "auth_pubkey")]
 pub use pubkey::*;
 use rand::{CryptoRng, Rng};
-use std::convert::TryInto;
-use std::marker::PhantomData;
 use tokio::sync::{Mutex, RwLock};
 #[cfg(feature = "auth_usrpwd")]
 pub use usrpwd::*;
-use zenoh_buffers::reader::SiphonableReader;
-use zenoh_buffers::ZBuf;
 use zenoh_buffers::{
-    reader::{DidntRead, HasReader, Reader},
+    reader::{DidntRead, HasReader, Reader, SiphonableReader},
     writer::{DidntWrite, HasWriter, Writer},
+    ZBuf,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::Config;
@@ -40,6 +38,8 @@ use zenoh_protocol::{
     common::{iext, ZExtUnknown},
     transport::{init, open},
 };
+
+use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
 pub(crate) mod id {
     #[cfg(feature = "auth_pubkey")]

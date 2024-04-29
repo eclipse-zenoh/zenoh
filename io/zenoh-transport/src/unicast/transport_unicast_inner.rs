@@ -12,12 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::{
-    unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
-    TransportPeerEventHandler,
-};
-use async_trait::async_trait;
 use std::{fmt::DebugStruct, sync::Arc, time::Duration};
+
+use async_trait::async_trait;
 use tokio::sync::MutexGuard as AsyncMutexGuard;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -28,6 +25,10 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
+use crate::{
+    unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
+    TransportPeerEventHandler,
+};
 
 pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
 pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);

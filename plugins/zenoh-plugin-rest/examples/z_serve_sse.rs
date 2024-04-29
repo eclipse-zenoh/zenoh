@@ -11,14 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{arg, Command};
 use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::core::try_init_log_from_env;
-use zenoh::key_expr::keyexpr;
-use zenoh::publication::CongestionControl;
-use zenoh::sample::QoSBuilderTrait;
-use zenoh::session::SessionDeclarations;
+
+use clap::{arg, Command};
+use zenoh::{
+    config::Config, core::try_init_log_from_env, key_expr::keyexpr, publication::CongestionControl,
+    sample::QoSBuilderTrait, session::SessionDeclarations,
+};
 
 const HTML: &str = r#"
 <div id="result"></div>

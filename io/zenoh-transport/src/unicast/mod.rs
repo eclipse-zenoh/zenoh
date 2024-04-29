@@ -21,25 +21,27 @@ pub(crate) mod universal;
 #[cfg(feature = "test")]
 pub mod test_helpers;
 
-#[cfg(feature = "shared-memory")]
-use crate::shm::TransportShmConfig;
+use std::{
+    fmt,
+    sync::{Arc, Weak},
+};
 
-use self::transport_unicast_inner::TransportUnicastTrait;
-
-use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "transport_multilink")]
 use establishment::ext::auth::ZPublicKey;
 pub use manager::*;
-use std::fmt;
-use std::sync::{Arc, Weak};
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
-use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
     core::{Bits, WhatAmI, ZenohId},
+    network::NetworkMessage,
     transport::{close, TransportSn},
 };
 use zenoh_result::{zerror, ZResult};
+
+use self::transport_unicast_inner::TransportUnicastTrait;
+use super::{TransportPeer, TransportPeerEventHandler};
+#[cfg(feature = "shared-memory")]
+use crate::shm::TransportShmConfig;
 
 /*************************************/
 /*        TRANSPORT UNICAST          */

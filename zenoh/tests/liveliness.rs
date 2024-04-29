@@ -14,7 +14,9 @@
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_liveliness() {
-    use {std::time::Duration, zenoh::internal::ztimeout, zenoh::prelude::*};
+    use std::time::Duration;
+
+    use zenoh::{internal::ztimeout, prelude::*};
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
 

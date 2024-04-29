@@ -17,36 +17,13 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use self::{
-    network::Network,
-    pubsub::{pubsub_new_face, pubsub_remove_node, undeclare_client_subscription},
-    queries::{queries_new_face, queries_remove_node, undeclare_client_queryable},
-};
-use super::{
-    super::dispatcher::{
-        face::FaceState,
-        tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
-    },
-    HatBaseTrait, HatTrait,
-};
-use crate::{
-    net::runtime::Runtime,
-    net::{
-        codec::Zenoh080Routing,
-        protocol::linkstate::LinkStateList,
-        routing::{
-            dispatcher::face::Face,
-            hat::TREES_COMPUTATION_DELAY_MS,
-            router::{compute_data_routes, compute_query_routes, RoutesIndexes},
-        },
-    },
-};
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
     sync::{atomic::AtomicU32, Arc},
     time::Duration,
 };
+
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -60,6 +37,29 @@ use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
+
+use self::{
+    network::Network,
+    pubsub::{pubsub_new_face, pubsub_remove_node, undeclare_client_subscription},
+    queries::{queries_new_face, queries_remove_node, undeclare_client_queryable},
+};
+use super::{
+    super::dispatcher::{
+        face::FaceState,
+        tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
+    },
+    HatBaseTrait, HatTrait,
+};
+use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::linkstate::LinkStateList,
+    routing::{
+        dispatcher::face::Face,
+        hat::TREES_COMPUTATION_DELAY_MS,
+        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+    },
+    runtime::Runtime,
+};
 
 mod network;
 mod pubsub;

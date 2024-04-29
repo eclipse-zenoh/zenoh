@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use event_listener::{Event, EventListener};
 use std::{pin::Pin, sync::MutexGuard};
+
+use event_listener::{Event, EventListener};
 use tokio::sync::MutexGuard as AysncMutexGuard;
 
 pub type ConditionWaiter = Pin<Box<EventListener>>;

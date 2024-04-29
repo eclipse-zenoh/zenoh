@@ -11,24 +11,27 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::api::builders::sample::SampleBuilderTrait;
-use crate::api::builders::sample::{QoSBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait};
+use std::future::{IntoFuture, Ready};
+
+use zenoh_core::{Resolvable, Result as ZResult, Wait};
+use zenoh_protocol::{core::CongestionControl, network::Mapping};
+
 #[cfg(feature = "unstable")]
 use crate::api::bytes::OptionZBytes;
-use crate::api::bytes::ZBytes;
-use crate::api::key_expr::KeyExpr;
-use crate::api::publication::Priority;
-use crate::api::sample::Locality;
-use crate::api::sample::SampleKind;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
-use crate::api::session::SessionRef;
-use crate::api::value::Value;
-use crate::api::{encoding::Encoding, publication::Publisher};
-use std::future::{IntoFuture, Ready};
-use zenoh_core::{Resolvable, Result as ZResult, Wait};
-use zenoh_protocol::core::CongestionControl;
-use zenoh_protocol::network::Mapping;
+use crate::api::{
+    builders::sample::{
+        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+    },
+    bytes::ZBytes,
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    publication::{Priority, Publisher},
+    sample::{Locality, SampleKind},
+    session::SessionRef,
+    value::Value,
+};
 
 pub type SessionPutBuilder<'a, 'b> =
     PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut>;

@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::convert::TryFrom;
+
 use zenoh_protocol::core::{Timestamp, TimestampId};
 
 /// Generates a reception [`Timestamp`] with id=0x01.

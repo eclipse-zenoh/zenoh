@@ -28,15 +28,18 @@ pub use common::stats;
 #[cfg(feature = "shared-memory")]
 mod shm;
 
-use crate::{multicast::TransportMulticast, unicast::TransportUnicast};
+use std::{any::Any, sync::Arc};
+
 pub use manager::*;
 use serde::Serialize;
-use std::any::Any;
-use std::sync::Arc;
 use zenoh_link::Link;
-use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_protocol::network::NetworkMessage;
+use zenoh_protocol::{
+    core::{WhatAmI, ZenohId},
+    network::NetworkMessage,
+};
 use zenoh_result::ZResult;
+
+use crate::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 /*************************************/
 /*            TRANSPORT              */

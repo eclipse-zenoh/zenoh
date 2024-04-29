@@ -1,6 +1,6 @@
-use rustls::client::verify_server_cert_signed_by_trust_anchor;
-use rustls::server::ParsedCertificate;
 use std::time::SystemTime;
+
+use rustls::{client::verify_server_cert_signed_by_trust_anchor, server::ParsedCertificate};
 use tokio_rustls::rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     Certificate, RootCertStore, ServerName,

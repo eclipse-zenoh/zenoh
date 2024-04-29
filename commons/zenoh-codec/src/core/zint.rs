@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
+
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 
 const VLE_LEN_MAX: usize = vle_len(u64::MAX);
 

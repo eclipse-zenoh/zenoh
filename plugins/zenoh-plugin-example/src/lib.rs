@@ -13,20 +13,25 @@
 //
 #![recursion_limit = "256"]
 
-use futures::select;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::sync::{
-    atomic::{AtomicBool, Ordering::Relaxed},
-    Arc, Mutex,
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    convert::TryFrom,
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Arc, Mutex,
+    },
 };
+
+use futures::select;
 use tracing::{debug, info};
-use zenoh::key_expr::{keyexpr, KeyExpr};
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::runtime::Runtime;
-use zenoh::sample::Sample;
-use zenoh::session::SessionDeclarations;
+use zenoh::{
+    key_expr::{keyexpr, KeyExpr},
+    plugins::{RunningPluginTrait, ZenohPlugin},
+    runtime::Runtime,
+    sample::Sample,
+    session::SessionDeclarations,
+};
 use zenoh_core::zlock;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, ZResult};

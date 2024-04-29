@@ -20,10 +20,11 @@ use core::fmt::Debug;
 
 use token_cell::prelude::*;
 
-use super::box_tree::PruneResult;
-use super::support::IterOrOption;
-use crate::keyexpr;
-use crate::keyexpr_tree::{support::IWildness, *};
+use super::{box_tree::PruneResult, support::IterOrOption};
+use crate::{
+    keyexpr,
+    keyexpr_tree::{support::IWildness, *},
+};
 
 pub struct KeArcTreeInner<
     Weight,
@@ -428,6 +429,7 @@ where
 pub(crate) mod sealed {
     use alloc::sync::Arc;
     use core::ops::{Deref, DerefMut};
+
     use token_cell::prelude::{TokenCell, TokenTrait};
 
     pub struct Tokenized<A, B>(pub A, pub(crate) B);
