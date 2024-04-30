@@ -32,38 +32,38 @@ fn shm_bytes_single_buf() {
     // Prepare a layout for allocations
     let layout = provider.alloc_layout().size(1024).res().unwrap();
 
-    // allocate an SHM buffer (ZSliceShmMut)
+    // allocate an SHM buffer (ZShmMut)
     let owned_shm_buf_mut = layout.alloc().res().unwrap();
 
-    // convert into immutable owned buffer (ZSliceShmMut -> ZSlceShm)
-    let owned_shm_buf: ZSliceShm = owned_shm_buf_mut.into();
+    // convert into immutable owned buffer (ZShmMut -> ZSlceShm)
+    let owned_shm_buf: ZShm = owned_shm_buf_mut.into();
 
-    // convert again into mutable owned buffer (ZSliceShm -> ZSlceShmMut)
-    let owned_shm_buf_mut: ZSliceShmMut = owned_shm_buf.try_into().unwrap();
+    // convert again into mutable owned buffer (ZShm -> ZSlceShmMut)
+    let owned_shm_buf_mut: ZShmMut = owned_shm_buf.try_into().unwrap();
 
-    // build a ZBytes from an SHM buffer (ZSliceShmMut -> ZBytes)
+    // build a ZBytes from an SHM buffer (ZShmMut -> ZBytes)
     let mut payload: ZBytes = owned_shm_buf_mut.into();
 
     // branch to illustrate immutable access to SHM data
     {
-        // deserialize ZBytes as an immutably borrowed zsliceshm (ZBytes -> &zsliceshm)
-        let borrowed_shm_buf: &zsliceshm = payload.deserialize().unwrap();
+        // deserialize ZBytes as an immutably borrowed zshm (ZBytes -> &zshm)
+        let borrowed_shm_buf: &zshm = payload.deserialize().unwrap();
 
-        // construct owned buffer from borrowed type (&zsliceshm -> ZSliceShm)
+        // construct owned buffer from borrowed type (&zshm -> ZShm)
         let owned = borrowed_shm_buf.to_owned();
 
-        // try to construct mutable ZSliceShmMut (ZSliceShm -> ZSliceShmMut)
-        let owned_mut: Result<ZSliceShmMut, _> = owned.try_into();
-        // the attempt fails because ZSliceShm has two existing references ('owned' and inside 'payload')
+        // try to construct mutable ZShmMut (ZShm -> ZShmMut)
+        let owned_mut: Result<ZShmMut, _> = owned.try_into();
+        // the attempt fails because ZShm has two existing references ('owned' and inside 'payload')
         assert!(owned_mut.is_err())
     }
 
     // branch to illustrate mutable access to SHM data
     {
-        // deserialize ZBytes as mutably borrowed zsliceshm (ZBytes -> &mut zsliceshm)
-        let borrowed_shm_buf: &mut zsliceshm = payload.deserialize_mut().unwrap();
+        // deserialize ZBytes as mutably borrowed zshm (ZBytes -> &mut zshm)
+        let borrowed_shm_buf: &mut zshm = payload.deserialize_mut().unwrap();
 
-        // convert zsliceshm to zsliceshmmut (&mut zsliceshm -> &mut zsliceshmmut)
-        let _borrowed_shm_buf_mut: &mut zsliceshmmut = borrowed_shm_buf.try_into().unwrap();
+        // convert zshm to zshmmut (&mut zshm -> &mut zshmmut)
+        let _borrowed_shm_buf_mut: &mut zshmmut = borrowed_shm_buf.try_into().unwrap();
     }
 }

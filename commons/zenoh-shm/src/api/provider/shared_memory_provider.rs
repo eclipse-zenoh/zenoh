@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use zenoh_result::ZResult;
 
 use crate::{
-    api::{common::types::ProtocolID, slice::zsliceshmmut::ZSliceShmMut},
+    api::{buffer::zshmmut::ZShmMut, common::types::ProtocolID},
     header::{
         allocated_descriptor::AllocatedHeaderDescriptor, descriptor::HeaderDescriptor,
         storage::GLOBAL_HEADER_STORAGE,
@@ -713,11 +713,11 @@ where
         self.backend.defragment()
     }
 
-    /// Map externally-allocated chunk into ZSliceShmMut.
+    /// Map externally-allocated chunk into ZShmMut.
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
-    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<ZSliceShmMut> {
+    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<ZShmMut> {
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
 
@@ -729,7 +729,7 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(unsafe { ZSliceShmMut::new_unchecked(wrapped) })
+        Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
     /// Try to collect free chunks.
@@ -806,7 +806,7 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(unsafe { ZSliceShmMut::new_unchecked(wrapped) })
+        Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
     fn alloc_resources() -> ZResult<(
@@ -911,6 +911,6 @@ where
             allocated_watchdog,
             confirmed_watchdog,
         );
-        Ok(unsafe { ZSliceShmMut::new_unchecked(wrapped) })
+        Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 }

@@ -94,7 +94,7 @@ async fn main() {
         match reply.result() {
             Ok(sample) => {
                 print!(">> Received ('{}': ", sample.key_expr().as_str());
-                match sample.payload().deserialize::<&zsliceshm>() {
+                match sample.payload().deserialize::<&zshm>() {
                     Ok(payload) => println!("'{}')", String::from_utf8_lossy(payload),),
                     Err(e) => println!("'Not a SharedMemoryBuf: {:?}')", e),
                 }

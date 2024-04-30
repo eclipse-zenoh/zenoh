@@ -14,8 +14,8 @@
 use zenoh::{
     bytes::ZBytes,
     shm::{
-        zsliceshm, zsliceshmmut, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder,
-        ZSliceShm, ZSliceShmMut, POSIX_PROTOCOL_ID,
+        zshm, zshmmut, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, ZShm,
+        ZShmMut, POSIX_PROTOCOL_ID,
     },
 };
 
@@ -35,59 +35,59 @@ fn main() {
     // Prepare a layout for allocations
     let layout = provider.alloc_layout().size(1024).res().unwrap();
 
-    // allocate an SHM buffer (ZSliceShmMut)
+    // allocate an SHM buffer (ZShmMut)
     let mut owned_shm_buf_mut = layout.alloc().res().unwrap();
 
     // mutable and immutable API
     let _data: &[u8] = &owned_shm_buf_mut;
     let _data_mut: &mut [u8] = &mut owned_shm_buf_mut;
 
-    // convert into immutable owned buffer (ZSliceShmMut -> ZSlceShm)
-    let owned_shm_buf: ZSliceShm = owned_shm_buf_mut.into();
+    // convert into immutable owned buffer (ZShmMut -> ZSlceShm)
+    let owned_shm_buf: ZShm = owned_shm_buf_mut.into();
 
     // immutable API
     let _data: &[u8] = &owned_shm_buf;
 
-    // convert again into mutable owned buffer (ZSliceShm -> ZSlceShmMut)
-    let mut owned_shm_buf_mut: ZSliceShmMut = owned_shm_buf.try_into().unwrap();
+    // convert again into mutable owned buffer (ZShm -> ZSlceShmMut)
+    let mut owned_shm_buf_mut: ZShmMut = owned_shm_buf.try_into().unwrap();
 
     // mutable and immutable API
     let _data: &[u8] = &owned_shm_buf_mut;
     let _data_mut: &mut [u8] = &mut owned_shm_buf_mut;
 
-    // build a ZBytes from an SHM buffer (ZSliceShmMut -> ZBytes)
+    // build a ZBytes from an SHM buffer (ZShmMut -> ZBytes)
     let mut payload: ZBytes = owned_shm_buf_mut.into();
 
     // branch to illustrate immutable access to SHM data
     {
-        // deserialize ZBytes as an immutably borrowed zsliceshm (ZBytes -> &zsliceshm)
-        let borrowed_shm_buf: &zsliceshm = payload.deserialize().unwrap();
+        // deserialize ZBytes as an immutably borrowed zshm (ZBytes -> &zshm)
+        let borrowed_shm_buf: &zshm = payload.deserialize().unwrap();
 
         // immutable API
         let _data: &[u8] = borrowed_shm_buf;
 
-        // construct owned buffer from borrowed type (&zsliceshm -> ZSliceShm)
+        // construct owned buffer from borrowed type (&zshm -> ZShm)
         let owned = borrowed_shm_buf.to_owned();
 
         // immutable API
         let _data: &[u8] = &owned;
 
-        // try to construct mutable ZSliceShmMut (ZSliceShm -> ZSliceShmMut)
-        let owned_mut: Result<ZSliceShmMut, _> = owned.try_into();
-        // the attempt fails because ZSliceShm has two existing references ('owned' and inside 'payload')
+        // try to construct mutable ZShmMut (ZShm -> ZShmMut)
+        let owned_mut: Result<ZShmMut, _> = owned.try_into();
+        // the attempt fails because ZShm has two existing references ('owned' and inside 'payload')
         assert!(owned_mut.is_err())
     }
 
     // branch to illustrate mutable access to SHM data
     {
-        // deserialize ZBytes as mutably borrowed zsliceshm (ZBytes -> &mut zsliceshm)
-        let borrowed_shm_buf: &mut zsliceshm = payload.deserialize_mut().unwrap();
+        // deserialize ZBytes as mutably borrowed zshm (ZBytes -> &mut zshm)
+        let borrowed_shm_buf: &mut zshm = payload.deserialize_mut().unwrap();
 
         // immutable API
         let _data: &[u8] = borrowed_shm_buf;
 
-        // convert zsliceshm to zsliceshmmut (&mut zsliceshm -> &mut zsliceshmmut)
-        let borrowed_shm_buf_mut: &mut zsliceshmmut = borrowed_shm_buf.try_into().unwrap();
+        // convert zshm to zshmmut (&mut zshm -> &mut zshmmut)
+        let borrowed_shm_buf_mut: &mut zshmmut = borrowed_shm_buf.try_into().unwrap();
 
         // mutable and immutable API
         let _data: &[u8] = borrowed_shm_buf_mut;

@@ -76,7 +76,7 @@ async fn main() {
             query.key_expr().as_str(),
         );
         if let Some(payload) = query.payload() {
-            match payload.deserialize::<&zsliceshm>() {
+            match payload.deserialize::<&zshm>() {
                 Ok(payload) => print!(": '{}'", String::from_utf8_lossy(payload)),
                 Err(e) => print!(": 'Not a SharedMemoryBuf: {:?}'", e),
             }

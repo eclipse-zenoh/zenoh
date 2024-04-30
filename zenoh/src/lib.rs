@@ -417,6 +417,10 @@ pub mod internal {
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub mod shm {
+    pub use zenoh_shm::api::buffer::{
+        zshm::{zshm, ZShm},
+        zshmmut::{zshmmut, ZShmMut},
+    };
     pub use zenoh_shm::api::client::{
         shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
     };
@@ -440,9 +444,5 @@ pub mod shm {
     };
     pub use zenoh_shm::api::provider::types::{
         AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError,
-    };
-    pub use zenoh_shm::api::slice::{
-        zsliceshm::{zsliceshm, ZSliceShm},
-        zsliceshmmut::{zsliceshmmut, ZSliceShmMut},
     };
 }

@@ -41,7 +41,7 @@ async fn main() {
             sample.kind(),
             sample.key_expr().as_str(),
         );
-        match sample.payload().deserialize::<&zsliceshm>() {
+        match sample.payload().deserialize::<&zshm>() {
             Ok(payload) => print!("'{}'", String::from_utf8_lossy(payload)),
             Err(e) => print!("'Not a SharedMemoryBuf: {:?}'", e),
         }
@@ -52,12 +52,12 @@ async fn main() {
     // // holding a reference to the SHM buffer, then it will be able to get a mutable reference to it.
     // // With the mutable reference at hand, it's possible to mutate in place the SHM buffer content.
     //
-    // use zenoh::shm::zsliceshmmut;
+    // use zenoh::shm::zshmmut;
 
     // while let Ok(mut sample) = subscriber.recv_async().await {
     //     let kind = sample.kind();
     //     let key_expr = sample.key_expr().to_string();
-    //     match sample.payload_mut().deserialize_mut::<&mut zsliceshmmut>() {
+    //     match sample.payload_mut().deserialize_mut::<&mut zshmmut>() {
     //         Ok(payload) => println!(
     //             ">> [Subscriber] Received {} ('{}': '{:02x?}')",
     //             kind, key_expr, payload

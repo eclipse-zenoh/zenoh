@@ -17,7 +17,7 @@ use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
 use zenoh_buffers::{ZBuf, ZSlice};
 use zenoh_protocol::core::EncodingId;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::slice::{zsliceshm::ZSliceShm, zsliceshmmut::ZSliceShmMut};
+use zenoh_shm::api::buffer::{zshm::ZShm, zshmmut::ZShmMut};
 
 /// Default encoding values used by Zenoh.
 ///
@@ -835,10 +835,10 @@ impl EncodingMapping for serde_pickle::Value {
 
 // - Zenoh SHM
 #[cfg(feature = "shared-memory")]
-impl EncodingMapping for ZSliceShm {
+impl EncodingMapping for ZShm {
     const ENCODING: Encoding = Encoding::ZENOH_BYTES;
 }
 #[cfg(feature = "shared-memory")]
-impl EncodingMapping for ZSliceShmMut {
+impl EncodingMapping for ZShmMut {
     const ENCODING: Encoding = Encoding::ZENOH_BYTES;
 }
