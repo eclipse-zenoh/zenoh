@@ -149,7 +149,7 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .unwrap();
 
     // WARN(yuyuan): 2 ms is the limit of tokio
-    let interval = std::time::Duration::from_millis(2);
+    let interval = std::time::Duration::from_millis(MINIMAL_SLEEP_INTERVAL_MS);
     let messages_count = 1000;
     for i in 0..messages_count {
         publisher_r100.put(format!("message {}", i)).res().unwrap();
