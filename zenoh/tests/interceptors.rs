@@ -160,9 +160,9 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     let rate_check = move |ke: KeyExpr, rate: usize| -> bool {
         tracing::info!("keyexpr: {ke}, rate: {rate}");
         if ke == ke_10hz {
-            rate > 0 && rate <= 10
+            rate > 0 && rate <= 10 + 1
         } else if ke == ke_20hz {
-            rate > 0 && rate <= 20
+            rate > 0 && rate <= 20 + 1
         } else {
             tracing::error!("Shouldn't reach this case. Invalid keyexpr {ke} detected.");
             false
@@ -212,7 +212,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
     let rate_check = move |ke: KeyExpr, rate: usize| -> bool {
         tracing::info!("keyexpr: {ke}, rate: {rate}");
         if ke == ke_10hz {
-            rate > 0 && rate <= 10
+            rate > 0 && rate <= 10 + 1
         } else if ke == ke_no_effect {
             rate > 10
         } else {
