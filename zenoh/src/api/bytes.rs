@@ -1838,7 +1838,7 @@ mod tests {
                 protocol_id::POSIX_PROTOCOL_ID,
             },
             provider::shared_memory_provider::SharedMemoryProviderBuilder,
-            slice::zshm::{zshm, ZShm},
+            buffer::zshm::{zshm, ZShm},
         };
 
         const NUM: usize = 1_000;
