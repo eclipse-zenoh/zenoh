@@ -473,11 +473,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension Auth
         #[allow(unused_mut, unused_assignments)]
-        #[cfg(all(feature = "auth_usrpwd", feature = "transport_auth"))]
-        // #[cfg(feature = "auth_usrpwd")]
+        #[cfg(feature = "auth_usrpwd")]
         let mut user_password_id = UsrPwdId(None);
 
-        #[cfg(feature = "transport_auth")]
+        #[cfg(feature = "auth_usrpwd")]
         {
             user_password_id = self
                 .ext_auth
@@ -511,7 +510,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             other_whatami: cookie.whatami,
             other_lease: open_syn.lease,
             other_initial_sn: open_syn.initial_sn,
-            #[cfg(feature = "transport_auth")]
+            #[cfg(feature = "auth_usrpwd")]
             other_auth_id: user_password_id,
         };
         Ok((state, output))
