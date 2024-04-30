@@ -66,7 +66,7 @@ pub(crate) fn acl_interceptor_factories(
                     enforcer: Arc::new(policy_enforcer),
                 }))
             }
-            Err(e) => tracing::error!("Access control not enabled due to: {}", e),
+            Err(e) => bail!("Access control not enabled due to: {}", e),
         }
     } else {
         tracing::debug!("Access control is disabled");
