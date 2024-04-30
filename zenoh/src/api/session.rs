@@ -31,7 +31,11 @@ use super::{
     value::Value,
     Id,
 };
-use crate::net::{primitives::Primitives, routing::dispatcher::face::Face, runtime::Runtime};
+use crate::net::{
+    primitives::Primitives,
+    routing::dispatcher::face::Face,
+    runtime::{Runtime, RuntimeBuilder},
+};
 use std::future::IntoFuture;
 use std::{
     collections::HashMap,
@@ -842,12 +846,13 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            let mut runtime = Runtime::init(
-                config,
-                #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-                shm_clients,
-            )
-            .await?;
+            #[allow(unused_mut)] // Required for shared-memory
+            let mut runtime = RuntimeBuilder::new(config);
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            {
+                runtime = runtime.shm_clients(shm_clients);
+            }
+            let mut runtime = runtime.build().await?;
 
             let mut session = Self::init(
                 runtime.clone(),

@@ -793,7 +793,14 @@ fn plugins_status(context: &AdminContext, query: Query) {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
-                        if let Err(e) = query.reply(key_expr, plugin.path()).wait() {
+                        if let Err(e) = query
+                            .reply(
+                                key_expr,
+                                serde_json::to_string(plugin.path())
+                                    .unwrap_or_else(|_| String::from("{}")),
+                            )
+                            .wait()
+                        {
                             tracing::error!("Error sending AdminSpace reply: {:?}", e);
                         }
                     }
