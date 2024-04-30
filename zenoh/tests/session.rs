@@ -17,7 +17,7 @@ use std::time::Duration;
 use zenoh::internal::ztimeout;
 use zenoh::prelude::*;
 #[cfg(feature = "unstable")]
-use zenoh::runtime::Runtime;
+use zenoh::runtime::{Runtime, RuntimeBuilder};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -264,7 +264,8 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Creating r1 session runtime: {:?}", endpoints);
-    let r1 = Runtime::new(config).await.unwrap();
+    let mut r1 = RuntimeBuilder::new(config).build().await.unwrap();
+    r1.start().await.unwrap();
 
     let mut config = config::peer();
     config.connect.endpoints = endpoints
@@ -273,7 +274,8 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Creating r2 session runtime: {:?}", endpoints);
-    let r2 = Runtime::new(config).await.unwrap();
+    let mut r2 = RuntimeBuilder::new(config).build().await.unwrap();
+    r2.start().await.unwrap();
 
     (r1, r2)
 }

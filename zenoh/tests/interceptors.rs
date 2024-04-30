@@ -15,6 +15,11 @@ use std::sync::{Arc, Mutex};
 use zenoh::internal::zlock;
 use zenoh::prelude::*;
 
+#[cfg(target_os = "windows")]
+static MINIMAL_SLEEP_INTERVAL_MS: u64 = 17;
+#[cfg(not(target_os = "windows"))]
+static MINIMAL_SLEEP_INTERVAL_MS: u64 = 2;
+
 struct IntervalCounter {
     first_tick: bool,
     last_time: std::time::Instant,
@@ -143,7 +148,7 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .unwrap();
 
     // WARN(yuyuan): 2 ms is the limit of tokio
-    let interval = std::time::Duration::from_millis(2);
+    let interval = std::time::Duration::from_millis(MINIMAL_SLEEP_INTERVAL_MS);
     let messages_count = 1000;
     for i in 0..messages_count {
         publisher_r100.put(format!("message {}", i)).wait().unwrap();
@@ -245,7 +250,7 @@ fn downsampling_by_interface_impl(egress: bool) {
         .unwrap();
 
     // WARN(yuyuan): 2 ms is the limit of tokio
-    let interval = std::time::Duration::from_millis(2);
+    let interval = std::time::Duration::from_millis(MINIMAL_SLEEP_INTERVAL_MS);
     let messages_count = 1000;
     for i in 0..messages_count {
         publisher_r100.put(format!("message {}", i)).wait().unwrap();
