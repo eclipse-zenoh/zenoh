@@ -23,7 +23,6 @@ use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::SplitBuffer;
 use zenoh::buffers::ZBuf;
-use zenoh::core::AsyncResolve;
 use zenoh::internal::bail;
 use zenoh::internal::{zenoh_home, Timed, TimedEvent, Timer};
 use zenoh::key_expr::keyexpr_tree::KeyedSetProvider;
@@ -144,7 +143,7 @@ impl StorageService {
         t.add_async(gc).await;
 
         // subscribe on key_expr
-        let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
+        let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 tracing::error!("Error starting storage '{}': {}", self.name, e);
@@ -157,7 +156,6 @@ impl StorageService {
             .session
             .declare_queryable(&self.key_expr)
             .complete(self.complete)
-            .res()
             .await
         {
             Ok(storage_queryable) => storage_queryable,
@@ -522,7 +520,6 @@ impl StorageService {
                                 .reply(key.clone(), entry.value.payload().clone())
                                 .encoding(entry.value.encoding().clone())
                                 .timestamp(entry.timestamp)
-                                .res()
                                 .await
                             {
                                 tracing::warn!(
@@ -556,7 +553,6 @@ impl StorageService {
                             .reply(q.key_expr().clone(), entry.value.payload().clone())
                             .encoding(entry.value.encoding().clone())
                             .timestamp(entry.timestamp)
-                            .res()
                             .await
                         {
                             tracing::warn!(
@@ -644,7 +640,6 @@ impl StorageService {
                 .get(Selector::new(&self.key_expr, "_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
-                .res()
                 .await
             {
                 Ok(replies) => replies,

@@ -13,7 +13,7 @@
 //
 use std::time::Duration;
 use zenoh::internal::ztimeout;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -29,25 +29,24 @@ async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening session");
-    ztimeout!(zenoh::open(config).res_async()).unwrap()
+    ztimeout!(zenoh::open(config)).unwrap()
 }
 
 async fn close_session(session: Session) {
     println!("[  ][01d] Closing session");
-    ztimeout!(session.close().res_async()).unwrap();
+    ztimeout!(session.close()).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_events() {
     let session = open_session(&["tcp/127.0.0.1:18447"], &[]).await;
     let zid = session.zid();
-    let sub1 = ztimeout!(session
-        .declare_subscriber(format!("@/session/{zid}/transport/unicast/*"))
-        .res())
-    .unwrap();
-    let sub2 = ztimeout!(session
-        .declare_subscriber(format!("@/session/{zid}/transport/unicast/*/link/*"))
-        .res())
+    let sub1 =
+        ztimeout!(session.declare_subscriber(format!("@/session/{zid}/transport/unicast/*")))
+            .unwrap();
+    let sub2 = ztimeout!(
+        session.declare_subscriber(format!("@/session/{zid}/transport/unicast/*/link/*"))
+    )
     .unwrap();
 
     let session2 = open_session(&["tcp/127.0.0.1:18448"], &["tcp/127.0.0.1:18447"]).await;
@@ -65,23 +64,21 @@ async fn zenoh_events() {
     assert!(key_expr.starts_with(&format!("@/session/{zid}/transport/unicast/{zid2}/link/")));
     assert!(sample.as_ref().unwrap().kind() == SampleKind::Put);
 
-    let replies: Vec<Reply> = ztimeout!(session
-        .get(format!("@/session/{zid}/transport/unicast/*"))
-        .res_async())
-    .unwrap()
-    .into_iter()
-    .collect();
+    let replies: Vec<Reply> =
+        ztimeout!(session.get(format!("@/session/{zid}/transport/unicast/*")))
+            .unwrap()
+            .into_iter()
+            .collect();
     assert!(replies.len() == 1);
     assert!(replies[0].result().is_ok());
     let key_expr = replies[0].result().unwrap().key_expr().as_str();
     assert!(key_expr.eq(&format!("@/session/{zid}/transport/unicast/{zid2}")));
 
-    let replies: Vec<Reply> = ztimeout!(session
-        .get(format!("@/session/{zid}/transport/unicast/*/link/*"))
-        .res_async())
-    .unwrap()
-    .into_iter()
-    .collect();
+    let replies: Vec<Reply> =
+        ztimeout!(session.get(format!("@/session/{zid}/transport/unicast/*/link/*")))
+            .unwrap()
+            .into_iter()
+            .collect();
     assert!(replies.len() == 1);
     assert!(replies[0].result().is_ok());
     let key_expr = replies[0].result().unwrap().key_expr().as_str();
@@ -101,7 +98,7 @@ async fn zenoh_events() {
     assert!(key_expr.starts_with(&format!("@/session/{zid}/transport/unicast/{zid2}/link/")));
     assert!(sample.as_ref().unwrap().kind() == SampleKind::Delete);
 
-    ztimeout!(sub2.undeclare().res()).unwrap();
-    ztimeout!(sub1.undeclare().res()).unwrap();
+    ztimeout!(sub2.undeclare()).unwrap();
+    ztimeout!(sub1.undeclare()).unwrap();
     close_session(session).await;
 }

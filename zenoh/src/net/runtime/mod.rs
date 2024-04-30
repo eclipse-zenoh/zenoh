@@ -184,6 +184,11 @@ impl RuntimeBuilder {
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
+        // Admin space
+        if start_admin_space {
+            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+        }
+
         // Start plugins
         #[cfg(all(feature = "unstable", feature = "plugins"))]
         start_plugins(&runtime);
@@ -215,11 +220,6 @@ impl RuntimeBuilder {
             }
         });
 
-        // Admin space
-        if start_admin_space {
-            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
-        }
-
         Ok(runtime)
     }
 }
@@ -241,32 +241,6 @@ impl StructVersion for Runtime {
 impl PluginStartArgs for Runtime {}
 
 impl Runtime {
-    pub async fn new(config: Config) -> ZResult<Runtime> {
-        // Create plugin_manager and load plugins
-        let mut runtime = Runtime::init(
-            config,
-            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-            None,
-        )
-        .await?;
-        match runtime.start().await {
-            Ok(()) => Ok(runtime),
-            Err(err) => Err(err),
-        }
-    }
-
-    pub(crate) async fn init(
-        config: Config,
-        #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
-            Arc<SharedMemoryClientStorage>,
-        >,
-    ) -> ZResult<Runtime> {
-        let builder = RuntimeBuilder::new(config);
-        #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-        let builder = builder.shm_clients(shm_clients);
-        builder.build().await
-    }
-
     #[inline(always)]
     pub(crate) fn manager(&self) -> &TransportManager {
         &self.state.manager

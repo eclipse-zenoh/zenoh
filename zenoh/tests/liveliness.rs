@@ -23,33 +23,24 @@ async fn zenoh_liveliness() {
         .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
         .unwrap();
     c1.scouting.multicast.set_enabled(Some(false)).unwrap();
-    let session1 = ztimeout!(zenoh::open(c1).res_async()).unwrap();
+    let session1 = ztimeout!(zenoh::open(c1)).unwrap();
     let mut c2 = config::peer();
     c2.connect
         .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
         .unwrap();
     c2.scouting.multicast.set_enabled(Some(false)).unwrap();
-    let session2 = ztimeout!(zenoh::open(c2).res_async()).unwrap();
+    let session2 = ztimeout!(zenoh::open(c2)).unwrap();
 
     let sub = ztimeout!(session2
         .liveliness()
-        .declare_subscriber("zenoh_liveliness_test")
-        .res_async())
+        .declare_subscriber("zenoh_liveliness_test"))
     .unwrap();
 
-    let token = ztimeout!(session1
-        .liveliness()
-        .declare_token("zenoh_liveliness_test")
-        .res_async())
-    .unwrap();
+    let token = ztimeout!(session1.liveliness().declare_token("zenoh_liveliness_test")).unwrap();
 
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(session2
-        .liveliness()
-        .get("zenoh_liveliness_test")
-        .res_async())
-    .unwrap();
+    let replies = ztimeout!(session2.liveliness().get("zenoh_liveliness_test")).unwrap();
     let sample: Sample = ztimeout!(replies.recv_async())
         .unwrap()
         .into_result()
@@ -67,11 +58,7 @@ async fn zenoh_liveliness() {
 
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(session2
-        .liveliness()
-        .get("zenoh_liveliness_test")
-        .res_async())
-    .unwrap();
+    let replies = ztimeout!(session2.liveliness().get("zenoh_liveliness_test")).unwrap();
     assert!(ztimeout!(replies.recv_async()).is_err());
 
     assert!(replies.try_recv().is_err());

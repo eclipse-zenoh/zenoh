@@ -13,7 +13,7 @@
 //
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 
 #[tokio::main]
 async fn main() {
@@ -23,15 +23,11 @@ async fn main() {
     let sub_key_expr = KeyExpr::try_from("test/valgrind/**").unwrap();
 
     println!("Declaring Publisher on '{pub_key_expr}'...");
-    let pub_session = zenoh::open(Config::default()).res().await.unwrap();
-    let publisher = pub_session
-        .declare_publisher(&pub_key_expr)
-        .res()
-        .await
-        .unwrap();
+    let pub_session = zenoh::open(Config::default()).await.unwrap();
+    let publisher = pub_session.declare_publisher(&pub_key_expr).await.unwrap();
 
     println!("Declaring Subscriber on '{sub_key_expr}'...");
-    let sub_session = zenoh::open(Config::default()).res().await.unwrap();
+    let sub_session = zenoh::open(Config::default()).await.unwrap();
     let _subscriber = sub_session
         .declare_subscriber(&sub_key_expr)
         .callback(|sample| {
@@ -45,7 +41,6 @@ async fn main() {
                     .unwrap_or_else(|e| format!("{}", e))
             );
         })
-        .res()
         .await
         .unwrap();
 
@@ -53,7 +48,7 @@ async fn main() {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] data");
         println!("Putting Data ('{}': '{}')...", &pub_key_expr, buf);
-        publisher.put(buf).res().await.unwrap();
+        publisher.put(buf).await.unwrap();
     }
 
     tokio::time::sleep(Duration::from_secs(1)).await;

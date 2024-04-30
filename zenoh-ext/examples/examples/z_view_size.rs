@@ -15,7 +15,6 @@ use clap::{arg, Parser};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
 use zenoh_ext::group::*;
 use zenoh_ext_examples::CommonArgs;
 
@@ -25,7 +24,7 @@ async fn main() {
 
     let (config, group_name, id, size, timeout) = parse_args();
 
-    let z = Arc::new(zenoh::open(config).res().await.unwrap());
+    let z = Arc::new(zenoh::open(config).await.unwrap());
     let member_id = id.unwrap_or_else(|| z.zid().to_string());
     let member = Member::new(member_id.as_str())
         .unwrap()

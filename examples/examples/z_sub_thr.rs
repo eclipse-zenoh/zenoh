@@ -13,7 +13,7 @@
 //
 use clap::Parser;
 use std::time::Instant;
-use zenoh::prelude::sync::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 struct Stats {
@@ -77,7 +77,7 @@ fn main() {
     // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
     config.transport.shared_memory.set_enabled(true).unwrap();
 
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     let key_expr = "test/thr";
 
@@ -90,7 +90,7 @@ fn main() {
                 std::process::exit(0)
             }
         })
-        .res()
+        .wait()
         .unwrap();
 
     println!("Press CTRL-C to quit...");

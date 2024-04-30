@@ -12,20 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{thread, time::Duration};
-use zenoh::prelude::sync::*;
+use zenoh::prelude::*;
 
 #[test]
 fn pubsub_with_ringbuffer() {
-    let zenoh = zenoh::open(Config::default()).res().unwrap();
+    let zenoh = zenoh::open(Config::default()).wait().unwrap();
     let sub = zenoh
         .declare_subscriber("test/ringbuffer")
         .with(RingChannel::new(3))
-        .res()
+        .wait()
         .unwrap();
     for i in 0..10 {
         zenoh
             .put("test/ringbuffer", format!("put{i}"))
-            .res()
+            .wait()
             .unwrap();
     }
     // Should only receive the last three samples ("put7", "put8", "put9")
@@ -45,22 +45,22 @@ fn pubsub_with_ringbuffer() {
 
 #[test]
 fn query_with_ringbuffer() {
-    let zenoh = zenoh::open(Config::default()).res().unwrap();
+    let zenoh = zenoh::open(Config::default()).wait().unwrap();
     let queryable = zenoh
         .declare_queryable("test/ringbuffer_query")
         .with(RingChannel::new(1))
-        .res()
+        .wait()
         .unwrap();
 
     let _reply1 = zenoh
         .get("test/ringbuffer_query")
         .payload("query1")
-        .res()
+        .wait()
         .unwrap();
     let _reply2 = zenoh
         .get("test/ringbuffer_query")
         .payload("query2")
-        .res()
+        .wait()
         .unwrap();
 
     let query = queryable.recv().unwrap();

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -23,17 +23,10 @@ async fn main() {
     let (config, key_expr) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring LivelinessToken on '{}'...", &key_expr);
-    let mut token = Some(
-        session
-            .liveliness()
-            .declare_token(&key_expr)
-            .res()
-            .await
-            .unwrap(),
-    );
+    let mut token = Some(session.liveliness().declare_token(&key_expr).await.unwrap());
 
     println!("Press CTRL-C to undeclare LivelinessToken and quit...");
     std::thread::park();
@@ -41,7 +34,7 @@ async fn main() {
     // Use the code below to manually undeclare it if needed
     if let Some(token) = token.take() {
         println!("Undeclaring LivelinessToken...");
-        token.undeclare().res().await.unwrap();
+        token.undeclare().await.unwrap();
     };
 }
 

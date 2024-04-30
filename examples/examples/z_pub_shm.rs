@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 const N: usize = 10;
@@ -30,7 +30,7 @@ async fn main() -> Result<(), ZError> {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Creating POSIX SHM backend...");
     // Construct an SHM backend
@@ -61,7 +61,7 @@ async fn main() -> Result<(), ZError> {
         .backend(backend)
         .res();
 
-    let publisher = session.declare_publisher(&path).res().await.unwrap();
+    let publisher = session.declare_publisher(&path).await.unwrap();
 
     println!("Allocating Shared Memory Buffer...");
     let layout = shared_memory_provider
@@ -96,7 +96,7 @@ async fn main() -> Result<(), ZError> {
             path,
             String::from_utf8_lossy(&sbuf[0..slice_len])
         );
-        publisher.put(sbuf).res().await?;
+        publisher.put(sbuf).await?;
     }
 
     Ok(())

@@ -24,7 +24,7 @@ use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use zenoh_core::{ResolveFuture, SyncResolve};
+use zenoh_core::{ResolveFuture, Wait};
 use zenoh_runtime::ZRuntime;
 
 #[derive(Clone)]
@@ -111,7 +111,7 @@ impl TaskController {
     /// The call blocks until all tasks yield or timeout duration expires.
     /// Returns 0 in case of success, number of non terminated tasks otherwise.
     pub fn terminate_all(&self, timeout: Duration) -> usize {
-        ResolveFuture::new(async move { self.terminate_all_async(timeout).await }).res_sync()
+        ResolveFuture::new(async move { self.terminate_all_async(timeout).await }).wait()
     }
 
     /// Async version of [`TaskController::terminate_all()`].
@@ -176,7 +176,7 @@ impl TerminatableTask {
     /// Attempts to terminate the task.
     /// Returns true if task completed / aborted within timeout duration, false otherwise.
     pub fn terminate(self, timeout: Duration) -> bool {
-        ResolveFuture::new(async move { self.terminate_async(timeout).await }).res_sync()
+        ResolveFuture::new(async move { self.terminate_async(timeout).await }).wait()
     }
 
     /// Async version of [`TerminatableTask::terminate()`].

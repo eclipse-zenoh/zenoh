@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -28,17 +28,16 @@ async fn main() {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
         .declare_queryable(&key_expr)
-        // // By default queryable receives queries from a FIFO. 
-        // // Uncomment this line to use a ring channel instead. 
+        // // By default queryable receives queries from a FIFO.
+        // // Uncomment this line to use a ring channel instead.
         // // More information on the ring channel are available in the z_pull example.
         // .with(zenoh::handlers::RingChannel::default())
         .complete(complete)
-        .res()
         .await
         .unwrap();
 
@@ -65,7 +64,6 @@ async fn main() {
         );
         query
             .reply(key_expr.clone(), value.clone())
-            .res()
             .await
             .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
     }

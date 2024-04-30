@@ -22,6 +22,7 @@ edition = { workspace = true }
 license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh"
+publish = false
 
 [badges]
 maintenance = { status = "actively-developed" }
