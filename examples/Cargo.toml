@@ -169,6 +169,6 @@ path = "examples/z_alloc_shm.rs"
 required-features = ["unstable", "shared-memory"]
 
 [[example]]
-name = "z_payload_shm"
-path = "examples/z_payload_shm.rs"
+name = "z_bytes_shm"
+path = "examples/z_bytes_shm.rs"
 required-features = ["unstable", "shared-memory"]
