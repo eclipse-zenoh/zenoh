@@ -15,9 +15,9 @@ use std::sync::{Arc, Mutex};
 use zenoh_core::zlock;
 
 #[cfg(target_os = "windows")]
-static MINIMAL_SLEEP_INTERVAL_MS: u64 = 2;
-#[cfg(not(target_os = "windows"))]
 static MINIMAL_SLEEP_INTERVAL_MS: u64 = 17;
+#[cfg(not(target_os = "windows"))]
+static MINIMAL_SLEEP_INTERVAL_MS: u64 = 2;
 
 struct IntervalCounter {
     first_tick: bool,
