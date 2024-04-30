@@ -137,10 +137,11 @@ impl PolicyEnforcer {
        initializes the policy_enforcer
     */
     pub fn init(&mut self, acl_config: &AclConfig) -> ZResult<()> {
-        self.acl_enabled = acl_config.enabled;
-        self.default_permission = acl_config.default_permission;
+        let mut_acl_config = acl_config.clone();
+        self.acl_enabled = mut_acl_config.enabled;
+        self.default_permission = mut_acl_config.default_permission;
         if self.acl_enabled {
-            if let Some(rules) = &acl_config.rules {
+            if let Some(mut rules) = mut_acl_config.rules {
                 if rules.is_empty() {
                     tracing::warn!("Access control rules are empty in config file");
                     self.policy_map = PolicyMap::default();
@@ -152,7 +153,30 @@ impl PolicyEnforcer {
                         };
                     }
                 } else {
-                    let policy_information = self.policy_information_point(rules)?;
+                    // check for undefined values in rules and initialize them to defaults
+                    for (rule_offset, rule) in rules.iter_mut().enumerate() {
+                        match rule.interfaces {
+                            Some(_) => (),
+                            None => {
+                                tracing::warn!("ACL config interfaces list is empty. Applying rule #{} to all network interfaces", rule_offset);
+                                if let Ok(all_interfaces) =
+                                    get_interface_names_by_addr(Ipv4Addr::UNSPECIFIED.into())
+                                {
+                                    rule.interfaces = Some(all_interfaces);
+                                }
+                            }
+                        }
+                        match rule.flows {
+                            Some(_) => (),
+                            None => {
+                                tracing::warn!("ACL config flows list is empty. Applying rule #{} to both Ingress and Egress flows", rule_offset);
+                                rule.flows = Some(
+                                    [InterceptorFlow::Ingress, InterceptorFlow::Egress].into(),
+                                );
+                            }
+                        }
+                    }
+                    let policy_information = self.policy_information_point(&rules)?;
                     let subject_map = policy_information.subject_map;
                     let mut main_policy: PolicyMap = PolicyMap::default();
 
@@ -197,43 +221,34 @@ impl PolicyEnforcer {
     */
     pub fn policy_information_point(
         &self,
-        config_rule_set: &[AclConfigRules],
+        config_rule_set: &Vec<AclConfigRules>,
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
-        for (rule_offset, config_rule) in config_rule_set.iter().enumerate() {
+        for config_rule in config_rule_set {
             // config validation
-            let mut validated_rule = config_rule.clone();
             let mut validation_err = String::new();
-            if validated_rule.interfaces.is_empty() {
-                tracing::warn!("ACL config interfaces list is empty. Applying rule #{} to all network interfaces", rule_offset);
-                if let Ok(all_interfaces) =
-                    get_interface_names_by_addr(Ipv4Addr::UNSPECIFIED.into())
-                {
-                    validated_rule.interfaces = all_interfaces;
-                }
+            if config_rule.interfaces.as_ref().unwrap().is_empty() {
+                validation_err.push_str("ACL config interfaces list is empty. ");
             }
-            if validated_rule.flows.is_empty() {
-                tracing::warn!("ACL config flows list is empty. Applying rule #{} to both Ingress and Egress flows", rule_offset);
-                validated_rule
-                    .flows
-                    .extend([InterceptorFlow::Ingress, InterceptorFlow::Egress]);
-            }
-            if validated_rule.actions.is_empty() {
+            if config_rule.actions.is_empty() {
                 validation_err.push_str("ACL config actions list is empty. ");
             }
-            if validated_rule.key_exprs.is_empty() {
+            if config_rule.flows.as_ref().unwrap().is_empty() {
+                validation_err.push_str("ACL config flows list is empty. ");
+            }
+            if config_rule.key_exprs.is_empty() {
                 validation_err.push_str("ACL config key_exprs list is empty. ");
             }
             if !validation_err.is_empty() {
                 bail!("{}", validation_err);
             }
-            for subject in &validated_rule.interfaces {
+            for subject in config_rule.interfaces.as_ref().unwrap() {
                 if subject.trim().is_empty() {
                     bail!("found an empty interface value in interfaces list");
                 }
-                for flow in &validated_rule.flows {
-                    for action in &validated_rule.actions {
-                        for key_expr in &validated_rule.key_exprs {
+                for flow in config_rule.flows.as_ref().unwrap() {
+                    for action in &config_rule.actions {
+                        for key_expr in &config_rule.key_exprs {
                             if key_expr.trim().is_empty() {
                                 bail!("found an empty key-expression value in key_exprs list");
                             }
@@ -241,7 +256,7 @@ impl PolicyEnforcer {
                                 subject: Subject::Interface(subject.clone()),
                                 key_expr: key_expr.clone(),
                                 action: *action,
-                                permission: validated_rule.permission,
+                                permission: config_rule.permission,
                                 flow: *flow,
                             })
                         }
