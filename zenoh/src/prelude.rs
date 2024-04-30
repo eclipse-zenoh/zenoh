@@ -51,7 +51,7 @@ pub(crate) mod flat {
     pub use crate::scouting::*;
     pub use crate::selector::*;
     pub use crate::session::*;
-    #[cfg(feature = "shared-memory")]
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
     pub use crate::shm::*;
     pub use crate::subscriber::*;
     pub use crate::time::*;
@@ -74,7 +74,7 @@ pub(crate) mod mods {
     pub use crate::scouting;
     pub use crate::selector;
     pub use crate::session;
-    #[cfg(feature = "shared-memory")]
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
     pub use crate::shm;
     pub use crate::subscriber;
     pub use crate::time;

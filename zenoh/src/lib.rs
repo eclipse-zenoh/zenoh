@@ -362,19 +362,32 @@ pub mod internal {
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub mod shm {
-    pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
-    pub use zenoh_shm::api::provider::shared_memory_provider::{BlockOn, GarbageCollect};
-    pub use zenoh_shm::api::provider::shared_memory_provider::{Deallocate, Defragment};
-    pub use zenoh_shm::api::provider::types::AllocAlignment;
-    pub use zenoh_shm::api::provider::types::MemoryLayout;
-    pub use zenoh_shm::api::slice::zsliceshm::{zsliceshm, ZSliceShm};
-    pub use zenoh_shm::api::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
-    pub use zenoh_shm::api::{
-        protocol_implementations::posix::{
-            posix_shared_memory_client::PosixSharedMemoryClient,
-            posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-            protocol_id::POSIX_PROTOCOL_ID,
+    pub use zenoh_shm::api::client::{
+        shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
+    };
+    pub use zenoh_shm::api::client_storage::{SharedMemoryClientStorage, GLOBAL_CLIENT_STORAGE};
+    pub use zenoh_shm::api::common::types::{ChunkID, ProtocolID, SegmentID};
+    pub use zenoh_shm::api::protocol_implementations::posix::{
+        posix_shared_memory_client::PosixSharedMemoryClient,
+        posix_shared_memory_provider_backend::{
+            LayoutedPosixSharedMemoryProviderBackendBuilder, PosixSharedMemoryProviderBackend,
+            PosixSharedMemoryProviderBackendBuilder,
         },
-        provider::shared_memory_provider::SharedMemoryProviderBuilder,
+        protocol_id::POSIX_PROTOCOL_ID,
+    };
+    pub use zenoh_shm::api::provider::shared_memory_provider::{
+        AllocBuilder, AllocLayout, AllocLayoutAlignedBuilder, AllocLayoutBuilder,
+        AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
+        DeallocOptimal, DeallocYoungest, Deallocate, Defragment, DynamicProtocolID,
+        ForceDeallocPolicy, GarbageCollect, JustAlloc, ProtocolIDSource, SharedMemoryProvider,
+        SharedMemoryProviderBuilder, SharedMemoryProviderBuilderBackendID,
+        SharedMemoryProviderBuilderID, StaticProtocolID,
+    };
+    pub use zenoh_shm::api::provider::types::{
+        AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError,
+    };
+    pub use zenoh_shm::api::slice::{
+        zsliceshm::{zsliceshm, ZSliceShm},
+        zsliceshmmut::{zsliceshmmut, ZSliceShmMut},
     };
 }
