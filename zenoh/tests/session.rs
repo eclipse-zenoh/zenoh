@@ -69,6 +69,7 @@ async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer01.close().res_async()).unwrap();
     println!("[  ][02d] Closing peer02 session");
     ztimeout!(peer02.close().res_async()).unwrap();
+    println!(">>> close session done");
 }
 
 async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Reliability) {
@@ -128,6 +129,8 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         // Wait for the declaration to propagate
         tokio::time::sleep(SLEEP).await;
     }
+
+    println!(">>> test_session_pubsub done");
 }
 
 async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
