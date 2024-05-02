@@ -60,7 +60,7 @@ fn main() {
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example
     // NOTE: For buf's API please check z_bytes_shm.rs example
-    let mut buf = provider
+    let buf = provider
         .alloc_layout()
         .size(size)
         .res()
