@@ -13,16 +13,17 @@
 //
 #[cfg(feature = "transport_compression")]
 mod tests {
-    use std::fmt::Write as _;
     use std::{
         any::Any,
         convert::TryFrom,
+        fmt::Write as _,
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
         },
         time::Duration,
     };
+
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{

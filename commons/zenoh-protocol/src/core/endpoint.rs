@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{locator::*, parameters::Parameters};
 use alloc::{borrow::ToOwned, format, string::String};
 use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
+
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
+
+use super::{locator::*, parameters::Parameters};
 
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';

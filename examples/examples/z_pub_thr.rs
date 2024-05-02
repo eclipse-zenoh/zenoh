@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use clap::Parser;
 use std::convert::TryInto;
+
+use clap::Parser;
 use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 

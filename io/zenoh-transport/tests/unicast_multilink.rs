@@ -14,6 +14,7 @@
 #[cfg(feature = "transport_multilink")]
 mod tests {
     use std::{convert::TryFrom, sync::Arc, time::Duration};
+
     use zenoh_core::ztimeout;
     use zenoh_link::EndPoint;
     use zenoh_protocol::core::{WhatAmI, ZenohId};

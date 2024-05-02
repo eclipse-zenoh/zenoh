@@ -110,8 +110,7 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
 );
 
 // Expose some functions directly to root `zenoh::`` namespace for convenience
-pub use crate::api::scouting::scout;
-pub use crate::api::session::open;
+pub use crate::api::{scouting::scout, session::open};
 
 pub mod prelude;
 
@@ -119,27 +118,24 @@ pub mod prelude;
 pub mod core {
     #[allow(deprecated)]
     pub use zenoh_core::AsyncResolve;
-    pub use zenoh_core::Resolvable;
-    pub use zenoh_core::Resolve;
     #[allow(deprecated)]
     pub use zenoh_core::SyncResolve;
-    pub use zenoh_core::Wait;
+    pub use zenoh_core::{Resolvable, Resolve, Wait};
     /// A zenoh error.
     pub use zenoh_result::Error;
     /// A zenoh result.
     pub use zenoh_result::ZResult as Result;
-    pub use zenoh_util::core::zresult::ErrNo;
-    pub use zenoh_util::try_init_log_from_env;
+    pub use zenoh_util::{core::zresult::ErrNo, try_init_log_from_env};
 }
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
 pub mod buffers {
-    pub use zenoh_buffers::buffer::SplitBuffer;
-    pub use zenoh_buffers::reader::HasReader;
-    pub use zenoh_buffers::reader::Reader;
-    pub use zenoh_buffers::ZBufReader;
-    pub use zenoh_buffers::{ZBuf, ZSlice, ZSliceBuffer};
+    pub use zenoh_buffers::{
+        buffer::SplitBuffer,
+        reader::{HasReader, Reader},
+        ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
+    };
 }
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
@@ -174,18 +170,16 @@ pub mod buffers {
 /// as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 pub mod key_expr {
     pub mod keyexpr_tree {
-        pub use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
         pub use zenoh_keyexpr::keyexpr_tree::{
-            support::NonWild, support::UnknownWildness, KeBoxTree,
+            impls::KeyedSetProvider,
+            support::{NonWild, UnknownWildness},
+            IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
         };
-        pub use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
     }
-    pub use crate::api::key_expr::KeyExpr;
-    pub use crate::api::key_expr::KeyExprUndeclaration;
-    pub use zenoh_keyexpr::keyexpr;
-    pub use zenoh_keyexpr::OwnedKeyExpr;
-    pub use zenoh_keyexpr::SetIntersectionLevel;
+    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr, SetIntersectionLevel};
     pub use zenoh_macros::{kedefine, keformat, kewrite};
+
+    pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
     // keyexpr format macro support
     pub mod format {
         pub use zenoh_keyexpr::format::*;
@@ -197,48 +191,38 @@ pub mod key_expr {
 
 /// Zenoh [`Session`](crate::session::Session) and associated types
 pub mod session {
-    pub use crate::api::builders::publication::SessionDeleteBuilder;
-    pub use crate::api::builders::publication::SessionPutBuilder;
     #[zenoh_macros::unstable]
     #[doc(hidden)]
     pub use crate::api::session::init;
-    pub use crate::api::session::open;
     #[zenoh_macros::unstable]
     #[doc(hidden)]
     pub use crate::api::session::InitBuilder;
-    pub use crate::api::session::OpenBuilder;
-    pub use crate::api::session::Session;
-    pub use crate::api::session::SessionDeclarations;
-    pub use crate::api::session::SessionRef;
-    pub use crate::api::session::Undeclarable;
+    pub use crate::api::{
+        builders::publication::{SessionDeleteBuilder, SessionPutBuilder},
+        session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
+    };
 }
 
 /// Tools to access information about the current zenoh [`Session`](crate::Session).
 pub mod info {
-    pub use crate::api::info::PeersZenohIdBuilder;
-    pub use crate::api::info::RoutersZenohIdBuilder;
-    pub use crate::api::info::SessionInfo;
-    pub use crate::api::info::ZenohIdBuilder;
+    pub use crate::api::info::{
+        PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder,
+    };
 }
 
 /// Sample primitives
 pub mod sample {
-    pub use crate::api::builders::sample::QoSBuilderTrait;
-    pub use crate::api::builders::sample::SampleBuilder;
-    pub use crate::api::builders::sample::SampleBuilderAny;
-    pub use crate::api::builders::sample::SampleBuilderDelete;
-    pub use crate::api::builders::sample::SampleBuilderPut;
-    pub use crate::api::builders::sample::SampleBuilderTrait;
-    pub use crate::api::builders::sample::TimestampBuilderTrait;
-    pub use crate::api::builders::sample::ValueBuilderTrait;
     #[zenoh_macros::unstable]
     pub use crate::api::sample::Locality;
-    pub use crate::api::sample::Sample;
-    pub use crate::api::sample::SampleFields;
-    pub use crate::api::sample::SampleKind;
     #[zenoh_macros::unstable]
     pub use crate::api::sample::SourceInfo;
-    pub use crate::api::sample::SourceSn;
+    pub use crate::api::{
+        builders::sample::{
+            QoSBuilderTrait, SampleBuilder, SampleBuilderAny, SampleBuilderDelete,
+            SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+        },
+        sample::{Sample, SampleFields, SampleKind, SourceSn},
+    };
 }
 
 /// Value primitives
@@ -253,42 +237,32 @@ pub mod encoding {
 
 /// Payload primitives
 pub mod bytes {
-    pub use crate::api::bytes::Deserialize;
-    pub use crate::api::bytes::OptionZBytes;
-    pub use crate::api::bytes::Serialize;
-    pub use crate::api::bytes::StringOrBase64;
-    pub use crate::api::bytes::ZBytes;
-    pub use crate::api::bytes::ZBytesIterator;
-    pub use crate::api::bytes::ZBytesReader;
-    pub use crate::api::bytes::ZBytesWriter;
-    pub use crate::api::bytes::ZDeserializeError;
-    pub use crate::api::bytes::ZSerde;
+    pub use crate::api::bytes::{
+        Deserialize, OptionZBytes, Serialize, StringOrBase64, ZBytes, ZBytesIterator, ZBytesReader,
+        ZBytesWriter, ZDeserializeError, ZSerde,
+    };
 }
 
 /// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 pub mod selector {
-    pub use crate::api::selector::Parameters;
-    pub use crate::api::selector::Selector;
-    pub use crate::api::selector::TIME_RANGE_KEY;
     pub use zenoh_protocol::core::Properties;
     pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
+
+    pub use crate::api::selector::{Parameters, Selector, TIME_RANGE_KEY};
 }
 
 /// Subscribing primitives
 pub mod subscriber {
-    pub use crate::api::subscriber::FlumeSubscriber;
-    pub use crate::api::subscriber::Subscriber;
-    pub use crate::api::subscriber::SubscriberBuilder;
     /// The kind of reliability.
     pub use zenoh_protocol::core::Reliability;
+
+    pub use crate::api::subscriber::{FlumeSubscriber, Subscriber, SubscriberBuilder};
 }
 
 /// Publishing primitives
 pub mod publication {
-    pub use crate::api::builders::publication::PublicationBuilderDelete;
-    pub use crate::api::builders::publication::PublicationBuilderPut;
-    pub use crate::api::builders::publication::PublisherBuilder;
-    pub use crate::api::builders::publication::PublisherDeleteBuilder;
+    pub use zenoh_protocol::core::CongestionControl;
+
     #[zenoh_macros::unstable]
     pub use crate::api::publication::MatchingListener;
     #[zenoh_macros::unstable]
@@ -297,88 +271,81 @@ pub mod publication {
     pub use crate::api::publication::MatchingListenerUndeclaration;
     #[zenoh_macros::unstable]
     pub use crate::api::publication::MatchingStatus;
-    pub use crate::api::publication::Priority;
-    pub use crate::api::publication::Publisher;
     #[zenoh_macros::unstable]
     pub use crate::api::publication::PublisherDeclarations;
     #[zenoh_macros::unstable]
     pub use crate::api::publication::PublisherRef;
-    pub use crate::api::publication::PublisherUndeclaration;
-    pub use zenoh_protocol::core::CongestionControl;
+    pub use crate::api::{
+        builders::publication::{
+            PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+            PublisherDeleteBuilder,
+        },
+        publication::{Priority, Publisher, PublisherUndeclaration},
+    };
 }
 
 /// Query primitives
 pub mod query {
-    pub use crate::api::query::GetBuilder;
-    pub use crate::api::query::Reply;
     #[zenoh_macros::unstable]
     pub use crate::api::query::ReplyKeyExpr;
     #[zenoh_macros::unstable]
     pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
-    pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget};
+    pub use crate::api::query::{
+        ConsolidationMode, GetBuilder, QueryConsolidation, QueryTarget, Reply,
+    };
 }
 
 /// Queryable primitives
 pub mod queryable {
-    pub use crate::api::queryable::Query;
-    pub use crate::api::queryable::Queryable;
-    pub use crate::api::queryable::QueryableBuilder;
-    pub use crate::api::queryable::QueryableUndeclaration;
-    pub use crate::api::queryable::ReplyBuilder;
-    pub use crate::api::queryable::ReplyBuilderDelete;
-    pub use crate::api::queryable::ReplyBuilderPut;
-    pub use crate::api::queryable::ReplyErrBuilder;
     #[zenoh_macros::unstable]
     pub use crate::api::queryable::ReplySample;
+    pub use crate::api::queryable::{
+        Query, Queryable, QueryableBuilder, QueryableUndeclaration, ReplyBuilder,
+        ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+    };
 }
 
 /// Callback handler trait
 pub mod handlers {
-    pub use crate::api::handlers::locked;
-    pub use crate::api::handlers::Callback;
-    pub use crate::api::handlers::CallbackDrop;
-    pub use crate::api::handlers::DefaultHandler;
-    pub use crate::api::handlers::FifoChannel;
-    pub use crate::api::handlers::IntoHandler;
-    pub use crate::api::handlers::RingChannel;
-    pub use crate::api::handlers::RingChannelHandler;
+    pub use crate::api::handlers::{
+        locked, Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
+        RingChannelHandler,
+    };
 }
 
 /// Scouting primitives
 pub mod scouting {
-    pub use crate::api::scouting::scout;
-    pub use crate::api::scouting::Scout;
-    pub use crate::api::scouting::ScoutBuilder;
     /// Constants and helpers for zenoh `whatami` flags.
     pub use zenoh_protocol::core::WhatAmI;
     /// A zenoh Hello message.
     pub use zenoh_protocol::scouting::Hello;
+
+    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
 }
 
 /// Liveliness primitives
 #[cfg(feature = "unstable")]
 pub mod liveliness {
-    pub use crate::api::liveliness::Liveliness;
-    pub use crate::api::liveliness::LivelinessGetBuilder;
-    pub use crate::api::liveliness::LivelinessSubscriberBuilder;
-    pub use crate::api::liveliness::LivelinessToken;
-    pub use crate::api::liveliness::LivelinessTokenBuilder;
-    pub use crate::api::liveliness::LivelinessTokenUndeclaration;
+    pub use crate::api::liveliness::{
+        Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
+        LivelinessTokenBuilder, LivelinessTokenUndeclaration,
+    };
 }
 
 /// Timestamp support
 pub mod time {
-    pub use crate::api::time::new_reception_timestamp;
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
+
+    pub use crate::api::time::new_reception_timestamp;
 }
 
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
 pub mod runtime {
-    pub use crate::net::runtime::RuntimeBuilder;
-    pub use crate::net::runtime::{AdminSpace, Runtime};
     pub use zenoh_runtime::ZRuntime;
+
+    pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
 }
 
 /// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
@@ -393,42 +360,39 @@ pub mod config {
 #[doc(hidden)]
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 pub mod plugins {
-    pub use crate::api::plugins::PluginsManager;
-    pub use crate::api::plugins::Response;
-    pub use crate::api::plugins::RunningPlugin;
-    pub use crate::api::plugins::PLUGIN_PREFIX;
-    pub use crate::api::plugins::{RunningPluginTrait, ZenohPlugin};
+    pub use crate::api::plugins::{
+        PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
+    };
 }
 
 #[doc(hidden)]
 pub mod internal {
-    pub use zenoh_core::zasync_executor_init;
-    pub use zenoh_core::zerror;
-    pub use zenoh_core::zlock;
-    pub use zenoh_core::ztimeout;
+    pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout};
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
-    pub use zenoh_task::TaskController;
-    pub use zenoh_task::TerminatableTask;
-    pub use zenoh_util::core::ResolveFuture;
-    pub use zenoh_util::LibLoader;
-    pub use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
+    pub use zenoh_task::{TaskController, TerminatableTask};
+    pub use zenoh_util::{
+        core::ResolveFuture, zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR,
+    };
 }
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub mod shm {
-    pub use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
-    pub use zenoh_shm::api::provider::shared_memory_provider::{BlockOn, GarbageCollect};
-    pub use zenoh_shm::api::provider::shared_memory_provider::{Deallocate, Defragment};
-    pub use zenoh_shm::api::provider::types::AllocAlignment;
-    pub use zenoh_shm::api::provider::types::MemoryLayout;
-    pub use zenoh_shm::api::slice::zsliceshm::{zsliceshm, ZSliceShm};
-    pub use zenoh_shm::api::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
     pub use zenoh_shm::api::{
+        client_storage::SharedMemoryClientStorage,
         protocol_implementations::posix::{
             posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
             protocol_id::POSIX_PROTOCOL_ID,
         },
-        provider::shared_memory_provider::SharedMemoryProviderBuilder,
+        provider::{
+            shared_memory_provider::{
+                BlockOn, Deallocate, Defragment, GarbageCollect, SharedMemoryProviderBuilder,
+            },
+            types::{AllocAlignment, MemoryLayout},
+        },
+        slice::{
+            zsliceshm::{zsliceshm, ZSliceShm},
+            zsliceshmmut::{zsliceshmmut, ZSliceShmMut},
+        },
     };
 }

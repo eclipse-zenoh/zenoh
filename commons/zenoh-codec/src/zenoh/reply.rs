@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -25,6 +25,8 @@ use zenoh_protocol::{
         reply::{flag, Reply, ReplyBody},
     },
 };
+
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 impl<W> WCodec<&Reply, &mut W> for Zenoh080
 where

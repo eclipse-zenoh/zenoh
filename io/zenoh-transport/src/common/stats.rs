@@ -167,8 +167,9 @@ macro_rules! stats_struct {
     }
 }
 
-use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+use serde::{Deserialize, Serialize};
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct DiscriminatedStats {

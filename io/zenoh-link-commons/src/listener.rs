@@ -11,11 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    sync::{Arc, RwLock},
+};
+
 use futures::Future;
-use std::collections::HashMap;
-use std::net::IpAddr;
-use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zread, zwrite};

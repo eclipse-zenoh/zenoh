@@ -16,7 +16,6 @@ pub(super) mod cookie;
 pub mod ext;
 pub(crate) mod open;
 
-use crate::common::seq_num;
 use async_trait::async_trait;
 use cookie::*;
 use sha3::{
@@ -27,6 +26,8 @@ use zenoh_protocol::{
     core::{Field, Resolution, ZenohId},
     transport::TransportSn,
 };
+
+use crate::common::seq_num;
 
 /*************************************/
 /*             TRAITS                */

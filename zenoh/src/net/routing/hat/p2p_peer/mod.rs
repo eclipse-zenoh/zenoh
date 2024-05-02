@@ -17,17 +17,24 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use crate::{
-    net::runtime::Runtime,
-    net::{
-        codec::Zenoh080Routing,
-        protocol::linkstate::LinkStateList,
-        routing::{
-            dispatcher::face::Face,
-            router::{compute_data_routes, compute_query_routes, RoutesIndexes},
-        },
+use std::{
+    any::Any,
+    collections::HashMap,
+    sync::{atomic::AtomicU32, Arc},
+};
+
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
+use zenoh_protocol::{
+    common::ZExtBody,
+    network::{
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+        oam::id::OAM_LINKSTATE,
+        Oam,
     },
 };
+use zenoh_result::ZResult;
+use zenoh_sync::get_mut_unchecked;
+use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
     gossip::Network,
@@ -41,23 +48,15 @@ use super::{
     },
     HatBaseTrait, HatTrait,
 };
-use std::{
-    any::Any,
-    collections::HashMap,
-    sync::{atomic::AtomicU32, Arc},
+use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::linkstate::LinkStateList,
+    routing::{
+        dispatcher::face::Face,
+        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+    },
+    runtime::Runtime,
 };
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
-use zenoh_protocol::network::{
-    declare::{QueryableId, SubscriberId},
-    Oam,
-};
-use zenoh_protocol::{
-    common::ZExtBody,
-    network::{declare::queryable::ext::QueryableInfoType, oam::id::OAM_LINKSTATE},
-};
-use zenoh_result::ZResult;
-use zenoh_sync::get_mut_unchecked;
-use zenoh_transport::unicast::TransportUnicast;
 
 mod gossip;
 mod pubsub;

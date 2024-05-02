@@ -11,18 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::unicast::manager::{
-    TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
-};
-use super::TransportEventHandler;
-use crate::multicast::manager::{
-    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
-    TransportManagerStateMulticast,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
+
 use rand::{RngCore, SeedableRng};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
 use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
@@ -38,6 +29,17 @@ use zenoh_shm::api::client_storage::GLOBAL_CLIENT_STORAGE;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::reader::SharedMemoryReader;
 use zenoh_task::TaskController;
+
+use super::{
+    unicast::manager::{
+        TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
+    },
+    TransportEventHandler,
+};
+use crate::multicast::manager::{
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerStateMulticast,
+};
 
 /// # Examples
 /// ```

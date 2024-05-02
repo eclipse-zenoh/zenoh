@@ -11,22 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use super::establishment::ext::shm::AuthUnicast;
-use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
-#[cfg(feature = "transport_auth")]
-use crate::unicast::establishment::ext::auth::Auth;
-#[cfg(feature = "transport_multilink")]
-use crate::unicast::establishment::ext::multilink::MultiLink;
-use crate::{
-    unicast::{
-        lowlatency::transport::TransportUnicastLowlatency,
-        transport_unicast_inner::{InitTransportError, TransportUnicastTrait},
-        universal::transport::TransportUnicastUniversal,
-        TransportConfigUnicast, TransportUnicast,
-    },
-    TransportManager, TransportPeer,
-};
 use std::{
     collections::HashMap,
     sync::{
@@ -35,6 +19,7 @@ use std::{
     },
     time::Duration,
 };
+
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionUnicastConf;
@@ -51,6 +36,23 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::reader::SharedMemoryReader;
+
+#[cfg(feature = "shared-memory")]
+use super::establishment::ext::shm::AuthUnicast;
+use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
+#[cfg(feature = "transport_auth")]
+use crate::unicast::establishment::ext::auth::Auth;
+#[cfg(feature = "transport_multilink")]
+use crate::unicast::establishment::ext::multilink::MultiLink;
+use crate::{
+    unicast::{
+        lowlatency::transport::TransportUnicastLowlatency,
+        transport_unicast_inner::{InitTransportError, TransportUnicastTrait},
+        universal::transport::TransportUnicastUniversal,
+        TransportConfigUnicast, TransportUnicast,
+    },
+    TransportManager, TransportPeer,
+};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */

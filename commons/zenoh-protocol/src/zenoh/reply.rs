@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::vec::Vec;
+
 use crate::{
     common::ZExtUnknown,
     zenoh::{query::Consolidation, PushBody},
 };
-use alloc::vec::Vec;
 
 /// # Reply message
 ///

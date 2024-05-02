@@ -11,6 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::time::Duration;
+
+use async_trait::async_trait;
+use zenoh_buffers::ZSlice;
+#[cfg(feature = "transport_auth")]
+use zenoh_core::zasynclock;
+use zenoh_core::{zcondfeat, zerror};
+use zenoh_link::LinkUnicast;
+use zenoh_protocol::{
+    core::{Field, Resolution, WhatAmI, ZenohId},
+    transport::{
+        batch_size, close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
+        TransportSn,
+    },
+};
+use zenoh_result::ZResult;
+
 #[cfg(feature = "shared-memory")]
 use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
@@ -27,21 +44,6 @@ use crate::{
     },
     TransportManager,
 };
-use async_trait::async_trait;
-use std::time::Duration;
-use zenoh_buffers::ZSlice;
-#[cfg(feature = "transport_auth")]
-use zenoh_core::zasynclock;
-use zenoh_core::{zcondfeat, zerror};
-use zenoh_link::LinkUnicast;
-use zenoh_protocol::{
-    core::{Field, Resolution, WhatAmI, ZenohId},
-    transport::{
-        batch_size, close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
-        TransportSn,
-    },
-};
-use zenoh_result::ZResult;
 
 type OpenError = (zenoh_result::Error, Option<u8>);
 

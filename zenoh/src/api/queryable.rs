@@ -11,6 +11,30 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
+
+use uhlc::Timestamp;
+use zenoh_core::{Resolvable, Resolve, Wait};
+use zenoh_protocol::{
+    core::{CongestionControl, EntityId, WireExpr, ZenohId},
+    network::{response, Mapping, RequestId, Response, ResponseFinal},
+    zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
+};
+use zenoh_result::ZResult;
+#[zenoh_macros::unstable]
+use {
+    super::{
+        builders::sample::SampleBuilderTrait, bytes::OptionZBytes, query::ReplyKeyExpr,
+        sample::SourceInfo,
+    },
+    zenoh_protocol::core::EntityGlobalId,
+};
+
 use super::{
     builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
     bytes::ZBytes,
@@ -25,30 +49,6 @@ use super::{
     Id,
 };
 use crate::net::primitives::Primitives;
-use std::future::IntoFuture;
-use std::{
-    fmt,
-    future::Ready,
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
-use uhlc::Timestamp;
-use zenoh_core::{Resolvable, Resolve, Wait};
-use zenoh_protocol::{
-    core::{CongestionControl, EntityId, WireExpr, ZenohId},
-    network::{response, Mapping, RequestId, Response, ResponseFinal},
-    zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
-};
-use zenoh_result::ZResult;
-
-#[zenoh_macros::unstable]
-use {
-    super::{
-        builders::sample::SampleBuilderTrait, bytes::OptionZBytes, query::ReplyKeyExpr,
-        sample::SourceInfo,
-    },
-    zenoh_protocol::core::EntityGlobalId,
-};
 
 pub(crate) struct QueryInner {
     /// The key expression of this Query.

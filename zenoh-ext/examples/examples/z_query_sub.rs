@@ -11,10 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::arg;
-use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::*;
+use clap::{arg, Parser};
+use zenoh::{config::Config, prelude::*};
 use zenoh_ext::*;
 use zenoh_ext_examples::CommonArgs;
 

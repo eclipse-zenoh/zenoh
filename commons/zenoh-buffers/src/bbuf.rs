@@ -11,6 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use core::{fmt, num::NonZeroUsize, option};
+
 use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
@@ -18,11 +23,6 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use alloc::sync::Arc;
-use core::{fmt, num::NonZeroUsize, option};
-
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BBuf {
@@ -199,6 +199,7 @@ impl BBuf {
     pub fn rand(len: usize) -> Self {
         #[cfg(not(feature = "std"))]
         use alloc::vec::Vec;
+
         use rand::Rng;
 
         let mut rng = rand::thread_rng();

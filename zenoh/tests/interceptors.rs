@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::sync::{Arc, Mutex};
-use zenoh::internal::zlock;
-use zenoh::prelude::*;
+
+use zenoh::{internal::zlock, prelude::*};
 
 #[cfg(target_os = "windows")]
 static MINIMAL_SLEEP_INTERVAL_MS: u64 = 17;

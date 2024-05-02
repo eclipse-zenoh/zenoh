@@ -17,29 +17,27 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use std::{borrow::Cow, convert::TryFrom, str::FromStr, sync::Arc};
+
 use async_std::prelude::FutureExt;
 use base64::Engine;
 use futures::StreamExt;
 use http_types::Method;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::convert::TryFrom;
-use std::str::FromStr;
-use std::sync::Arc;
-use tide::http::Mime;
-use tide::sse::Sender;
-use tide::{Request, Response, Server, StatusCode};
-use zenoh::bytes::{StringOrBase64, ZBytes};
-use zenoh::core::try_init_log_from_env;
-use zenoh::encoding::Encoding;
-use zenoh::key_expr::{keyexpr, KeyExpr};
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::query::{QueryConsolidation, Reply};
-use zenoh::runtime::Runtime;
-use zenoh::sample::{Sample, SampleKind, ValueBuilderTrait};
-use zenoh::selector::{Selector, TIME_RANGE_KEY};
-use zenoh::session::{Session, SessionDeclarations};
-use zenoh::value::Value;
+use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
+use zenoh::{
+    bytes::{StringOrBase64, ZBytes},
+    core::try_init_log_from_env,
+    encoding::Encoding,
+    key_expr::{keyexpr, KeyExpr},
+    plugins::{RunningPluginTrait, ZenohPlugin},
+    query::{QueryConsolidation, Reply},
+    runtime::Runtime,
+    sample::{Sample, SampleKind, ValueBuilderTrait},
+    selector::{Selector, TIME_RANGE_KEY},
+    session::{Session, SessionDeclarations},
+    value::Value,
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 

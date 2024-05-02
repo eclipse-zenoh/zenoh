@@ -11,9 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header, Zenoh080Length,
-};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -27,6 +24,10 @@ use zenoh_protocol::{
         init::{ext, flag, InitAck, InitSyn},
         BatchSize,
     },
+};
+
+use crate::{
+    common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header, Zenoh080Length,
 };
 
 // InitSyn

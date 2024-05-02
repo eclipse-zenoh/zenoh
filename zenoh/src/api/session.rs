@@ -11,37 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{
-    admin,
-    builders::publication::{
-        PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder, SessionDeleteBuilder,
-        SessionPutBuilder,
-    },
-    bytes::ZBytes,
-    encoding::Encoding,
-    handlers::{Callback, DefaultHandler},
-    info::SessionInfo,
-    key_expr::{KeyExpr, KeyExprInner},
-    publication::Priority,
-    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
-    queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
-    sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
-    selector::{Selector, TIME_RANGE_KEY},
-    subscriber::{SubscriberBuilder, SubscriberState},
-    value::Value,
-    Id,
-};
-use crate::net::{
-    primitives::Primitives,
-    routing::dispatcher::face::Face,
-    runtime::{Runtime, RuntimeBuilder},
-};
-use std::future::IntoFuture;
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     fmt,
-    future::Ready,
+    future::{IntoFuture, Ready},
     ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
@@ -49,6 +23,7 @@ use std::{
     },
     time::Duration,
 };
+
 use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
@@ -82,6 +57,26 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_task::TaskController;
 
+use super::{
+    admin,
+    builders::publication::{
+        PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder, SessionDeleteBuilder,
+        SessionPutBuilder,
+    },
+    bytes::ZBytes,
+    encoding::Encoding,
+    handlers::{Callback, DefaultHandler},
+    info::SessionInfo,
+    key_expr::{KeyExpr, KeyExprInner},
+    publication::Priority,
+    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
+    queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
+    sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
+    selector::{Selector, TIME_RANGE_KEY},
+    subscriber::{SubscriberBuilder, SubscriberState},
+    value::Value,
+    Id,
+};
 #[cfg(feature = "unstable")]
 use super::{
     liveliness::{Liveliness, LivelinessTokenState},
@@ -89,6 +84,11 @@ use super::{
     publication::{MatchingListenerState, MatchingStatus},
     query::_REPLY_KEY_EXPR_ANY_SEL_PARAM,
     sample::SourceInfo,
+};
+use crate::net::{
+    primitives::Primitives,
+    routing::dispatcher::face::Face,
+    runtime::{Runtime, RuntimeBuilder},
 };
 
 zconfigurable! {

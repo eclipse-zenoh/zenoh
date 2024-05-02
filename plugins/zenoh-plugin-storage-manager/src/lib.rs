@@ -19,34 +19,32 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 #![recursion_limit = "512"]
 
+use std::{
+    collections::HashMap,
+    convert::TryFrom,
+    sync::{Arc, Mutex},
+};
+
 use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::sync::Mutex;
 use storages_mgt::StorageMessage;
-use zenoh::core::try_init_log_from_env;
-use zenoh::core::Result as ZResult;
-use zenoh::internal::zlock;
-use zenoh::internal::LibLoader;
-use zenoh::key_expr::keyexpr;
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::runtime::Runtime;
-use zenoh::selector::Selector;
-use zenoh::session::Session;
-use zenoh_backend_traits::config::ConfigDiff;
-use zenoh_backend_traits::config::PluginConfig;
-use zenoh_backend_traits::config::StorageConfig;
-use zenoh_backend_traits::config::VolumeConfig;
-use zenoh_backend_traits::VolumeInstance;
-use zenoh_plugin_trait::plugin_long_version;
-use zenoh_plugin_trait::plugin_version;
-use zenoh_plugin_trait::Plugin;
-use zenoh_plugin_trait::PluginControl;
-use zenoh_plugin_trait::PluginReport;
-use zenoh_plugin_trait::PluginStatusRec;
+use zenoh::{
+    core::{try_init_log_from_env, Result as ZResult},
+    internal::{zlock, LibLoader},
+    key_expr::keyexpr,
+    plugins::{RunningPluginTrait, ZenohPlugin},
+    runtime::Runtime,
+    selector::Selector,
+    session::Session,
+};
+use zenoh_backend_traits::{
+    config::{ConfigDiff, PluginConfig, StorageConfig, VolumeConfig},
+    VolumeInstance,
+};
+use zenoh_plugin_trait::{
+    plugin_long_version, plugin_version, Plugin, PluginControl, PluginReport, PluginStatusRec,
+};
 
 mod backends_mgt;
 use backends_mgt::*;

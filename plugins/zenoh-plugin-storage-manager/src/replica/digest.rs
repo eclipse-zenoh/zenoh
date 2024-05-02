@@ -12,16 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    convert::TryFrom,
+    str::FromStr,
+    string::ParseError,
+    time::Duration,
+};
+
 use crc::{Crc, CRC_64_ECMA_182};
 use derive_new::new;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::TryFrom;
-use std::str::FromStr;
-use std::string::ParseError;
-use std::time::Duration;
-use zenoh::key_expr::OwnedKeyExpr;
-use zenoh::time::Timestamp;
+use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp};
 
 #[derive(Eq, PartialEq, Clone, Debug, Deserialize, Serialize)]
 pub struct DigestConfig {

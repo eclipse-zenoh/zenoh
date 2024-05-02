@@ -11,14 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::PublicationCacheBuilder;
-use std::convert::TryInto;
-use std::sync::Arc;
+use std::{convert::TryInto, sync::Arc};
+
 use zenoh::{
     core::Error,
     key_expr::KeyExpr,
     session::{Session, SessionRef},
 };
+
+use super::PublicationCacheBuilder;
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
 pub trait SessionExt<'s, 'a> {

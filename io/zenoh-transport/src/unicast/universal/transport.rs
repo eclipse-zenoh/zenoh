@@ -11,6 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{
+    fmt::DebugStruct,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
+
+use async_trait::async_trait;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{Priority, WhatAmI, ZenohId},
+    network::NetworkMessage,
+    transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
+};
+use zenoh_result::{bail, zerror, ZResult};
+
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -23,19 +40,6 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
-use async_trait::async_trait;
-use std::fmt::DebugStruct;
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
-use zenoh_link::Link;
-use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohId},
-    network::NetworkMessage,
-    transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
-};
-use zenoh_result::{bail, zerror, ZResult};
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {

@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::fmt::Debug;
-
-use std::sync::atomic::AtomicPtr;
+use std::{fmt::Debug, sync::atomic::AtomicPtr};
 
 use zenoh_result::ZResult;
 

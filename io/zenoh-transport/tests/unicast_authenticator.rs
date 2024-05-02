@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{any::Any, sync::Arc, time::Duration};
+
 use zenoh_core::{zasyncwrite, ztimeout};
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -20,11 +21,9 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    multicast::TransportMulticast, unicast::establishment::ext::auth::Auth,
-    TransportMulticastEventHandler,
-};
-use zenoh_transport::{
-    unicast::TransportUnicast, DummyTransportPeerEventHandler, TransportEventHandler,
+    multicast::TransportMulticast,
+    unicast::{establishment::ext::auth::Auth, TransportUnicast},
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler,
 };
 

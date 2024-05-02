@@ -16,9 +16,8 @@ use std::sync::atomic::AtomicU64;
 
 use zenoh_result::ZResult;
 
-use crate::posix_shm::array::ArrayInSHM;
-
 use super::descriptor::SegmentID;
+use crate::posix_shm::array::ArrayInSHM;
 
 const WATCHDOG_SEGMENT_PREFIX: &str = "watchdog";
 

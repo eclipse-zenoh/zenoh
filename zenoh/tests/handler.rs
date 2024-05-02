@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{thread, time::Duration};
+
 use zenoh::prelude::*;
 
 #[test]

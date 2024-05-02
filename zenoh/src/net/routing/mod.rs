@@ -24,11 +24,12 @@ pub mod router;
 
 use std::{cell::OnceCell, sync::Arc};
 
-use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
+use zenoh_protocol::{
+    core::{key_expr::OwnedKeyExpr, WireExpr},
+    network::NetworkMessage,
+};
 
 use self::{dispatcher::face::Face, router::Resource};
-
 use super::runtime;
 
 pub(crate) static PREFIX_LIVELINESS: &str = "@/liveliness";
@@ -100,8 +101,7 @@ impl<Msg> RoutingContext<Msg> {
 impl RoutingContext<NetworkMessage> {
     #[inline]
     pub(crate) fn wire_expr(&self) -> Option<&WireExpr> {
-        use zenoh_protocol::network::DeclareBody;
-        use zenoh_protocol::network::NetworkBody;
+        use zenoh_protocol::network::{DeclareBody, NetworkBody};
         match &self.msg.body {
             NetworkBody::Push(m) => Some(&m.wire_expr),
             NetworkBody::Request(m) => Some(&m.wire_expr),

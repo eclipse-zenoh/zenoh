@@ -20,31 +20,28 @@
 mod adminspace;
 pub mod orchestrator;
 
-use super::primitives::DeMux;
-use super::routing;
-use super::routing::router::Router;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::api::loader::{load_plugins, start_plugins};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::api::plugins::PluginsManager;
-use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
-use crate::{GIT_VERSION, LONG_VERSION};
-pub use adminspace::AdminSpace;
-use futures::stream::StreamExt;
-use futures::Future;
-use std::any::Any;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Weak};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use std::sync::{Mutex, MutexGuard};
-use std::time::Duration;
+use std::{
+    any::Any,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc, Weak,
+    },
+    time::Duration,
+};
+
+pub use adminspace::AdminSpace;
+use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
-use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
-use zenoh_protocol::network::NetworkMessage;
+use zenoh_protocol::{
+    core::{Locator, WhatAmI, ZenohId},
+    network::NetworkMessage,
+};
 use zenoh_result::{bail, ZResult};
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
@@ -55,6 +52,16 @@ use zenoh_task::TaskController;
 use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+};
+
+use super::{primitives::DeMux, routing, routing::router::Router};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::api::loader::{load_plugins, start_plugins};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::api::plugins::PluginsManager;
+use crate::{
+    config::{unwrap_or_default, Config, ModeDependent, Notifier},
+    GIT_VERSION, LONG_VERSION,
 };
 
 pub(crate) struct RuntimeState {

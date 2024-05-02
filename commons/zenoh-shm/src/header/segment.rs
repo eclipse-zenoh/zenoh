@@ -14,12 +14,11 @@
 
 use zenoh_result::ZResult;
 
-use crate::posix_shm::array::ArrayInSHM;
-
 use super::{
     chunk_header::ChunkHeaderType,
     descriptor::{HeaderIndex, HeaderSegmentID},
 };
+use crate::posix_shm::array::ArrayInSHM;
 
 const HEADER_SEGMENT_PREFIX: &str = "header";
 

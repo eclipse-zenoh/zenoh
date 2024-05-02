@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{sync::Arc, time::Duration};
+
 use futures::StreamExt;
-use std::sync::Arc;
-use std::time::Duration;
 use zenoh::prelude::*;
 use zenoh_ext::group::*;
 

@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
-use zenoh::internal::ztimeout;
-use zenoh::prelude::*;
+
+use zenoh::{internal::ztimeout, prelude::*};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

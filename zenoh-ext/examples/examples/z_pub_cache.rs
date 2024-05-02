@@ -11,10 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{arg, Parser};
 use std::time::Duration;
-use zenoh::config::{Config, ModeDependentValue};
-use zenoh::prelude::*;
+
+use clap::{arg, Parser};
+use zenoh::{
+    config::{Config, ModeDependentValue},
+    prelude::*,
+};
 use zenoh_ext::*;
 use zenoh_ext_examples::CommonArgs;
 

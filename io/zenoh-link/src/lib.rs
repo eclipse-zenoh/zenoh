@@ -18,40 +18,41 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::collections::HashMap;
+
 use zenoh_config::Config;
-use zenoh_result::{bail, ZResult};
-
-#[cfg(feature = "transport_tcp")]
-pub use zenoh_link_tcp as tcp;
-#[cfg(feature = "transport_tcp")]
-use zenoh_link_tcp::{LinkManagerUnicastTcp, TcpLocatorInspector, TCP_LOCATOR_PREFIX};
-
-#[cfg(feature = "transport_udp")]
-pub use zenoh_link_udp as udp;
-#[cfg(feature = "transport_udp")]
-use zenoh_link_udp::{
-    LinkManagerMulticastUdp, LinkManagerUnicastUdp, UdpLocatorInspector, UDP_LOCATOR_PREFIX,
-};
-
-#[cfg(feature = "transport_tls")]
-pub use zenoh_link_tls as tls;
-#[cfg(feature = "transport_tls")]
-use zenoh_link_tls::{
-    LinkManagerUnicastTls, TlsConfigurator, TlsLocatorInspector, TLS_LOCATOR_PREFIX,
-};
-
+pub use zenoh_link_commons::*;
 #[cfg(feature = "transport_quic")]
 pub use zenoh_link_quic as quic;
 #[cfg(feature = "transport_quic")]
 use zenoh_link_quic::{
     LinkManagerUnicastQuic, QuicConfigurator, QuicLocatorInspector, QUIC_LOCATOR_PREFIX,
 };
-
-#[cfg(feature = "transport_ws")]
-pub use zenoh_link_ws as ws;
-#[cfg(feature = "transport_ws")]
-use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
-
+#[cfg(feature = "transport_serial")]
+pub use zenoh_link_serial as serial;
+#[cfg(feature = "transport_serial")]
+use zenoh_link_serial::{LinkManagerUnicastSerial, SerialLocatorInspector, SERIAL_LOCATOR_PREFIX};
+#[cfg(feature = "transport_tcp")]
+pub use zenoh_link_tcp as tcp;
+#[cfg(feature = "transport_tcp")]
+use zenoh_link_tcp::{LinkManagerUnicastTcp, TcpLocatorInspector, TCP_LOCATOR_PREFIX};
+#[cfg(feature = "transport_tls")]
+pub use zenoh_link_tls as tls;
+#[cfg(feature = "transport_tls")]
+use zenoh_link_tls::{
+    LinkManagerUnicastTls, TlsConfigurator, TlsLocatorInspector, TLS_LOCATOR_PREFIX,
+};
+#[cfg(feature = "transport_udp")]
+pub use zenoh_link_udp as udp;
+#[cfg(feature = "transport_udp")]
+use zenoh_link_udp::{
+    LinkManagerMulticastUdp, LinkManagerUnicastUdp, UdpLocatorInspector, UDP_LOCATOR_PREFIX,
+};
+#[cfg(feature = "transport_unixpipe")]
+pub use zenoh_link_unixpipe as unixpipe;
+#[cfg(feature = "transport_unixpipe")]
+use zenoh_link_unixpipe::{
+    LinkManagerUnicastPipe, UnixPipeConfigurator, UnixPipeLocatorInspector, UNIXPIPE_LOCATOR_PREFIX,
+};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 pub use zenoh_link_unixsock_stream as unixsock_stream;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -59,26 +60,16 @@ use zenoh_link_unixsock_stream::{
     LinkManagerUnicastUnixSocketStream, UnixSockStreamLocatorInspector,
     UNIXSOCKSTREAM_LOCATOR_PREFIX,
 };
-
-#[cfg(feature = "transport_serial")]
-pub use zenoh_link_serial as serial;
-#[cfg(feature = "transport_serial")]
-use zenoh_link_serial::{LinkManagerUnicastSerial, SerialLocatorInspector, SERIAL_LOCATOR_PREFIX};
-
-#[cfg(feature = "transport_unixpipe")]
-pub use zenoh_link_unixpipe as unixpipe;
-#[cfg(feature = "transport_unixpipe")]
-use zenoh_link_unixpipe::{
-    LinkManagerUnicastPipe, UnixPipeConfigurator, UnixPipeLocatorInspector, UNIXPIPE_LOCATOR_PREFIX,
-};
-
 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
 pub use zenoh_link_vsock as vsock;
 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
 use zenoh_link_vsock::{LinkManagerUnicastVsock, VsockLocatorInspector, VSOCK_LOCATOR_PREFIX};
-
-pub use zenoh_link_commons::*;
+#[cfg(feature = "transport_ws")]
+pub use zenoh_link_ws as ws;
+#[cfg(feature = "transport_ws")]
+use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
 pub use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_result::{bail, ZResult};
 
 pub const PROTOCOLS: &[&str] = &[
     #[cfg(feature = "transport_quic")]

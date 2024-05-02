@@ -12,35 +12,40 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_trait::async_trait;
-use std::cell::UnsafeCell;
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    cell::UnsafeCell,
+    collections::HashMap,
+    fmt,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
-use std::time::Duration;
-use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tokio::task::JoinHandle;
+
+use async_trait::async_trait;
+use tokio::{
+    sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock},
+    task::JoinHandle,
+};
 use tokio_util::sync::CancellationToken;
+use z_serial::ZSerial;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
 };
-use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_protocol::transport::BatchSize;
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{zerror, ZResult};
-
-use z_serial::ZSerial;
-
-use crate::get_exclusive;
 
 use super::{
     get_baud_rate, get_unix_path_as_string, SERIAL_ACCEPT_THROTTLE_TIME, SERIAL_DEFAULT_MTU,
     SERIAL_LOCATOR_PREFIX,
 };
+use crate::get_exclusive;
 
 struct LinkUnicastSerial {
     // The underlying serial port as returned by ZSerial (tokio-serial)

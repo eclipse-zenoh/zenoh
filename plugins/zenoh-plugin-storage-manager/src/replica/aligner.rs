@@ -12,13 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{Digest, EraType, LogEntry, Snapshotter};
-use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
+use std::{
+    collections::{HashMap, HashSet},
+    str,
+};
+
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
-use std::collections::{HashMap, HashSet};
-use std::str;
 use zenoh::prelude::*;
+
+use super::{Digest, EraType, LogEntry, Snapshotter, CONTENTS, ERA, INTERVALS, SUBINTERVALS};
 
 pub struct Aligner {
     session: Arc<Session>,

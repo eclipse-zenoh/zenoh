@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -28,6 +27,8 @@ use zenoh_protocol::{
         Interest, Mapping,
     },
 };
+
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 
 // Interest
 impl<W> WCodec<&Interest, &mut W> for Zenoh080

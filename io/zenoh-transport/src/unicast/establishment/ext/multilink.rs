@@ -11,10 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::{
-    ext::auth::pubkey::{self, AuthPubKey, AuthPubKeyFsm, ZPublicKey},
-    AcceptFsm, OpenFsm,
-};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
 use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
@@ -27,6 +23,11 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::transport::{init, open};
+
+use crate::unicast::establishment::{
+    ext::auth::pubkey::{self, AuthPubKey, AuthPubKeyFsm, ZPublicKey},
+    AcceptFsm, OpenFsm,
+};
 
 const KEY_SIZE: usize = 512;
 

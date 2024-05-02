@@ -17,13 +17,16 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use async_trait::async_trait;
 use std::net::SocketAddr;
+
+use async_trait::async_trait;
 use url::Url;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::{endpoint::Address, Locator};
-use zenoh_protocol::transport::BatchSize;
+use zenoh_protocol::{
+    core::{endpoint::Address, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{bail, ZResult};
 mod unicast;
 pub use unicast::*;

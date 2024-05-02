@@ -11,25 +11,26 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{
-    bytes::ZBytes,
-    encoding::Encoding,
-    key_expr::KeyExpr,
-    queryable::Query,
-    sample::Locality,
-    sample::{DataInfo, SampleKind},
-    session::Session,
-};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     sync::Arc,
 };
+
 use zenoh_core::{Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+};
+
+use super::{
+    bytes::ZBytes,
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    queryable::Query,
+    sample::{DataInfo, Locality, SampleKind},
+    session::Session,
 };
 
 macro_rules! ke_for_sure {

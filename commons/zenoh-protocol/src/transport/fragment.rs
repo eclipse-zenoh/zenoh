@@ -11,9 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use zenoh_buffers::ZSlice;
+
 use crate::core::Reliability;
 pub use crate::transport::TransportSn;
-use zenoh_buffers::ZSlice;
 
 /// # Fragment message
 ///

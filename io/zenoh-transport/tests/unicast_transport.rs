@@ -11,16 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::fmt::Write as _;
 use std::{
     any::Any,
     convert::TryFrom,
+    fmt::Write as _,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
 };
+
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -1158,6 +1159,7 @@ async fn transport_unicast_tls_only_mutual_success() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     use std::vec;
+
     use zenoh_link::tls::config::*;
 
     zenoh_util::try_init_log_from_env();
@@ -1373,6 +1375,7 @@ async fn transport_unicast_quic_only_mutual_success() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_quic_only_mutual_no_client_certs_failure() {
     use std::vec;
+
     use zenoh_link::quic::config::*;
 
     zenoh_util::try_init_log_from_env();

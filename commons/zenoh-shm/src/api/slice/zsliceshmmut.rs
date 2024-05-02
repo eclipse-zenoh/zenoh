@@ -17,12 +17,11 @@ use std::borrow::{Borrow, BorrowMut};
 
 use zenoh_buffers::{ZBuf, ZSlice};
 
-use crate::SharedMemoryBuf;
-
 use super::{
     traits::{SHMBuf, SHMBufMut},
     zsliceshm::{zsliceshm, ZSliceShm},
 };
+use crate::SharedMemoryBuf;
 
 /// A mutable SHM slice
 #[zenoh_macros::unstable_doc]

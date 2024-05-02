@@ -11,14 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use alloc::{string::String, vec::Vec};
 use core::convert::TryFrom;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::core::Locator;
+
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 
 impl<W> WCodec<&Locator, &mut W> for Zenoh080
 where

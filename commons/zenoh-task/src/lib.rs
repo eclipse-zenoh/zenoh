@@ -18,12 +18,11 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
+use std::{future::Future, time::Duration};
+
 use futures::future::FutureExt;
-use std::future::Future;
-use std::time::Duration;
 use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
-use tokio_util::task::TaskTracker;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_core::{ResolveFuture, Wait};
 use zenoh_runtime::ZRuntime;
 
