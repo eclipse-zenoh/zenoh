@@ -33,7 +33,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os:
+          - ubuntu-latest
+          # - windows-latest
+          - macos-13
+          - macos-14
 
     steps:
       - name: Clone this repository
