@@ -205,10 +205,9 @@ pub mod session {
 
 /// Tools to access information about the current zenoh [`Session`](crate::Session).
 pub mod info {
-    pub use crate::api::info::PeersZenohIdBuilder;
-    pub use crate::api::info::RoutersZenohIdBuilder;
-    pub use crate::api::info::SessionInfo;
-    pub use crate::api::info::ZenohIdBuilder;
+    pub use crate::api::info::{
+        PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder,
+    };
 }
 
 /// Sample primitives
