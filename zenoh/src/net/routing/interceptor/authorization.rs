@@ -181,7 +181,6 @@ impl PolicyEnforcer {
                             }
                         };
                     }
-                    println!("main policy{}", main_policy.len());
                     self.policy_map = main_policy;
                     self.subject_map = subject_map;
                 }
@@ -263,7 +262,6 @@ impl PolicyEnforcer {
                 counter += 1;
             }
         }
-        println!("subject map {:?}policy map{:?}", subject_map, policy_rules);
         Ok(PolicyInformation {
             subject_map,
             policy_rules,
