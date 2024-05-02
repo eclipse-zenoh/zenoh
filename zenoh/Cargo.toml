@@ -109,6 +109,10 @@ zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 
+[dev-dependencies]
+# Enable the unstable feature for the tests
+zenoh = { workspace = true, features = ["unstable"] }
+
 [build-dependencies]
 rustc_version = { workspace = true }
 
