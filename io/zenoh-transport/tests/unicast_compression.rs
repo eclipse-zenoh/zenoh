@@ -178,7 +178,8 @@ mod tests {
             #[cfg(feature = "shared-memory")]
             false,
             lowlatency_transport,
-        );
+        )
+        .compression(true);
         let router_manager = TransportManager::builder()
             .zid(router_id)
             .whatami(WhatAmI::Router)
