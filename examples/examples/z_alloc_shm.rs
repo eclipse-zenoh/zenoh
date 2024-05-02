@@ -11,7 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::prelude::*;
+use zenoh::{
+    prelude::*,
+    shm::{
+        AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect,
+        PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,
+    },
+    Config,
+};
 
 #[tokio::main]
 async fn main() {

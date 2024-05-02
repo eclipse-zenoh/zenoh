@@ -37,7 +37,7 @@ use super::bytes::ZBytes;
 ///
 /// Create an [`Encoding`] from a string and viceversa.
 /// ```
-/// use zenoh::prelude::Encoding;
+/// use zenoh::Encoding;
 ///
 /// let encoding: Encoding = "text/plain".into();
 /// let text: String = encoding.clone().into();
@@ -49,7 +49,7 @@ use super::bytes::ZBytes;
 /// Since some encoding values are internally optimized by Zenoh, it's generally more efficient to use
 /// the defined constants and [`Cow`][std::borrow::Cow] conversion to obtain its string representation.
 /// ```
-/// use zenoh::prelude::Encoding;
+/// use zenoh::Encoding;
 /// use std::borrow::Cow;
 ///
 /// // This allocates
@@ -64,7 +64,7 @@ use super::bytes::ZBytes;
 /// The convetions is to use the `;` separator if an encoding is created from a string.
 /// Alternatively, [`with_schema()`](Encoding::with_schema) can be used to add a schme to one of the associated constants.
 /// ```
-/// use zenoh::prelude::Encoding;
+/// use zenoh::Encoding;
 ///
 /// let encoding1 = Encoding::from("text/plain;utf-8");
 /// let encoding2 = Encoding::TEXT_PLAIN.with_schema("utf-8");

@@ -205,7 +205,7 @@ impl<'a> KeyExpr<'a> {
     /// This is notably useful for workspaces:
     /// ```rust
     /// # use std::convert::TryFrom;
-    /// # use zenoh::prelude::KeyExpr;
+    /// # use zenoh::KeyExpr;
     /// # let get_workspace = || KeyExpr::try_from("some/workspace").unwrap();
     /// let workspace: KeyExpr = get_workspace();
     /// let topic = workspace.join("some/topic").unwrap();
@@ -566,7 +566,7 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
 /// session.undeclare(key_expr).await.unwrap();
 /// # }

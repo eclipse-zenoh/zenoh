@@ -38,7 +38,7 @@ use crate::{
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+/// let receiver = zenoh::scout(zenoh::WhatAmI::Peer | zenoh::WhatAmI::Router, zenoh::config::default())
 ///     .await
 ///     .unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
@@ -63,7 +63,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    /// let scout = zenoh::scout(zenoh::WhatAmI::Peer | zenoh::WhatAmI::Router, zenoh::config::default())
     ///     .callback(|hello| { println!("{}", hello); })
     ///     .await
     ///     .unwrap();
@@ -98,7 +98,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// use zenoh::prelude::*;
     ///
     /// let mut n = 0;
-    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    /// let scout = zenoh::scout(zenoh:: WhatAmI::Peer | zenoh::WhatAmI::Router, zenoh::config::default())
     ///     .callback_mut(move |_hello| { n += 1; })
     ///     .await
     ///     .unwrap();
@@ -123,7 +123,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    /// let receiver = zenoh::scout(zenoh::WhatAmI::Peer | zenoh::WhatAmI::Router, zenoh::config::default())
     ///     .with(flume::bounded(32))
     ///     .await
     ///     .unwrap();
@@ -190,7 +190,7 @@ where
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+/// let scout = zenoh::scout(zenoh::WhatAmI::Peer | zenoh::WhatAmI::Router, zenoh::config::default())
 ///     .callback(|hello| { println!("{}", hello); })
 ///     .await
 ///     .unwrap();
@@ -210,7 +210,7 @@ impl ScoutInner {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    /// let scout = zenoh::scout(zenoh::WhatAmI::Peer | zenoh::WhatAmI::Router, zenoh::config::default())
     ///     .callback(|hello| { println!("{}", hello); })
     ///     .await
     ///     .unwrap();
@@ -245,7 +245,7 @@ impl fmt::Debug for ScoutInner {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+/// let receiver = zenoh::scout(zenoh::WhatAmI::Peer | zenoh::WhatAmI::Router, zenoh::config::default())
 ///     .with(flume::bounded(32))
 ///     .await
 ///     .unwrap();
@@ -278,7 +278,7 @@ impl<Receiver> Scout<Receiver> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let scout = zenoh::scout(WhatAmI::Router, config::default())
+    /// let scout = zenoh::scout(zenoh::WhatAmI::Router, zenoh::config::default())
     ///     .with(flume::bounded(32))
     ///     .await
     ///     .unwrap();
@@ -355,7 +355,7 @@ fn _scout(
 /// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+/// let receiver = zenoh::scout(zenoh::WhatAmI::Peer | zenoh::WhatAmI::Router, zenoh::config::default())
 ///     .await
 ///     .unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {

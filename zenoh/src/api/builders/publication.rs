@@ -27,7 +27,7 @@ use crate::api::{
     bytes::ZBytes,
     encoding::Encoding,
     key_expr::KeyExpr,
-    publication::{Priority, Publisher},
+    publisher::{Priority, Publisher},
     sample::{Locality, SampleKind},
     session::SessionRef,
     value::Value,
@@ -53,7 +53,7 @@ pub struct PublicationBuilderPut {
 pub struct PublicationBuilderDelete;
 
 /// A builder for initializing  [`Session::put`](crate::session::Session::put), [`Session::delete`](crate::session::Session::delete),
-/// [`Publisher::put`](crate::publication::Publisher::put), and [`Publisher::delete`](crate::publication::Publisher::delete) operations.
+/// [`Publisher::put`](crate::publisher::Publisher::put), and [`Publisher::delete`](crate::publisher::Publisher::delete) operations.
 ///
 /// # Examples
 /// ```
@@ -61,11 +61,11 @@ pub struct PublicationBuilderDelete;
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// session
 ///     .put("key/expression", "payload")
-///     .encoding(Encoding::TEXT_PLAIN)
-///     .congestion_control(CongestionControl::Block)
+///     .encoding(zenoh::Encoding::TEXT_PLAIN)
+///     .congestion_control(zenoh::CongestionControl::Block)
 ///     .await
 ///     .unwrap();
 /// # }
@@ -240,10 +240,10 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session
 ///     .declare_publisher("key/expression")
-///     .congestion_control(CongestionControl::Block)
+///     .congestion_control(zenoh::CongestionControl::Block)
 ///     .await
 ///     .unwrap();
 /// # }

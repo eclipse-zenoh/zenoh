@@ -29,6 +29,7 @@
 //! ```
 //! use std::sync::Arc;
 //! use async_trait::async_trait;
+//! use zenoh::{OwnedKeyExpr, Timestamp, Value};
 //! use zenoh::prelude::*;
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;

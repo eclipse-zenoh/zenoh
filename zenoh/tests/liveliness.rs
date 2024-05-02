@@ -11,12 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "unstable")]
+#![cfg(feature = "unstable")]
+use std::time::Duration;
+
+use zenoh::{
+    config,
+    internal::ztimeout,
+    prelude::*,
+    sample::{Sample, SampleKind},
+};
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_liveliness() {
-    use std::time::Duration;
-
-    use zenoh::{internal::ztimeout, prelude::*};
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
 

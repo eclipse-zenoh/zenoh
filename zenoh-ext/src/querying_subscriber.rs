@@ -605,7 +605,7 @@ where
 /// use zenoh::prelude::*;
 /// use zenoh_ext::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expr")
 ///     .fetching( |cb| {
@@ -740,11 +740,10 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
-    ///         use zenoh::prelude::sync::SyncResolve;
     ///         session
     ///             .get("key/expr")
     ///             .callback(cb)
@@ -756,7 +755,6 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     /// // perform an additional fetch
     /// subscriber
     ///     .fetch( |cb| {
-    ///         use zenoh::prelude::sync::SyncResolve;
     ///         session
     ///             .get("key/expr")
     ///             .callback(cb)
@@ -820,11 +818,10 @@ impl Drop for RepliesHandler {
 /// # use zenoh::prelude::*;
 /// # use zenoh_ext::*;
 /// #
-/// # let session = zenoh::open(config::peer()).await.unwrap();
+/// # let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// # let mut fetching_subscriber = session
 /// #     .declare_subscriber("key/expr")
 /// #     .fetching( |cb| {
-/// #         use zenoh::prelude::sync::SyncResolve;
 /// #         session
 /// #             .get("key/expr")
 /// #             .callback(cb)
@@ -835,7 +832,6 @@ impl Drop for RepliesHandler {
 /// #
 /// fetching_subscriber
 ///     .fetch( |cb| {
-///         use zenoh::prelude::sync::SyncResolve;
 ///         session
 ///             .get("key/expr")
 ///             .callback(cb)

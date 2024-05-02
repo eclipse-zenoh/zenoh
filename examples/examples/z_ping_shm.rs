@@ -14,7 +14,14 @@
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use zenoh::prelude::*;
+use zenoh::{
+    buffers::ZSlice,
+    key_expr::keyexpr,
+    prelude::*,
+    publisher::CongestionControl,
+    shm::{PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID},
+    Config,
+};
 use zenoh_examples::CommonArgs;
 
 fn main() {

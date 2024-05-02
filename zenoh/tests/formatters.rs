@@ -11,13 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use zenoh::{kedefine, keformat};
+
 #[test]
 fn kedefine_reuse() {
-    zenoh::key_expr::kedefine!(
+    kedefine!(
         pub gkeys: "zenoh/${group:*}/${member:*}",
     );
     let mut formatter = gkeys::formatter();
-    let k1 = zenoh::key_expr::keformat!(formatter, group = "foo", member = "bar").unwrap();
+    let k1 = keformat!(formatter, group = "foo", member = "bar").unwrap();
     assert_eq!(dbg!(k1).as_str(), "zenoh/foo/bar");
 
     formatter.set("member", "*").unwrap();
@@ -29,8 +31,8 @@ fn kedefine_reuse() {
     let k2 = dbg!(&mut formatter).build().unwrap();
     assert_eq!(dbg!(k2).as_str(), "zenoh/foo/*");
 
-    let k3 = zenoh::key_expr::keformat!(formatter, group = "foo", member = "*").unwrap();
+    let k3 = keformat!(formatter, group = "foo", member = "*").unwrap();
     assert_eq!(dbg!(k3).as_str(), "zenoh/foo/*");
 
-    zenoh::key_expr::keformat!(formatter, group = "**", member = "**").unwrap_err();
+    keformat!(formatter, group = "**", member = "**").unwrap_err();
 }

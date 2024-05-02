@@ -14,7 +14,16 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::prelude::*;
+use zenoh::{
+    prelude::*,
+    query::QueryTarget,
+    selector::Selector,
+    shm::{
+        zshm, BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend,
+        SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,
+    },
+    Config,
+};
 use zenoh_examples::CommonArgs;
 
 const N: usize = 10;

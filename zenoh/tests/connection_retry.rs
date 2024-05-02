@@ -11,7 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::prelude::*;
+use zenoh::{
+    config::{ConnectionRetryConf, EndPoint},
+    prelude::*,
+    Config,
+};
 
 #[test]
 fn retry_config_overriding() {
@@ -132,7 +136,7 @@ fn retry_config_const_period() {
 }
 
 #[test]
-fn retry_config_infinit_period() {
+fn retry_config_infinite_period() {
     let mut config = Config::default();
     config
         .insert_json5(

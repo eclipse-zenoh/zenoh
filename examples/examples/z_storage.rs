@@ -17,7 +17,12 @@ use std::collections::HashMap;
 
 use clap::Parser;
 use futures::select;
-use zenoh::prelude::*;
+use zenoh::{
+    key_expr::{keyexpr, KeyExpr},
+    prelude::*,
+    sample::{Sample, SampleKind},
+    Config,
+};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
