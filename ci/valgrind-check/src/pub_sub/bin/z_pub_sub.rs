@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::prelude::*;
+
+use zenoh::{config::Config, prelude::*};
 
 #[tokio::main]
 async fn main() {
