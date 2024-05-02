@@ -18,7 +18,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::runtime::{Runtime, RuntimeBuilder};
 use zenoh_core::ztimeout;
 
-const TIMEOUT: Duration = Duration::from_secs(60);
+const TIMEOUT: Duration = Duration::from_secs(20);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
