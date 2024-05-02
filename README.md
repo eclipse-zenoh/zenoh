@@ -26,12 +26,12 @@ To install the latest release of the Zenoh router (`zenohd`) and its default plu
 
 ### Manual installation (all platforms)
 
-All release packages can be downloaded from:  
- - https://download.eclipse.org/zenoh/zenoh/latest/   
+All release packages can be downloaded from:
+ - https://download.eclipse.org/zenoh/zenoh/latest/
 
 Each subdirectory has the name of the Rust target. See the platforms each target corresponds to on https://doc.rust-lang.org/stable/rustc/platform-support.html
 
-Choose your platform and download the `.zip` file.  
+Choose your platform and download the `.zip` file.
 Unzip it where you want, and run the extracted `zenohd` binary.
 
 ### Linux Debian
@@ -99,32 +99,32 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
 > **Windows users**: to properly execute the commands below in PowerShell you need to escape `"` characters as `\"`.
 
  - **put/store/get**
-    - run the Zenoh router with a memory storage:  
+    - run the Zenoh router with a memory storage:
       `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     - in another shell run: `./target/release/examples/z_put`
     - then run `./target/release/examples/z_get`
     - the get should receive the stored publication.
 
  - **REST API using `curl` tool**
-    - run the Zenoh router with a memory storage:  
+    - run the Zenoh router with a memory storage:
       `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
-    - in another shell, do a publication via the REST API:  
+    - in another shell, do a publication via the REST API:
       `curl -X PUT -d '"Hello World!"' http://localhost:8000/demo/example/test`
-    - get it back via the REST API:  
+    - get it back via the REST API:
       `curl http://localhost:8000/demo/example/test`
 
   - **router admin space via the REST API**
-    - run the Zenoh router with permission to perform config changes via the admin space, and with a memory storage:  
+    - run the Zenoh router with permission to perform config changes via the admin space, and with a memory storage:
       `./target/release/zenohd --adminspace-permissions=rw --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
-    - in another shell, get info of the zenoh router via the zenoh admin space:  
+    - in another shell, get info of the zenoh router via the zenoh admin space:
       `curl http://localhost:8000/@/router/local`
-    - get the volumes of the router (only memory by default):  
+    - get the volumes of the router (only memory by default):
       `curl 'http://localhost:8000/@/router/local/**/volumes/*'`
-    - get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):  
+    - get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):
       `curl 'http://localhost:8000/@/router/local/**/storages/*'`
-    - add another memory storage on `/demo/mystore/**`:  
+    - add another memory storage on `/demo/mystore/**`:
       `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume":"memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
-    - check it has been created:  
+    - check it has been created:
       `curl 'http://localhost:8000/@/router/local/**/storages/*'`
 
 **Configuration options:**
@@ -133,7 +133,11 @@ A Zenoh configuration file can be provided via CLI to all Zenoh examples and the
 
   * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file and the available options.
 
+
 See other examples of Zenoh usage in [examples/](examples)
+
+> [!NOTE]
+> **Zenoh Runtime Configuration**: Starting from version 0.11.0-rc, Zenoh allows for configuring the number of worker threads and other advanced options of the runtime. For guidance on utilizing it, please refer to the [doc](https://docs.rs/zenoh-runtime/latest/zenoh_runtime/enum.ZRuntime.html).
 
 -------------------------------
 ## Zenoh router command line arguments
@@ -142,7 +146,7 @@ See other examples of Zenoh usage in [examples/](examples)
   * `--adminspace-permissions <[r|w|rw|none]>`: Configure the read and/or write permissions on the admin space. Default is read only.
   * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
   * `--cfg <KEY>:<VALUE>`: allows you to change specific parts of the configuration right after it has been constructed. VALUE must be a valid JSON5 value, and key must be a path through the configuration file, where each element is separated by a `/`. When inserting in parts of the config that are arrays, you may use indexes, or may use `+` to indicate that you want to append your value to the array. `--cfg` passed values will always override any previously existing value for their key in the configuration.
-  * `-l, --listen <ENDPOINT>...`: An endpoint on which this router will listen for incoming sessions. 
+  * `-l, --listen <ENDPOINT>...`: An endpoint on which this router will listen for incoming sessions.
     Repeat this option to open several listeners. By default, `tcp/[::]:7447` is used. The following endpoints are currently supported:
       - TCP: `tcp/<host_name_or_IPv4_or_IPv6>:<port>`
       - UDP: `udp/<host_name_or_IPv4_or_IPv6>:<port>`
@@ -184,8 +188,8 @@ Otherwise, incompatibilities in memory mapping of shared types between `zenohd` 
 
 By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via zenoh puts on individual parts of the configuration.
 
-> [!WARNING] 
-> Since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only configured plugins are loaded (after processing `--cfg` and `--plugin` options). Once `zenohd` is running, plugins can be hot-loaded and, if they support it, reconfigured at runtime by editing their configuration through the adminspace.  
+> [!WARNING]
+> Since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only configured plugins are loaded (after processing `--cfg` and `--plugin` options). Once `zenohd` is running, plugins can be hot-loaded and, if they support it, reconfigured at runtime by editing their configuration through the adminspace.
 
 Note that the REST plugin is added to the configuration by the default value of the `--rest-http-port` CLI argument.
 
@@ -198,5 +202,5 @@ This plugin allows you to easily define storages. These will store key-value pai
 -------------------------------
 ## Troubleshooting
 
-In case of troubles, please first check on [this page](https://zenoh.io/docs/getting-started/troubleshooting/) if the trouble and cause are already known.  
+In case of troubles, please first check on [this page](https://zenoh.io/docs/getting-started/troubleshooting/) if the trouble and cause are already known.
 Otherwise, you can ask a question on the [zenoh Discord server](https://discord.gg/vSDSpqnbkm), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
