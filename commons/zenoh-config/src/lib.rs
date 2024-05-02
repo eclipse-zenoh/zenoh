@@ -107,7 +107,7 @@ pub struct AclConfigRules {
     pub usernames: Option<Vec<String>>,
     pub key_exprs: Vec<String>,
     pub actions: Vec<Action>,
-    pub flows: Vec<InterceptorFlow>,
+    pub flows: Option<Vec<InterceptorFlow>>,
     pub permission: Permission,
 }
 

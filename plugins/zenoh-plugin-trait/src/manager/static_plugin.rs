@@ -51,7 +51,7 @@ where
         Some(P::PLUGIN_LONG_VERSION)
     }
     fn path(&self) -> &str {
-        "<static>"
+        "__static_lib__"
     }
     fn state(&self) -> PluginState {
         self.instance

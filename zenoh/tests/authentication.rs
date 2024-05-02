@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(target_family = "unix")]
 mod test {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -86,7 +85,7 @@ mod test {
             "client_auth": true,
             "server_name_verification": false
           },
-        },
+        },  
       }"#,
             )
             .unwrap();

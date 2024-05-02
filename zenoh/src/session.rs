@@ -28,6 +28,7 @@ use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
+use crate::runtime::RuntimeBuilder;
 #[cfg(feature = "unstable")]
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
@@ -824,7 +825,7 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            let mut runtime = Runtime::init(config).await?;
+            let mut runtime = RuntimeBuilder::new(config).build().await?;
 
             let mut session = Self::init(
                 runtime.clone(),
