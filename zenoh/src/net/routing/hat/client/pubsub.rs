@@ -518,4 +518,62 @@ impl HatPubSubTrait for HatCode {
     fn get_data_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
         get_routes_entries()
     }
+
+    fn get_matching_subscriptions(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+    ) -> HashMap<usize, Arc<FaceState>> {
+        let mut matching_subscriptions = HashMap::new();
+        if key_expr.ends_with('/') {
+            return matching_subscriptions;
+        }
+        tracing::trace!("get_matching_subscriptions({})", key_expr,);
+
+        for face in tables
+            .faces
+            .values()
+            .filter(|f| f.whatami != WhatAmI::Client)
+        {
+            if face.local_interests.values().any(|interest| {
+                interest.finalized
+                    && interest.options.subscribers()
+                    && interest
+                        .res
+                        .as_ref()
+                        .map(|res| {
+                            KeyExpr::try_from(res.expr())
+                                .map(|intres| intres.includes(key_expr))
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(true)
+            }) && face_hat!(face).remote_subs.values().any(|sub| {
+                KeyExpr::try_from(sub.expr())
+                    .map(|subres| subres.intersects(key_expr))
+                    .unwrap_or(false)
+            }) {
+                matching_subscriptions.insert(face.id, face.clone());
+            }
+        }
+
+        let res = Resource::get_resource(&tables.root_res, key_expr);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+
+            for (sid, context) in &mres.session_ctxs {
+                if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
+                    matching_subscriptions
+                        .entry(*sid)
+                        .or_insert_with(|| context.face.clone());
+                }
+            }
+        }
+        matching_subscriptions
+    }
 }

@@ -20,6 +20,7 @@ use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
 use crate::net::routing::hat::{CurrentFutureTrait, HatPubSubTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
+use crate::KeyExpr;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -599,5 +600,36 @@ impl HatPubSubTrait for HatCode {
 
     fn get_data_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
         get_routes_entries()
+    }
+
+    fn get_matching_subscriptions(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+    ) -> HashMap<usize, Arc<FaceState>> {
+        let mut matching_subscriptions = HashMap::new();
+        if key_expr.ends_with('/') {
+            return matching_subscriptions;
+        }
+        tracing::trace!("get_matching_subscriptions({})", key_expr,);
+        let res = Resource::get_resource(&tables.root_res, key_expr);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+
+            for (sid, context) in &mres.session_ctxs {
+                if context.subs.is_some() {
+                    matching_subscriptions
+                        .entry(*sid)
+                        .or_insert_with(|| context.face.clone());
+                }
+            }
+        }
+        matching_subscriptions
     }
 }

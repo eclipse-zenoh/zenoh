@@ -22,6 +22,7 @@ use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
 use crate::net::routing::hat::{CurrentFutureTrait, HatPubSubTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
+use crate::KeyExpr;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -901,39 +902,6 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
     }
 }
 
-#[inline]
-fn insert_faces_for_subs(
-    route: &mut Route,
-    expr: &RoutingExpr,
-    tables: &Tables,
-    net: &Network,
-    source: NodeId,
-    subs: &HashSet<ZenohId>,
-) {
-    if net.trees.len() > source as usize {
-        for sub in subs {
-            if let Some(sub_idx) = net.get_idx(sub) {
-                if net.trees[source as usize].directions.len() > sub_idx.index() {
-                    if let Some(direction) = net.trees[source as usize].directions[sub_idx.index()]
-                    {
-                        if net.graph.contains_node(direction) {
-                            if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                route.entry(face.id).or_insert_with(|| {
-                                    let key_expr =
-                                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                                    (face.clone(), key_expr.to_owned(), source)
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        tracing::trace!("Tree for node sid:{} not yet ready", source);
-    }
-}
-
 impl HatPubSubTrait for HatCode {
     fn declare_sub_interest(
         &self,
@@ -1176,6 +1144,43 @@ impl HatPubSubTrait for HatCode {
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route> {
+        #[inline]
+        fn insert_faces_for_subs(
+            route: &mut Route,
+            expr: &RoutingExpr,
+            tables: &Tables,
+            net: &Network,
+            source: NodeId,
+            subs: &HashSet<ZenohId>,
+        ) {
+            if net.trees.len() > source as usize {
+                for sub in subs {
+                    if let Some(sub_idx) = net.get_idx(sub) {
+                        if net.trees[source as usize].directions.len() > sub_idx.index() {
+                            if let Some(direction) =
+                                net.trees[source as usize].directions[sub_idx.index()]
+                            {
+                                if net.graph.contains_node(direction) {
+                                    if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                        route.entry(face.id).or_insert_with(|| {
+                                            let key_expr = Resource::get_best_key(
+                                                expr.prefix,
+                                                expr.suffix,
+                                                face.id,
+                                            );
+                                            (face.clone(), key_expr.to_owned(), source)
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                tracing::trace!("Tree for node sid:{} not yet ready", source);
+            }
+        }
+
         let mut route = HashMap::new();
         let key_expr = expr.full_expr();
         if key_expr.ends_with('/') {
@@ -1266,5 +1271,92 @@ impl HatPubSubTrait for HatCode {
 
     fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
         get_routes_entries(tables)
+    }
+
+    fn get_matching_subscriptions(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+    ) -> HashMap<usize, Arc<FaceState>> {
+        #[inline]
+        fn insert_faces_for_subs(
+            route: &mut HashMap<usize, Arc<FaceState>>,
+            tables: &Tables,
+            net: &Network,
+            source: usize,
+            subs: &HashSet<ZenohId>,
+        ) {
+            if net.trees.len() > source {
+                for sub in subs {
+                    if let Some(sub_idx) = net.get_idx(sub) {
+                        if net.trees[source].directions.len() > sub_idx.index() {
+                            if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
+                                if net.graph.contains_node(direction) {
+                                    if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                        route.entry(face.id).or_insert_with(|| face.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                tracing::trace!("Tree for node sid:{} not yet ready", source);
+            }
+        }
+
+        let mut matching_subscriptions = HashMap::new();
+        if key_expr.ends_with('/') {
+            return matching_subscriptions;
+        }
+        tracing::trace!("get_matching_subscriptions({})", key_expr,);
+
+        let res = Resource::get_resource(&tables.root_res, key_expr);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        let master = !hat!(tables).full_net(WhatAmI::Peer)
+            || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
+                == tables.zid;
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+
+            if master {
+                let net = hat!(tables).routers_net.as_ref().unwrap();
+                insert_faces_for_subs(
+                    &mut matching_subscriptions,
+                    tables,
+                    net,
+                    net.idx.index(),
+                    &res_hat!(mres).router_subs,
+                );
+            }
+
+            if hat!(tables).full_net(WhatAmI::Peer) {
+                let net = hat!(tables).peers_net.as_ref().unwrap();
+                insert_faces_for_subs(
+                    &mut matching_subscriptions,
+                    tables,
+                    net,
+                    net.idx.index(),
+                    &res_hat!(mres).peer_subs,
+                );
+            }
+
+            if master {
+                for (sid, context) in &mres.session_ctxs {
+                    if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
+                        matching_subscriptions
+                            .entry(*sid)
+                            .or_insert_with(|| context.face.clone());
+                    }
+                }
+            }
+        }
+        matching_subscriptions
     }
 }

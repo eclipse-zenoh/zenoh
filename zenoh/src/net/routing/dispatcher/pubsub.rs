@@ -15,6 +15,8 @@ use super::face::FaceState;
 use super::resource::{DataRoutes, Direction, Resource};
 use super::tables::{NodeId, Route, RoutingExpr, Tables, TablesLock};
 use crate::net::routing::hat::HatTrait;
+#[cfg(feature = "unstable")]
+use crate::KeyExpr;
 use std::collections::HashMap;
 use std::sync::Arc;
 use zenoh_core::zread;
@@ -407,18 +409,11 @@ fn get_data_route(
 
 #[zenoh_macros::unstable]
 #[inline]
-pub(crate) fn get_local_data_route(
+pub(crate) fn get_matching_subscriptions(
     tables: &Tables,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
-) -> Arc<Route> {
-    res.as_ref()
-        .and_then(|res| res.data_route(WhatAmI::Client, 0))
-        .unwrap_or_else(|| {
-            tables
-                .hat_code
-                .compute_data_route(tables, expr, 0, WhatAmI::Client)
-        })
+    key_expr: &KeyExpr<'_>,
+) -> HashMap<usize, Arc<FaceState>> {
+    tables.hat_code.get_matching_subscriptions(tables, key_expr)
 }
 
 #[cfg(feature = "stats")]

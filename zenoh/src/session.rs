@@ -1415,33 +1415,29 @@ impl Session {
         key_expr: &KeyExpr,
         destination: Locality,
     ) -> ZResult<MatchingStatus> {
-        use crate::net::routing::dispatcher::tables::RoutingExpr;
         let router = self.runtime.router();
         let tables = zread!(router.tables.tables);
-        let res = crate::net::routing::dispatcher::resource::Resource::get_resource(
-            &tables.root_res,
-            key_expr.as_str(),
-        );
 
-        let route = crate::net::routing::dispatcher::pubsub::get_local_data_route(
-            &tables,
-            &res,
-            &mut RoutingExpr::new(&tables.root_res, key_expr.as_str()),
-        );
+        let matching_subscriptions =
+            crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(&tables, key_expr);
 
         drop(tables);
         let matching = match destination {
-            Locality::Any => !route.is_empty(),
+            Locality::Any => !matching_subscriptions.is_empty(),
             Locality::Remote => {
                 if let Some(face) = zread!(self.state).primitives.as_ref() {
-                    route.values().any(|dir| !Arc::ptr_eq(&dir.0, &face.state))
+                    matching_subscriptions
+                        .values()
+                        .any(|dir| !Arc::ptr_eq(dir, &face.state))
                 } else {
-                    !route.is_empty()
+                    !matching_subscriptions.is_empty()
                 }
             }
             Locality::SessionLocal => {
                 if let Some(face) = zread!(self.state).primitives.as_ref() {
-                    route.values().any(|dir| Arc::ptr_eq(&dir.0, &face.state))
+                    matching_subscriptions
+                        .values()
+                        .any(|dir| Arc::ptr_eq(dir, &face.state))
                 } else {
                     false
                 }

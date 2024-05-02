@@ -24,8 +24,8 @@ use super::{
     },
     router::RoutesIndexes,
 };
-use crate::runtime::Runtime;
-use std::{any::Any, sync::Arc};
+use crate::{runtime::Runtime, KeyExpr};
+use std::{any::Any, collections::HashMap, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
 use zenoh_protocol::{
@@ -179,6 +179,12 @@ pub(crate) trait HatPubSubTrait {
     ) -> Arc<Route>;
 
     fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
+
+    fn get_matching_subscriptions(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatQueriesTrait {
