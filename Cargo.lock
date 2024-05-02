@@ -5454,7 +5454,6 @@ dependencies = [
  "ron",
  "serde",
  "tokio",
- "tracing",
  "zenoh-collections",
  "zenoh-macros",
  "zenoh-result",
