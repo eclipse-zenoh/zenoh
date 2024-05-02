@@ -15,7 +15,7 @@
 #[test]
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 fn shm_bytes_single_buf() {
-    use zenoh::prelude::r#async::*;
+    use zenoh::prelude::*;
 
     // create an SHM backend...
     let backend = PosixSharedMemoryProviderBackend::builder()
