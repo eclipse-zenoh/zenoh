@@ -38,13 +38,11 @@ jobs:
       - name: Clone this repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        run: |
-          rustup show
-          rustup component add rustfmt clippy
-
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: cargo +stable install cargo-deny --locked
 
       - name: Code format check
         run: cargo fmt --check
@@ -68,6 +66,9 @@ jobs:
 
       - name: Run doctests
         run: cargo test --doc
+
+      - name: Check licenses
+        run: cargo deny check licenses
 
   test:
     name: Unit tests on ${{ matrix.os }}
