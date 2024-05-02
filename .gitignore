@@ -22,6 +22,5 @@
 cargo-timing*.html
 
 #ignore test data
-tests
-
+testfiles
 ci/valgrind-check/*.log

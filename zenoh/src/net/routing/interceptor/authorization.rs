@@ -199,7 +199,6 @@ impl PolicyEnforcer {
         &self,
         config_rule_set: &Vec<AclConfigRules>,
     ) -> ZResult<PolicyInformation> {
-        println!("start policy info point{:?}", config_rule_set);
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
             for flow in &config_rule.flows {

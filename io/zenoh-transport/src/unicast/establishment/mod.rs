@@ -83,6 +83,7 @@ pub trait AcceptFsm {
     ) -> Result<Self::SendInitAckOut, Self::Error>;
 
     type RecvOpenSynIn;
+    
     type RecvOpenSynOut;
     async fn recv_open_syn(
         self,
