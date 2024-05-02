@@ -13,10 +13,6 @@
 //
 use std::{
     net::{IpAddr, Ipv6Addr, SocketAddr},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
     time::Duration,
 };
 
@@ -24,7 +20,7 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use tokio::{
     net::UdpSocket,
-    sync::{futures::Notified, Notify},
+    sync::{futures::Notified, Mutex, Notify},
 };
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
@@ -55,24 +51,68 @@ pub enum Loop {
     Break,
 }
 
-#[derive(Default)]
-struct StartConditions {
+#[derive(Default, Debug)]
+pub(crate) struct PeerConnector {
+    zid: Option<ZenohId>,
+    terminated: bool,
+}
+
+#[derive(Default, Debug)]
+pub(crate) struct StartConditions {
     notify: Notify,
-    peer_connectors: AtomicUsize,
+    peer_connectors: Mutex<Vec<PeerConnector>>,
 }
 
 impl StartConditions {
-    fn notified(&self) -> Notified<'_> {
+    pub(crate) fn notified(&self) -> Notified<'_> {
         self.notify.notified()
     }
 
-    fn add_peer_connector(&self) {
-        self.peer_connectors.fetch_add(1, Ordering::Relaxed);
+    pub(crate) async fn add_peer_connector(&self) -> usize {
+        let mut peer_connectors = self.peer_connectors.lock().await;
+        peer_connectors.push(PeerConnector::default());
+        peer_connectors.len() - 1
     }
 
-    fn terminate_peer_connector(&self) {
-        if self.peer_connectors.fetch_sub(1, Ordering::Relaxed) <= 1 {
-            self.notify.notify_one();
+    pub(crate) async fn add_peer_connector_zid(&self, zid: ZenohId) {
+        let mut peer_connectors = self.peer_connectors.lock().await;
+        if !peer_connectors.iter().any(|pc| pc.zid == Some(zid)) {
+            peer_connectors.push(PeerConnector {
+                zid: Some(zid),
+                terminated: false,
+            })
+        }
+    }
+
+    pub(crate) async fn set_peer_connector_zid(&self, idx: usize, zid: ZenohId) {
+        let mut peer_connectors = self.peer_connectors.lock().await;
+        if let Some(peer_connector) = peer_connectors.get_mut(idx) {
+            peer_connector.zid = Some(zid);
+        }
+    }
+
+    pub(crate) async fn terminate_peer_connector(&self, idx: usize) {
+        let mut peer_connectors = self.peer_connectors.lock().await;
+        if let Some(peer_connector) = peer_connectors.get_mut(idx) {
+            peer_connector.terminated = true;
+        }
+        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+            self.notify.notify_one()
+        }
+    }
+
+    pub(crate) async fn terminate_peer_connector_zid(&self, zid: ZenohId) {
+        let mut peer_connectors = self.peer_connectors.lock().await;
+        if let Some(peer_connector) = peer_connectors.iter_mut().find(|pc| pc.zid == Some(zid)) {
+            peer_connector.terminated = true;
+        } else {
+            peer_connectors.push(PeerConnector {
+                zid: Some(zid),
+                terminated: true,
+            })
+        }
+        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+            self.notify.notify_one()
         }
     }
 }
@@ -120,7 +160,7 @@ impl Runtime {
                     bail!("No peer specified and multicast scouting desactivated!")
                 }
             }
-            _ => self.connect_peers(&peers, true, None).await,
+            _ => self.connect_peers(&peers, true).await,
         }
     }
 
@@ -159,16 +199,13 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        let start_conditions = Arc::new(StartConditions::default());
-
-        self.connect_peers(&peers, false, Some(start_conditions.clone()))
-            .await?;
+        self.connect_peers(&peers, false).await?;
 
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
-        if tokio::time::timeout(delay, start_conditions.notified())
+        if tokio::time::timeout(delay, self.state.start_conditions.notified())
             .await
             .is_err()
             && !peers.is_empty()
@@ -212,7 +249,7 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        self.connect_peers(&peers, false, None).await?;
+        self.connect_peers(&peers, false).await?;
 
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
@@ -263,20 +300,13 @@ impl Runtime {
         Ok(())
     }
 
-    async fn connect_peers(
-        &self,
-        peers: &[EndPoint],
-        single_link: bool,
-        notify: Option<Arc<StartConditions>>,
-    ) -> ZResult<()> {
+    async fn connect_peers(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
         let timeout = self.get_global_connect_timeout();
         if timeout.is_zero() {
-            self.connect_peers_impl(peers, single_link, notify).await
+            self.connect_peers_impl(peers, single_link).await
         } else {
             let res = tokio::time::timeout(timeout, async {
-                self.connect_peers_impl(peers, single_link, notify)
-                    .await
-                    .ok()
+                self.connect_peers_impl(peers, single_link).await.ok()
             })
             .await;
             match res {
@@ -294,16 +324,11 @@ impl Runtime {
         }
     }
 
-    async fn connect_peers_impl(
-        &self,
-        peers: &[EndPoint],
-        single_link: bool,
-        notify: Option<Arc<StartConditions>>,
-    ) -> ZResult<()> {
+    async fn connect_peers_impl(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
         if single_link {
             self.connect_peers_single_link(peers).await
         } else {
-            self.connect_peers_multiply_links(peers, notify).await
+            self.connect_peers_multiply_links(peers).await
         }
     }
 
@@ -328,7 +353,7 @@ impl Runtime {
                 }
             } else {
                 // try to connect with retry waiting
-                self.peer_connector_retry(endpoint).await;
+                let _ = self.peer_connector_retry(endpoint).await;
                 return Ok(());
             }
         }
@@ -341,11 +366,7 @@ impl Runtime {
         Err(e.into())
     }
 
-    async fn connect_peers_multiply_links(
-        &self,
-        peers: &[EndPoint],
-        notify: Option<Arc<StartConditions>>,
-    ) -> ZResult<()> {
+    async fn connect_peers_multiply_links(&self, peers: &[EndPoint]) -> ZResult<()> {
         for peer in peers {
             let endpoint = peer.clone();
             let retry_config = self.get_connect_retry_config(&endpoint);
@@ -364,10 +385,10 @@ impl Runtime {
                 }
             } else if retry_config.exit_on_failure {
                 // try to connect with retry waiting
-                self.peer_connector_retry(endpoint).await;
+                let _ = self.peer_connector_retry(endpoint).await;
             } else {
                 // try to connect in background
-                self.spawn_peer_connector(endpoint, notify.clone()).await?
+                self.spawn_peer_connector(endpoint).await?
             }
         }
         Ok(())
@@ -430,7 +451,7 @@ impl Runtime {
                     }
                     false
                 }) {
-                    self.spawn_peer_connector(peer, None).await?;
+                    self.spawn_peer_connector(peer).await?;
                 }
             }
         }
@@ -705,23 +726,28 @@ impl Runtime {
         Ok(udp_socket)
     }
 
-    async fn spawn_peer_connector(
-        &self,
-        peer: EndPoint,
-        notify: Option<Arc<StartConditions>>,
-    ) -> ZResult<()> {
+    async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {
         if !LocatorInspector::default()
             .is_multicast(&peer.to_locator())
             .await?
         {
             let this = self.clone();
-            if let Some(notify) = notify.as_ref() {
-                notify.add_peer_connector();
-            }
+            let idx = self.state.start_conditions.add_peer_connector().await;
+            let config = this.config().lock();
+            let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
+            drop(config);
             self.spawn(async move {
-                this.peer_connector_retry(peer).await;
-                if let Some(notify) = notify {
-                    notify.terminate_peer_connector();
+                if let Ok(zid) = this.peer_connector_retry(peer).await {
+                    this.state
+                        .start_conditions
+                        .set_peer_connector_zid(idx, zid)
+                        .await;
+                }
+                if !gossip {
+                    this.state
+                        .start_conditions
+                        .terminate_peer_connector(idx)
+                        .await;
                 }
             });
             Ok(())
@@ -730,7 +756,7 @@ impl Runtime {
         }
     }
 
-    async fn peer_connector_retry(&self, peer: EndPoint) {
+    async fn peer_connector_retry(&self, peer: EndPoint) -> ZResult<ZenohId> {
         let retry_config = self.get_connect_retry_config(&peer);
         let mut period = retry_config.period();
         let cancellation_token = self.get_cancellation_token();
@@ -750,7 +776,7 @@ impl Runtime {
                                     *zwrite!(orch_transport.endpoint) = Some(peer);
                                 }
                             }
-                            break;
+                            return transport.get_zid();
                         }
                         Ok(Err(e)) => {
                             tracing::debug!(
@@ -770,7 +796,7 @@ impl Runtime {
                         }
                     }
                 }
-                _ = cancellation_token.cancelled() => { break; }
+                _ = cancellation_token.cancelled() => { bail!(zerror!("Peer connector terminated")); }
             }
             tokio::time::sleep(period.next_duration()).await;
         }

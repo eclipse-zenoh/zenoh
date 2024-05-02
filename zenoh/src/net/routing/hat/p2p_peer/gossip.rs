@@ -399,6 +399,11 @@ impl Network {
 
             if self.gossip {
                 if let Some(idx) = idx {
+                    zenoh_runtime::ZRuntime::Net.block_in_place(
+                        strong_runtime
+                            .start_conditions()
+                            .add_peer_connector_zid(zid),
+                    );
                     if self.gossip_multihop || self.links.values().any(|link| link.zid == zid) {
                         self.send_on_links(
                             vec![(
@@ -430,6 +435,10 @@ impl Network {
                                     );
                                     tokio::time::sleep(sleep_time).await;
                                     runtime.connect_peer(&zid, &locators).await;
+                                    runtime
+                                        .start_conditions()
+                                        .terminate_peer_connector_zid(zid)
+                                        .await;
                                 }
                             });
                         }
@@ -437,6 +446,11 @@ impl Network {
                 }
             }
         }
+        zenoh_runtime::ZRuntime::Net.block_in_place(
+            strong_runtime
+                .start_conditions()
+                .terminate_peer_connector_zid(src),
+        );
     }
 
     pub(super) fn add_link(&mut self, transport: TransportUnicast) -> usize {
