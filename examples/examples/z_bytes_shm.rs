@@ -21,6 +21,7 @@ use zenoh::{
 
 fn main() {
     // create an SHM backend...
+    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
     let backend = PosixSharedMemoryProviderBackend::builder()
         .with_size(4096)
         .unwrap()
@@ -32,11 +33,17 @@ fn main() {
         .backend(backend)
         .res();
 
-    // Prepare a layout for allocations
-    let layout = provider.alloc_layout().size(1024).res().unwrap();
-
-    // allocate an SHM buffer (ZShmMut)
-    let mut owned_shm_buf_mut = layout.alloc().res().unwrap();
+    // Allocate an SHM buffer
+    // NOTE: For allocation API please check z_alloc_shm.rs example
+    // NOTE: For buf's API please check z_bytes_shm.rs example
+    let mut owned_shm_buf_mut = provider
+        .alloc_layout()
+        .size(1024)
+        .res()
+        .unwrap()
+        .alloc()
+        .res()
+        .unwrap();
 
     // mutable and immutable API
     let _data: &[u8] = &owned_shm_buf_mut;

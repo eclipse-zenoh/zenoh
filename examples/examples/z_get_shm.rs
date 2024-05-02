@@ -33,43 +33,29 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Creating POSIX SHM backend...");
-    // Construct an SHM backend
-    let backend = {
-        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
-        // The initialisation of SHM backend is completely backend-specific and user is free to do
-        // anything reasonable here. This code is execuated at the provider's first use
-
-        // Alignment for POSIX SHM provider
-        // All allocations will be aligned corresponding to this alignment -
-        // that means that the provider will be able to satisfy allocation layouts
-        // with alignment <= provider_alignment
-        let provider_alignment = AllocAlignment::default();
-
-        // Create layout for POSIX Provider's memory
-        let provider_layout = MemoryLayout::new(N * 1024, provider_alignment).unwrap();
-
-        PosixSharedMemoryProviderBackend::builder()
-            .with_layout(provider_layout)
-            .res()
-            .unwrap()
-    };
-
-    println!("Creating SHM Provider with POSIX backend...");
-    // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
-    let shared_memory_provider = SharedMemoryProviderBuilder::builder()
+    println!("Creating POSIX SHM provider...");
+    // create an SHM backend...
+    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixSharedMemoryProviderBackend::builder()
+        .with_size(N * 1024)
+        .unwrap()
+        .res()
+        .unwrap();
+    // ...and an SHM provider
+    let provider = SharedMemoryProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
 
+    // Allocate an SHM buffer
+    // NOTE: For allocation API please check z_alloc_shm.rs example
+    // NOTE: For buf's API please check z_bytes_shm.rs example
     println!("Allocating Shared Memory Buffer...");
-    let layout = shared_memory_provider
+    let mut sbuf = provider
         .alloc_layout()
         .size(1024)
         .res()
-        .unwrap();
-
-    let mut sbuf = layout
+        .unwrap()
         .alloc()
         .with_policy::<BlockOn<GarbageCollect>>()
         .res_async()

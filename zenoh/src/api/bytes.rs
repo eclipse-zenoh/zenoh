@@ -1833,12 +1833,12 @@ mod tests {
 
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
         use zenoh_shm::api::{
+            buffer::zshm::{zshm, ZShm},
             protocol_implementations::posix::{
                 posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
                 protocol_id::POSIX_PROTOCOL_ID,
             },
             provider::shared_memory_provider::SharedMemoryProviderBuilder,
-            buffer::zshm::{zshm, ZShm},
         };
 
         const NUM: usize = 1_000;
