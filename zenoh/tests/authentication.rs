@@ -30,14 +30,14 @@ mod test {
         test_pub_sub_allow_then_deny_tls().await;
         test_get_qbl_allow_then_deny_tls().await;
         test_get_qbl_deny_then_allow_tls().await;
-        test_pub_sub_deny_then_allow_quic().await;
-        test_pub_sub_allow_then_deny_quic().await;
-        test_get_qbl_allow_then_deny_quic().await;
-        test_get_qbl_deny_then_allow_quic().await;
         test_pub_sub_deny_then_allow_usrpswd().await;
         test_pub_sub_allow_then_deny_usrpswd().await;
         test_get_qbl_allow_then_deny_usrpswd().await;
         test_get_qbl_deny_then_allow_usrpswd().await;
+        test_pub_sub_deny_then_allow_quic().await;
+        test_pub_sub_allow_then_deny_quic().await;
+        test_get_qbl_allow_then_deny_quic().await;
+        test_get_qbl_deny_then_allow_quic().await;
     }
     async fn get_basic_router_config_tls() -> Config {
         let mut config = config::default();

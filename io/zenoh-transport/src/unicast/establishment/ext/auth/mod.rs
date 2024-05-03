@@ -571,16 +571,17 @@ impl<'a> AcceptFsm for &'a AuthFsm<'a> {
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Auth>);
-    #[cfg(feature = "auth_usrpwd")]
 
+    #[cfg(not(feature = "auth_usrpwd"))]
+    type RecvOpenSynOut = ();
+    #[cfg(feature = "auth_usrpwd")]
     type RecvOpenSynOut = UsrPwdId;
+
     async fn recv_open_syn(
         self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         const S: &str = "Auth extension - Recv OpenSyn.";
-        #[cfg(feature = "transport_auth")]
-        let mut user_passwd_id = UsrPwdId(None);
 
         let (state, ext) = input;
         let ext = ext.unwrap_or(init::ext::Auth::new(ZBuf::empty()));
@@ -609,14 +610,17 @@ impl<'a> AcceptFsm for &'a AuthFsm<'a> {
                 (Some(e), Some(s)) => {
                     let x = ztake!(exts, id::USRPWD);
                     let username = e.recv_open_syn((s, ztryinto!(x, S))).await?;
-                    user_passwd_id = UsrPwdId(Some(username));
+                    let user_passwd_id = UsrPwdId(Some(username));
+                    return Ok(user_passwd_id);
                 }
-                (None, None) => {}
+                (None, None) => {
+                    return Ok(UsrPwdId(None));
+                }
                 _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
-
-        Ok(user_passwd_id)
+        #[cfg(not(feature = "auth_usrpwd"))]
+        Ok(())
     }
 
     type SendOpenAckIn = &'a StateAccept;
