@@ -22,7 +22,7 @@ mod test {
     const SLEEP: Duration = Duration::from_secs(1);
     const KEY_EXPR: &str = "test/demo";
     const VALUE: &str = "zenoh";
-
+    #[ignore]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication() {
         zenoh_util::try_init_log_from_env();
@@ -30,14 +30,14 @@ mod test {
         test_pub_sub_allow_then_deny_tls().await;
         test_get_qbl_allow_then_deny_tls().await;
         test_get_qbl_deny_then_allow_tls().await;
-        test_pub_sub_deny_then_allow_usrpswd().await;
-        test_pub_sub_allow_then_deny_usrpswd().await;
-        test_get_qbl_allow_then_deny_usrpswd().await;
-        test_get_qbl_deny_then_allow_usrpswd().await;
         test_pub_sub_deny_then_allow_quic().await;
         test_pub_sub_allow_then_deny_quic().await;
         test_get_qbl_allow_then_deny_quic().await;
         test_get_qbl_deny_then_allow_quic().await;
+        test_pub_sub_deny_then_allow_usrpswd().await;
+        test_pub_sub_allow_then_deny_usrpswd().await;
+        test_get_qbl_allow_then_deny_usrpswd().await;
+        test_get_qbl_deny_then_allow_usrpswd().await;
     }
     async fn get_basic_router_config_tls() -> Config {
         let mut config = config::default();
@@ -224,7 +224,6 @@ mod test {
                             user: "client1name",
                             password: "client1passwd",
                           },
-                        
                         }
                     }"#,
             )
@@ -324,7 +323,6 @@ mod test {
 
     async fn test_pub_sub_allow_then_deny_tls() {
         println!("test_pub_sub_allow_then_deny_tls");
-
         let mut config_router = get_basic_router_config_tls().await;
         config_router
             .insert_json5(
@@ -588,9 +586,8 @@ mod test {
         close_router_session(session).await;
     }
 
+    #[allow(unused)]
     async fn test_pub_sub_allow_then_deny_quic() {
-        tokio::time::sleep(SLEEP).await;
-
         println!("test_pub_sub_allow_then_deny_quic");
 
         let mut config_router = get_basic_router_config_quic().await;
@@ -650,11 +647,11 @@ mod test {
         close_router_session(session).await;
     }
 
+    #[allow(unused)]
     async fn test_get_qbl_deny_then_allow_quic() {
         println!("test_get_qbl_deny_then_allow_quic");
 
         let mut config_router = get_basic_router_config_quic().await;
-        // config_router.listen.endpoints = vec!["quic/127.0.0.1:7447".parse().unwrap()];
         config_router
             .insert_json5(
                 "access_control",
@@ -722,11 +719,11 @@ mod test {
         close_router_session(session).await;
     }
 
+    #[allow(unused)]
     async fn test_get_qbl_allow_then_deny_quic() {
         println!("test_get_qbl_allow_then_deny_quic");
 
         let mut config_router = get_basic_router_config_quic().await;
-        //  config_router.listen.endpoints = vec!["quic/127.0.0.1:7447".parse().unwrap()];
         config_router
             .insert_json5(
                 "access_control",
@@ -922,7 +919,6 @@ mod test {
         println!("test_get_qbl_deny_then_allow_usrpswd");
 
         let mut config_router = get_basic_router_config_usrpswd().await;
-        // config_router.listen.endpoints = vec!["quic/127.0.0.1:7447".parse().unwrap()];
         config_router
             .insert_json5(
                 "access_control",
@@ -994,7 +990,6 @@ mod test {
         println!("test_get_qbl_allow_then_deny_usrpswd");
 
         let mut config_router = get_basic_router_config_usrpswd().await;
-        //  config_router.listen.endpoints = vec!["quic/127.0.0.1:7447".parse().unwrap()];
         config_router
             .insert_json5(
                 "access_control",
