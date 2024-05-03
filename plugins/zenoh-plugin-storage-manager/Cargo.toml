@@ -24,8 +24,8 @@ categories = { workspace = true }
 description = "The zenoh storages plugin."
 
 [features]
-default = ["no_mangle", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
-no_mangle = []
+default = ["dynamic_plugin", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
+dynamic_plugin = []
 
 [lib]
 name = "zenoh_plugin_storage_manager"

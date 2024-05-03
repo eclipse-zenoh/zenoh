@@ -26,7 +26,7 @@ use zenoh_backend_traits::{
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
 use zenoh_result::ZResult;
 
-#[cfg(feature = "no_mangle")]
+#[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(ExampleBackend);
 
 impl Plugin for ExampleBackend {
