@@ -112,7 +112,7 @@ pub mod buffer {
                         vec.extend_from_slice(slice);
                     }
                     Cow::Owned(vec)
-                },
+                }
             }
         }
     }
