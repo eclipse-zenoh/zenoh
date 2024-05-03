@@ -40,14 +40,14 @@ async fn run() -> ZResult<()> {
     // This layout is reusable and can handle series of similar allocations
     let buffer_layout = {
         // OPTION 1: Simple (default) configuration:
-        let simple_layout = shared_memory_provider
+        let simple_layout = provider
             .alloc_layout()
             .size(512)
             .res()
             .unwrap();
 
         // OPTION 2: Comprehensive configuration:
-        let _comprehensive_layout = shared_memory_provider
+        let _comprehensive_layout = provider
             .alloc_layout()
             .size(512)
             .alignment(AllocAlignment::new(2))
