@@ -30,7 +30,9 @@ use super::{
     resource::{DataRoutes, Direction, Resource},
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
-use crate::{key_expr::KeyExpr, net::routing::hat::HatTrait};
+#[zenoh_macros::unstable]
+use crate::key_expr::KeyExpr;
+use crate::net::routing::hat::HatTrait;
 
 pub(crate) fn declare_sub_interest(
     hat_code: &(dyn HatTrait + Send + Sync),

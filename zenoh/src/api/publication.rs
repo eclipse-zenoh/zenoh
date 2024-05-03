@@ -33,7 +33,6 @@ use zenoh_result::{Error, ZResult};
 use {
     crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
     crate::api::sample::SourceInfo,
-    crate::api::Id,
     zenoh_protocol::core::EntityGlobalId,
 };
 
@@ -48,7 +47,7 @@ use super::{
     sample::{DataInfo, Locality, QoS, Sample, SampleFields, SampleKind},
     session::{SessionRef, Undeclarable},
 };
-use crate::net::primitives::Primitives;
+use crate::{api::Id, net::primitives::Primitives};
 
 pub(crate) struct PublisherState {
     pub(crate) id: Id,
