@@ -15,18 +15,7 @@
 #[test]
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 fn shm_payload_single_buf() {
-    use zenoh::shm::slice::zsliceshm::{zsliceshm, ZSliceShm};
-    use zenoh::shm::slice::zsliceshmmut::{zsliceshmmut, ZSliceShmMut};
-    use zenoh::{
-        bytes::ZBytes,
-        shm::{
-            protocol_implementations::posix::{
-                posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-                protocol_id::POSIX_PROTOCOL_ID,
-            },
-            provider::shared_memory_provider::SharedMemoryProviderBuilder,
-        },
-    };
+    use zenoh::prelude::*;
 
     // create an SHM backend...
     let backend = PosixSharedMemoryProviderBackend::builder()

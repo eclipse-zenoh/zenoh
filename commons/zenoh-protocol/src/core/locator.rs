@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::endpoint::*;
 use alloc::{borrow::ToOwned, string::String};
 use core::{convert::TryFrom, fmt, hash::Hash, str::FromStr};
+
 use zenoh_result::{Error as ZError, ZResult};
+
+use super::endpoint::*;
 
 /// A string that respects the [`Locator`] canon form: `<proto>/<address>[?<metadata>]`.
 ///

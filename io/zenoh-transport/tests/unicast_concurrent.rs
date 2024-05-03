@@ -10,11 +10,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::any::Any;
-use std::convert::TryFrom;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    any::Any,
+    convert::TryFrom,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use tokio::sync::Barrier;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;

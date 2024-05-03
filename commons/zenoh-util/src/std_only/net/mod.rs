@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::net::{IpAddr, Ipv6Addr};
+
 use tokio::net::{TcpSocket, UdpSocket};
 use zenoh_core::zconfigurable;
 #[cfg(unix)]
@@ -78,8 +79,9 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
     #[cfg(windows)]
     {
         unsafe {
-            use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+            use crate::ffi;
 
             let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
 
@@ -162,8 +164,9 @@ pub fn get_local_addresses(interface: Option<&str>) -> ZResult<Vec<IpAddr>> {
     #[cfg(windows)]
     {
         unsafe {
-            use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+            use crate::ffi;
 
             let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_UNSPEC)?;
 
@@ -242,8 +245,9 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
     #[cfg(windows)]
     {
         unsafe {
-            use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+            use crate::ffi;
 
             let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
 
@@ -281,8 +285,9 @@ pub fn get_index_of_interface(addr: IpAddr) -> ZResult<u32> {
     #[cfg(windows)]
     {
         unsafe {
-            use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+            use crate::ffi;
 
             let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
 
@@ -324,8 +329,9 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
     {
         let mut result = vec![];
         unsafe {
-            use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+            use crate::ffi;
 
             let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_UNSPEC)?;
 

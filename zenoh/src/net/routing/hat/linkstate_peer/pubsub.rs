@@ -11,34 +11,43 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::network::Network;
-use super::{face_hat, face_hat_mut, get_routes_entries, hat, hat_mut, res_hat, res_hat_mut};
-use super::{get_peer, HatCode, HatContext, HatFace, HatTables};
-use crate::net::routing::dispatcher::face::FaceState;
-use crate::net::routing::dispatcher::pubsub::*;
-use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::Tables;
-use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::{CurrentFutureTrait, HatPubSubTrait, Sources};
-use crate::net::routing::router::RoutesIndexes;
-use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
-use crate::KeyExpr;
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    sync::{atomic::Ordering, Arc},
+};
+
 use petgraph::graph::NodeIndex;
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::SubscriberId;
-use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
-    core::{Reliability, WhatAmI, ZenohId},
-    network::declare::{
-        common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareSubscriber, UndeclareSubscriber,
+    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, ZenohId},
+    network::{
+        declare::{
+            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
+            DeclareSubscriber, SubscriberId, UndeclareSubscriber,
+        },
+        interest::{InterestId, InterestMode},
     },
 };
 use zenoh_sync::get_mut_unchecked;
+
+use super::{
+    face_hat, face_hat_mut, get_peer, get_routes_entries, hat, hat_mut, network::Network, res_hat,
+    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+};
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        dispatcher::{
+            face::FaceState,
+            pubsub::*,
+            resource::{NodeId, Resource, SessionContext},
+            tables::{Route, RoutingExpr, Tables},
+        },
+        hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
+        router::RoutesIndexes,
+        RoutingContext, PREFIX_LIVELINESS,
+    },
+};
 
 #[inline]
 fn send_sourced_subscription_to_net_childs(

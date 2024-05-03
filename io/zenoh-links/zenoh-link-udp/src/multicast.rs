@@ -11,18 +11,25 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{config::*, UDP_DEFAULT_MTU};
-use crate::{get_udp_addrs, socket_addr_to_udp_locator};
+use std::{
+    borrow::Cow,
+    fmt,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::Arc,
+};
+
 use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::Arc;
-use std::{borrow::Cow, fmt};
 use tokio::net::UdpSocket;
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
-use zenoh_protocol::core::{Config, EndPoint, Locator};
-use zenoh_protocol::transport::BatchSize;
+use zenoh_protocol::{
+    core::{Config, EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
+
+use super::{config::*, UDP_DEFAULT_MTU};
+use crate::{get_udp_addrs, socket_addr_to_udp_locator};
 
 pub struct LinkMulticastUdp {
     // The unicast socket address of this link

@@ -17,15 +17,8 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use super::{
-    dispatcher::{
-        face::{Face, FaceState},
-        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
-    },
-    router::RoutesIndexes,
-};
-use crate::{runtime::Runtime, KeyExpr};
 use std::{any::Any, collections::HashMap, sync::Arc};
+
 use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
 use zenoh_protocol::{
@@ -41,6 +34,15 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
+
+use super::{
+    dispatcher::{
+        face::{Face, FaceState},
+        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
+    },
+    router::RoutesIndexes,
+};
+use crate::{key_expr::KeyExpr, runtime::Runtime};
 
 mod client;
 mod linkstate_peer;

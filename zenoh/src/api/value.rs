@@ -13,7 +13,7 @@
 //
 
 //! Value primitives.
-use crate::{bytes::ZBytes, encoding::Encoding};
+use super::{bytes::ZBytes, encoding::Encoding};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the payload's [`ZBytes`] should be interpreted.
 #[non_exhaustive]

@@ -11,20 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::sample::{QoS, QoSBuilder};
-use crate::Encoding;
-use crate::KeyExpr;
-use crate::Priority;
-use crate::Sample;
-use crate::SampleKind;
-use crate::Value;
-use crate::ZBytes;
-#[cfg(feature = "unstable")]
-use crate::{bytes::OptionZBytes, sample::SourceInfo};
 use std::marker::PhantomData;
+
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
+
+use crate::api::{
+    bytes::ZBytes,
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    publication::Priority,
+    sample::{QoS, QoSBuilder, Sample, SampleKind},
+    value::Value,
+};
+#[cfg(feature = "unstable")]
+use crate::{api::bytes::OptionZBytes, sample::SourceInfo};
 
 pub trait QoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.
@@ -42,7 +44,6 @@ pub trait TimestampBuilderTrait {
     fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self;
 }
 
-#[zenoh_macros::unstable]
 pub trait SampleBuilderTrait {
     /// Attach source information
     #[zenoh_macros::unstable]
@@ -141,7 +142,7 @@ impl<T> SampleBuilder<T> {
     }
 
     // Allows to change qos as a whole of [`Sample`]
-    pub fn qos(self, qos: QoS) -> Self {
+    pub(crate) fn qos(self, qos: QoS) -> Self {
         Self {
             sample: Sample { qos, ..self.sample },
             _t: PhantomData::<T>,

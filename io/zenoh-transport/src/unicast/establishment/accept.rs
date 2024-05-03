@@ -11,26 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use super::ext::shm::AuthSegment;
-#[cfg(feature = "shared-memory")]
-use crate::shm::TransportShmConfig;
+use std::time::Duration;
 
-use crate::{
-    common::batch::BatchConfig,
-    unicast::{
-        establishment::{compute_sn, ext, AcceptFsm, Cookie, Zenoh080Cookie},
-        link::{
-            LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
-            TransportLinkUnicastDirection,
-        },
-        TransportConfigUnicast,
-    },
-    TransportManager,
-};
 use async_trait::async_trait;
 use rand::Rng;
-use std::time::Duration;
 use tokio::sync::Mutex;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
@@ -46,6 +30,23 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+
+#[cfg(feature = "shared-memory")]
+use super::ext::shm::AuthSegment;
+#[cfg(feature = "shared-memory")]
+use crate::shm::TransportShmConfig;
+use crate::{
+    common::batch::BatchConfig,
+    unicast::{
+        establishment::{compute_sn, ext, AcceptFsm, Cookie, Zenoh080Cookie},
+        link::{
+            LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
+            TransportLinkUnicastDirection,
+        },
+        TransportConfigUnicast,
+    },
+    TransportManager,
+};
 
 pub(super) type AcceptError = (zenoh_result::Error, Option<u8>);
 

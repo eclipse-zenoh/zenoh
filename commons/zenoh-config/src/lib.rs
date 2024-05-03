@@ -16,10 +16,6 @@
 pub mod defaults;
 mod include;
 
-use include::recursive_include;
-use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
@@ -31,11 +27,16 @@ use std::{
     path::Path,
     sync::{Arc, Mutex, MutexGuard, Weak},
 };
+
+use include::recursive_include;
+use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 use zenoh_core::zlock;
 pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, Priority, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
+    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
 };
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, Bits},

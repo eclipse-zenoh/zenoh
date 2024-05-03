@@ -1,4 +1,30 @@
-use crate::common::batch::BatchConfig;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, MutexGuard,
+    },
+    time::{Duration, Instant},
+};
+
+use flume::{bounded, Receiver, Sender};
+use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
+use zenoh_buffers::{
+    reader::{HasReader, Reader},
+    writer::HasWriter,
+    ZBuf,
+};
+use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
+use zenoh_config::QueueSizeConf;
+use zenoh_core::zlock;
+use zenoh_protocol::{
+    core::{Priority, Reliability},
+    network::NetworkMessage,
+    transport::{
+        fragment::FragmentHeader,
+        frame::{self, FrameHeader},
+        AtomicBatchSize, BatchSize, TransportMessage,
+    },
+};
 
 //
 // Copyright (c) 2023 ZettaScale Technology
@@ -17,32 +43,7 @@ use super::{
     batch::{Encode, WBatch},
     priority::{TransportChannelTx, TransportPriorityTx},
 };
-use flume::{bounded, Receiver, Sender};
-use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
-use std::{
-    sync::atomic::{AtomicBool, Ordering},
-    time::Instant,
-};
-use zenoh_buffers::{
-    reader::{HasReader, Reader},
-    writer::HasWriter,
-    ZBuf,
-};
-use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
-use zenoh_config::QueueSizeConf;
-use zenoh_core::zlock;
-use zenoh_protocol::core::Reliability;
-use zenoh_protocol::network::NetworkMessage;
-use zenoh_protocol::{
-    core::Priority,
-    transport::{
-        fragment::FragmentHeader,
-        frame::{self, FrameHeader},
-        AtomicBatchSize, BatchSize, TransportMessage,
-    },
-};
+use crate::common::batch::BatchConfig;
 
 // It's faster to work directly with nanoseconds.
 // Backoff will never last more the u32::MAX nanoseconds.
@@ -719,7 +720,6 @@ impl TransmissionPipelineConsumer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::{
         convert::TryFrom,
         sync::{
@@ -728,8 +728,8 @@ mod tests {
         },
         time::{Duration, Instant},
     };
-    use tokio::task;
-    use tokio::time::timeout;
+
+    use tokio::{task, time::timeout};
     use zenoh_buffers::{
         reader::{DidntRead, HasReader},
         ZBuf,
@@ -742,6 +742,8 @@ mod tests {
         zenoh::{PushBody, Put},
     };
     use zenoh_result::ZResult;
+
+    use super::*;
 
     const SLEEP: Duration = Duration::from_millis(100);
     const TIMEOUT: Duration = Duration::from_secs(60);

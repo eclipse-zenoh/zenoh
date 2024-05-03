@@ -10,12 +10,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
 use std::path::{Path, PathBuf};
 
 use libloading::Library;
 use zenoh_result::{bail, ZResult};
 use zenoh_util::LibLoader;
+
+use crate::*;
 
 /// This enum contains information where to load the plugin from.
 pub enum DynamicPluginSource {
@@ -142,7 +143,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
         if let Some(starter) = &self.starter {
             starter.path()
         } else {
-            "<not loaded>"
+            "__not_loaded__"
         }
     }
     fn state(&self) -> PluginState {

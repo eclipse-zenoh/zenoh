@@ -11,72 +11,43 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::admin;
-use crate::bytes::ZBytes;
-use crate::config::Config;
-use crate::config::Notifier;
-use crate::encoding::Encoding;
-use crate::handlers::{Callback, DefaultHandler};
-use crate::info::*;
-use crate::key_expr::KeyExprInner;
-#[zenoh_macros::unstable]
-use crate::liveliness::{Liveliness, LivelinessTokenState};
-use crate::net::primitives::Primitives;
-use crate::net::routing::dispatcher::face::Face;
-use crate::net::runtime::Runtime;
-use crate::prelude::KeyExpr;
-use crate::prelude::Locality;
-use crate::publication::*;
-use crate::query::*;
-use crate::queryable::*;
-use crate::sample::DataInfo;
-use crate::sample::DataInfoIntoSample;
-use crate::sample::QoS;
-use crate::selector::TIME_RANGE_KEY;
-use crate::subscriber::*;
-use crate::Id;
-use crate::Priority;
-use crate::Sample;
-use crate::SampleKind;
-use crate::Selector;
-#[cfg(feature = "unstable")]
-use crate::SourceInfo;
-use crate::Value;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::fmt;
-use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::Arc;
-use std::sync::RwLock;
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    fmt,
+    future::{IntoFuture, Ready},
+    ops::Deref,
+    sync::{
+        atomic::{AtomicU16, Ordering},
+        Arc, RwLock,
+    },
+    time::Duration,
+};
+
 use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::unwrap_or_default;
-use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
-use zenoh_protocol::core::EntityId;
-use zenoh_protocol::network;
-use zenoh_protocol::network::interest::InterestMode;
-use zenoh_protocol::network::interest::InterestOptions;
-use zenoh_protocol::network::Interest;
+use zenoh_config::{unwrap_or_default, Config, Notifier};
+use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, ZenohId,
+        EMPTY_EXPR_ID,
     },
     network::{
+        self,
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
             subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
             DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
+        interest::{InterestMode, InterestOptions},
         request::{self, ext::TargetType, Request},
-        AtomicRequestId, Mapping, Push, RequestId, Response, ResponseFinal,
+        AtomicRequestId, Interest, Mapping, Push, RequestId, Response, ResponseFinal,
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
@@ -88,7 +59,40 @@ use zenoh_result::ZResult;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_task::TaskController;
-use zenoh_util::core::AsyncResolve;
+
+use super::{
+    admin,
+    builders::publication::{
+        PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder, SessionDeleteBuilder,
+        SessionPutBuilder,
+    },
+    bytes::ZBytes,
+    encoding::Encoding,
+    handlers::{Callback, DefaultHandler},
+    info::SessionInfo,
+    key_expr::{KeyExpr, KeyExprInner},
+    publication::{Priority, PublisherState},
+    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
+    queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
+    sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
+    selector::{Selector, TIME_RANGE_KEY},
+    subscriber::{SubscriberBuilder, SubscriberState},
+    value::Value,
+    Id,
+};
+#[cfg(feature = "unstable")]
+use super::{
+    liveliness::{Liveliness, LivelinessTokenState},
+    publication::Publisher,
+    publication::{MatchingListenerState, MatchingStatus},
+    query::_REPLY_KEY_EXPR_ANY_SEL_PARAM,
+    sample::SourceInfo,
+};
+use crate::net::{
+    primitives::Primitives,
+    routing::dispatcher::face::Face,
+    runtime::{Runtime, RuntimeBuilder},
+};
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -453,11 +457,10 @@ impl Session {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// tokio::task::spawn(async move {
@@ -487,11 +490,10 @@ impl Session {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::Session;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = Session::leak(zenoh::open(config::peer()).res().await.unwrap());
-    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+    /// let session = Session::leak(zenoh::open(config::peer()).await.unwrap());
+    /// let subscriber = session.declare_subscriber("key/expression").await.unwrap();
     /// tokio::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received: {:?}", sample);
@@ -506,7 +508,7 @@ impl Session {
     /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
     /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
     pub fn zid(&self) -> ZenohId {
-        self.info().zid().res_sync()
+        self.info().zid().wait()
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
@@ -522,10 +524,10 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session.close().res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// session.close().await.unwrap();
     /// # }
     /// ```
     pub fn close(mut self) -> impl Resolve<ZResult<()>> {
@@ -565,9 +567,9 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let peers = session.config().get("connect/endpoints").unwrap();
     /// # }
     /// ```
@@ -576,9 +578,9 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # }
     /// ```
@@ -637,10 +639,10 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
     /// # }
     /// ```
     pub fn declare_keyexpr<'a, 'b: 'a, TryIntoKeyExpr>(
@@ -663,7 +665,7 @@ impl Session {
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
-            let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
+            let expr_id = self.declare_prefix(key_expr.as_str()).wait();
             let key_expr = match key_expr.0 {
                 KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                     KeyExpr(KeyExprInner::BorrowedWire {
@@ -699,14 +701,12 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session
     ///     .put("key/expression", "payload")
     ///     .encoding(Encoding::TEXT_PLAIN)
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # }
@@ -722,7 +722,7 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
         IntoZBytes: Into<ZBytes>,
     {
-        PublicationBuilder {
+        SessionPutBuilder {
             publisher: self.declare_publisher(key_expr),
             kind: PublicationBuilderPut {
                 payload: payload.into(),
@@ -746,10 +746,10 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session.delete("key/expression").res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// session.delete("key/expression").await.unwrap();
     /// # }
     /// ```
     #[inline]
@@ -761,7 +761,7 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublicationBuilder {
+        SessionDeleteBuilder {
             publisher: self.declare_publisher(key_expr),
             kind: PublicationBuilderDelete,
             timestamp: None,
@@ -784,10 +784,10 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let replies = session.get("key/expression").res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let replies = session.get("key/expression").await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     println!(">> Received {:?}", reply.result());
     /// }
@@ -849,19 +849,19 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            let mut runtime = Runtime::init(
-                config,
-                #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-                shm_clients,
-            )
-            .await?;
+            #[allow(unused_mut)] // Required for shared-memory
+            let mut runtime = RuntimeBuilder::new(config);
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            {
+                runtime = runtime.shm_clients(shm_clients);
+            }
+            let mut runtime = runtime.build().await?;
 
             let mut session = Self::init(
                 runtime.clone(),
                 aggregated_subscribers,
                 aggregated_publishers,
             )
-            .res_async()
             .await;
             session.owns_runtime = true;
             runtime.start().await?;
@@ -1045,7 +1045,7 @@ impl Session {
         let declared_sub = origin != Locality::SessionLocal
             && !key_expr
                 .as_str()
-                .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+                .starts_with(crate::api::liveliness::PREFIX_LIVELINESS);
 
         let declared_sub =
             declared_sub
@@ -1109,14 +1109,14 @@ impl Session {
             //     match key_expr.as_str().find('*') {
             //         Some(0) => key_expr.to_wire(self),
             //         Some(pos) => {
-            //             let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).res_sync();
+            //             let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).wait();
             //             WireExpr {
             //                 scope: expr_id,
             //                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[pos..]),
             //             }
             //         }
             //         None => {
-            //             let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
+            //             let expr_id = self.declare_prefix(key_expr.as_str()).wait();
             //             WireExpr {
             //                 scope: expr_id,
             //                 suffix: std::borrow::Cow::Borrowed(""),
@@ -1148,7 +1148,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             if key_expr
                 .as_str()
-                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                .starts_with(crate::api::liveliness::PREFIX_LIVELINESS)
             {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
@@ -1194,7 +1194,7 @@ impl Session {
                 && !sub_state
                     .key_expr
                     .as_str()
-                    .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+                    .starts_with(crate::api::liveliness::PREFIX_LIVELINESS);
             if send_forget {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
@@ -1226,7 +1226,7 @@ impl Session {
                 if sub_state
                     .key_expr
                     .as_str()
-                    .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                    .starts_with(crate::api::liveliness::PREFIX_LIVELINESS)
                 {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
@@ -1324,7 +1324,7 @@ impl Session {
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
-        let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
+        let key_expr = KeyExpr::from(*crate::api::liveliness::KE_PREFIX_LIVELINESS / key_expr);
         let tok_state = Arc::new(LivelinessTokenState {
             id,
             key_expr: key_expr.clone().into_owned(),
@@ -1893,11 +1893,10 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// tokio::task::spawn(async move {
@@ -1935,11 +1934,10 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let queryable = session.declare_queryable("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// tokio::task::spawn(async move {
@@ -1947,7 +1945,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     ///         query.reply(
     ///             KeyExpr::try_from("key/expression").unwrap(),
     ///             "value",
-    ///         ).res().await.unwrap();
+    ///         ).await.unwrap();
     ///     }
     /// }).await;
     /// # }
@@ -1979,14 +1977,13 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
-    /// publisher.put("value").res().await.unwrap();
+    /// publisher.put("value").await.unwrap();
     /// # }
     /// ```
     fn declare_publisher<'b, TryIntoKeyExpr>(
@@ -2013,13 +2010,12 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # }
@@ -2086,7 +2082,7 @@ impl Primitives for Session {
 
                             if expr
                                 .as_str()
-                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                                .starts_with(crate::api::liveliness::PREFIX_LIVELINESS)
                             {
                                 drop(state);
                                 self.handle_data(
@@ -2118,7 +2114,7 @@ impl Primitives for Session {
 
                         if expr
                             .as_str()
-                            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                            .starts_with(crate::api::liveliness::PREFIX_LIVELINESS)
                         {
                             drop(state);
                             let data_info = DataInfo {
@@ -2483,7 +2479,7 @@ impl Primitives for Session {
 impl Drop for Session {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.clone().close().res_sync();
+            let _ = self.clone().close().wait();
         }
     }
 }
@@ -2507,11 +2503,10 @@ impl fmt::Debug for Session {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
 /// let subscriber = session.declare_subscriber("key/expression")
-///     .res()
 ///     .await
 ///     .unwrap();
 /// tokio::task::spawn(async move {
@@ -2532,11 +2527,10 @@ pub trait SessionDeclarations<'s, 'a> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// tokio::task::spawn(async move {
@@ -2565,11 +2559,10 @@ pub trait SessionDeclarations<'s, 'a> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let queryable = session.declare_queryable("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// tokio::task::spawn(async move {
@@ -2577,7 +2570,7 @@ pub trait SessionDeclarations<'s, 'a> {
     ///         query.reply(
     ///             KeyExpr::try_from("key/expression").unwrap(),
     ///             "value",
-    ///         ).res().await.unwrap();
+    ///         ).await.unwrap();
     ///     }
     /// }).await;
     /// # }
@@ -2600,14 +2593,13 @@ pub trait SessionDeclarations<'s, 'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
-    /// publisher.put("value").res().await.unwrap();
+    /// publisher.put("value").await.unwrap();
     /// # }
     /// ```
     fn declare_publisher<'b, TryIntoKeyExpr>(
@@ -2624,13 +2616,12 @@ pub trait SessionDeclarations<'s, 'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # }
@@ -2643,9 +2634,9 @@ pub trait SessionDeclarations<'s, 'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let info = session.info();
     /// # }
     /// ```
@@ -2690,5 +2681,184 @@ impl crate::net::primitives::EPrimitives for Session {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+/// Open a zenoh [`Session`].
+///
+/// # Arguments
+///
+/// * `config` - The [`Config`] for the zenoh session
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// # }
+/// ```
+///
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use std::str::FromStr;
+/// use zenoh::prelude::*;
+///
+/// let mut config = config::peer();
+/// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
+/// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
+///
+/// let session = zenoh::open(config).await.unwrap();
+/// # }
+/// ```
+pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    OpenBuilder {
+        config,
+        #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+        shm_clients: None,
+    }
+}
+
+/// A builder returned by [`open`] used to open a zenoh [`Session`].
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// # }
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+pub struct OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    config: TryIntoConfig,
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+}
+
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    pub fn with_shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
+        self.shm_clients = Some(shm_clients);
+        self
+    }
+}
+
+impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type To = ZResult<Session>;
+}
+
+impl<TryIntoConfig> Wait for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    fn wait(self) -> <Self as Resolvable>::To {
+        let config: crate::config::Config = self
+            .config
+            .try_into()
+            .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
+        Session::new(
+            config,
+            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            self.shm_clients,
+        )
+        .wait()
+    }
+}
+
+impl<TryIntoConfig> IntoFuture for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+/// Initialize a Session with an existing Runtime.
+/// This operation is used by the plugins to share the same Runtime as the router.
+#[doc(hidden)]
+#[zenoh_macros::unstable]
+pub fn init(runtime: Runtime) -> InitBuilder {
+    InitBuilder {
+        runtime,
+        aggregated_subscribers: vec![],
+        aggregated_publishers: vec![],
+    }
+}
+
+/// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[doc(hidden)]
+#[zenoh_macros::unstable]
+pub struct InitBuilder {
+    runtime: Runtime,
+    aggregated_subscribers: Vec<OwnedKeyExpr>,
+    aggregated_publishers: Vec<OwnedKeyExpr>,
+}
+
+#[zenoh_macros::unstable]
+impl InitBuilder {
+    #[inline]
+    pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
+        self.aggregated_subscribers = exprs;
+        self
+    }
+
+    #[inline]
+    pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
+        self.aggregated_publishers = exprs;
+        self
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for InitBuilder {
+    type To = ZResult<Session>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for InitBuilder {
+    fn wait(self) -> <Self as Resolvable>::To {
+        Ok(Session::init(
+            self.runtime,
+            self.aggregated_subscribers,
+            self.aggregated_publishers,
+        )
+        .wait())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for InitBuilder {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }

@@ -11,17 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::digest::*;
-use super::Snapshotter;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeSet, HashMap, HashSet},
+    str,
+    str::FromStr,
+};
+
 use async_std::sync::Arc;
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::str;
-use std::str::FromStr;
-use zenoh::bytes::StringOrBase64;
-use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
-use zenoh::Session;
+use zenoh::prelude::*;
+
+use super::{digest::*, Snapshotter};
 
 pub struct AlignQueryable {
     session: Arc<Session>,
@@ -71,7 +71,6 @@ impl AlignQueryable {
             .session
             .declare_queryable(&self.digest_key)
             .complete(true) // This queryable is meant to have all the history
-            .res()
             .await
             .unwrap();
 
@@ -100,7 +99,6 @@ impl AlignQueryable {
                                     query.key_expr().clone(),
                                     serde_json::to_string(&(i, c)).unwrap(),
                                 )
-                                .res()
                                 .await
                                 .unwrap();
                         }
@@ -110,7 +108,6 @@ impl AlignQueryable {
                                     query.key_expr().clone(),
                                     serde_json::to_string(&(i, c)).unwrap(),
                                 )
-                                .res()
                                 .await
                                 .unwrap();
                         }
@@ -120,7 +117,6 @@ impl AlignQueryable {
                                     query.key_expr().clone(),
                                     serde_json::to_string(&(i, c)).unwrap(),
                                 )
-                                .res()
                                 .await
                                 .unwrap();
                         }
@@ -129,7 +125,6 @@ impl AlignQueryable {
                                 .reply(k, v.payload().clone())
                                 .encoding(v.encoding().clone())
                                 .timestamp(ts)
-                                .res()
                                 .await
                                 .unwrap();
                         }
@@ -229,7 +224,7 @@ impl AlignQueryable {
 impl AlignQueryable {
     async fn get_entry(&self, logentry: &LogEntry) -> Option<Sample> {
         // get corresponding key from log
-        let replies = self.session.get(&logentry.key).res().await.unwrap();
+        let replies = self.session.get(&logentry.key).await.unwrap();
         if let Ok(reply) = replies.recv_async().await {
             match reply.into_result() {
                 Ok(sample) => {

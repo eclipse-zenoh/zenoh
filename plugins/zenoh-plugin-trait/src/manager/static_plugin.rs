@@ -11,9 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
 use std::marker::PhantomData;
+
 use zenoh_result::ZResult;
+
+use crate::*;
 
 pub struct StaticPlugin<StartArgs, Instance: PluginInstance, P>
 where
@@ -51,7 +53,7 @@ where
         Some(P::PLUGIN_LONG_VERSION)
     }
     fn path(&self) -> &str {
-        "<static>"
+        "__static_lib__"
     }
     fn state(&self) -> PluginState {
         self.instance

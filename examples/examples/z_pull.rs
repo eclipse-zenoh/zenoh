@@ -11,9 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
 use std::time::Duration;
-use zenoh::{config::Config, handlers::RingChannel, prelude::r#async::*};
+
+use clap::Parser;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -24,13 +25,12 @@ async fn main() {
     let (config, key_expr, size, interval) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Subscriber on '{key_expr}'...");
     let subscriber = session
         .declare_subscriber(&key_expr)
         .with(RingChannel::new(size))
-        .res()
         .await
         .unwrap();
 

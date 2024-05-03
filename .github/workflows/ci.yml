@@ -47,7 +47,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Code format check
-        run: cargo fmt --check
+        run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
 
       - name: Clippy
         run: cargo +stable clippy --all-targets -- --deny warnings

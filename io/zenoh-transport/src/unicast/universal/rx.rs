@@ -11,6 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::sync::MutexGuard;
+
+use zenoh_core::{zlock, zread};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{Priority, Reliability},
+    network::NetworkMessage,
+    transport::{Close, Fragment, Frame, KeepAlive, TransportBody, TransportMessage, TransportSn},
+};
+use zenoh_result::{bail, zerror, ZResult};
+
 use super::transport::TransportUnicastUniversal;
 use crate::{
     common::{
@@ -20,15 +31,6 @@ use crate::{
     unicast::transport_unicast_inner::TransportUnicastTrait,
     TransportPeerEventHandler,
 };
-use std::sync::MutexGuard;
-use zenoh_core::{zlock, zread};
-use zenoh_link::Link;
-use zenoh_protocol::{
-    core::{Priority, Reliability},
-    network::NetworkMessage,
-    transport::{Close, Fragment, Frame, KeepAlive, TransportBody, TransportMessage, TransportSn},
-};
-use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
 /*            TRANSPORT RX           */

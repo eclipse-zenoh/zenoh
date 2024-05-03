@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::storages_mgt::*;
-use flume::Sender;
 use std::sync::Arc;
-use zenoh::Session;
-use zenoh_backend_traits::config::StorageConfig;
-use zenoh_backend_traits::{Capability, VolumeInstance};
-use zenoh_result::ZResult;
+
+use flume::Sender;
+use zenoh::{core::Result as ZResult, session::Session};
+use zenoh_backend_traits::{config::StorageConfig, Capability, VolumeInstance};
+
+use super::storages_mgt::*;
 
 pub struct StoreIntercept {
     pub storage: Box<dyn zenoh_backend_traits::Storage>,

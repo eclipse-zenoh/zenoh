@@ -13,11 +13,11 @@
 //
 #![recursion_limit = "256"]
 
+use std::collections::HashMap;
+
 use clap::Parser;
 use futures::select;
-use std::collections::HashMap;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -30,16 +30,15 @@ async fn main() {
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Subscriber on '{key_expr}'...");
-    let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
+    let subscriber = session.declare_subscriber(&key_expr).await.unwrap();
 
     println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
         .declare_queryable(&key_expr)
         .complete(complete)
-        .res()
         .await
         .unwrap();
 
@@ -61,7 +60,7 @@ async fn main() {
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
                     if query.selector().key_expr().intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
-                        query.reply(sample.key_expr().clone(), sample.payload().clone()).res().await.unwrap();
+                        query.reply(sample.key_expr().clone(), sample.payload().clone()).await.unwrap();
                     }
                 }
             }

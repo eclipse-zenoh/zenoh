@@ -16,10 +16,13 @@ use std::sync::atomic::AtomicPtr;
 
 use zenoh_result::ZResult;
 
-use crate::api::common::types::SegmentID;
-use crate::api::{client::shared_memory_segment::SharedMemorySegment, common::types::ChunkID};
-
-use crate::posix_shm::array::ArrayInSHM;
+use crate::{
+    api::{
+        client::shared_memory_segment::SharedMemorySegment,
+        common::types::{ChunkID, SegmentID},
+    },
+    posix_shm::array::ArrayInSHM,
+};
 
 const POSIX_SHM_SEGMENT_PREFIX: &str = "posix_shm_provider_segment";
 

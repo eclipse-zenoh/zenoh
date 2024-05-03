@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::Reliability, network::NetworkMessage, transport::TransportSn};
 use alloc::vec::Vec;
+
+use crate::{core::Reliability, network::NetworkMessage, transport::TransportSn};
 
 /// # Frame message
 ///

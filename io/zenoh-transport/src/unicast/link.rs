@@ -11,14 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
-use std::fmt;
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
+
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::zcondfeat;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::transport::{BatchSize, Close, OpenAck, TransportMessage};
 use zenoh_result::{zerror, ZResult};
+
+use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum TransportLinkUnicastDirection {

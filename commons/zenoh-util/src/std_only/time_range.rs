@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use humantime::{format_rfc3339, parse_rfc3339_weak};
 use std::{
     convert::{TryFrom, TryInto},
     fmt::Display,
@@ -20,6 +19,8 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime},
 };
+
+use humantime::{format_rfc3339, parse_rfc3339_weak};
 use zenoh_result::{bail, zerror, ZError};
 
 const U_TO_SECS: f64 = 0.000001;

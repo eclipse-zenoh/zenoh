@@ -22,8 +22,8 @@ use lazy_static::lazy_static;
 use zenoh_result::{zerror, ZResult};
 
 use super::{
-    periodic_task::PeriodicTask,
     descriptor::{Descriptor, OwnedDescriptor, SegmentID},
+    periodic_task::PeriodicTask,
     segment::Segment,
 };
 
@@ -117,7 +117,7 @@ pub struct WatchdogConfirmator {
 impl WatchdogConfirmator {
     fn new(interval: Duration) -> Self {
         let segment_transactions = Arc::<lockfree::queue::Queue<Arc<ConfirmedSegment>>>::default();
-        
+
         let c_segment_transactions = segment_transactions.clone();
         let mut segments: Vec<(Arc<ConfirmedSegment>, BTreeMap<OwnedDescriptor, i32>)> = vec![];
         let task = PeriodicTask::new("Watchdog Confirmator".to_owned(), interval, move || {

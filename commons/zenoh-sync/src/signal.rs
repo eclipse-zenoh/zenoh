@@ -11,8 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::atomic::{AtomicBool, Ordering::*};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering::*},
+    Arc,
+};
+
 use tokio::sync::Semaphore;
 
 #[derive(Debug, Clone)]
@@ -68,8 +71,9 @@ impl Default for Signal {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
+    use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn signal_test() {

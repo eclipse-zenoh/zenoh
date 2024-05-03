@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use clap::Parser;
 use std::convert::TryInto;
-use zenoh::prelude::sync::*;
-use zenoh::publication::CongestionControl;
+
+use clap::Parser;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 fn main() {
@@ -35,21 +35,21 @@ fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    let session = zenoh::open(args.common).res().unwrap();
+    let session = zenoh::open(args.common).wait().unwrap();
 
     let publisher = session
         .declare_publisher("test/thr")
         .congestion_control(CongestionControl::Block)
         .priority(prio)
         .express(args.express)
-        .res()
+        .wait()
         .unwrap();
 
     println!("Press CTRL-C to quit...");
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
     loop {
-        publisher.put(data.clone()).res().unwrap();
+        publisher.put(data.clone()).wait().unwrap();
 
         if args.print {
             if count < args.number {

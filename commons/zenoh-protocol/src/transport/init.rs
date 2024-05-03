@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use zenoh_buffers::ZSlice;
+
 use crate::{
     core::{Resolution, WhatAmI, ZenohId},
     transport::BatchSize,
 };
-use zenoh_buffers::ZSlice;
 
 /// # Init message
 ///
@@ -158,8 +159,9 @@ pub mod ext {
 impl InitSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
+
+        use crate::common::{ZExtUnit, ZExtZBuf};
 
         let mut rng = rand::thread_rng();
 
@@ -213,8 +215,9 @@ pub struct InitAck {
 impl InitAck {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
+
+        use crate::common::{ZExtUnit, ZExtZBuf};
 
         let mut rng = rand::thread_rng();
 

@@ -11,6 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::sync::Arc;
+
+use rand::Rng;
+use zenoh_core::zasynclock;
+use zenoh_link::LinkMulticast;
+use zenoh_protocol::{
+    core::{Field, Priority},
+    transport::PrioritySn,
+};
+use zenoh_result::{bail, ZResult};
+
 use crate::{
     common::{batch::BatchConfig, seq_num},
     multicast::{
@@ -20,15 +31,6 @@ use crate::{
     },
     TransportManager,
 };
-use rand::Rng;
-use std::sync::Arc;
-use zenoh_core::zasynclock;
-use zenoh_link::LinkMulticast;
-use zenoh_protocol::{
-    core::{Field, Priority},
-    transport::PrioritySn,
-};
-use zenoh_result::{bail, ZResult};
 
 pub(crate) async fn open_link(
     manager: &TransportManager,

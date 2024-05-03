@@ -18,7 +18,6 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_trait::async_trait;
-
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::{core::Locator, transport::BatchSize};

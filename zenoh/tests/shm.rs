@@ -13,16 +13,15 @@
 //
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::time::Duration;
-    use zenoh::prelude::r#async::*;
-    use zenoh::shm::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
-    use zenoh::shm::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
-    use zenoh::shm::provider::shared_memory_provider::{
-        BlockOn, GarbageCollect, SharedMemoryProviderBuilder,
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
     };
-    use zenoh_core::ztimeout;
+
+    use zenoh::{internal::ztimeout, prelude::*};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -40,7 +39,7 @@ mod tests {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config.transport.shared_memory.set_enabled(true).unwrap();
         println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
-        let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+        let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
         let mut config = config::peer();
         config.connect.endpoints = endpoints
@@ -50,7 +49,7 @@ mod tests {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config.transport.shared_memory.set_enabled(true).unwrap();
         println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
-        let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+        let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
         (peer01, peer02)
     }
@@ -62,23 +61,23 @@ mod tests {
         config.scouting.multicast.set_enabled(Some(true)).unwrap();
         config.transport.shared_memory.set_enabled(true).unwrap();
         println!("[  ][01a] Opening peer01 session: {}", endpoint01);
-        let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+        let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
         let mut config = config::peer();
         config.listen.endpoints = vec![endpoint02.parse().unwrap()];
         config.scouting.multicast.set_enabled(Some(true)).unwrap();
         config.transport.shared_memory.set_enabled(true).unwrap();
         println!("[  ][02a] Opening peer02 session: {}", endpoint02);
-        let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+        let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
         (peer01, peer02)
     }
 
     async fn close_session(peer01: Session, peer02: Session) {
         println!("[  ][01d] Closing peer02 session");
-        ztimeout!(peer01.close().res_async()).unwrap();
+        ztimeout!(peer01.close()).unwrap();
         println!("[  ][02d] Closing peer02 session");
-        ztimeout!(peer02.close().res_async()).unwrap();
+        ztimeout!(peer02.close()).unwrap();
     }
 
     async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Reliability) {
@@ -101,8 +100,7 @@ mod tests {
                 .callback(move |sample| {
                     assert_eq!(sample.payload().len(), size);
                     c_msgs.fetch_add(1, Ordering::Relaxed);
-                })
-                .res_async())
+                }))
             .unwrap();
 
             // Wait for the declaration to propagate
@@ -140,8 +138,7 @@ mod tests {
                 // Publish this message
                 ztimeout!(peer02
                     .put(&key_expr, sbuf)
-                    .congestion_control(CongestionControl::Block)
-                    .res_async())
+                    .congestion_control(CongestionControl::Block))
                 .unwrap();
                 println!("{c} putted");
             }

@@ -11,23 +11,26 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    encoding::Encoding,
-    keyexpr,
-    prelude::sync::{KeyExpr, Locality, SampleKind},
-    queryable::Query,
-    sample::DataInfo,
-    Session, ZBytes, ZResult,
-};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     sync::Arc,
 };
-use zenoh_core::SyncResolve;
+
+use zenoh_core::{Result as ZResult, Wait};
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+};
+
+use super::{
+    bytes::ZBytes,
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    queryable::Query,
+    sample::{DataInfo, Locality, SampleKind},
+    session::Session,
 };
 
 macro_rules! ke_for_sure {
@@ -70,7 +73,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
                     match ZBytes::try_from(value) {
                         Ok(zbuf) => {
-                            let _ = query.reply(key_expr, zbuf).res_sync();
+                            let _ = query.reply(key_expr, zbuf).wait();
                         }
                         Err(e) => tracing::debug!("Admin query error: {}", e),
                     }
@@ -87,7 +90,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         if let Ok(value) = serde_json::value::to_value(link) {
                             match ZBytes::try_from(value) {
                                 Ok(zbuf) => {
-                                    let _ = query.reply(key_expr, zbuf).res_sync();
+                                    let _ = query.reply(key_expr, zbuf).wait();
                                 }
                                 Err(e) => tracing::debug!("Admin query error: {}", e),
                             }

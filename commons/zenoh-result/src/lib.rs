@@ -20,8 +20,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
-use anyhow::Error as AnyError;
 use core::fmt;
+
+use anyhow::Error as AnyError;
 
 #[cold]
 pub const fn cold() {}

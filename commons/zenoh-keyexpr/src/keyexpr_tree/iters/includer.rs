@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::keyexpr_tree::*;
 use alloc::vec::Vec;
+
+use crate::keyexpr_tree::*;
 
 struct StackFrame<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
 where

@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 use alloc::string::String;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, HasWriter, Writer},
@@ -26,6 +26,8 @@ use zenoh_protocol::{
         id, Mapping,
     },
 };
+
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 
 // Declaration
 impl<W> WCodec<&DeclareBody, &mut W> for Zenoh080

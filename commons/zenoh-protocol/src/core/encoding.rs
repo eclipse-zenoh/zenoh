@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use core::fmt::Debug;
+
 use zenoh_buffers::ZSlice;
 
 pub type EncodingId = u16;

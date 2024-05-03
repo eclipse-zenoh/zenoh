@@ -17,13 +17,16 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use ahash::RandomState;
 use std::collections::HashMap;
+
+use ahash::RandomState;
 use zenoh_config::{
     AclConfig, AclConfigRules, Action, InterceptorFlow, Permission, PolicyRule, Subject,
 };
-use zenoh_keyexpr::keyexpr;
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
+use zenoh_keyexpr::{
+    keyexpr,
+    keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree},
+};
 use zenoh_result::ZResult;
 type PolicyForSubject = FlowPolicy;
 

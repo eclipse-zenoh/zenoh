@@ -12,9 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use core::num::NonZeroUsize;
-
 use alloc::vec::Vec;
+use core::num::NonZeroUsize;
 
 use crate::keyexpr_tree::*;
 pub struct TreeIter<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>

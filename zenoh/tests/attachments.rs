@@ -14,10 +14,8 @@
 #[cfg(feature = "unstable")]
 #[test]
 fn attachment_pubsub() {
-    use zenoh::bytes::ZBytes;
-    use zenoh::prelude::sync::*;
-
-    let zenoh = zenoh::open(Config::default()).res().unwrap();
+    use zenoh::{bytes::ZBytes, prelude::*};
+    let zenoh = zenoh::open(Config::default()).wait().unwrap();
     let _sub = zenoh
         .declare_subscriber("test/attachment")
         .callback(|sample| {
@@ -29,10 +27,10 @@ fn attachment_pubsub() {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
             }
         })
-        .res()
+        .wait()
         .unwrap();
 
-    let publisher = zenoh.declare_publisher("test/attachment").res().unwrap();
+    let publisher = zenoh.declare_publisher("test/attachment").wait().unwrap();
     for i in 0..10 {
         let mut backer = [(
             [0; std::mem::size_of::<usize>()],
@@ -45,12 +43,12 @@ fn attachment_pubsub() {
         zenoh
             .put("test/attachment", "put")
             .attachment(ZBytes::from_iter(backer.iter()))
-            .res()
+            .wait()
             .unwrap();
         publisher
             .put("publisher")
             .attachment(ZBytes::from_iter(backer.iter()))
-            .res()
+            .wait()
             .unwrap();
     }
 }
@@ -58,9 +56,8 @@ fn attachment_pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn attachment_queries() {
-    use zenoh::{bytes::ZBytes, prelude::sync::*, sample::builder::SampleBuilderTrait};
-
-    let zenoh = zenoh::open(Config::default()).res().unwrap();
+    use zenoh::prelude::*;
+    let zenoh = zenoh::open(Config::default()).wait().unwrap();
     let _sub = zenoh
         .declare_queryable("test/attachment")
         .callback(|query| {
@@ -92,10 +89,10 @@ fn attachment_queries() {
                         )>()
                         .map(|(k, _)| (k, k)),
                 ))
-                .res()
+                .wait()
                 .unwrap();
         })
-        .res()
+        .wait()
         .unwrap();
     for i in 0..10 {
         let mut backer = [(
@@ -110,7 +107,7 @@ fn attachment_queries() {
             .get("test/attachment")
             .payload("query")
             .attachment(ZBytes::from_iter(backer.iter()))
-            .res()
+            .wait()
             .unwrap();
         while let Ok(reply) = get.recv() {
             let response = reply.result().unwrap();

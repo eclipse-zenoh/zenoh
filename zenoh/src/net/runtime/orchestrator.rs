@@ -11,14 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{Runtime, RuntimeSession};
+use std::{
+    net::{IpAddr, Ipv6Addr, SocketAddr},
+    time::Duration,
+};
+
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
-use std::time::Duration;
 use tokio::net::UdpSocket;
-use zenoh_buffers::reader::DidntRead;
-use zenoh_buffers::{reader::HasReader, writer::HasWriter};
+use zenoh_buffers::{
+    reader::{DidntRead, HasReader},
+    writer::HasWriter,
+};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::{
     get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default, ModeDependent,
@@ -29,6 +33,8 @@ use zenoh_protocol::{
     scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
+
+use super::{Runtime, RuntimeSession};
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
@@ -43,7 +49,7 @@ pub enum Loop {
 }
 
 impl Runtime {
-    pub(crate) async fn start(&mut self) -> ZResult<()> {
+    pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami() {
             WhatAmI::Client => self.start_client().await,
             WhatAmI::Peer => self.start_peer().await,

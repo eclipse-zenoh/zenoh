@@ -11,13 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::{string::String, vec::Vec};
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-
 use zenoh_protocol::{
     common::{iext, imsg},
     zenoh::{
@@ -25,6 +24,8 @@ use zenoh_protocol::{
         query::{ext, flag, Consolidation, Query},
     },
 };
+
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 // Consolidation
 impl<W> WCodec<Consolidation, &mut W> for Zenoh080
