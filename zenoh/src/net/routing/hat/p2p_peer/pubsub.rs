@@ -577,13 +577,7 @@ impl HatPubSubTrait for HatCode {
 
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some()
-                    && match tables.whatami {
-                        WhatAmI::Router => context.face.whatami != WhatAmI::Router,
-                        _ => {
-                            source_type == WhatAmI::Client
-                                || context.face.whatami == WhatAmI::Client
-                        }
-                    }
+                    && (source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client)
                 {
                     route.entry(*sid).or_insert_with(|| {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);

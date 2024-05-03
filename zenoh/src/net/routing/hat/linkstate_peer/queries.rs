@@ -934,10 +934,7 @@ impl HatQueriesTrait for HatCode {
             );
 
             for (sid, context) in &mres.session_ctxs {
-                if match tables.whatami {
-                    WhatAmI::Router => context.face.whatami != WhatAmI::Router,
-                    _ => source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client,
-                } {
+                if source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                     if let Some(qabl_info) = context.qabl.as_ref() {
                         route.push(QueryTargetQabl {
