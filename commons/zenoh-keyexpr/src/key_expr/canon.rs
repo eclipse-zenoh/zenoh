@@ -11,12 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::string::String;
+use core::{slice, str};
+
 use crate::key_expr::{
     utils::{Split, Writer},
     DELIMITER, DOUBLE_WILD, SINGLE_WILD,
 };
-use alloc::string::String;
-use core::{slice, str};
 
 pub trait Canonizable {
     fn canonize(&mut self);

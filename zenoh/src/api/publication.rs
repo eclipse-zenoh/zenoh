@@ -12,6 +12,31 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{
+    convert::TryFrom,
+    future::{IntoFuture, Ready},
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use futures::Sink;
+use zenoh_core::{zread, Resolvable, Resolve, Wait};
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::{
+    core::CongestionControl,
+    network::{push::ext, Push},
+    zenoh::{Del, PushBody, Put},
+};
+use zenoh_result::{Error, ZResult};
+#[zenoh_macros::unstable]
+use {
+    crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
+    crate::api::sample::SourceInfo,
+    crate::api::Id,
+    zenoh_protocol::core::EntityGlobalId,
+    zenoh_protocol::core::EntityId,
+};
+
 use super::{
     builders::publication::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
@@ -24,31 +49,6 @@ use super::{
     session::{SessionRef, Undeclarable},
 };
 use crate::net::primitives::Primitives;
-use futures::Sink;
-use std::future::IntoFuture;
-use std::{
-    convert::TryFrom,
-    future::Ready,
-    pin::Pin,
-    task::{Context, Poll},
-};
-use zenoh_core::{zread, Resolvable, Resolve, Wait};
-use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::{
-    core::CongestionControl,
-    network::{push::ext, Push},
-    zenoh::{Del, PushBody, Put},
-};
-use zenoh_result::{Error, ZResult};
-
-#[zenoh_macros::unstable]
-use {
-    crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
-    crate::api::sample::SourceInfo,
-    crate::api::Id,
-    zenoh_protocol::core::EntityGlobalId,
-    zenoh_protocol::core::EntityId,
-};
 
 #[zenoh_macros::unstable]
 #[derive(Clone)]
@@ -1087,15 +1087,18 @@ impl Drop for MatchingListenerInner<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::api::{sample::SampleKind, session::SessionDeclarations};
     use zenoh_config::Config;
     use zenoh_core::Wait;
 
+    use crate::api::{sample::SampleKind, session::SessionDeclarations};
+
     #[test]
     fn priority_from() {
-        use super::Priority as APrio;
         use std::convert::TryInto;
+
         use zenoh_protocol::core::Priority as TPrio;
+
+        use super::Priority as APrio;
 
         for i in APrio::MAX as u8..=APrio::MIN as u8 {
             let p: APrio = i.try_into().unwrap();

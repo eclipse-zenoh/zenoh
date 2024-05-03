@@ -11,12 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::Zenoh080Routing;
-use crate::net::protocol::{
-    linkstate,
-    linkstate::{LinkState, LinkStateList},
-};
 use core::convert::TryFrom;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -25,6 +21,12 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
     common::imsg,
     core::{Locator, WhatAmI, ZenohId},
+};
+
+use super::Zenoh080Routing;
+use crate::net::protocol::{
+    linkstate,
+    linkstate::{LinkState, LinkStateList},
 };
 
 // LinkState

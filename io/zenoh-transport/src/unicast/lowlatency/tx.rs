@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastLowlatency;
 use zenoh_protocol::{
     network::NetworkMessage,
     transport::{TransportBodyLowLatency, TransportMessageLowLatency},
@@ -20,6 +19,7 @@ use zenoh_protocol::{
 use zenoh_result::bail;
 use zenoh_result::ZResult;
 
+use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "shared-memory")]
 use crate::shm::map_zmsg_to_partner;
 

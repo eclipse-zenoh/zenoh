@@ -11,14 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::str::FromStr;
-use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicUsize, Arc};
-use std::time::Duration;
+use std::{
+    str::FromStr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh::core::Result;
-use zenoh::internal::{bail, ztimeout};
-use zenoh::prelude::*;
+use zenoh::{
+    core::Result,
+    internal::{bail, ztimeout},
+    prelude::*,
+};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;

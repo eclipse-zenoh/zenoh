@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
 use std::time::{Duration, Instant};
+
+use clap::Parser;
 use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 

@@ -16,12 +16,10 @@
 // 1. normal case, just some wild card puts and deletes on existing keys and ensure it works
 // 2. check for dealing with out of order updates
 
-use std::str::FromStr;
-use std::thread::sleep;
+use std::{str::FromStr, thread::sleep};
 
 use async_std::task;
-use zenoh::internal::zasync_executor_init;
-use zenoh::prelude::*;
+use zenoh::{internal::zasync_executor_init, prelude::*};
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {

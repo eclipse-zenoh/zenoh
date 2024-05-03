@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::ext;
 use std::convert::TryFrom;
+
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
@@ -23,6 +23,8 @@ use zenoh_protocol::{
     core::{Resolution, WhatAmI, ZenohId},
     transport::BatchSize,
 };
+
+use crate::unicast::establishment::ext;
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Cookie {
@@ -193,9 +195,10 @@ impl Cookie {
 mod tests {
     #[test]
     fn codec_cookie() {
-        use super::*;
         use rand::{Rng, SeedableRng};
         use zenoh_buffers::ZBuf;
+
+        use super::*;
 
         const NUM_ITER: usize = 1_000;
 

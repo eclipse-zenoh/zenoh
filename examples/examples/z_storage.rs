@@ -13,9 +13,10 @@
 //
 #![recursion_limit = "256"]
 
+use std::collections::HashMap;
+
 use clap::Parser;
 use futures::select;
-use std::collections::HashMap;
 use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 

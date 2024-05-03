@@ -11,15 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::any::Any;
-use std::convert::TryFrom;
-use std::fmt::Write as _;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    any::Any,
+    convert::TryFrom,
+    fmt::Write as _,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
-use zenoh_protocol::network::NetworkBody;
 use zenoh_protocol::{
     core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
     network::{
@@ -27,7 +31,7 @@ use zenoh_protocol::{
             ext::{NodeIdType, QoSType},
             Push,
         },
-        NetworkMessage,
+        NetworkBody, NetworkMessage,
     },
     zenoh::Put,
 };

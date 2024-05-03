@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::common::ZExtUnknown;
 use alloc::{string::String, vec::Vec};
+
+use crate::common::ZExtUnknown;
 
 /// The kind of consolidation.
 #[repr(u8)]
@@ -108,11 +109,12 @@ pub mod ext {
 impl Query {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::iext;
         use rand::{
             distributions::{Alphanumeric, DistString},
             Rng,
         };
+
+        use crate::common::iext;
         let mut rng = rand::thread_rng();
 
         const MIN: usize = 2;

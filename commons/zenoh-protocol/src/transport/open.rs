@@ -11,9 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::transport::TransportSn;
 use core::time::Duration;
+
 use zenoh_buffers::ZSlice;
+
+use crate::transport::TransportSn;
 
 /// # Open message
 ///
@@ -88,15 +90,14 @@ pub struct OpenSyn {
 
 // Extensions
 pub mod ext {
-    use crate::{
-        common::{ZExtUnit, ZExtZBuf},
-        zextunit, zextzbuf,
-    };
-
     #[cfg(feature = "shared-memory")]
     use crate::common::ZExtZ64;
     #[cfg(feature = "shared-memory")]
     use crate::zextz64;
+    use crate::{
+        common::{ZExtUnit, ZExtZBuf},
+        zextunit, zextzbuf,
+    };
 
     /// # QoS extension
     /// Used to negotiate the use of QoS
@@ -128,11 +129,11 @@ pub mod ext {
 impl OpenSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
 
         #[cfg(feature = "shared-memory")]
         use crate::common::ZExtZ64;
+        use crate::common::{ZExtUnit, ZExtZBuf};
 
         const MIN: usize = 32;
         const MAX: usize = 1_024;
@@ -186,11 +187,11 @@ pub struct OpenAck {
 impl OpenAck {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
 
         #[cfg(feature = "shared-memory")]
         use crate::common::ZExtZ64;
+        use crate::common::{ZExtUnit, ZExtZBuf};
 
         let mut rng = rand::thread_rng();
 

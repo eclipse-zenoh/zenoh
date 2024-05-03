@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::parameters::{Parameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR};
 use alloc::{
     borrow::Cow,
     string::{String, ToString},
@@ -19,6 +18,8 @@ use alloc::{
 use core::{borrow::Borrow, fmt};
 #[cfg(feature = "std")]
 use std::collections::HashMap;
+
+use super::parameters::{Parameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR};
 
 /// A map of key/value (String,String) properties.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties

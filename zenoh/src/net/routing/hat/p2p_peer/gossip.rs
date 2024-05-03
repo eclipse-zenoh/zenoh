@@ -11,23 +11,29 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::codec::Zenoh080Routing;
-use crate::net::protocol::linkstate::{LinkState, LinkStateList};
-use crate::net::runtime::Runtime;
-use crate::net::runtime::WeakRuntime;
+use std::convert::TryInto;
+
 use petgraph::graph::NodeIndex;
 use rand::Rng;
-use std::convert::TryInto;
 use vec_map::VecMap;
-use zenoh_buffers::writer::{DidntWrite, HasWriter};
-use zenoh_buffers::ZBuf;
+use zenoh_buffers::{
+    writer::{DidntWrite, HasWriter},
+    ZBuf,
+};
 use zenoh_codec::WCodec;
 use zenoh_link::Locator;
-use zenoh_protocol::common::ZExtBody;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
-use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
-use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
+use zenoh_protocol::{
+    common::ZExtBody,
+    core::{WhatAmI, WhatAmIMatcher, ZenohId},
+    network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
+};
 use zenoh_transport::unicast::TransportUnicast;
+
+use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::linkstate::{LinkState, LinkStateList},
+    runtime::{Runtime, WeakRuntime},
+};
 
 #[derive(Clone)]
 struct Details {

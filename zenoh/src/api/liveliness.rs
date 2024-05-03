@@ -12,6 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{
+    convert::TryInto,
+    future::{IntoFuture, Ready},
+    sync::Arc,
+    time::Duration,
+};
+
+use zenoh_config::unwrap_or_default;
+use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::network::{declare::subscriber::ext::SubscriberInfo, request};
+
 use super::{
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
@@ -21,13 +33,6 @@ use super::{
     subscriber::{Subscriber, SubscriberInner},
     Id,
 };
-use std::future::IntoFuture;
-use std::{convert::TryInto, future::Ready, sync::Arc, time::Duration};
-use zenoh_config::unwrap_or_default;
-use zenoh_core::{Resolvable, Result as ZResult};
-use zenoh_core::{Resolve, Wait};
-use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::network::{declare::subscriber::ext::SubscriberInfo, request};
 
 #[zenoh_macros::unstable]
 pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;

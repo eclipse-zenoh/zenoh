@@ -11,12 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::{TransportMulticastInner, TransportMulticastPeer};
-use crate::common::{
-    batch::{Decode, RBatch},
-    priority::TransportChannelRx,
-};
 use std::sync::MutexGuard;
+
 use zenoh_core::{zlock, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
@@ -27,6 +23,12 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::{bail, zerror, ZResult};
+
+use super::transport::{TransportMulticastInner, TransportMulticastPeer};
+use crate::common::{
+    batch::{Decode, RBatch},
+    priority::TransportChannelRx,
+};
 
 /*************************************/
 /*            TRANSPORT RX           */

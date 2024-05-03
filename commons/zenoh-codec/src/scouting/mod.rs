@@ -14,7 +14,6 @@
 mod hello;
 mod scout;
 
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -23,6 +22,8 @@ use zenoh_protocol::{
     common::imsg,
     scouting::{id, ScoutingBody, ScoutingMessage},
 };
+
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 impl<W> WCodec<&ScoutingMessage, &mut W> for Zenoh080
 where

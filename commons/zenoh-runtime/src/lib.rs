@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use core::panic;
-use lazy_static::lazy_static;
-use serde::Deserialize;
 use std::{
     borrow::Borrow,
     collections::HashMap,
@@ -26,6 +24,9 @@ use std::{
     },
     time::Duration,
 };
+
+use lazy_static::lazy_static;
+use serde::Deserialize;
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 use zenoh_macros::{GenericRuntimeParam, RegisterParam};
 use zenoh_result::ZResult as Result;

@@ -11,14 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::convert::TryInto;
-use std::fmt;
-
-use super::common::seq_num::SeqNum;
-use super::core::u64;
+use std::{convert::TryInto, fmt};
 
 use zenoh_result::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
+
+use super::{common::seq_num::SeqNum, core::u64};
 
 pub(super) struct ReliabilityQueue<T> {
     sn: SeqNum,
@@ -249,8 +247,9 @@ impl<T: fmt::Debug> fmt::Debug for ReliabilityQueue<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rand::{thread_rng, Rng};
+
+    use super::*;
 
     #[test]
     fn reliability_queue_simple() {

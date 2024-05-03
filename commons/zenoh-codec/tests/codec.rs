@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::convert::TryFrom;
+
 use rand::{
     distributions::{Alphanumeric, DistString},
     *,
 };
-use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     writer::HasWriter,
@@ -360,9 +361,10 @@ fn codec_encoding() {
 #[cfg(feature = "shared-memory")]
 #[test]
 fn codec_shm_info() {
-    use zenoh_shm::api::provider::chunk::ChunkDescriptor;
-    use zenoh_shm::header::descriptor::HeaderDescriptor;
-    use zenoh_shm::{watchdog::descriptor::Descriptor, SharedMemoryBufInfo};
+    use zenoh_shm::{
+        api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
+        watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
+    };
 
     run!(SharedMemoryBufInfo, {
         let mut rng = rand::thread_rng();

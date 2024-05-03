@@ -18,9 +18,6 @@ mod push;
 mod request;
 mod response;
 
-use crate::{
-    LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length, Zenoh080Reliability,
-};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -29,6 +26,10 @@ use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
     core::{EntityId, Reliability, ZenohId},
     network::{ext::EntityGlobalIdType, *},
+};
+
+use crate::{
+    LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length, Zenoh080Reliability,
 };
 
 // NetworkMessage

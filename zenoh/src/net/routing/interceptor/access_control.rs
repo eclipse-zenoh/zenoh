@@ -18,14 +18,8 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use super::{
-    authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
-    InterceptorFactoryTrait, InterceptorTrait,
-};
-use crate::api::key_expr::KeyExpr;
-use crate::net::routing::RoutingContext;
-use std::any::Any;
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
+
 use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject, ZenohId};
 use zenoh_protocol::{
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
@@ -33,6 +27,12 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
+
+use super::{
+    authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
+    InterceptorFactoryTrait, InterceptorTrait,
+};
+use crate::{api::key_expr::KeyExpr, net::routing::RoutingContext};
 pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }

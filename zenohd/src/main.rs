@@ -14,16 +14,14 @@
 use clap::Parser;
 use futures::future;
 use git_version::git_version;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
-use zenoh::config::EndPoint;
-use zenoh::config::{Config, ModeDependentValue, PermissionsConf, ValidatedMap};
-use zenoh::core::Result;
-use zenoh::scouting::WhatAmI;
-
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 #[cfg(feature = "loki")]
 use url::Url;
+use zenoh::{
+    config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap},
+    core::Result,
+    scouting::WhatAmI,
+};
 
 #[cfg(feature = "loki")]
 const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";

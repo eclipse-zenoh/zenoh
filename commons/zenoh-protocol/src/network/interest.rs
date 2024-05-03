@@ -11,12 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::imsg, core::WireExpr, network::Mapping};
 use core::{
     fmt::{self, Debug},
     ops::{Add, AddAssign, Sub, SubAssign},
     sync::atomic::AtomicU32,
 };
+
+use crate::{common::imsg, core::WireExpr, network::Mapping};
 
 pub type InterestId = u32;
 

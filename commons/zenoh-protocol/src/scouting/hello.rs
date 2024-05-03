@@ -11,9 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{Locator, WhatAmI, ZenohId};
 use alloc::vec::Vec;
 use core::fmt;
+
+use crate::core::{Locator, WhatAmI, ZenohId};
 
 /// # Hello message
 ///

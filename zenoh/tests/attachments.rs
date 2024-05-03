@@ -14,8 +14,7 @@
 #[cfg(feature = "unstable")]
 #[test]
 fn attachment_pubsub() {
-    use zenoh::bytes::ZBytes;
-    use zenoh::prelude::*;
+    use zenoh::{bytes::ZBytes, prelude::*};
     let zenoh = zenoh::open(Config::default()).wait().unwrap();
     let _sub = zenoh
         .declare_subscriber("test/attachment")

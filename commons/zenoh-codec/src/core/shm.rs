@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -20,6 +19,8 @@ use zenoh_shm::{
     api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
     watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
 };
+
+use crate::{RCodec, WCodec, Zenoh080};
 
 impl<W> WCodec<&Descriptor, &mut W> for Zenoh080
 where

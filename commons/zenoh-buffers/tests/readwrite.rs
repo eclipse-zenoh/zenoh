@@ -14,8 +14,8 @@
 use zenoh_buffers::{
     reader::{HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, HasWriter, Writer},
+    BBuf, ZBuf, ZSlice,
 };
-use zenoh_buffers::{BBuf, ZBuf, ZSlice};
 
 const BYTES: usize = 18;
 

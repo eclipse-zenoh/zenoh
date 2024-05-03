@@ -14,20 +14,24 @@
 
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
-use crate::backends_mgt::StoreIntercept;
-use crate::storages_mgt::StorageMessage;
-use async_std::stream::{interval, StreamExt};
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
+use std::{
+    collections::{HashMap, HashSet},
+    str,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
+
+use async_std::{
+    stream::{interval, StreamExt},
+    sync::{Arc, RwLock},
+};
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
-use std::collections::{HashMap, HashSet};
-use std::str;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
 use urlencoding::encode;
 use zenoh::prelude::*;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
+
+use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
 
 pub mod align_queryable;
 pub mod aligner;

@@ -25,6 +25,7 @@ use std::{
 use zenoh_core::zlock;
 use zenoh_result::ZResult;
 
+use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 use crate::api::{
     common::types::ChunkID,
     provider::{
@@ -33,8 +34,6 @@ use crate::api::{
         types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError},
     },
 };
-
-use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 
 // TODO: MIN_FREE_CHUNK_SIZE limitation is made to reduce memory fragmentation and lower
 // the CPU time needed to defragment() - that's reasonable, and there is additional thing here:

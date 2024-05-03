@@ -11,13 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh::internal::ztimeout;
-use zenoh::prelude::*;
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 #[cfg(feature = "unstable")]
 use zenoh::runtime::{Runtime, RuntimeBuilder};
+use zenoh::{internal::ztimeout, prelude::*};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

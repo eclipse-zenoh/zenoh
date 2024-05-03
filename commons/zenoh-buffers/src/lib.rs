@@ -113,8 +113,9 @@ pub mod buffer {
 }
 
 pub mod writer {
-    use crate::ZSlice;
     use core::num::NonZeroUsize;
+
+    use crate::ZSlice;
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntWrite;
@@ -156,8 +157,9 @@ pub mod writer {
 }
 
 pub mod reader {
-    use crate::ZSlice;
     use core::num::NonZeroUsize;
+
+    use crate::ZSlice;
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;

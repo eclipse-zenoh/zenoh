@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::{AcceptFsm, OpenFsm};
+use std::ops::Deref;
+
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
-use std::ops::Deref;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
@@ -25,6 +25,8 @@ use zenoh_crypto::PseudoRng;
 use zenoh_protocol::transport::{init, open};
 use zenoh_result::{zerror, Error as ZError, ZResult};
 use zenoh_shm::{api::common::types::ProtocolID, posix_shm::array::ArrayInSHM};
+
+use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
 /*************************************/
 /*             Segment               */

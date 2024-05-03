@@ -11,16 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
-use crate::net::runtime::{orchestrator::Loop, Runtime};
-use std::future::IntoFuture;
-use std::time::Duration;
-use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+    net::SocketAddr,
+    ops::Deref,
+    time::Duration,
+};
+
 use tokio::net::UdpSocket;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::{core::WhatAmIMatcher, scouting::Hello};
 use zenoh_result::ZResult;
 use zenoh_task::TerminatableTask;
+
+use crate::{
+    api::handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    net::runtime::{orchestrator::Loop, Runtime},
+};
 
 /// A builder for initializing a [`Scout`].
 ///

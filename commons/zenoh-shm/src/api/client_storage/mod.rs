@@ -12,25 +12,26 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
+use lazy_static::lazy_static;
 use zenoh_result::{bail, ZResult};
 
-use crate::api::{
-    client::{
-        shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
+use crate::{
+    api::{
+        client::{
+            shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
+        },
+        common::types::ProtocolID,
+        protocol_implementations::posix::{
+            posix_shared_memory_client::PosixSharedMemoryClient, protocol_id::POSIX_PROTOCOL_ID,
+        },
     },
-    common::types::ProtocolID,
-    protocol_implementations::posix::{
-        posix_shared_memory_client::PosixSharedMemoryClient, protocol_id::POSIX_PROTOCOL_ID,
-    },
+    reader::{ClientStorage, GlobalDataSegmentID},
 };
-
-use crate::reader::{ClientStorage, GlobalDataSegmentID};
 
 lazy_static! {
     /// A global lazily-initialized SHM client storage.

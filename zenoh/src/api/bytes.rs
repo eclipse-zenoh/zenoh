@@ -13,11 +13,11 @@
 //
 
 //! ZBytes primitives.
-use crate::buffers::ZBuf;
 use std::{
     borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref, str::Utf8Error,
     string::FromUtf8Error, sync::Arc,
 };
+
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
@@ -36,6 +36,8 @@ use zenoh_shm::{
     },
     SharedMemoryBuf,
 };
+
+use crate::buffers::ZBuf;
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
@@ -1825,12 +1827,11 @@ impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
 mod tests {
     #[test]
     fn serializer() {
-        use super::ZBytes;
-        use rand::Rng;
         use std::borrow::Cow;
+
+        use rand::Rng;
         use zenoh_buffers::{ZBuf, ZSlice};
         use zenoh_protocol::core::Properties;
-
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
         use zenoh_shm::api::{
             buffer::zshm::{zshm, ZShm},
@@ -1840,6 +1841,8 @@ mod tests {
             },
             provider::shared_memory_provider::SharedMemoryProviderBuilder,
         };
+
+        use super::ZBytes;
 
         const NUM: usize = 1_000;
 

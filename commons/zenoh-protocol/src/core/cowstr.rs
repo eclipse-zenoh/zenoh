@@ -12,8 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
-use core::fmt::{Debug, Display, Formatter};
-use core::num::NonZeroUsize;
+use core::{
+    fmt::{Debug, Display, Formatter},
+    num::NonZeroUsize,
+};
 
 enum CowStrInner<'a> {
     Borrowed(&'a str),
