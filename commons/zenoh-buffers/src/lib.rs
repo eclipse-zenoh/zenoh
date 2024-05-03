@@ -101,7 +101,11 @@ pub mod buffer {
             let mut slices = self.slices();
             match slices.len() {
                 0 => Cow::Borrowed(b""),
-                1 => Cow::Borrowed(slices.next().unwrap()),
+                1 => {
+                    // SAFETY: unwrap here is safe because we have explicitly checked
+                    //         the iterator has 1 element.
+                    Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() })
+                }
                 _ => {
                     let mut l = 0;
                     for s in slices.by_ref() {
