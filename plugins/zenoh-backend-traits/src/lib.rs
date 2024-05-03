@@ -23,7 +23,7 @@
 //!  - [`Storage`]
 //!
 //! Such library must also declare a `create_volume()` operation
-//! with the `#[no_mangle]` attribute as an entrypoint to be called for the Backend creation.
+//! with the `#[dynamic_plugin]` attribute as an entrypoint to be called for the Backend creation.
 //!
 //! # Example
 //! ```
@@ -35,7 +35,7 @@
 //! use zenoh_backend_traits::config::*;
 //! use zenoh::Result as ZResult;
 //!
-//! #[no_mangle]
+//! #[dynamic_plugin]
 //! pub fn create_volume(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
 //!     Ok(Box::new(MyVolumeType { config }))
 //! }

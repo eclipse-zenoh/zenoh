@@ -32,7 +32,7 @@ use zenoh_result::{bail, ZResult};
 pub struct ExamplePlugin {}
 
 // declaration of the plugin's VTable for zenohd to find the plugin's functions to be called
-#[cfg(feature = "no_mangle")]
+#[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
 // A default selector for this example of storage plugin (in case the config doesn't set it)
