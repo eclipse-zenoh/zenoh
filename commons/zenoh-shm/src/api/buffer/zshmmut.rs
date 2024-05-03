@@ -19,37 +19,37 @@ use zenoh_buffers::{ZBuf, ZSlice};
 
 use super::{
     traits::{SHMBuf, SHMBufMut},
-    zsliceshm::{zsliceshm, ZSliceShm},
+    zshm::{zshm, ZShm},
 };
 use crate::SharedMemoryBuf;
 
-/// A mutable SHM slice
+/// A mutable SHM buffer
 #[zenoh_macros::unstable_doc]
 #[derive(Debug, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct ZSliceShmMut(SharedMemoryBuf);
+pub struct ZShmMut(SharedMemoryBuf);
 
-impl SHMBuf for ZSliceShmMut {
+impl SHMBuf for ZShmMut {
     fn is_valid(&self) -> bool {
         self.0.is_valid()
     }
 }
 
-impl SHMBufMut for ZSliceShmMut {}
+impl SHMBufMut for ZShmMut {}
 
-impl ZSliceShmMut {
+impl ZShmMut {
     pub(crate) unsafe fn new_unchecked(data: SharedMemoryBuf) -> Self {
         Self(data)
     }
 }
 
-impl PartialEq<zsliceshmmut> for &ZSliceShmMut {
-    fn eq(&self, other: &zsliceshmmut) -> bool {
+impl PartialEq<zshmmut> for &ZShmMut {
+    fn eq(&self, other: &zshmmut) -> bool {
         self.0 == other.0 .0
     }
 }
 
-impl TryFrom<SharedMemoryBuf> for ZSliceShmMut {
+impl TryFrom<SharedMemoryBuf> for ZShmMut {
     type Error = SharedMemoryBuf;
 
     fn try_from(value: SharedMemoryBuf) -> Result<Self, Self::Error> {
@@ -60,10 +60,10 @@ impl TryFrom<SharedMemoryBuf> for ZSliceShmMut {
     }
 }
 
-impl TryFrom<ZSliceShm> for ZSliceShmMut {
-    type Error = ZSliceShm;
+impl TryFrom<ZShm> for ZShmMut {
+    type Error = ZShm;
 
-    fn try_from(value: ZSliceShm) -> Result<Self, Self::Error> {
+    fn try_from(value: ZShm) -> Result<Self, Self::Error> {
         match value.0.is_unique() && value.0.is_valid() {
             true => Ok(Self(value.0)),
             false => Err(value),
@@ -71,39 +71,39 @@ impl TryFrom<ZSliceShm> for ZSliceShmMut {
     }
 }
 
-impl Borrow<zsliceshm> for ZSliceShmMut {
-    fn borrow(&self) -> &zsliceshm {
-        // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+impl Borrow<zshm> for ZShmMut {
+    fn borrow(&self) -> &zshm {
+        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to SharedMemoryBuf type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
-impl BorrowMut<zsliceshm> for ZSliceShmMut {
-    fn borrow_mut(&mut self) -> &mut zsliceshm {
-        // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+impl BorrowMut<zshm> for ZShmMut {
+    fn borrow_mut(&mut self) -> &mut zshm {
+        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to SharedMemoryBuf type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
-impl Borrow<zsliceshmmut> for ZSliceShmMut {
-    fn borrow(&self) -> &zsliceshmmut {
-        // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+impl Borrow<zshmmut> for ZShmMut {
+    fn borrow(&self) -> &zshmmut {
+        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to SharedMemoryBuf type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
-impl BorrowMut<zsliceshmmut> for ZSliceShmMut {
-    fn borrow_mut(&mut self) -> &mut zsliceshmmut {
-        // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+impl BorrowMut<zshmmut> for ZShmMut {
+    fn borrow_mut(&mut self) -> &mut zshmmut {
+        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to SharedMemoryBuf type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
-impl Deref for ZSliceShmMut {
+impl Deref for ZShmMut {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -111,75 +111,75 @@ impl Deref for ZSliceShmMut {
     }
 }
 
-impl DerefMut for ZSliceShmMut {
+impl DerefMut for ZShmMut {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.as_mut()
     }
 }
 
-impl AsRef<[u8]> for ZSliceShmMut {
+impl AsRef<[u8]> for ZShmMut {
     fn as_ref(&self) -> &[u8] {
         self
     }
 }
 
-impl AsMut<[u8]> for ZSliceShmMut {
+impl AsMut<[u8]> for ZShmMut {
     fn as_mut(&mut self) -> &mut [u8] {
         self
     }
 }
 
-impl From<ZSliceShmMut> for ZSliceShm {
-    fn from(value: ZSliceShmMut) -> Self {
+impl From<ZShmMut> for ZShm {
+    fn from(value: ZShmMut) -> Self {
         value.0.into()
     }
 }
 
-impl From<ZSliceShmMut> for ZSlice {
-    fn from(value: ZSliceShmMut) -> Self {
+impl From<ZShmMut> for ZSlice {
+    fn from(value: ZShmMut) -> Self {
         value.0.into()
     }
 }
 
-impl From<ZSliceShmMut> for ZBuf {
-    fn from(value: ZSliceShmMut) -> Self {
+impl From<ZShmMut> for ZBuf {
+    fn from(value: ZShmMut) -> Self {
         value.0.into()
     }
 }
 
-/// A borrowed mutable SHM slice
+/// A borrowed mutable SHM buffer
 #[zenoh_macros::unstable_doc]
 #[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
-pub struct zsliceshmmut(ZSliceShmMut);
+pub struct zshmmut(ZShmMut);
 
-impl PartialEq<ZSliceShmMut> for &zsliceshmmut {
-    fn eq(&self, other: &ZSliceShmMut) -> bool {
+impl PartialEq<ZShmMut> for &zshmmut {
+    fn eq(&self, other: &ZShmMut) -> bool {
         self.0 .0 == other.0
     }
 }
 
-impl Deref for zsliceshmmut {
-    type Target = ZSliceShmMut;
+impl Deref for zshmmut {
+    type Target = ZShmMut;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for zsliceshmmut {
+impl DerefMut for zshmmut {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl TryFrom<&mut SharedMemoryBuf> for &mut zsliceshmmut {
+impl TryFrom<&mut SharedMemoryBuf> for &mut zshmmut {
     type Error = ();
 
     fn try_from(value: &mut SharedMemoryBuf) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
-            // SAFETY: ZSliceShm, ZSliceShmMut, zsliceshm and zsliceshmmut are #[repr(transparent)]
+            // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
             // to SharedMemoryBuf type, so it is safe to transmute them in any direction
             true => Ok(unsafe { core::mem::transmute(value) }),
             false => Err(()),
