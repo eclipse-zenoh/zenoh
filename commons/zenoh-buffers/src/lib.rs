@@ -101,11 +101,22 @@ pub mod buffer {
             let mut slices = self.slices();
             match slices.len() {
                 0 => Cow::Borrowed(b""),
-                1 => Cow::Borrowed(slices.next().unwrap()),
-                _ => Cow::Owned(slices.fold(Vec::new(), |mut acc, it| {
-                    acc.extend(it);
-                    acc
-                })),
+                1 => {
+                    // SAFETY: unwrap here is safe because we have explicitly checked
+                    //         the iterator has 1 element.
+                    Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() })
+                }
+                _ => {
+                    let mut l = 0;
+                    for s in slices.by_ref() {
+                        l += s.len();
+                    }
+                    let mut vec = Vec::with_capacity(l);
+                    for slice in slices {
+                        vec.extend_from_slice(slice);
+                    }
+                    Cow::Owned(vec)
+                }
             }
         }
     }
