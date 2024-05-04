@@ -32,14 +32,24 @@ mod test {
         create_new_files(path).await.unwrap();
         println!("testfiles created successfully.");
 
-        test_pub_sub_deny_then_allow_tls().await;
-        test_pub_sub_allow_then_deny_tls().await;
-        test_get_qbl_allow_then_deny_tls().await;
-        test_get_qbl_deny_then_allow_tls().await;
         test_pub_sub_deny_then_allow_usrpswd().await;
         test_pub_sub_allow_then_deny_usrpswd().await;
         test_get_qbl_allow_then_deny_usrpswd().await;
         test_get_qbl_deny_then_allow_usrpswd().await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        test_pub_sub_deny_then_allow_tls().await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        test_pub_sub_allow_then_deny_tls().await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        test_get_qbl_allow_then_deny_tls().await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        test_get_qbl_deny_then_allow_tls().await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
         test_pub_sub_deny_then_allow_quic().await;
         // test_get_qbl_allow_then_deny_quic().await;
         // test_pub_sub_allow_then_deny_quic().await;
