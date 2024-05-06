@@ -146,10 +146,19 @@ lazy_static! {
 }
 
 // To drop the data mannually since Rust does not drop static variables.
-pub extern "C" fn cleanup() {
+pub fn cleanup() {
     unsafe {
         std::mem::drop((ZRUNTIME_POOL.deref() as *const ZRuntimePool).read());
         std::mem::drop((ZRUNTIME_INDEX.deref() as *const HashMap<ZRuntime, AtomicUsize>).read());
+    }
+}
+
+// A runtime guard used to explicitly drop the static variables
+pub struct ZRuntimePoolGuard;
+
+impl Drop for ZRuntimePoolGuard {
+    fn drop(&mut self) {
+        cleanup()
     }
 }
 
@@ -157,12 +166,6 @@ pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<Runtime>>);
 
 impl ZRuntimePool {
     fn new() -> Self {
-        // It has been recognized that using atexit within Windows DLL is problematic
-        #[cfg(not(target_os = "windows"))]
-        // Register a callback to clean the static variables.
-        unsafe {
-            libc::atexit(cleanup);
-        }
         Self(ZRuntime::iter().map(|zrt| (zrt, OnceLock::new())).collect())
     }
 
