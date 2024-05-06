@@ -36,14 +36,7 @@ fn main() {
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example
     // NOTE: For buf's API please check z_bytes_shm.rs example
-    let mut owned_shm_buf_mut = provider
-        .alloc_layout()
-        .size(1024)
-        .res()
-        .unwrap()
-        .alloc()
-        .res()
-        .unwrap();
+    let mut owned_shm_buf_mut = provider.alloc(1024).res().unwrap();
 
     // mutable and immutable API
     let _data: &[u8] = &owned_shm_buf_mut;

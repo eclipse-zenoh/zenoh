@@ -30,7 +30,7 @@ fn shm_bytes_single_buf() {
         .res();
 
     // Prepare a layout for allocations
-    let layout = provider.alloc_layout().size(1024).res().unwrap();
+    let layout = provider.alloc(1024).make_layout().unwrap();
 
     // allocate an SHM buffer (ZShmMut)
     let owned_shm_buf_mut = layout.alloc().res().unwrap();

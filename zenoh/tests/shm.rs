@@ -122,7 +122,7 @@ mod tests {
             let shm_segment_size = shm01.available();
 
             // Prepare a layout for allocations
-            let layout = shm01.alloc_layout().size(size).res().unwrap();
+            let layout = shm01.alloc(size).make_layout().unwrap();
 
             // Put data
             println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");

@@ -34,20 +34,51 @@ async fn run() -> ZResult<()> {
         .backend(backend)
         .res();
 
+    // There are two API-defined ways of making shm buffer allocations: direct and through the layout...
+
+    // Direct allocation
+    // The direct allocation calcualtes all layouting checks on each allocation. It is good for making
+    // uniquely-layouted allocations. For making series of similar allocations, please refer to  layout
+    // allocation API which is shown later in this example...
+    let _direct_allocation = {
+        // OPTION: Simple allocation
+        let simple = provider.alloc(512).res().unwrap();
+
+        // OPTION: Allocation with custom alignemnt and alloc policy customization
+        let _comprehensive = provider
+            .alloc(512)
+            .with_alignment(AllocAlignment::new(2))
+            // for more examples on policies, please see allocation policy usage below (for layout allocation API)
+            .with_policy::<GarbageCollect>()
+            .res()
+            .unwrap();
+
+        // OPTION: Allocation with custom alignemnt and async alloc policy
+        let _async = provider
+            .alloc(512)
+            .with_alignment(AllocAlignment::new(2))
+            // for more examples on policies, please see allocation policy usage below (for layout allocation API)
+            .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
+            .res_async()
+            .await
+            .unwrap();
+
+        simple
+    };
+
     // Create a layout for particular allocation arguments and particular SHM provider
     // The layout is validated for argument correctness and also is checked
     // against particular SHM provider's layouting capabilities.
     // This layout is reusable and can handle series of similar allocations
     let buffer_layout = {
-        // OPTION 1: Simple (default) configuration:
-        let simple_layout = provider.alloc_layout().size(512).res().unwrap();
+        // OPTION: Simple configuration:
+        let simple_layout = provider.alloc(512).make_layout().unwrap();
 
-        // OPTION 2: Comprehensive configuration:
+        // OPTION: Comprehensive configuration:
         let _comprehensive_layout = provider
-            .alloc_layout()
-            .size(512)
-            .alignment(AllocAlignment::new(2))
-            .res()
+            .alloc(512)
+            .with_alignment(AllocAlignment::new(2))
+            .make_layout()
             .unwrap();
 
         simple_layout
@@ -69,10 +100,10 @@ async fn run() -> ZResult<()> {
     let mut sbuf = async {
         // Some examples on how to use layout's interface:
 
-        // The default allocation with default JustAlloc policy
+        // OPTION: The default allocation with default JustAlloc policy
         let default_alloc = buffer_layout.alloc().res().unwrap();
 
-        // The async allocation
+        // OPTION: The async allocation
         let _async_alloc = buffer_layout
             .alloc()
             .with_policy::<BlockOn>()
@@ -80,14 +111,14 @@ async fn run() -> ZResult<()> {
             .await
             .unwrap();
 
-        // The comprehensive allocation policy that blocks if provider is not able to allocate
+        // OPTION: The comprehensive allocation policy that blocks if provider is not able to allocate
         let _comprehensive_alloc = buffer_layout
             .alloc()
             .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
             .res()
             .unwrap();
 
-        // The comprehensive allocation policy that deallocates up to 1000 buffers if provider is not able to allocate
+        // OPTION: The comprehensive allocation policy that deallocates up to 1000 buffers if provider is not able to allocate
         let _comprehensive_alloc = buffer_layout
             .alloc()
             .with_policy::<Deallocate<1000, Defragment<GarbageCollect>>>()

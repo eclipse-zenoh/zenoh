@@ -1961,7 +1961,7 @@ mod tests {
                 .res();
 
             // Prepare a layout for allocations
-            let layout = provider.alloc_layout().size(1024).res().unwrap();
+            let layout = provider.alloc(1024).make_layout().unwrap();
 
             // allocate an SHM buffer
             let mutable_shm_buf = layout.alloc().res().unwrap();

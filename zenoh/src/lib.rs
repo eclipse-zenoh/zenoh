@@ -398,15 +398,17 @@ pub mod shm {
         },
         provider::{
             shared_memory_provider::{
-                AllocBuilder, AllocLayout, AllocLayoutAlignedBuilder, AllocLayoutBuilder,
-                AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
-                DeallocOptimal, DeallocYoungest, Deallocate, Defragment, DynamicProtocolID,
-                ForceDeallocPolicy, GarbageCollect, JustAlloc, ProtocolIDSource,
-                SharedMemoryProvider, SharedMemoryProviderBuilder,
+                AllocBuilder, AllocBuilder2, AllocLayout, AllocLayoutSizedBuilder, AllocPolicy,
+                AsyncAllocPolicy, BlockOn, DeallocEldest, DeallocOptimal, DeallocYoungest,
+                Deallocate, Defragment, DynamicProtocolID, ForceDeallocPolicy, GarbageCollect,
+                JustAlloc, ProtocolIDSource, SharedMemoryProvider, SharedMemoryProviderBuilder,
                 SharedMemoryProviderBuilderBackendID, SharedMemoryProviderBuilderID,
                 StaticProtocolID,
             },
-            types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
+            types::{
+                AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
+                MemoryLayout, ZAllocError, ZLayoutAllocError, ZLayoutError,
+            },
         },
     };
 }
