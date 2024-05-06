@@ -11,11 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::StructVersion;
-use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, ops::BitOrAssign};
+
+use serde::{Deserialize, Serialize};
 use zenoh_keyexpr::keyexpr;
 use zenoh_result::ZResult;
+
+use crate::StructVersion;
 
 /// The plugin can be in one of these states:
 /// - Declared: the plugin is declared in the configuration file, but not loaded yet or failed to load
@@ -155,7 +157,7 @@ pub trait PluginControl {
 
 pub trait PluginStartArgs: StructVersion {}
 
-pub trait PluginInstance: StructVersion + PluginControl + Send {}
+pub trait PluginInstance: StructVersion + PluginControl + Send + Sync {}
 
 /// Base plugin trait. The loaded plugin
 pub trait Plugin: Sized + 'static {

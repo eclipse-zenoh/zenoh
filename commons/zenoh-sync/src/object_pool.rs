@@ -11,14 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::LifoQueue;
 use std::{
     any::Any,
     fmt,
     ops::{Deref, DerefMut, Drop},
     sync::{Arc, Weak},
 };
+
 use zenoh_buffers::ZSliceBuffer;
+
+use super::LifoQueue;
 
 /// Provides a pool of pre-allocated objects that are automaticlaly reinserted into
 /// the pool when dropped.
@@ -141,10 +143,12 @@ impl ZSliceBuffer for RecyclingObject<Box<[u8]>> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
+
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }

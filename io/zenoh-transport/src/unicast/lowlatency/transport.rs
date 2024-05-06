@@ -11,6 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{
+    sync::{Arc, RwLock as SyncRwLock},
+    time::Duration,
+};
+
+use async_trait::async_trait;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{WhatAmI, ZenohId},
+    network::NetworkMessage,
+    transport::{close, Close, TransportBodyLowLatency, TransportMessageLowLatency, TransportSn},
+};
+use zenoh_result::{zerror, ZResult};
+
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -21,23 +38,6 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
-use async_trait::async_trait;
-use std::sync::{Arc, RwLock as SyncRwLock};
-use std::time::Duration;
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
-use tokio_util::sync::CancellationToken;
-use tokio_util::task::TaskTracker;
-use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
-use zenoh_link::Link;
-use zenoh_protocol::network::NetworkMessage;
-use zenoh_protocol::transport::TransportBodyLowLatency;
-use zenoh_protocol::transport::TransportMessageLowLatency;
-use zenoh_protocol::transport::{Close, TransportSn};
-use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
-    transport::close,
-};
-use zenoh_result::{zerror, ZResult};
 
 /*************************************/
 /*       LOW-LATENCY TRANSPORT       */
@@ -193,7 +193,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool {
-        self.config.is_shm
+        self.config.shm.is_some()
     }
 
     fn is_qos(&self) -> bool {

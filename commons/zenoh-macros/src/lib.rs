@@ -60,16 +60,25 @@ pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn unstable_doc(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item = proc_macro2::TokenStream::from(item);
     TokenStream::from(quote! {
-        #[cfg(feature = "unstable")]
         /// <div class="stab unstable">
         ///   <span class="emoji">🔬</span>
         ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
         ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
         /// </div>
         ///
+        #item
+    })
+}
+
+#[proc_macro_attribute]
+pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item = proc_macro2::TokenStream::from(item);
+    TokenStream::from(quote! {
+        #[cfg(feature = "unstable")]
+        #[zenoh_macros::unstable_doc]
         #item
     })
 }
@@ -152,7 +161,7 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
     let formatter_doc = format!("And instance of a formatter for `{source}`.");
 
     quote! {
-            use ::zenoh::Result as ZResult;
+            use ::zenoh::core::Result as ZResult;
             const FORMAT_INNER: ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> = unsafe {
                 ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])
             };
@@ -351,4 +360,39 @@ pub fn ke(tokens: TokenStream) -> TokenStream {
         Ok(_) => quote!(unsafe {::zenoh::key_expr::keyexpr::from_str_unchecked(#ke)}).into(),
         Err(e) => panic!("{}", e),
     }
+}
+
+mod zenoh_runtime_derive;
+use syn::DeriveInput;
+use zenoh_runtime_derive::{derive_generic_runtime_param, derive_register_param};
+
+/// Make the underlying struct `Param` be generic over any `T` satifying a generated `trait DefaultParam { fn param() -> Param; }`
+/// ```rust,ignore
+/// #[derive(GenericRuntimeParam)]
+/// struct Param {
+///    ...
+/// }
+/// ```
+#[proc_macro_derive(GenericRuntimeParam)]
+pub fn generic_runtime_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse_macro_input!(input);
+    derive_generic_runtime_param(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Register the input `Enum` with the struct `Param` specified in the param attribute
+/// ```rust,ignore
+/// #[derive(RegisterParam)]
+/// #[param(Param)]
+/// enum Enum {
+///    ...
+/// }
+/// ```
+#[proc_macro_derive(RegisterParam, attributes(alias, param))]
+pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input: DeriveInput = syn::parse_macro_input!(input);
+    derive_register_param(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }

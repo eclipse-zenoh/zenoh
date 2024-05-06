@@ -12,15 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::{config::Config, prelude::*};
 use zenoh_examples::CommonArgs;
-use zenoh_shm::SharedMemoryBuf;
 
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (mut config, key_expr) = parse_args();
 
@@ -30,25 +28,44 @@ async fn main() {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Subscriber on '{}'...", &key_expr);
-    let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
+    let subscriber = session.declare_subscriber(&key_expr).await.unwrap();
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        match sample.payload().deserialize::<SharedMemoryBuf>() {
-            Ok(payload) => println!(
-                ">> [Subscriber] Received {} ('{}': '{:02x?}')",
-                sample.kind(),
-                sample.key_expr().as_str(),
-                payload.as_slice()
-            ),
-            Err(e) => {
-                println!(">> [Subscriber] Not a SharedMemoryBuf: {:?}", e);
-            }
+        print!(
+            ">> [Subscriber] Received {} ('{}': ",
+            sample.kind(),
+            sample.key_expr().as_str(),
+        );
+        match sample.payload().deserialize::<&zshm>() {
+            Ok(payload) => print!("'{}'", String::from_utf8_lossy(payload)),
+            Err(e) => print!("'Not a SharedMemoryBuf: {:?}'", e),
         }
+        println!(")");
     }
+
+    // // Try to get a mutable reference to the SHM buffer. If this subscriber is the only subscriber
+    // // holding a reference to the SHM buffer, then it will be able to get a mutable reference to it.
+    // // With the mutable reference at hand, it's possible to mutate in place the SHM buffer content.
+    //
+    // use zenoh::shm::zshmmut;
+
+    // while let Ok(mut sample) = subscriber.recv_async().await {
+    //     let kind = sample.kind();
+    //     let key_expr = sample.key_expr().to_string();
+    //     match sample.payload_mut().deserialize_mut::<&mut zshmmut>() {
+    //         Ok(payload) => println!(
+    //             ">> [Subscriber] Received {} ('{}': '{:02x?}')",
+    //             kind, key_expr, payload
+    //         ),
+    //         Err(e) => {
+    //             println!(">> [Subscriber] Not a SharedMemoryBuf: {:?}", e);
+    //         }
+    //     }
+    // }
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

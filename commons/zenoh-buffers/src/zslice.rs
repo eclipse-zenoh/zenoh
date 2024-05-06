@@ -11,10 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    buffer::{Buffer, SplitBuffer},
-    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
-};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
     any::Any,
@@ -25,23 +21,30 @@ use core::{
     option,
 };
 
+use crate::{
+    buffer::{Buffer, SplitBuffer},
+    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
+};
+
 /*************************************/
 /*           ZSLICE BUFFER           */
 /*************************************/
-pub trait ZSliceBuffer: Send + Sync + fmt::Debug {
+pub trait ZSliceBuffer: Any + Send + Sync + fmt::Debug {
     fn as_slice(&self) -> &[u8];
-    fn as_mut_slice(&mut self) -> &mut [u8];
     fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl ZSliceBuffer for Vec<u8> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
+
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -50,10 +53,12 @@ impl ZSliceBuffer for Box<[u8]> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
+
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -62,10 +67,12 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
+
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -138,6 +145,15 @@ impl ZSlice {
         T: Any,
     {
         self.buf.as_any().downcast_ref::<T>()
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
+    where
+        T: Any,
+    {
+        Arc::get_mut(&mut self.buf).and_then(|val| val.as_any_mut().downcast_mut::<T>())
     }
 
     #[inline]
@@ -424,8 +440,9 @@ mod tests {
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
         let range = zslice.range();
-        let mbuf = Arc::get_mut(&mut zslice.buf).unwrap();
-        mbuf.as_mut_slice()[range][..buf.len()].clone_from_slice(&buf[..]);
+        let mut_slice = zslice.downcast_mut::<Vec<u8>>().unwrap();
+
+        mut_slice[range][..buf.len()].clone_from_slice(&buf[..]);
 
         assert_eq!(buf.as_slice(), zslice.as_slice());
     }

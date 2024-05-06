@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastLowlatency;
 use zenoh_protocol::{
     network::NetworkMessage,
     transport::{TransportBodyLowLatency, TransportMessageLowLatency},
@@ -20,6 +19,10 @@ use zenoh_protocol::{
 use zenoh_result::bail;
 use zenoh_result::ZResult;
 
+use super::transport::TransportUnicastLowlatency;
+#[cfg(feature = "shared-memory")]
+use crate::shm::map_zmsg_to_partner;
+
 impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
@@ -27,12 +30,7 @@ impl TransportUnicastLowlatency {
     pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
         {
-            let res = if self.config.is_shm {
-                crate::shm::map_zmsg_to_shminfo(&mut msg)
-            } else {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)
-            };
-            if let Err(e) = res {
+            if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
                 bail!("Failed SHM conversion: {}", e);
             }
         }

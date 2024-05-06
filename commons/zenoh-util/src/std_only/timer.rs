@@ -11,16 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::*;
-use async_std::sync::Mutex;
-use async_std::task;
+use std::{
+    cmp::Ordering as ComparisonOrdering,
+    collections::BinaryHeap,
+    sync::{
+        atomic::{AtomicBool, Ordering as AtomicOrdering},
+        Arc, Weak,
+    },
+    time::{Duration, Instant},
+};
+
+use async_std::{prelude::*, sync::Mutex, task};
 use async_trait::async_trait;
 use flume::{bounded, Receiver, RecvError, Sender};
-use std::cmp::Ordering as ComparisonOrdering;
-use std::collections::BinaryHeap;
-use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
-use std::sync::{Arc, Weak};
-use std::time::{Duration, Instant};
 use zenoh_core::zconfigurable;
 
 zconfigurable! {
@@ -296,12 +299,18 @@ impl Default for Timer {
 mod tests {
     #[test]
     fn timer() {
-        use super::{Timed, TimedEvent, Timer};
+        use std::{
+            sync::{
+                atomic::{AtomicUsize, Ordering},
+                Arc,
+            },
+            time::{Duration, Instant},
+        };
+
         use async_std::task;
         use async_trait::async_trait;
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        use std::sync::Arc;
-        use std::time::{Duration, Instant};
+
+        use super::{Timed, TimedEvent, Timer};
 
         #[derive(Clone)]
         struct MyEvent {

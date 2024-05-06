@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header};
 use alloc::vec::Vec;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -27,6 +27,8 @@ use zenoh_protocol::{
     },
 };
 
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header};
+
 impl<W> WCodec<&Err, &mut W> for Zenoh080
 where
     W: Writer,
@@ -37,6 +39,8 @@ where
         let Err {
             encoding,
             ext_sinfo,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
             payload,
         } = x;
@@ -47,6 +51,10 @@ where
             header |= flag::E;
         }
         let mut n_exts = (ext_sinfo.is_some() as u8) + (ext_unknown.len() as u8);
+        #[cfg(feature = "shared-memory")]
+        {
+            n_exts += ext_shm.is_some() as u8;
+        }
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -61,6 +69,11 @@ where
         if let Some(sinfo) = ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        #[cfg(feature = "shared-memory")]
+        if let Some(eshm) = ext_shm.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (eshm, n_exts != 0))?;
         }
         for u in ext_unknown.iter() {
             n_exts -= 1;
@@ -107,6 +120,8 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        #[cfg(feature = "shared-memory")]
+        let mut ext_shm: Option<ext::ShmType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -117,6 +132,12 @@ where
                 ext::SourceInfo::ID => {
                     let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
                     ext_sinfo = Some(s);
+                    has_ext = ext;
+                }
+                #[cfg(feature = "shared-memory")]
+                ext::Shm::ID => {
+                    let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
+                    ext_shm = Some(s);
                     has_ext = ext;
                 }
                 _ => {
@@ -134,6 +155,8 @@ where
         Ok(Err {
             encoding,
             ext_sinfo,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
             payload,
         })

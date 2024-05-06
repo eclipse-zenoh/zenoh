@@ -11,33 +11,39 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::backends_mgt::StoreIntercept;
-use crate::storages_mgt::StorageMessage;
-use async_std::sync::Arc;
-use async_std::sync::{Mutex, RwLock};
+use std::{
+    collections::{HashMap, HashSet},
+    str::{self, FromStr},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
-use std::collections::{HashMap, HashSet};
-use std::str::{self, FromStr};
-use std::time::{SystemTime, UNIX_EPOCH};
-use zenoh::buffers::buffer::SplitBuffer;
-use zenoh::buffers::ZBuf;
-use zenoh::prelude::r#async::*;
-use zenoh::query::{ConsolidationMode, QueryTarget};
-use zenoh::sample::builder::SampleBuilder;
-use zenoh::sample::{Sample, SampleKind};
-use zenoh::time::{new_reception_timestamp, Timestamp, NTP64};
-use zenoh::value::Value;
-use zenoh::{Result as ZResult, Session};
-use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
-use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
-use zenoh_keyexpr::key_expr::OwnedKeyExpr;
-use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_keyexpr::keyexpr_tree::{support::NonWild, support::UnknownWildness, KeBoxTree};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
-use zenoh_result::bail;
-use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer};
+use zenoh::{
+    buffers::{SplitBuffer, ZBuf},
+    core::Result as ZResult,
+    internal::{bail, zenoh_home, Timed, TimedEvent, Timer},
+    key_expr::{
+        keyexpr_tree::{
+            IKeyExprTree, IKeyExprTreeMut, KeBoxTree, KeyedSetProvider, NonWild, UnknownWildness,
+        },
+        KeyExpr, OwnedKeyExpr,
+    },
+    query::{ConsolidationMode, QueryTarget},
+    sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait, ValueBuilderTrait},
+    selector::Selector,
+    session::{Session, SessionDeclarations},
+    time::{new_reception_timestamp, Timestamp, NTP64},
+    value::Value,
+};
+use zenoh_backend_traits::{
+    config::{GarbageCollectionConfig, StorageConfig},
+    Capability, History, Persistence, StorageInsertionResult, StoredData,
+};
+
+use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -141,7 +147,7 @@ impl StorageService {
         t.add_async(gc).await;
 
         // subscribe on key_expr
-        let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
+        let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 tracing::error!("Error starting storage '{}': {}", self.name, e);
@@ -154,7 +160,6 @@ impl StorageService {
             .session
             .declare_queryable(&self.key_expr)
             .complete(self.complete)
-            .res()
             .await
         {
             Ok(storage_queryable) => storage_queryable,
@@ -519,7 +524,6 @@ impl StorageService {
                                 .reply(key.clone(), entry.value.payload().clone())
                                 .encoding(entry.value.encoding().clone())
                                 .timestamp(entry.timestamp)
-                                .res()
                                 .await
                             {
                                 tracing::warn!(
@@ -553,7 +557,6 @@ impl StorageService {
                             .reply(q.key_expr().clone(), entry.value.payload().clone())
                             .encoding(entry.value.encoding().clone())
                             .timestamp(entry.timestamp)
-                            .res()
                             .await
                         {
                             tracing::warn!(
@@ -638,10 +641,9 @@ impl StorageService {
             // with `_time=[..]` to get historical data (in case of time-series)
             let replies = match self
                 .session
-                .get(KeyExpr::from(&self.key_expr).with_parameters("_time=[..]"))
+                .get(Selector::new(&self.key_expr, "_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
-                .res()
                 .await
             {
                 Ok(replies) => replies,

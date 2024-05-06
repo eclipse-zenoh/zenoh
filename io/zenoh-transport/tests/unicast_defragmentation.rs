@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{convert::TryFrom, sync::Arc, time::Duration};
+
 use zenoh_core::ztimeout;
 use zenoh_protocol::{
     core::{
@@ -64,10 +65,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     println!("Opening transport with {endpoint}");
     let _ = ztimeout!(client_manager.open_transport_unicast(endpoint.clone())).unwrap();
 
-    let client_transport = client_manager
-        .get_transport_unicast(&router_id)
-        .await
-        .unwrap();
+    let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
 
     // Create the message to send
     let message: NetworkMessage = Push {
@@ -131,7 +129,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_defragmentation_tcp_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     // Define the locators
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 11000).parse().unwrap();
@@ -164,7 +162,7 @@ async fn transport_unicast_defragmentation_tcp_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn transport_unicast_defragmentation_ws_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     // Define the locators
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
@@ -197,7 +195,7 @@ async fn transport_unicast_defragmentation_ws_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn transport_unicast_defragmentation_unixpipe_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     // Define the locators
     let endpoint: EndPoint = "unixpipe/transport_unicast_defragmentation_unixpipe_only"

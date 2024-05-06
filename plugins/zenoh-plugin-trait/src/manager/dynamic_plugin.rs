@@ -10,12 +10,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
 use std::path::{Path, PathBuf};
 
 use libloading::Library;
 use zenoh_result::{bail, ZResult};
 use zenoh_util::LibLoader;
+
+use crate::*;
 
 /// This enum contains information where to load the plugin from.
 pub enum DynamicPluginSource {
@@ -106,6 +107,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
 
 pub struct DynamicPlugin<StartArgs, Instance> {
     name: String,
+    required: bool,
     report: PluginReport,
     source: DynamicPluginSource,
     starter: Option<DynamicPluginStarter<StartArgs, Instance>>,
@@ -113,9 +115,10 @@ pub struct DynamicPlugin<StartArgs, Instance> {
 }
 
 impl<StartArgs, Instance> DynamicPlugin<StartArgs, Instance> {
-    pub fn new(name: String, source: DynamicPluginSource) -> Self {
+    pub fn new(name: String, source: DynamicPluginSource, required: bool) -> Self {
         Self {
             name,
+            required,
             report: PluginReport::new(),
             source,
             starter: None,
@@ -140,7 +143,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
         if let Some(starter) = &self.starter {
             starter.path()
         } else {
-            "<not loaded>"
+            "__not_loaded__"
         }
     }
     fn state(&self) -> PluginState {
@@ -201,6 +204,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArg
 {
     fn as_status(&self) -> &dyn PluginStatus {
         self
+    }
+    fn required(&self) -> bool {
+        self.required
     }
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         let starter = self

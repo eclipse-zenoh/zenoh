@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{any::Any, sync::Arc, time::Duration};
+
 use zenoh_core::{zasyncwrite, ztimeout};
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -20,11 +21,9 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    multicast::TransportMulticast, unicast::establishment::ext::auth::Auth,
-    TransportMulticastEventHandler,
-};
-use zenoh_transport::{
-    unicast::TransportUnicast, DummyTransportPeerEventHandler, TransportEventHandler,
+    multicast::TransportMulticast,
+    unicast::{establishment::ext::auth::Auth, TransportUnicast},
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler,
 };
 
@@ -291,10 +290,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     ];
     let router_pri_key = RsaPrivateKey::from_components(n, e, d, primes).unwrap();
     let mut auth_pubkey = AuthPubKey::new(router_pub_key.into(), router_pri_key.into());
-    auth_pubkey
-        .add_pubkey(client01_pub_key.into())
-        .await
-        .unwrap();
+    ztimeout!(auth_pubkey.add_pubkey(client01_pub_key.into())).unwrap();
     let mut auth = Auth::empty();
     auth.set_pubkey(Some(auth_pubkey));
     let unicast = make_basic_transport_manager_builder(
@@ -315,7 +311,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     // Add the locator on the router
     ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     println!("Transport Authenticator PubKey [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Authenticator PubKey [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -344,10 +340,10 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     // Add client02 pubkey to the router
     let router_auth_handle = router_manager.get_auth_handle_unicast();
-    zasyncwrite!(router_auth_handle.get_pubkey().unwrap())
-        .add_pubkey(client02_pub_key.into())
-        .await
-        .unwrap();
+    ztimeout!(
+        zasyncwrite!(router_auth_handle.get_pubkey().unwrap()).add_pubkey(client02_pub_key.into())
+    )
+    .unwrap();
 
     /* [3b] */
     // Open a first transport from client02 to the router
@@ -435,13 +431,9 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router transport manager
     let mut auth_usrpwd_router = AuthUsrPwd::new(None);
-    auth_usrpwd_router
-        .add_user(user01.clone().into(), password01.clone().into())
-        .await
+    ztimeout!(auth_usrpwd_router.add_user(user01.clone().into(), password01.clone().into()))
         .unwrap();
-    auth_usrpwd_router
-        .add_user(user03.clone().into(), password03.clone().into())
-        .await
+    ztimeout!(auth_usrpwd_router.add_user(user03.clone().into(), password03.clone().into()))
         .unwrap();
     let mut auth_router = Auth::empty();
     auth_router.set_usrpwd(Some(auth_usrpwd_router));
@@ -520,7 +512,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     println!("Transport Authenticator UserPassword [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Authenticator UserPassword [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Authenticator UserPassword [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -637,7 +629,7 @@ async fn run_with_lowlatency_transport(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_tcp() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
     run_with_universal_transport(&endpoint).await;
 }
@@ -645,7 +637,7 @@ async fn authenticator_tcp() {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_tcp_with_lowlatency_transport() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8100).parse().unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
@@ -653,7 +645,7 @@ async fn authenticator_tcp_with_lowlatency_transport() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_udp() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
     run_with_universal_transport(&endpoint).await;
 }
@@ -661,7 +653,7 @@ async fn authenticator_udp() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_udp_with_lowlatency_transport() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8110).parse().unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
@@ -670,7 +662,7 @@ async fn authenticator_udp_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn authenticator_unixpipe() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_test".parse().unwrap();
     run_with_universal_transport(&endpoint).await;
 }
@@ -679,7 +671,7 @@ async fn authenticator_unixpipe() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn authenticator_unixpipe_with_lowlatency_transport() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_with_lowlatency_transport"
         .parse()
         .unwrap();
@@ -690,7 +682,7 @@ async fn authenticator_unixpipe_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn authenticator_ws() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
     run_with_universal_transport(&endpoint).await;
 }
@@ -699,7 +691,7 @@ async fn authenticator_ws() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn authenticator_ws_with_lowlatency_transport() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8120).parse().unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
@@ -707,7 +699,7 @@ async fn authenticator_ws_with_lowlatency_transport() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_unix() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let f1 = "zenoh-test-unix-socket-10.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
@@ -721,7 +713,7 @@ async fn authenticator_unix() {
 async fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -821,7 +813,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 async fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real

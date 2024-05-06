@@ -11,29 +11,32 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{face_hat, face_hat_mut, get_routes_entries};
-use super::{HatCode, HatFace};
-use crate::net::routing::dispatcher::face::FaceState;
-use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::Tables;
-use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::HatPubSubTrait;
-use crate::net::routing::router::RoutesIndexes;
-use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::SubscriberId;
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc},
+};
+
 use zenoh_protocol::{
-    core::{Reliability, WhatAmI},
+    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI},
     network::declare::{
         common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareSubscriber, UndeclareSubscriber,
+        DeclareSubscriber, SubscriberId, UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
+
+use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        resource::{NodeId, Resource, SessionContext},
+        tables::{Route, RoutingExpr, Tables},
+    },
+    hat::{HatPubSubTrait, Sources},
+    router::RoutesIndexes,
+    RoutingContext, PREFIX_LIVELINESS,
+};
 
 #[inline]
 fn propagate_simple_subscription_to(
@@ -276,11 +279,19 @@ impl HatPubSubTrait for HatCode {
         forget_client_subscription(tables, face, id)
     }
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        let mut subs = HashSet::new();
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known suscriptions (keys)
+        let mut subs = HashMap::new();
         for src_face in tables.faces.values() {
             for sub in face_hat!(src_face).remote_subs.values() {
-                subs.insert(sub.clone());
+                // Insert the key in the list of known suscriptions
+                let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
+                // Append src_face as a suscription source in the proper list
+                match src_face.whatami {
+                    WhatAmI::Router => srcs.routers.push(src_face.zid),
+                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
+                    WhatAmI::Client => srcs.clients.push(src_face.zid),
+                }
             }
         }
         Vec::from_iter(subs)

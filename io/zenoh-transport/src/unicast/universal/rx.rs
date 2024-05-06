@@ -11,6 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::sync::MutexGuard;
+
+use zenoh_core::{zlock, zread};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{Priority, Reliability},
+    network::NetworkMessage,
+    transport::{Close, Fragment, Frame, KeepAlive, TransportBody, TransportMessage, TransportSn},
+};
+use zenoh_result::{bail, zerror, ZResult};
+
 use super::transport::TransportUnicastUniversal;
 use crate::{
     common::{
@@ -20,15 +31,6 @@ use crate::{
     unicast::transport_unicast_inner::TransportUnicastTrait,
     TransportPeerEventHandler,
 };
-use std::sync::MutexGuard;
-use zenoh_core::{zlock, zread};
-use zenoh_link::Link;
-use zenoh_protocol::{
-    core::{Priority, Reliability},
-    network::NetworkMessage,
-    transport::{Close, Fragment, Frame, KeepAlive, TransportBody, TransportMessage, TransportSn},
-};
-use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -42,8 +44,8 @@ impl TransportUnicastUniversal {
     ) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
         {
-            if self.config.is_shm {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.unicast.shm.reader)?;
+            if self.config.shm.is_some() {
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)?;
             }
         }
         callback.handle_message(msg)

@@ -11,22 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use crate::unicast::shared_memory_unicast::Challenge;
-use crate::{
-    common::batch::BatchConfig,
-    unicast::{
-        establishment::{compute_sn, ext, OpenFsm},
-        link::{
-            LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
-            TransportLinkUnicastDirection,
-        },
-        TransportConfigUnicast, TransportUnicast,
-    },
-    TransportManager,
-};
-use async_trait::async_trait;
 use std::time::Duration;
+
+use async_trait::async_trait;
 use zenoh_buffers::ZSlice;
 #[cfg(feature = "transport_auth")]
 use zenoh_core::zasynclock;
@@ -40,6 +27,23 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+
+#[cfg(feature = "shared-memory")]
+use super::ext::shm::AuthSegment;
+#[cfg(feature = "shared-memory")]
+use crate::shm::TransportShmConfig;
+use crate::{
+    common::batch::BatchConfig,
+    unicast::{
+        establishment::{compute_sn, ext, OpenFsm},
+        link::{
+            LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
+            TransportLinkUnicastDirection,
+        },
+        TransportConfigUnicast, TransportUnicast,
+    },
+    TransportManager,
+};
 
 type OpenError = (zenoh_result::Error, Option<u8>);
 
@@ -81,7 +85,7 @@ struct RecvInitAckOut {
     other_whatami: WhatAmI,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Challenge,
+    ext_shm: Option<AuthSegment>,
 }
 
 // OpenSyn
@@ -91,11 +95,13 @@ struct SendOpenSynIn {
     other_zid: ZenohId,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Challenge,
+    ext_shm: Option<AuthSegment>,
 }
 
 struct SendOpenSynOut {
     mine_initial_sn: TransportSn,
+    #[cfg(feature = "shared-memory")]
+    ext_shm: Option<AuthSegment>,
 }
 
 // OpenAck
@@ -110,7 +116,7 @@ struct OpenLink<'a> {
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::MultiLinkFsm<'a>,
     #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::ShmFsm<'a>,
+    ext_shm: Option<ext::shm::ShmFsm<'a>>,
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::AuthFsm<'a>,
     ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
@@ -138,14 +144,14 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
-        let ext_shm = zcondfeat!(
-            "shared-memory",
-            self.ext_shm
+        #[cfg(feature = "shared-memory")]
+        let ext_shm = match self.ext_shm.as_ref() {
+            Some(ext) => ext
                 .send_init_syn(&state.transport.ext_shm)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
-            None
-        );
+            None => None,
+        };
 
         // Extension Auth
         let ext_auth = zcondfeat!(
@@ -191,6 +197,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             batch_size: state.transport.batch_size,
             resolution: state.transport.resolution,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,
@@ -295,11 +302,13 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
 
         // Extension Shm
         #[cfg(feature = "shared-memory")]
-        let shm_challenge = self
-            .ext_shm
-            .recv_init_ack((&mut state.transport.ext_shm, init_ack.ext_shm))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        let shm_segment = match self.ext_shm.as_ref() {
+            Some(ext) => ext
+                .recv_init_ack(init_ack.ext_shm)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None => None,
+        };
 
         // Extension Auth
         #[cfg(feature = "transport_auth")]
@@ -333,7 +342,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             other_whatami: init_ack.whatami,
             other_cookie: init_ack.cookie,
             #[cfg(feature = "shared-memory")]
-            ext_shm: shm_challenge,
+            ext_shm: shm_segment,
         };
         Ok(output)
     }
@@ -354,14 +363,14 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
-        let ext_shm = zcondfeat!(
-            "shared-memory",
-            self.ext_shm
-                .send_open_syn((&state.transport.ext_shm, input.ext_shm))
+        #[cfg(feature = "shared-memory")]
+        let ext_shm = match self.ext_shm.as_ref() {
+            Some(ext_shm) => ext_shm
+                .send_open_syn(&input.ext_shm)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
-            None
-        );
+            None => None,
+        };
 
         // Extension Auth
         let ext_auth = zcondfeat!(
@@ -408,6 +417,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             initial_sn: mine_initial_sn,
             cookie: input.other_cookie,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,
@@ -421,7 +431,11 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        let output = SendOpenSynOut { mine_initial_sn };
+        let output = SendOpenSynOut {
+            mine_initial_sn,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: input.ext_shm,
+        };
         Ok(output)
     }
 
@@ -471,10 +485,11 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
 
         // Extension Shm
         #[cfg(feature = "shared-memory")]
-        self.ext_shm
-            .recv_open_ack((&mut state.transport.ext_shm, open_ack.ext_shm))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        if let Some(ext) = self.ext_shm.as_ref() {
+            ext.recv_open_ack((&mut state.transport.ext_shm, open_ack.ext_shm))
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?
+        };
 
         // Extension Auth
         #[cfg(feature = "transport_auth")]
@@ -531,7 +546,12 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
         #[cfg(feature = "shared-memory")]
-        ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
+        ext_shm: manager
+            .state
+            .unicast
+            .auth_shm
+            .as_ref()
+            .map(ext::shm::ShmFsm::new),
         #[cfg(feature = "transport_auth")]
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
         ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),
@@ -555,7 +575,7 @@ pub(crate) async fn open_link(
                 .multilink
                 .open(manager.config.unicast.max_links > 1),
             #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::StateOpen::new(manager.config.unicast.is_shm),
+            ext_shm: ext::shm::StateOpen::new(),
 
             ext_lowlatency: ext::lowlatency::StateOpen::new(manager.config.unicast.is_lowlatency),
         },
@@ -619,7 +639,10 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        is_shm: state.transport.ext_shm.is_shm(),
+        shm: match state.transport.ext_shm.negotiated_to_use_shm() {
+            true => osyn_out.ext_shm.map(TransportShmConfig::new),
+            false => None,
+        },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
 

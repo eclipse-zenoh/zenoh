@@ -17,6 +17,28 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use std::{
+    any::Any,
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
+    hash::Hasher,
+    sync::{atomic::AtomicU32, Arc},
+    time::Duration,
+};
+
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::{
+    common::ZExtBody,
+    network::{
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+        oam::id::OAM_LINKSTATE,
+        Oam,
+    },
+};
+use zenoh_result::ZResult;
+use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TerminatableTask;
+use zenoh_transport::unicast::TransportUnicast;
+
 use self::{
     network::{shared_nodes, Network},
     pubsub::{
@@ -33,38 +55,16 @@ use super::{
     },
     HatBaseTrait, HatTrait,
 };
-use crate::{
-    net::{
-        codec::Zenoh080Routing,
-        protocol::linkstate::LinkStateList,
-        routing::{
-            dispatcher::face::Face,
-            hat::TREES_COMPUTATION_DELAY_MS,
-            router::{compute_data_routes, compute_query_routes, RoutesIndexes},
-        },
+use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::linkstate::LinkStateList,
+    routing::{
+        dispatcher::face::Face,
+        hat::TREES_COMPUTATION_DELAY_MS,
+        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
     },
     runtime::Runtime,
 };
-use std::{
-    any::Any,
-    collections::{hash_map::DefaultHasher, HashMap, HashSet},
-    hash::Hasher,
-    sync::{atomic::AtomicU32, Arc},
-    time::Duration,
-};
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
-use zenoh_protocol::{
-    common::ZExtBody,
-    network::{
-        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
-        oam::id::OAM_LINKSTATE,
-        Oam,
-    },
-};
-use zenoh_result::ZResult;
-use zenoh_sync::get_mut_unchecked;
-use zenoh_task::TerminatableTask;
-use zenoh_transport::unicast::TransportUnicast;
 
 mod network;
 mod pubsub;

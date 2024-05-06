@@ -175,6 +175,7 @@
   //      ],
   //    },
   //  ],
+
   //  /// configure access control (ACL) rules 
   //  access_control: {
   //   ///[true/false] acl will be activated only if this is set to true
@@ -199,6 +200,7 @@
   //     },
   //  ]
   //},
+
   /// Configure internal transport parameters
   transport: {
     unicast: {
@@ -364,6 +366,8 @@
   /// Configure the Admin Space
   /// Unstable: this configuration part works as advertised, but may change in a future release
   adminspace: {
+    // Enables the admin space
+    enabled: false,
     // read and/or write permissions on the admin space
     permissions: {
       read: true,
@@ -374,9 +378,15 @@
   ///
   /// Plugins configurations
   ///
-  //  /// Directories where plugins configured by name should be looked for. Plugins configured by __path__ are not subject to lookup
-  //  plugins_search_dirs: [],
-  //  /// Plugins are only loaded if present in the configuration. When starting
+  //  
+  //  plugins_loading: {
+  //    // Enable plugins loading.
+  //    enabled: false,
+  //    /// Directories where plugins configured by name should be looked for. Plugins configured by __path__ are not subject to lookup.
+  //    /// If `enabled: true` and `search_dirs` is not specified then `search_dirs` falls back to the default value: ".:~/.zenoh/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib"
+  //    search_dirs: [],
+  //  },
+  //  /// Plugins are only loaded if `plugins_loading: { enabled: true }` and present in the configuration when starting.
   //  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
   //  plugins: {
   //    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzenoh_plugin_rest.so` would be searched for on linux)
@@ -385,7 +395,7 @@
   //    /// - If `__config__` is specified, it's content is merged into plugin configuration
   //    /// - Properties loaded from `__config__` file overrides existing properties
   //    /// - If json objects in loaded file contains `__config__` properties, they are processed recursively
-  //    ///   This is used in the 'storcge_manager' which supports subplugins, each with it's own config
+  //    ///   This is used in the 'storage_manager' which supports subplugins, each with it's own config
   //    ///
   //    /// See below exapmle of plugin configuration using `__config__` property
   //

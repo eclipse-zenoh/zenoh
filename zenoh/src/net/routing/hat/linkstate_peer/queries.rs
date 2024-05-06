@@ -11,35 +11,45 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::network::Network;
-use super::{face_hat, face_hat_mut, get_routes_entries, hat, hat_mut, res_hat, res_hat_mut};
-use super::{get_peer, HatCode, HatContext, HatFace, HatTables};
-use crate::net::routing::dispatcher::face::FaceState;
-use crate::net::routing::dispatcher::queries::*;
-use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::Tables;
-use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::HatQueriesTrait;
-use crate::net::routing::router::RoutesIndexes;
-use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc},
+};
+
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use zenoh_buffers::ZBuf;
-use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
-use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::QueryableId;
 use zenoh_protocol::{
-    core::{WhatAmI, WireExpr, ZenohId},
+    core::{
+        key_expr::{
+            include::{Includer, DEFAULT_INCLUDER},
+            OwnedKeyExpr,
+        },
+        WhatAmI, WireExpr, ZenohId,
+    },
     network::declare::{
         common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
-        DeclareQueryable, UndeclareQueryable,
+        DeclareQueryable, QueryableId, UndeclareQueryable,
     },
 };
 use zenoh_sync::get_mut_unchecked;
+
+use super::{
+    face_hat, face_hat_mut, get_peer, get_routes_entries, hat, hat_mut, network::Network, res_hat,
+    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+};
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        queries::*,
+        resource::{NodeId, Resource, SessionContext},
+        tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+    },
+    hat::{HatQueriesTrait, Sources},
+    router::RoutesIndexes,
+    RoutingContext, PREFIX_LIVELINESS,
+};
 
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
@@ -676,8 +686,31 @@ impl HatQueriesTrait for HatCode {
         }
     }
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        hat!(tables).peer_qabls.iter().cloned().collect()
+    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known queryables (keys)
+        hat!(tables)
+            .peer_qabls
+            .iter()
+            .map(|s| {
+                (
+                    s.clone(),
+                    // Compute the list of routers, peers and clients that are known
+                    // sources of those queryables
+                    Sources {
+                        routers: vec![],
+                        peers: Vec::from_iter(res_hat!(s).peer_qabls.keys().cloned()),
+                        clients: s
+                            .session_ctxs
+                            .values()
+                            .filter_map(|f| {
+                                (f.face.whatami == WhatAmI::Client && f.qabl.is_some())
+                                    .then_some(f.face.zid)
+                            })
+                            .collect(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn compute_query_route(

@@ -10,11 +10,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::any::Any;
-use std::convert::TryFrom;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    any::Any,
+    convert::TryFrom,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use tokio::sync::Barrier;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
@@ -145,7 +150,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             println!("[Transport Peer 01a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
-        let locs = peer01_manager.get_listeners().await;
+        let locs = ztimeout!(peer01_manager.get_listeners());
         println!("[Transport Peer 01b] => Getting endpoints: {c_end01:?} {locs:?}");
         assert_eq!(c_end01.len(), locs.len());
 
@@ -173,11 +178,8 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         println!("[Transport Peer 01e] => Waiting... OK");
 
         // Verify that the transport has been correctly open
-        assert_eq!(peer01_manager.get_transports_unicast().await.len(), 1);
-        let s02 = peer01_manager
-            .get_transport_unicast(&c_zid02)
-            .await
-            .unwrap();
+        assert_eq!(ztimeout!(peer01_manager.get_transports_unicast()).len(), 1);
+        let s02 = ztimeout!(peer01_manager.get_transport_unicast(&c_zid02)).unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
@@ -246,7 +248,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             println!("[Transport Peer 02a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
-        let locs = peer02_manager.get_listeners().await;
+        let locs = ztimeout!(peer02_manager.get_listeners());
         println!("[Transport Peer 02b] => Getting endpoints: {c_end02:?} {locs:?}");
         assert_eq!(c_end02.len(), locs.len());
 
@@ -276,13 +278,10 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Verify that the transport has been correctly open
         println!(
             "[Transport Peer 02e] => Transports: {:?}",
-            peer02_manager.get_transports_unicast().await
+            ztimeout!(peer02_manager.get_transports_unicast())
         );
-        assert_eq!(peer02_manager.get_transports_unicast().await.len(), 1);
-        let s01 = peer02_manager
-            .get_transport_unicast(&c_zid01)
-            .await
-            .unwrap();
+        assert_eq!(ztimeout!(peer02_manager.get_transports_unicast()).len(), 1);
+        let s01 = ztimeout!(peer02_manager.get_transport_unicast(&c_zid01)).unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
@@ -348,7 +347,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 #[cfg(feature = "transport_tcp")]
 #[tokio::test]
 async fn transport_tcp_concurrent() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let endpoint01: Vec<EndPoint> = vec![
         format!("tcp/127.0.0.1:{}", 9000).parse().unwrap(),
@@ -378,7 +377,7 @@ async fn transport_tcp_concurrent() {
 #[tokio::test]
 #[ignore]
 async fn transport_ws_concurrent() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let endpoint01: Vec<EndPoint> = vec![
         format!("ws/127.0.0.1:{}", 9020).parse().unwrap(),
@@ -408,7 +407,7 @@ async fn transport_ws_concurrent() {
 #[tokio::test]
 #[ignore]
 async fn transport_unixpipe_concurrent() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let endpoint01: Vec<EndPoint> = vec![
         "unixpipe/transport_unixpipe_concurrent".parse().unwrap(),

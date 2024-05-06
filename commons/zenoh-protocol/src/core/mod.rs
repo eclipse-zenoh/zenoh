@@ -23,6 +23,7 @@ use core::{
     hash::Hash,
     str::FromStr,
 };
+
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
@@ -33,7 +34,6 @@ pub type TimestampId = uhlc::ID;
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;
 pub use whatami::*;
-
 pub use zenoh_keyexpr::key_expr;
 
 pub mod wire_expr;

@@ -17,25 +17,27 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use std::{borrow::Cow, convert::TryFrom, str::FromStr, sync::Arc};
+
 use async_std::prelude::FutureExt;
 use base64::Engine;
 use futures::StreamExt;
 use http_types::Method;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::convert::TryFrom;
-use std::str::FromStr;
-use std::sync::Arc;
-use tide::http::Mime;
-use tide::sse::Sender;
-use tide::{Request, Response, Server, StatusCode};
-use zenoh::bytes::StringOrBase64;
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::r#async::*;
-use zenoh::query::{QueryConsolidation, Reply};
-use zenoh::runtime::Runtime;
-use zenoh::selector::TIME_RANGE_KEY;
-use zenoh::Session;
+use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
+use zenoh::{
+    bytes::{StringOrBase64, ZBytes},
+    core::try_init_log_from_env,
+    encoding::Encoding,
+    key_expr::{keyexpr, KeyExpr},
+    plugins::{RunningPluginTrait, ZenohPlugin},
+    query::{QueryConsolidation, Reply},
+    runtime::Runtime,
+    sample::{Sample, SampleKind, ValueBuilderTrait},
+    selector::{Selector, TIME_RANGE_KEY},
+    session::{Session, SessionDeclarations},
+    value::Value,
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -240,7 +242,7 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::init_log_from_env();
+        try_init_log_from_env();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -346,13 +348,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let sub = req
-                        .state()
-                        .0
-                        .declare_subscriber(&key_expr)
-                        .res()
-                        .await
-                        .unwrap();
+                    let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
                         let json_sample =
@@ -370,7 +366,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                                     e,
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -380,7 +376,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                                     "SSE timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -424,7 +420,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 .unwrap_or_default();
             query = query.payload(body).encoding(encoding);
         }
-        match query.res().await {
+        match query.await {
             Ok(receiver) => {
                 if raw {
                     Ok(to_raw_response(receiver).await)
@@ -466,8 +462,8 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             // @TODO: Define the right congestion control value
             let session = &req.state().0;
             let res = match method_to_kind(req.method()) {
-                SampleKind::Put => session.put(&key_expr, bytes).encoding(encoding).res().await,
-                SampleKind::Delete => session.delete(&key_expr).res().await,
+                SampleKind::Put => session.put(&key_expr, bytes).encoding(encoding).await,
+                SampleKind::Delete => session.delete(&key_expr).await,
             };
             match res {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
@@ -490,10 +486,10 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    zenoh_util::init_log_from_env();
+    try_init_log_from_env();
 
     let zid = runtime.zid().to_string();
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));
     app.with(

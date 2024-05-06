@@ -11,15 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::any::Any;
-use std::convert::TryFrom;
-use std::fmt::Write as _;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    any::Any,
+    convert::TryFrom,
+    fmt::Write as _,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
-use zenoh_protocol::network::NetworkBody;
 use zenoh_protocol::{
     core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
     network::{
@@ -27,7 +31,7 @@ use zenoh_protocol::{
             ext::{NodeIdType, QoSType},
             Push,
         },
-        NetworkMessage,
+        NetworkBody, NetworkMessage,
     },
     zenoh::Put,
 };
@@ -227,10 +231,7 @@ async fn open_transport_unicast(
         let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
-    let client_transport = client_manager
-        .get_transport_unicast(&router_id)
-        .await
-        .unwrap();
+    let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
 
     // Return the handlers
     (
@@ -332,7 +333,7 @@ async fn run(endpoints: &[EndPoint]) {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn priorities_tcp_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 10000).parse().unwrap()];
     // Run
@@ -343,7 +344,7 @@ async fn priorities_tcp_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn conduits_unixpipe_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     // Define the locators
     let endpoints: Vec<EndPoint> = vec!["unixpipe/conduits_unixpipe_only"
         .to_string()
@@ -356,7 +357,7 @@ async fn conduits_unixpipe_only() {
 #[cfg(feature = "transport_ws")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn priorities_ws_only() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 10010).parse().unwrap()];
     // Run

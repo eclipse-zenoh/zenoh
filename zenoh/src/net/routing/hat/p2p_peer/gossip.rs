@@ -11,22 +11,29 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::codec::Zenoh080Routing;
-use crate::net::protocol::linkstate::{LinkState, LinkStateList};
-use crate::net::runtime::Runtime;
-use crate::runtime::WeakRuntime;
-use petgraph::graph::NodeIndex;
 use std::convert::TryInto;
+
+use petgraph::graph::NodeIndex;
+use rand::Rng;
 use vec_map::VecMap;
-use zenoh_buffers::writer::{DidntWrite, HasWriter};
-use zenoh_buffers::ZBuf;
+use zenoh_buffers::{
+    writer::{DidntWrite, HasWriter},
+    ZBuf,
+};
 use zenoh_codec::WCodec;
 use zenoh_link::Locator;
-use zenoh_protocol::common::ZExtBody;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
-use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
-use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
+use zenoh_protocol::{
+    common::ZExtBody,
+    core::{WhatAmI, WhatAmIMatcher, ZenohId},
+    network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
+};
 use zenoh_transport::unicast::TransportUnicast;
+
+use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::linkstate::{LinkState, LinkStateList},
+    runtime::{Runtime, WeakRuntime},
+};
 
 #[derive(Clone)]
 struct Details {
@@ -406,24 +413,25 @@ impl Network {
                         );
                     }
 
-                    if !self.autoconnect.is_empty() {
+                    if !self.autoconnect.is_empty() && self.autoconnect.matches(whatami) {
                         // Connect discovered peers
-                        if zenoh_runtime::ZRuntime::Acceptor
-                            .block_in_place(strong_runtime.manager().get_transport_unicast(&zid))
-                            .is_none()
-                            && self.autoconnect.matches(whatami)
-                        {
-                            if let Some(locators) = locators {
-                                let runtime = strong_runtime.clone();
-                                strong_runtime.spawn(async move {
+                        if let Some(locators) = locators {
+                            let runtime = strong_runtime.clone();
+                            strong_runtime.spawn(async move {
+                                if runtime
+                                    .manager()
+                                    .get_transport_unicast(&zid)
+                                    .await
+                                    .is_none()
+                                {
                                     // random backoff
-                                    tokio::time::sleep(std::time::Duration::from_millis(
-                                        rand::random::<u64>() % 100,
-                                    ))
-                                    .await;
+                                    let sleep_time = std::time::Duration::from_millis(
+                                        rand::thread_rng().gen_range(0..100),
+                                    );
+                                    tokio::time::sleep(sleep_time).await;
                                     runtime.connect_peer(&zid, &locators).await;
-                                });
-                            }
+                                }
+                            });
                         }
                     }
                 }

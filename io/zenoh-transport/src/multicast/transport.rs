@@ -11,16 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::priority::{TransportPriorityRx, TransportPriorityTx};
-use super::link::{TransportLinkMulticastConfigUniversal, TransportLinkMulticastUniversal};
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
-use crate::{
-    multicast::{
-        link::TransportLinkMulticast, TransportConfigMulticast, TransportMulticastEventHandler,
-    },
-    TransportManager, TransportPeer, TransportPeerEventHandler,
-};
 use std::{
     collections::HashMap,
     sync::{
@@ -29,17 +19,31 @@ use std::{
     },
     time::Duration,
 };
+
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zcondfeat, zread, zwrite};
 use zenoh_link::{Link, Locator};
-use zenoh_protocol::core::Resolution;
-use zenoh_protocol::transport::{batch_size, Close, TransportMessage};
 use zenoh_protocol::{
-    core::{Bits, Field, Priority, WhatAmI, ZenohId},
-    transport::{close, Join},
+    core::{Bits, Field, Priority, Resolution, WhatAmI, ZenohId},
+    transport::{batch_size, close, Close, Join, TransportMessage},
 };
 use zenoh_result::{bail, ZResult};
 use zenoh_task::TaskController;
+
+use super::{
+    common::priority::{TransportPriorityRx, TransportPriorityTx},
+    link::{TransportLinkMulticastConfigUniversal, TransportLinkMulticastUniversal},
+};
+#[cfg(feature = "shared-memory")]
+use crate::shm::MulticastTransportShmConfig;
+#[cfg(feature = "stats")]
+use crate::stats::TransportStats;
+use crate::{
+    multicast::{
+        link::TransportLinkMulticast, TransportConfigMulticast, TransportMulticastEventHandler,
+    },
+    TransportManager, TransportPeer, TransportPeerEventHandler,
+};
 // use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 /*************************************/
@@ -88,6 +92,8 @@ pub(crate) struct TransportMulticastInner {
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm: Option<MulticastTransportShmConfig>,
 }
 
 impl TransportMulticastInner {
@@ -109,6 +115,12 @@ impl TransportMulticastInner {
         #[cfg(feature = "stats")]
         let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
 
+        #[cfg(feature = "shared-memory")]
+        let shm = match manager.config.multicast.is_shm {
+            true => Some(MulticastTransportShmConfig),
+            false => None,
+        };
+
         let ti = TransportMulticastInner {
             manager,
             priority_tx: priority_tx.into_boxed_slice().into(),
@@ -119,6 +131,8 @@ impl TransportMulticastInner {
             task_controller: TaskController::default(),
             #[cfg(feature = "stats")]
             stats,
+            #[cfg(feature = "shared-memory")]
+            shm,
         };
 
         let link = TransportLinkMulticastUniversal::new(ti.clone(), config.link);

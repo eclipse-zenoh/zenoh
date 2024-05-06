@@ -11,15 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
 use std::marker::PhantomData;
+
 use zenoh_result::ZResult;
+
+use crate::*;
 
 pub struct StaticPlugin<StartArgs, Instance: PluginInstance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
     instance: Option<Instance>,
+    required: bool,
     phantom: PhantomData<P>,
 }
 
@@ -27,9 +30,10 @@ impl<StartArgs, Instance: PluginInstance, P> StaticPlugin<StartArgs, Instance, P
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
-    pub fn new() -> Self {
+    pub fn new(required: bool) -> Self {
         Self {
             instance: None,
+            required,
             phantom: PhantomData,
         }
     }
@@ -49,7 +53,7 @@ where
         Some(P::PLUGIN_LONG_VERSION)
     }
     fn path(&self) -> &str {
-        "<static>"
+        "__static_lib__"
     }
     fn state(&self) -> PluginState {
         self.instance
@@ -91,6 +95,9 @@ where
 {
     fn as_status(&self) -> &dyn PluginStatus {
         self
+    }
+    fn required(&self) -> bool {
+        self.required
     }
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         if self.instance.is_none() {

@@ -11,15 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+use core::{mem, num::NonZeroUsize, option};
+
 use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
 };
-use core::{mem, num::NonZeroUsize, option};
-
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
 
 /// Allocate a vector with a given capacity and sets the length to that capacity.
 #[must_use]

@@ -11,11 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{
+    env::consts::{DLL_PREFIX, DLL_SUFFIX},
+    ffi::OsString,
+    ops::Deref,
+    path::PathBuf,
+};
+
 use libloading::Library;
-use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
-use std::ffi::OsString;
-use std::ops::Deref;
-use std::path::PathBuf;
 use tracing::{debug, warn};
 use zenoh_core::zconfigurable;
 use zenoh_result::{bail, ZResult};
@@ -36,6 +39,13 @@ pub struct LibLoader {
 }
 
 impl LibLoader {
+    /// Return an empty `LibLoader`.
+    pub fn empty() -> LibLoader {
+        LibLoader {
+            search_paths: Vec::new(),
+        }
+    }
+
     /// Returns the list of search paths used by `LibLoader::default()`
     pub fn default_search_paths() -> &'static str {
         &LIB_DEFAULT_SEARCH_PATHS

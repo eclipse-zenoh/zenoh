@@ -11,22 +11,25 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{arg, Parser};
 use std::time::Duration;
-use zenoh::config::{Config, ModeDependentValue};
-use zenoh::prelude::r#async::*;
+
+use clap::{arg, Parser};
+use zenoh::{
+    config::{Config, ModeDependentValue},
+    prelude::*,
+};
 use zenoh_ext::*;
 use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (config, key_expr, value, history, prefix, complete) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring PublicationCache on {}", &key_expr);
     let mut publication_cache_builder = session
@@ -36,14 +39,14 @@ async fn main() {
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);
     }
-    let _publication_cache = publication_cache_builder.res().await.unwrap();
+    let _publication_cache = publication_cache_builder.await.unwrap();
 
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {value}");
         println!("Put Data ('{}': '{}')", &key_expr, buf);
-        session.put(&key_expr, buf).res().await.unwrap();
+        session.put(&key_expr, buf).await.unwrap();
     }
 }
 

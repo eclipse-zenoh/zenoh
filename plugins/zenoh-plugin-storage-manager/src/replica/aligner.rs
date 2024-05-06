@@ -12,18 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{Digest, EraType, LogEntry, Snapshotter};
-use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
+use std::{
+    collections::{HashMap, HashSet},
+    str,
+};
+
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
-use std::collections::{HashMap, HashSet};
-use std::str;
-use zenoh::bytes::StringOrBase64;
-use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
-use zenoh::prelude::r#async::*;
-use zenoh::sample::builder::SampleBuilder;
-use zenoh::time::Timestamp;
-use zenoh::Session;
+use zenoh::prelude::*;
+
+use super::{Digest, EraType, LogEntry, Snapshotter, CONTENTS, ERA, INTERVALS, SUBINTERVALS};
 
 pub struct Aligner {
     session: Arc<Session>,
@@ -316,10 +314,10 @@ impl Aligner {
 
     async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
         let mut no_err = true;
-        let selector = KeyExpr::from(&self.digest_key)
-            .join(&from)
-            .unwrap()
-            .with_parameters(&properties);
+        let selector = Selector::new(
+            KeyExpr::from(&self.digest_key).join(&from).unwrap(),
+            properties,
+        );
         tracing::trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         match self
@@ -327,7 +325,6 @@ impl Aligner {
             .get(&selector)
             .consolidation(zenoh::query::ConsolidationMode::None)
             .accept_replies(zenoh::query::ReplyKeyExpr::Any)
-            .res()
             .await
         {
             Ok(replies) => {

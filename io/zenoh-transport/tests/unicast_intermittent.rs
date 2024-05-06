@@ -11,12 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::any::Any;
-use std::convert::TryFrom;
-use std::io::Write;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    any::Any,
+    convert::TryFrom,
+    io::Write,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -220,7 +225,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     // Add a listener to the router
     println!("\nTransport Intermittent [1a1]");
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
-    let locators = router_manager.get_listeners().await;
+    let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Intermittent [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -228,7 +233,10 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     // Open a transport from client01 to the router
     let c_ses1 = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone())).unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
-    assert_eq!(client01_manager.get_transports_unicast().await.len(), 1);
+    assert_eq!(
+        ztimeout!(client01_manager.get_transports_unicast()).len(),
+        1
+    );
     assert_eq!(c_ses1.get_zid().unwrap(), router_id);
 
     /* [3] */
@@ -244,7 +252,10 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             let c_ses2 =
                 ztimeout!(c_client02_manager.open_transport_unicast(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
-            assert_eq!(c_client02_manager.get_transports_unicast().await.len(), 1);
+            assert_eq!(
+                ztimeout!(c_client02_manager.get_transports_unicast()).len(),
+                1
+            );
             assert_eq!(c_ses2.get_zid().unwrap(), c_router_id);
 
             tokio::time::sleep(SLEEP).await;
@@ -269,7 +280,10 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             let c_ses3 =
                 ztimeout!(c_client03_manager.open_transport_unicast(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
-            assert_eq!(c_client03_manager.get_transports_unicast().await.len(), 1);
+            assert_eq!(
+                ztimeout!(c_client03_manager.get_transports_unicast()).len(),
+                1
+            );
             assert_eq!(c_ses3.get_zid().unwrap(), c_router_id);
 
             tokio::time::sleep(SLEEP).await;
@@ -361,15 +375,15 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     /* [5] */
     // Close the open transport on the client
     println!("Transport Intermittent [5a1]");
-    for s in client01_manager.get_transports_unicast().await.iter() {
+    for s in ztimeout!(client01_manager.get_transports_unicast()).iter() {
         ztimeout!(s.close()).unwrap();
     }
     println!("Transport Intermittent [5a2]");
-    for s in client02_manager.get_transports_unicast().await.iter() {
+    for s in ztimeout!(client02_manager.get_transports_unicast()).iter() {
         ztimeout!(s.close()).unwrap();
     }
     println!("Transport Intermittent [5a3]");
-    for s in client03_manager.get_transports_unicast().await.iter() {
+    for s in ztimeout!(client03_manager.get_transports_unicast()).iter() {
         ztimeout!(s.close()).unwrap();
     }
 
@@ -414,7 +428,7 @@ async fn lowlatency_transport_intermittent(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_tcp_intermittent() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
@@ -422,7 +436,7 @@ async fn transport_tcp_intermittent() {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_tcp_intermittent_for_lowlatency_transport() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12100).parse().unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
@@ -431,7 +445,7 @@ async fn transport_tcp_intermittent_for_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn transport_ws_intermittent() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
@@ -440,7 +454,7 @@ async fn transport_ws_intermittent() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn transport_ws_intermittent_for_lowlatency_transport() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12110).parse().unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
@@ -449,7 +463,7 @@ async fn transport_ws_intermittent_for_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn transport_unixpipe_intermittent() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent".parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
@@ -458,7 +472,7 @@ async fn transport_unixpipe_intermittent() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn transport_unixpipe_intermittent_for_lowlatency_transport() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent_for_lowlatency_transport"
         .parse()
         .unwrap();
@@ -468,7 +482,7 @@ async fn transport_unixpipe_intermittent_for_lowlatency_transport() {
 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_vsock_intermittent() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }

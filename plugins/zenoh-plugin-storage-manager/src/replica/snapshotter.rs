@@ -11,18 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{Digest, DigestConfig, LogEntry};
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
-use async_std::task::sleep;
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    time::Duration,
+};
+
+use async_std::{
+    stream::{interval, StreamExt},
+    sync::{Arc, RwLock},
+    task::sleep,
+};
 use flume::Receiver;
 use futures::join;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::time::Duration;
-use zenoh::key_expr::OwnedKeyExpr;
-use zenoh::time::Timestamp;
+use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp};
 use zenoh_backend_traits::config::ReplicaConfig;
+
+use super::{Digest, DigestConfig, LogEntry};
 
 pub struct Snapshotter {
     // channel to get updates from the storage
@@ -113,8 +118,11 @@ impl Snapshotter {
     // Periodically update parameters for snapshot
     async fn task_update_snapshot_params(&self) {
         sleep(Duration::from_secs(2)).await;
+
+        let mut interval = interval(self.replica_config.delta);
         loop {
-            sleep(self.replica_config.delta).await;
+            let _ = interval.next().await;
+
             let mut last_snapshot_time = self.content.last_snapshot_time.write().await;
             let mut last_interval = self.content.last_interval.write().await;
             let (time, interval) = Snapshotter::compute_snapshot_params(
@@ -258,8 +266,7 @@ impl Snapshotter {
             *last_snapshot_time,
             new_stable_content,
             deleted_content,
-        )
-        .await;
+        );
         *digest = updated_digest;
     }
 
@@ -304,8 +311,7 @@ impl Snapshotter {
             *last_snapshot_time,
             new_stable,
             deleted_stable,
-        )
-        .await;
+        );
         *digest = updated_digest;
         drop(digest);
 

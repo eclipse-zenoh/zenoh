@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::num::NonZeroUsize;
+
 use zenoh_buffers::{
     buffer::Buffer,
     reader::{DidntRead, HasReader},
@@ -423,7 +424,7 @@ impl RBatch {
     pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
     where
         C: Fn() -> T + Copy,
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         #[allow(unused_variables)]
         let (l, h, p) = Self::split(self.buffer.as_slice(), &self.config);
@@ -455,10 +456,10 @@ impl RBatch {
     #[cfg(feature = "transport_compression")]
     fn decompress<T>(&self, payload: &[u8], mut buff: impl FnMut() -> T) -> ZResult<ZSlice>
     where
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         let mut into = (buff)();
-        let n = lz4_flex::block::decompress_into(payload, into.as_mut_slice())
+        let n = lz4_flex::block::decompress_into(payload, into.as_mut())
             .map_err(|_| zerror!("Decompression error"))?;
         let zslice = ZSlice::new(Arc::new(into), 0, n)
             .map_err(|_| zerror!("Invalid decompression buffer length"))?;
@@ -497,7 +498,6 @@ impl Decode<(TransportMessage, BatchSize)> for &mut RBatch {
 mod tests {
     use std::vec;
 
-    use super::*;
     use rand::Rng;
     use zenoh_buffers::ZBuf;
     use zenoh_core::zcondfeat;
@@ -510,6 +510,8 @@ mod tests {
         },
         zenoh::{PushBody, Put},
     };
+
+    use super::*;
 
     #[test]
     fn rw_batch() {

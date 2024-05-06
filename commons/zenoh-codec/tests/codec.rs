@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::convert::TryFrom;
+
 use rand::{
     distributions::{Alphanumeric, DistString},
     *,
 };
-use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     writer::HasWriter,
@@ -360,15 +361,25 @@ fn codec_encoding() {
 #[cfg(feature = "shared-memory")]
 #[test]
 fn codec_shm_info() {
-    use zenoh_shm::SharedMemoryBufInfo;
+    use zenoh_shm::{
+        api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
+        watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
+    };
 
     run!(SharedMemoryBufInfo, {
         let mut rng = rand::thread_rng();
-        let len = rng.gen_range(0..16);
         SharedMemoryBufInfo::new(
+            ChunkDescriptor::new(rng.gen(), rng.gen(), rng.gen()),
             rng.gen(),
             rng.gen(),
-            Alphanumeric.sample_string(&mut rng, len),
+            Descriptor {
+                id: rng.gen(),
+                index_and_bitpos: rng.gen(),
+            },
+            HeaderDescriptor {
+                id: rng.gen(),
+                index: rng.gen(),
+            },
             rng.gen(),
         )
     });
@@ -377,7 +388,7 @@ fn codec_shm_info() {
 // Common
 #[test]
 fn codec_extension() {
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     macro_rules! run_extension_single {
         ($ext:ty, $buff:expr) => {

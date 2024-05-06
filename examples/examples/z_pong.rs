@@ -12,18 +12,21 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::sync::*;
-use zenoh::publication::CongestionControl;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
-    let (config, express) = parse_args();
+    let (mut config, express) = parse_args();
 
-    let session = zenoh::open(config).res().unwrap().into_arc();
+    // A probing procedure for shared memory is performed upon session opening. To enable `z_ping_shm` to operate
+    // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
+    // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
+    config.transport.shared_memory.set_enabled(true).unwrap();
+
+    let session = zenoh::open(config).wait().unwrap().into_arc();
 
     // The key expression to read the data from
     let key_expr_ping = keyexpr::new("test/ping").unwrap();
@@ -35,13 +38,13 @@ fn main() {
         .declare_publisher(key_expr_pong)
         .congestion_control(CongestionControl::Block)
         .express(express)
-        .res()
+        .wait()
         .unwrap();
 
     let _sub = session
         .declare_subscriber(key_expr_ping)
-        .callback(move |sample| publisher.put(sample.payload().clone()).res().unwrap())
-        .res()
+        .callback(move |sample| publisher.put(sample.payload().clone()).wait().unwrap())
+        .wait()
         .unwrap();
     std::thread::park();
 }

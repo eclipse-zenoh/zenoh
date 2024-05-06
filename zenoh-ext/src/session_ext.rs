@@ -11,11 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{convert::TryInto, sync::Arc};
+
+use zenoh::{
+    core::Error,
+    key_expr::KeyExpr,
+    session::{Session, SessionRef},
+};
+
 use super::PublicationCacheBuilder;
-use std::convert::TryInto;
-use std::sync::Arc;
-use zenoh::prelude::KeyExpr;
-use zenoh::{Session, SessionRef};
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
 pub trait SessionExt<'s, 'a> {
@@ -25,7 +29,7 @@ pub trait SessionExt<'s, 'a> {
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>;
 }
 
 impl<'s, 'a> SessionExt<'s, 'a> for SessionRef<'a> {
@@ -35,7 +39,7 @@ impl<'s, 'a> SessionExt<'s, 'a> for SessionRef<'a> {
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
     {
         PublicationCacheBuilder::new(self.clone(), pub_key_expr.try_into().map_err(Into::into))
     }
@@ -48,7 +52,7 @@ impl<'a> SessionExt<'a, 'a> for Session {
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
     {
         SessionRef::Borrow(self).declare_publication_cache(pub_key_expr)
     }
@@ -59,14 +63,14 @@ impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::config::ModeDependentValue::Unique;
     /// use zenoh_ext::SessionExt;
     ///
     /// let mut config = config::default();
     /// config.timestamping.set_enabled(Some(Unique(true)));
-    /// let session = zenoh::open(config).res().await.unwrap().into_arc();
-    /// let publication_cache = session.declare_publication_cache("key/expression").res().await.unwrap();
+    /// let session = zenoh::open(config).await.unwrap().into_arc();
+    /// let publication_cache = session.declare_publication_cache("key/expression").await.unwrap();
     /// tokio::task::spawn(async move {
     ///     publication_cache.key_expr();
     /// }).await;
@@ -78,7 +82,7 @@ impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     ) -> PublicationCacheBuilder<'static, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
     {
         SessionRef::Shared(self.clone()).declare_publication_cache(pub_key_expr)
     }

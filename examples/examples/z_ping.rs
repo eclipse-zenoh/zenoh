@@ -11,19 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
 use std::time::{Duration, Instant};
-use zenoh::config::Config;
-use zenoh::prelude::sync::*;
-use zenoh::publication::CongestionControl;
+
+use clap::Parser;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (config, warmup, size, n, express) = parse_args();
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     // The key expression to publish data on
     let key_expr_ping = keyexpr::new("test/ping").unwrap();
@@ -31,12 +30,12 @@ fn main() {
     // The key expression to wait the response back
     let key_expr_pong = keyexpr::new("test/pong").unwrap();
 
-    let sub = session.declare_subscriber(key_expr_pong).res().unwrap();
+    let sub = session.declare_subscriber(key_expr_pong).wait().unwrap();
     let publisher = session
         .declare_publisher(key_expr_ping)
         .congestion_control(CongestionControl::Block)
         .express(express)
-        .res()
+        .wait()
         .unwrap();
 
     let data: ZBytes = (0usize..size)
@@ -51,7 +50,7 @@ fn main() {
     let now = Instant::now();
     while now.elapsed() < warmup {
         let data = data.clone();
-        publisher.put(data).res().unwrap();
+        publisher.put(data).wait().unwrap();
 
         let _ = sub.recv();
     }
@@ -59,7 +58,7 @@ fn main() {
     for _ in 0..n {
         let data = data.clone();
         let write_time = Instant::now();
-        publisher.put(data).res().unwrap();
+        publisher.put(data).wait().unwrap();
 
         let _ = sub.recv();
         let ts = write_time.elapsed().as_micros();

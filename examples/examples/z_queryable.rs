@@ -12,29 +12,32 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
-    let (config, key_expr, value, complete) = parse_args();
+    let (mut config, key_expr, value, complete) = parse_args();
+
+    // A probing procedure for shared memory is performed upon session opening. To enable `z_get_shm` to operate
+    // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
+    // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
+    config.transport.shared_memory.set_enabled(true).unwrap();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
         .declare_queryable(&key_expr)
-        // // By default queryable receives queries from a FIFO. 
-        // // Uncomment this line to use a ring channel instead. 
+        // // By default queryable receives queries from a FIFO.
+        // // Uncomment this line to use a ring channel instead.
         // // More information on the ring channel are available in the z_pull example.
         // .with(zenoh::handlers::RingChannel::default())
         .complete(complete)
-        .res()
         .await
         .unwrap();
 
@@ -61,7 +64,6 @@ async fn main() {
         );
         query
             .reply(key_expr.clone(), value.clone())
-            .res()
             .await
             .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
     }

@@ -12,7 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::sync::{Arc, Mutex};
-use zenoh_core::zlock;
+
+use zenoh::{internal::zlock, prelude::*};
+
+#[cfg(target_os = "windows")]
+static MINIMAL_SLEEP_INTERVAL_MS: u64 = 17;
+#[cfg(not(target_os = "windows"))]
+static MINIMAL_SLEEP_INTERVAL_MS: u64 = 2;
 
 struct IntervalCounter {
     first_tick: bool,
@@ -59,9 +65,7 @@ impl IntervalCounter {
 }
 
 fn downsampling_by_keyexpr_impl(egress: bool) {
-    zenoh_util::init_log_from_env();
-
-    use zenoh::prelude::sync::*;
+    zenoh_util::try_init_log_from_env();
 
     let ds_cfg = format!(
         r#"
@@ -90,7 +94,7 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    let zenoh_sub = zenoh::open(config_sub).res().unwrap();
+    let zenoh_sub = zenoh::open(config_sub).wait().unwrap();
 
     let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
     let counter_r100_clone = counter_r100.clone();
@@ -111,7 +115,7 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
                 zlock!(counter_r50).tick();
             }
         })
-        .res()
+        .wait()
         .unwrap();
 
     // declare publisher
@@ -127,29 +131,29 @@ fn downsampling_by_keyexpr_impl(egress: bool) {
         .multicast
         .set_enabled(Some(false))
         .unwrap();
-    let zenoh_pub = zenoh::open(config_pub).res().unwrap();
+    let zenoh_pub = zenoh::open(config_pub).wait().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples_by_keyexp/r100")
-        .res()
+        .wait()
         .unwrap();
 
     let publisher_r50 = zenoh_pub
         .declare_publisher("test/downsamples_by_keyexp/r50")
-        .res()
+        .wait()
         .unwrap();
 
     let publisher_all = zenoh_pub
         .declare_publisher("test/downsamples_by_keyexp/all")
-        .res()
+        .wait()
         .unwrap();
 
     // WARN(yuyuan): 2 ms is the limit of tokio
-    let interval = std::time::Duration::from_millis(2);
+    let interval = std::time::Duration::from_millis(MINIMAL_SLEEP_INTERVAL_MS);
     let messages_count = 1000;
     for i in 0..messages_count {
-        publisher_r100.put(format!("message {}", i)).res().unwrap();
-        publisher_r50.put(format!("message {}", i)).res().unwrap();
-        publisher_all.put(format!("message {}", i)).res().unwrap();
+        publisher_r100.put(format!("message {}", i)).wait().unwrap();
+        publisher_r50.put(format!("message {}", i)).wait().unwrap();
+        publisher_all.put(format!("message {}", i)).wait().unwrap();
         std::thread::sleep(interval);
     }
 
@@ -176,9 +180,7 @@ fn downsampling_by_keyexpr() {
 
 #[cfg(unix)]
 fn downsampling_by_interface_impl(egress: bool) {
-    zenoh_util::init_log_from_env();
-
-    use zenoh::prelude::sync::*;
+    zenoh_util::try_init_log_from_env();
 
     let ds_cfg = format!(
         r#"
@@ -208,7 +210,7 @@ fn downsampling_by_interface_impl(egress: bool) {
     if !egress {
         config_sub.insert_json5("downsampling", &ds_cfg).unwrap();
     };
-    let zenoh_sub = zenoh::open(config_sub).res().unwrap();
+    let zenoh_sub = zenoh::open(config_sub).wait().unwrap();
 
     let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
     let counter_r100_clone = counter_r100.clone();
@@ -225,7 +227,7 @@ fn downsampling_by_interface_impl(egress: bool) {
                 zlock!(counter_r100).tick();
             }
         })
-        .res()
+        .wait()
         .unwrap();
 
     // declare publisher
@@ -236,23 +238,23 @@ fn downsampling_by_interface_impl(egress: bool) {
     if egress {
         config_pub.insert_json5("downsampling", &ds_cfg).unwrap();
     }
-    let zenoh_pub = zenoh::open(config_pub).res().unwrap();
+    let zenoh_pub = zenoh::open(config_pub).wait().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples_by_interface/r100")
-        .res()
+        .wait()
         .unwrap();
 
     let publisher_all = zenoh_pub
         .declare_publisher("test/downsamples_by_interface/all")
-        .res()
+        .wait()
         .unwrap();
 
     // WARN(yuyuan): 2 ms is the limit of tokio
-    let interval = std::time::Duration::from_millis(2);
+    let interval = std::time::Duration::from_millis(MINIMAL_SLEEP_INTERVAL_MS);
     let messages_count = 1000;
     for i in 0..messages_count {
-        publisher_r100.put(format!("message {}", i)).res().unwrap();
-        publisher_all.put(format!("message {}", i)).res().unwrap();
+        publisher_r100.put(format!("message {}", i)).wait().unwrap();
+        publisher_all.put(format!("message {}", i)).wait().unwrap();
 
         std::thread::sleep(interval);
     }
@@ -278,9 +280,7 @@ fn downsampling_by_interface() {
 #[test]
 #[should_panic(expected = "unknown variant `down`")]
 fn downsampling_config_error_wrong_strategy() {
-    zenoh_util::init_log_from_env();
-
-    use zenoh::prelude::sync::*;
+    zenoh_util::try_init_log_from_env();
 
     let mut config = Config::default();
     config
@@ -300,5 +300,5 @@ fn downsampling_config_error_wrong_strategy() {
         )
         .unwrap();
 
-    zenoh::open(config).res().unwrap();
+    zenoh::open(config).wait().unwrap();
 }

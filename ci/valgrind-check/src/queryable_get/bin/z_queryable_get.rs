@@ -11,45 +11,37 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::convert::TryFrom;
-use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
-use zenoh_util::init_log;
+use std::{convert::TryFrom, time::Duration};
+
+use zenoh::{config::Config, prelude::*};
 
 #[tokio::main]
 async fn main() {
-    init_log();
-
-    let _z = zenoh_runtime::ZRuntimePoolGuard;
+    zenoh_util::init_log_test();
 
     let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();
 
     println!("Declaring Queryable on '{queryable_key_expr}'...");
-    let queryable_session = zenoh::open(Config::default()).res().await.unwrap();
+    let queryable_session = zenoh::open(Config::default()).await.unwrap();
     let _queryable = queryable_session
-        .declare_queryable(&queryable_key_expr.clone())
+        .declare_queryable(queryable_key_expr.clone())
         .callback(move |query| {
             println!(">> Handling query '{}'", query.selector());
+            let queryable_key_expr = queryable_key_expr.clone();
             zenoh_runtime::ZRuntime::Application.block_in_place(async move {
                 query
-                    .reply(
-                        query.selector().key_expr(),
-                        query.value().unwrap().payload().clone(),
-                    )
-                    .res()
+                    .reply(queryable_key_expr, query.value().unwrap().payload().clone())
                     .await
                     .unwrap();
             });
         })
         .complete(true)
-        .res()
         .await
         .unwrap();
 
     println!("Declaring Get session for '{get_selector}'...");
-    let get_session = zenoh::open(Config::default()).res().await.unwrap();
+    let get_session = zenoh::open(Config::default()).await.unwrap();
 
     for idx in 0..5 {
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -58,7 +50,6 @@ async fn main() {
             .get(&get_selector)
             .value(idx)
             .target(QueryTarget::All)
-            .res()
             .await
             .unwrap();
         while let Ok(reply) = replies.recv_async().await {

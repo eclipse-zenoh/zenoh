@@ -17,17 +17,10 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use super::{
-    dispatcher::{
-        face::{Face, FaceState},
-        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
-    },
-    router::RoutesIndexes,
-};
-use crate::runtime::Runtime;
 use std::{any::Any, sync::Arc};
+
 use zenoh_buffers::ZBuf;
-use zenoh_config::{unwrap_or_default, Config, WhatAmI};
+use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
 use zenoh_protocol::{
     core::WireExpr,
     network::{
@@ -41,6 +34,15 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 
+use super::{
+    dispatcher::{
+        face::{Face, FaceState},
+        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
+    },
+    router::RoutesIndexes,
+};
+use crate::net::runtime::Runtime;
+
 mod client;
 mod linkstate_peer;
 mod p2p_peer;
@@ -48,6 +50,23 @@ mod router;
 
 zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct Sources {
+    routers: Vec<ZenohId>,
+    peers: Vec<ZenohId>,
+    clients: Vec<ZenohId>,
+}
+
+impl Sources {
+    pub(crate) fn empty() -> Self {
+        Self {
+            routers: vec![],
+            peers: vec![],
+            clients: vec![],
+        }
+    }
 }
 
 pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
@@ -134,7 +153,7 @@ pub(crate) trait HatPubSubTrait {
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>>;
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_data_route(
         &self,
@@ -166,7 +185,7 @@ pub(crate) trait HatQueriesTrait {
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>>;
+    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_query_route(
         &self,

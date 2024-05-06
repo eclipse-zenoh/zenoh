@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
 use std::time::Instant;
-use zenoh::config::Config;
-use zenoh::prelude::sync::*;
+
+use clap::Parser;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 struct Stats {
@@ -69,7 +69,7 @@ impl Drop for Stats {
 
 fn main() {
     // initiate logging
-    zenoh_util::init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let (mut config, m, n) = parse_args();
 
@@ -78,7 +78,7 @@ fn main() {
     // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
     config.transport.shared_memory.set_enabled(true).unwrap();
 
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     let key_expr = "test/thr";
 
@@ -91,7 +91,7 @@ fn main() {
                 std::process::exit(0)
             }
         })
-        .res()
+        .wait()
         .unwrap();
 
     println!("Press CTRL-C to quit...");

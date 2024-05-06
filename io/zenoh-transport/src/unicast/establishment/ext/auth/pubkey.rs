@@ -11,7 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+use std::{collections::HashSet, fmt, ops::Deref, path::Path};
+
 use async_trait::async_trait;
 use rand::Rng;
 use rsa::{
@@ -19,7 +20,6 @@ use rsa::{
     traits::PublicKeyParts,
     BigUint, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
 };
-use std::{collections::HashSet, fmt, ops::Deref, path::Path};
 use tokio::sync::{Mutex, RwLock};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
@@ -31,9 +31,12 @@ use zenoh_core::{bail, zasynclock, zasyncread, zerror, Error as ZError, Result a
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::common::{ZExtUnit, ZExtZBuf};
 
+use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+
 mod ext {
-    use super::{id::PUBKEY, ZExtUnit, ZExtZBuf};
     use zenoh_protocol::{zextunit, zextzbuf};
+
+    use super::{id::PUBKEY, ZExtUnit, ZExtZBuf};
 
     pub(super) type InitSyn = zextzbuf!(PUBKEY, false);
     pub(super) type InitAck = zextzbuf!(PUBKEY, false);
