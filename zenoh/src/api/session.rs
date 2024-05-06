@@ -1444,7 +1444,7 @@ impl Session {
         drop(state);
 
         primitives.send_interest(Interest {
-            id: todo!(),
+            id,
             mode: InterestMode::Future,
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(key_expr.to_wire(self).to_owned()),

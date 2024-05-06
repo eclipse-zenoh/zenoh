@@ -68,7 +68,7 @@ fn send_sourced_token_to_net_childs(
                                     id: 0,
                                     wire_expr: key_expr,
                                 }),
-                                interest_id: todo!(),
+                                interest_id: None,
                             },
                             res.expr(),
                         ));
@@ -113,7 +113,7 @@ fn propagate_simple_token_to(
                         id,
                         wire_expr: key_expr,
                     }),
-                    interest_id: todo!(),
+                    interest_id: None,
                 },
                 res.expr(),
             ));
@@ -144,7 +144,7 @@ fn propagate_simple_token_to(
                                 id,
                                 wire_expr: key_expr,
                             }),
-                            interest_id: todo!(),
+                            interest_id: None,
                         },
                         res.expr(),
                     ));
@@ -374,7 +374,7 @@ fn send_forget_sourced_token_to_net_childs(
                                     id: 0,
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
-                                interest_id: todo!(),
+                                interest_id: None,
                             },
                             res.expr(),
                         ));
@@ -398,7 +398,7 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                         id,
                         ext_wire_expr: WireExprType::null(),
                     }),
-                    interest_id: todo!(),
+                    interest_id: None,
                 },
                 res.expr(),
             ));
@@ -427,7 +427,7 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                                 id,
                                 ext_wire_expr: WireExprType::null(),
                             }),
-                            interest_id: todo!(),
+                            interest_id: None,
                         },
                         res.expr(),
                     ));
@@ -468,7 +468,7 @@ fn propagate_forget_simple_token_to_peers(tables: &mut Tables, res: &Arc<Resourc
                                 id,
                                 ext_wire_expr: WireExprType::null(),
                             }),
-                            interest_id: todo!(),
+                            interest_id: None,
                         },
                         res.expr(),
                     ));
@@ -627,7 +627,7 @@ pub(super) fn undeclare_client_token(
                                 id,
                                 ext_wire_expr: WireExprType::null(),
                             }),
-                            interest_id: todo!(),
+                            interest_id: None,
                         },
                         res.expr(),
                     ));
@@ -656,7 +656,7 @@ pub(super) fn undeclare_client_token(
                                         id,
                                         ext_wire_expr: WireExprType::null(),
                                     }),
-                                    interest_id: todo!(),
+                                    interest_id: None,
                                 },
                                 res.expr(),
                             ));
@@ -760,6 +760,7 @@ impl HatTokenTrait for HatCode {
         aggregate: bool,
     ) {
         if mode.current() && face.whatami == WhatAmI::Client {
+            let interest_id = mode.future().then_some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
                     if hat!(tables).router_tokens.iter().any(|token| {
@@ -778,7 +779,7 @@ impl HatTokenTrait for HatCode {
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                                interest_id: todo!(),
+                                interest_id,
                             },
                             res.expr(),
                         ));
@@ -800,7 +801,7 @@ impl HatTokenTrait for HatCode {
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
                                     body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                                    interest_id: todo!(),
+                                    interest_id,
                                 },
                                 token.expr(),
                             ));
@@ -823,7 +824,7 @@ impl HatTokenTrait for HatCode {
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                                interest_id: todo!(),
+                                interest_id,
                             },
                             token.expr(),
                         ));

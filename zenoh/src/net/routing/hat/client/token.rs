@@ -59,7 +59,7 @@ fn propagate_simple_token_to(
                     id,
                     wire_expr: key_expr,
                 }),
-                interest_id: todo!(),
+                interest_id: None,
             },
             res.expr(),
         ));
@@ -141,7 +141,7 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                         id,
                         ext_wire_expr: WireExprType::null(),
                     }),
-                    interest_id: todo!(),
+                    interest_id: None,
                 },
                 res.expr(),
             ));
@@ -180,7 +180,7 @@ pub(super) fn undeclare_client_token(
                                 id,
                                 ext_wire_expr: WireExprType::null(),
                             }),
-                            interest_id: todo!(),
+                            interest_id: None
                         },
                         res.expr(),
                     ));
