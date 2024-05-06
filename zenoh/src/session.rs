@@ -529,10 +529,11 @@ impl Session {
                 self.runtime.close().await?;
             }
             let mut state = zwrite!(self.state);
-            state.primitives.as_ref().unwrap().send_close();
             // clean up to break cyclic references from self.state to itself
-            state.primitives.take();
+            let primitives = state.primitives.take();
             state.queryables.clear();
+            drop(state);
+            primitives.as_ref().unwrap().send_close();
             self.alive = false;
             Ok(())
         })
