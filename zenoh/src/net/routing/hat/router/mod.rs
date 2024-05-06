@@ -45,26 +45,26 @@ use crate::{
     },
     runtime::Runtime,
 };
-use async_std::task::JoinHandle;
 use std::{
     any::Any,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
     sync::{atomic::AtomicU32, Arc},
+    time::Duration,
 };
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
     network::{
-        declare::{
-            queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId, TokenId,
-        },
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
+        interest::InterestId,
         oam::id::OAM_LINKSTATE,
         Oam,
     },
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
 mod network;
@@ -128,9 +128,22 @@ struct HatTables {
     routers_net: Option<Network>,
     peers_net: Option<Network>,
     shared_nodes: Vec<ZenohId>,
-    routers_trees_task: Option<JoinHandle<()>>,
-    peers_trees_task: Option<JoinHandle<()>>,
+    routers_trees_task: Option<TerminatableTask>,
+    peers_trees_task: Option<TerminatableTask>,
     router_peers_failover_brokering: bool,
+}
+
+impl Drop for HatTables {
+    fn drop(&mut self) {
+        if self.peers_trees_task.is_some() {
+            let task = self.peers_trees_task.take().unwrap();
+            task.terminate(Duration::from_secs(10));
+        }
+        if self.routers_trees_task.is_some() {
+            let task = self.routers_trees_task.take().unwrap();
+            task.terminate(Duration::from_secs(10));
+        }
+    }
 }
 
 impl HatTables {
@@ -250,35 +263,40 @@ impl HatTables {
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
         {
-            let task = Some(async_std::task::spawn(async move {
-                async_std::task::sleep(std::time::Duration::from_millis(
-                    *TREES_COMPUTATION_DELAY_MS,
-                ))
-                .await;
-                let mut tables = zwrite!(tables_ref.tables);
+            let task = TerminatableTask::spawn(
+                zenoh_runtime::ZRuntime::Net,
+                async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        *TREES_COMPUTATION_DELAY_MS,
+                    ))
+                    .await;
+                    let mut tables = zwrite!(tables_ref.tables);
 
-                log::trace!("Compute trees");
-                let new_childs = match net_type {
-                    WhatAmI::Router => hat_mut!(tables)
-                        .routers_net
-                        .as_mut()
-                        .unwrap()
-                        .compute_trees(),
-                    _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
-                };
+                    tracing::trace!("Compute trees");
+                    let new_childs = match net_type {
+                        WhatAmI::Router => hat_mut!(tables)
+                            .routers_net
+                            .as_mut()
+                            .unwrap()
+                            .compute_trees(),
+                        _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
+                    };
 
-                log::trace!("Compute routes");
-                pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
-                queries::queries_tree_change(&mut tables, &new_childs, net_type);
+                    tracing::trace!("Compute routes");
+                    pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
+                    queries::queries_tree_change(&mut tables, &new_childs, net_type);
 
-                match net_type {
-                    WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
-                    _ => hat_mut!(tables).peers_trees_task = None,
-                };
-            }));
+                    tracing::trace!("Computations completed");
+                    match net_type {
+                        WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
+                        _ => hat_mut!(tables).peers_trees_task = None,
+                    };
+                },
+                TerminatableTask::create_cancellation_token(),
+            );
             match net_type {
-                WhatAmI::Router => self.routers_trees_task = task,
-                _ => self.peers_trees_task = task,
+                WhatAmI::Router => self.routers_trees_task = Some(task),
+                _ => self.peers_trees_task = Some(task),
             };
         }
     }
@@ -682,7 +700,7 @@ impl HatBaseTrait for HatCode {
                     _ => (),
                 };
             }
-            (_, _) => log::error!("Closed transport in session closing!"),
+            (_, _) => tracing::error!("Closed transport in session closing!"),
         }
         Ok(())
     }
@@ -816,7 +834,7 @@ fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<
         Some(link) => match link.get_zid(&(nodeid as u64)) {
             Some(router) => Some(*router),
             None => {
-                log::error!(
+                tracing::error!(
                     "Received router declaration with unknown routing context id {}",
                     nodeid
                 );
@@ -824,7 +842,7 @@ fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<
             }
         },
         None => {
-            log::error!(
+            tracing::error!(
                 "Could not find corresponding link in routers network for {}",
                 face
             );
@@ -843,7 +861,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
         Some(link) => match link.get_zid(&(nodeid as u64)) {
             Some(router) => Some(*router),
             None => {
-                log::error!(
+                tracing::error!(
                     "Received peer declaration with unknown routing context id {}",
                     nodeid
                 );
@@ -851,7 +869,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
             }
         },
         None => {
-            log::error!(
+            tracing::error!(
                 "Could not find corresponding link in peers network for {}",
                 face
             );

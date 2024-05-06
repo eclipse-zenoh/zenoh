@@ -16,10 +16,10 @@ use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     let (config, key_expr) = parse_args();
 

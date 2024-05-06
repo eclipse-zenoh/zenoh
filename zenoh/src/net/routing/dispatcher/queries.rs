@@ -20,8 +20,10 @@ use crate::net::routing::RoutingContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::declare::InterestId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
@@ -41,8 +43,7 @@ pub(crate) fn declare_qabl_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
     expr: Option<&WireExpr>,
-    current: bool,
-    future: bool,
+    mode: InterestMode,
     aggregate: bool,
 ) {
     if let Some(expr) = expr {
@@ -52,7 +53,7 @@ pub(crate) fn declare_qabl_interest(
             .cloned()
         {
             Some(mut prefix) => {
-                log::debug!(
+                tracing::debug!(
                     "{} Declare qabl interest {} ({}{})",
                     face,
                     id,
@@ -88,12 +89,11 @@ pub(crate) fn declare_qabl_interest(
                     face,
                     id,
                     Some(&mut res),
-                    current,
-                    future,
+                    mode,
                     aggregate,
                 );
             }
-            None => log::error!(
+            None => tracing::error!(
                 "{} Declare qabl interest {} for unknown scope {}!",
                 face,
                 id,
@@ -102,7 +102,7 @@ pub(crate) fn declare_qabl_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_qabl_interest(&mut wtables, face, id, None, current, future, aggregate);
+        hat_code.declare_qabl_interest(&mut wtables, face, id, None, mode, aggregate);
     }
 }
 
@@ -112,7 +112,7 @@ pub(crate) fn undeclare_qabl_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
 ) {
-    log::debug!("{} Undeclare qabl interest {}", face, id,);
+    tracing::debug!("{} Undeclare qabl interest {}", face, id,);
     let mut wtables = zwrite!(tables.tables);
     hat_code.undeclare_qabl_interest(&mut wtables, face, id);
 }
@@ -137,7 +137,7 @@ pub(crate) fn declare_queryable(
         .cloned()
     {
         Some(mut prefix) => {
-            log::debug!(
+            tracing::debug!(
                 "{} Declare queryable {} ({}{})",
                 face,
                 id,
@@ -182,7 +182,7 @@ pub(crate) fn declare_queryable(
             }
             drop(wtables);
         }
-        None => log::error!(
+        None => tracing::error!(
             "{} Declare queryable {} for unknown scope {}!",
             face,
             id,
@@ -207,7 +207,7 @@ pub(crate) fn undeclare_queryable(
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    log::error!(
+                    tracing::error!(
                         "{} Undeclare unknown queryable {}{}!",
                         face,
                         prefix.expr(),
@@ -217,7 +217,7 @@ pub(crate) fn undeclare_queryable(
                 }
             },
             None => {
-                log::error!(
+                tracing::error!(
                     "{} Undeclare queryable with unknown scope {}",
                     face,
                     expr.scope
@@ -228,7 +228,7 @@ pub(crate) fn undeclare_queryable(
     };
     let mut wtables = zwrite!(tables.tables);
     if let Some(mut res) = hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id) {
-        log::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
+        tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
         disable_matches_query_routes(&mut wtables, &mut res);
         drop(wtables);
 
@@ -245,7 +245,7 @@ pub(crate) fn undeclare_queryable(
         Resource::clean(&mut res);
         drop(wtables);
     } else {
-        log::error!("{} Undeclare unknown queryable {}", face, id);
+        tracing::error!("{} Undeclare unknown queryable {}", face, id);
     }
 }
 
@@ -350,7 +350,10 @@ fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> Requ
     let outface_mut = get_mut_unchecked(outface);
     outface_mut.next_qid += 1;
     let qid = outface_mut.next_qid;
-    outface_mut.pending_queries.insert(qid, query);
+    outface_mut.pending_queries.insert(
+        qid,
+        (query, outface_mut.task_controller.get_cancellation_token()),
+    );
     qid
 }
 
@@ -423,6 +426,31 @@ struct QueryCleanup {
     qid: RequestId,
 }
 
+impl QueryCleanup {
+    pub fn spawn_query_clean_up_task(
+        face: &Arc<FaceState>,
+        tables_ref: &Arc<TablesLock>,
+        qid: u32,
+        timeout: Duration,
+    ) {
+        let mut cleanup = QueryCleanup {
+            tables: tables_ref.clone(),
+            face: Arc::downgrade(face),
+            qid,
+        };
+        if let Some((_, cancellation_token)) = face.pending_queries.get(&qid) {
+            let c_cancellation_token = cancellation_token.clone();
+            face.task_controller
+                .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(timeout) => { cleanup.run().await }
+                        _ = c_cancellation_token.cancelled() => {}
+                    }
+                });
+        }
+    }
+}
+
 #[async_trait]
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
@@ -433,9 +461,9 @@ impl Timed for QueryCleanup {
                 .remove(&self.qid)
             {
                 drop(tables_lock);
-                log::warn!(
+                tracing::warn!(
                     "Didn't receive final reply {}:{} from {}: Timeout!",
-                    query.src_face,
+                    query.0.src_face,
                     self.qid,
                     face
                 );
@@ -557,7 +585,7 @@ pub fn route_query(
     let rtables = zread!(tables_ref.tables);
     match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => {
-            log::debug!(
+            tracing::debug!(
                 "Route query {}:{} for res {}{}",
                 face,
                 qid,
@@ -593,6 +621,8 @@ pub fn route_query(
                         .hat_code
                         .compute_local_replies(&rtables, &prefix, expr.suffix, face);
                 let zid = rtables.zid;
+
+                let timeout = rtables.queries_default_timeout;
 
                 drop(queries_lock);
                 drop(rtables);
@@ -639,7 +669,7 @@ pub fn route_query(
                 }
 
                 if route.is_empty() {
-                    log::debug!(
+                    tracing::debug!(
                         "Send final reply {}:{} (no matching queryables or not master)",
                         face,
                         qid
@@ -656,14 +686,7 @@ pub fn route_query(
                         ));
                 } else {
                     for ((outface, key_expr, context), qid) in route.values() {
-                        // timer.add(TimedEvent::once(
-                        //     Instant::now() + timeout,
-                        //     QueryCleanup {
-                        //         tables: tables_ref.clone(),
-                        //         face: Arc::downgrade(&outface),
-                        //         *qid,
-                        //     },
-                        // ));
+                        QueryCleanup::spawn_query_clean_up_task(outface, tables_ref, *qid, timeout);
                         #[cfg(feature = "stats")]
                         if !admin {
                             inc_req_stats!(outface, tx, user, body)
@@ -671,7 +694,7 @@ pub fn route_query(
                             inc_req_stats!(outface, tx, admin, body)
                         }
 
-                        log::trace!("Propagate query {}:{} to {}", face, qid, outface);
+                        tracing::trace!("Propagate query {}:{} to {}", face, qid, outface);
                         outface.primitives.send_request(RoutingContext::with_expr(
                             Request {
                                 id: *qid,
@@ -689,7 +712,7 @@ pub fn route_query(
                     }
                 }
             } else {
-                log::debug!("Send final reply {}:{} (not master)", face, qid);
+                tracing::debug!("Send final reply {}:{} (not master)", face, qid);
                 drop(rtables);
                 face.primitives
                     .clone()
@@ -704,7 +727,7 @@ pub fn route_query(
             }
         }
         None => {
-            log::error!(
+            tracing::error!(
                 "{} Route query with unknown scope {}! Send final reply.",
                 face,
                 expr.scope,
@@ -743,7 +766,7 @@ pub(crate) fn route_send_response(
     }
 
     match face.pending_queries.get(&qid) {
-        Some(query) => {
+        Some((query, _)) => {
             drop(queries_lock);
 
             #[cfg(feature = "stats")]
@@ -769,7 +792,7 @@ pub(crate) fn route_send_response(
                     "".to_string(), // @TODO provide the proper key expression of the response for interceptors
                 ));
         }
-        None => log::warn!(
+        None => tracing::warn!(
             "Route reply {}:{} from {}: Query nof found!",
             face,
             qid,
@@ -787,15 +810,15 @@ pub(crate) fn route_send_response_final(
     match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
             drop(queries_lock);
-            log::debug!(
+            tracing::debug!(
                 "Received final reply {}:{} from {}",
-                query.src_face,
+                query.0.src_face,
                 qid,
                 face
             );
             finalize_pending_query(query);
         }
-        None => log::warn!(
+        None => tracing::warn!(
             "Route final reply {}:{} from {}: Query nof found!",
             face,
             qid,
@@ -812,9 +835,11 @@ pub(crate) fn finalize_pending_queries(tables_ref: &TablesLock, face: &mut Arc<F
     drop(queries_lock);
 }
 
-pub(crate) fn finalize_pending_query(query: Arc<Query>) {
+pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
+    let (query, cancellation_token) = query;
+    cancellation_token.cancel();
     if let Some(query) = Arc::into_inner(query) {
-        log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
+        tracing::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
         query
             .src_face
             .primitives

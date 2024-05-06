@@ -17,18 +17,19 @@ use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::HatQueriesTrait;
+use crate::net::routing::hat::{HatQueriesTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::{InterestId, QueryableId};
+use zenoh_protocol::network::declare::QueryableId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::declare::{
@@ -94,6 +95,7 @@ fn propagate_simple_queryable(
             println!("Decled key = {key_expr:?}");
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -159,6 +161,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -198,6 +201,7 @@ pub(super) fn undeclare_client_queryable(
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
+                        interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -250,11 +254,10 @@ impl HatQueriesTrait for HatCode {
         _face: &mut Arc<FaceState>,
         _id: InterestId,
         _res: Option<&mut Arc<Resource>>,
-        _current: bool,
-        _future: bool,
+        _mode: InterestMode,
         _aggregate: bool,
     ) {
-        todo!()
+        // ignore
     }
 
     fn undeclare_qabl_interest(
@@ -263,7 +266,7 @@ impl HatQueriesTrait for HatCode {
         _face: &mut Arc<FaceState>,
         _id: InterestId,
     ) {
-        todo!()
+        // ignore
     }
 
     fn declare_queryable(
@@ -289,11 +292,19 @@ impl HatQueriesTrait for HatCode {
         forget_client_queryable(tables, face, id)
     }
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        let mut qabls = HashSet::new();
+    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known queryables (keys)
+        let mut qabls = HashMap::new();
         for src_face in tables.faces.values() {
             for qabl in face_hat!(src_face).remote_qabls.values() {
-                qabls.insert(qabl.clone());
+                // Insert the key in the list of known queryables
+                let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
+                // Append src_face as a queryable source in the proper list
+                match src_face.whatami {
+                    WhatAmI::Router => srcs.routers.push(src_face.zid),
+                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
+                    WhatAmI::Client => srcs.clients.push(src_face.zid),
+                }
             }
         }
         Vec::from_iter(qabls)
@@ -311,7 +322,7 @@ impl HatQueriesTrait for HatCode {
         if key_expr.ends_with('/') {
             return EMPTY_ROUTE.clone();
         }
-        log::trace!(
+        tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -320,7 +331,7 @@ impl HatQueriesTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return EMPTY_ROUTE.clone();
             }
         };
@@ -379,7 +390,7 @@ impl HatQueriesTrait for HatCode {
             let key_expr = match OwnedKeyExpr::try_from(key_expr) {
                 Ok(ke) => ke,
                 Err(e) => {
-                    log::warn!("Invalid KE reached the system: {}", e);
+                    tracing::warn!("Invalid KE reached the system: {}", e);
                     return result;
                 }
             };

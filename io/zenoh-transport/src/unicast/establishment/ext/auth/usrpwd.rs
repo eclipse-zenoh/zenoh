@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
-use async_std::{fs, sync::RwLock};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
 use std::{collections::HashMap, fmt};
+use tokio::sync::RwLock;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
@@ -68,7 +68,7 @@ impl AuthUsrPwd {
 
         let mut lookup: HashMap<User, Password> = HashMap::new();
         if let Some(dict) = config.dictionary_file() {
-            let content = fs::read_to_string(dict)
+            let content = tokio::fs::read_to_string(dict)
                 .await
                 .map_err(|e| zerror!("{S} Invalid user-password dictionary file: {}.", e))?;
 
@@ -96,19 +96,19 @@ impl AuthUsrPwd {
                 }
                 lookup.insert(user, password);
             }
-            log::debug!("{S} User-password dictionary has been configured.");
+            tracing::debug!("{S} User-password dictionary has been configured.");
         }
 
         let mut credentials: Option<(User, Password)> = None;
         if let Some(user) = config.user() {
             if let Some(password) = config.password() {
-                log::debug!("{S} User-password has been configured.");
+                tracing::debug!("{S} User-password has been configured.");
                 credentials = Some((user.as_bytes().to_owned(), password.as_bytes().to_owned()));
             }
         }
 
         if !lookup.is_empty() || credentials.is_some() {
-            log::debug!("{S} User-password authentication is enabled.");
+            tracing::debug!("{S} User-password authentication is enabled.");
             Ok(Some(Self {
                 lookup,
                 credentials,
@@ -448,10 +448,8 @@ impl<'a> AcceptFsm for &'a AuthUsrPwdFsm<'a> {
 }
 
 mod tests {
-    #[test]
-    fn authenticator_usrpwd_config() {
-        use zenoh_core::zasync_executor_init;
-
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn authenticator_usrpwd_config() {
         async fn inner() {
             use super::AuthUsrPwd;
             use std::{fs::File, io::Write};
@@ -504,9 +502,6 @@ mod tests {
             let _ = std::fs::remove_file(f1);
         }
 
-        async_std::task::block_on(async {
-            zasync_executor_init!();
-            inner().await;
-        });
+        inner().await;
     }
 }

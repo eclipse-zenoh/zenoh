@@ -107,6 +107,7 @@ impl RoutingContext<NetworkMessage> {
             NetworkBody::Request(m) => Some(&m.wire_expr),
             NetworkBody::Response(m) => Some(&m.wire_expr),
             NetworkBody::ResponseFinal(_) => None,
+            NetworkBody::Interest(m) => m.wire_expr.as_ref(),
             NetworkBody::Declare(m) => match &m.body {
                 DeclareBody::DeclareKeyExpr(m) => Some(&m.wire_expr),
                 DeclareBody::UndeclareKeyExpr(_) => None,
@@ -116,9 +117,7 @@ impl RoutingContext<NetworkMessage> {
                 DeclareBody::UndeclareQueryable(m) => Some(&m.ext_wire_expr.wire_expr),
                 DeclareBody::DeclareToken(m) => Some(&m.wire_expr),
                 DeclareBody::UndeclareToken(m) => Some(&m.ext_wire_expr.wire_expr),
-                DeclareBody::DeclareInterest(m) => m.wire_expr.as_ref(),
-                DeclareBody::FinalInterest(_) => None,
-                DeclareBody::UndeclareInterest(m) => Some(&m.ext_wire_expr.wire_expr),
+                DeclareBody::DeclareFinal(_) => None,
             },
             NetworkBody::OAM(_) => None,
         }

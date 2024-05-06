@@ -18,9 +18,8 @@ use crate::{
     queryable::Query,
     sample::DataInfo,
     subscriber::SubscriberKind,
-    Payload, Session, ZResult,
+    Session, ZBytes, ZResult,
 };
-use async_std::task;
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
@@ -70,11 +69,11 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
             let key_expr = *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
-                    match Payload::try_from(value) {
+                    match ZBytes::try_from(value) {
                         Ok(zbuf) => {
                             let _ = query.reply(key_expr, zbuf).res_sync();
                         }
-                        Err(e) => log::debug!("Admin query error: {}", e),
+                        Err(e) => tracing::debug!("Admin query error: {}", e),
                     }
                 }
             }
@@ -87,11 +86,11 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                         *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid / *KE_LINK / lid;
                     if query.key_expr().intersects(&key_expr) {
                         if let Ok(value) = serde_json::value::to_value(link) {
-                            match Payload::try_from(value) {
+                            match ZBytes::try_from(value) {
                                 Ok(zbuf) => {
                                     let _ = query.reply(key_expr, zbuf).res_sync();
                                 }
-                                Err(e) => log::debug!("Admin query error: {}", e),
+                                Err(e) => tracing::debug!("Admin query error: {}", e),
                             }
                         }
                     }
@@ -101,12 +100,16 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
     }
 
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        for transport in task::block_on(session.runtime.manager().get_transports_unicast()) {
+        for transport in zenoh_runtime::ZRuntime::Net
+            .block_in_place(session.runtime.manager().get_transports_unicast())
+        {
             if let Ok(peer) = transport.get_peer() {
                 reply_peer(own_zid, &query, peer);
             }
         }
-        for transport in task::block_on(session.runtime.manager().get_transports_multicast()) {
+        for transport in zenoh_runtime::ZRuntime::Net
+            .block_in_place(session.runtime.manager().get_transports_multicast())
+        {
             for peer in transport.get_peers().unwrap_or_default() {
                 reply_peer(own_zid, &query, peer);
             }

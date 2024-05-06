@@ -28,9 +28,29 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+test = ["num_cpus"]
+
 [dependencies]
-log = { workspace = true }
+async-trait = { workspace = true }
+bincode = { workspace = true }
+crc = { workspace = true }
+tracing = {workspace = true}
 serde = { workspace = true, features = ["default"] }
 shared_memory = { workspace = true }
-zenoh-buffers = { workspace = true }
+tokio = { workspace = true }
 zenoh-result = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-macros = { workspace = true }
+zenoh-buffers = { workspace = true }
+rand = { workspace = true }
+lazy_static = { workspace = true }
+num-traits = { workspace = true }
+num_cpus = { workspace = true, optional = true }
+thread-priority = { workspace = true }
+lockfree = { workspace = true }
+stabby = { workspace = true }
+
+[dev-dependencies]
+zenoh-shm = { workspace = true, features = ["test"] }
+libc = { workspace = true }

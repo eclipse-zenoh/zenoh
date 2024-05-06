@@ -43,8 +43,9 @@ use std::{
 };
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::declare::{
-    queryable::ext::QueryableInfoType, InterestId, QueryableId, SubscriberId, TokenId,
+    queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId,
 };
+use zenoh_protocol::network::interest::InterestId;
 use zenoh_protocol::network::Oam;
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;

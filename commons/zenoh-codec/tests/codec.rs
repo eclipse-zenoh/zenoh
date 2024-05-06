@@ -31,6 +31,22 @@ use zenoh_protocol::{
     zenoh, zextunit, zextz64, zextzbuf,
 };
 
+#[test]
+fn zbuf_test() {
+    let mut buffer = vec![0u8; 64];
+
+    let zbuf = ZBuf::empty();
+    let mut writer = buffer.writer();
+
+    let codec = Zenoh080::new();
+    codec.write(&mut writer, &zbuf).unwrap();
+    println!("Buffer: {:?}", buffer);
+
+    let mut reader = buffer.reader();
+    let ret: ZBuf = codec.read(&mut reader).unwrap();
+    assert_eq!(ret, zbuf);
+}
+
 const NUM_ITER: usize = 100;
 const MAX_PAYLOAD_SIZE: usize = 256;
 
@@ -344,15 +360,24 @@ fn codec_encoding() {
 #[cfg(feature = "shared-memory")]
 #[test]
 fn codec_shm_info() {
-    use zenoh_shm::SharedMemoryBufInfo;
+    use zenoh_shm::api::provider::chunk::ChunkDescriptor;
+    use zenoh_shm::header::descriptor::HeaderDescriptor;
+    use zenoh_shm::{watchdog::descriptor::Descriptor, SharedMemoryBufInfo};
 
     run!(SharedMemoryBufInfo, {
         let mut rng = rand::thread_rng();
-        let len = rng.gen_range(0..16);
         SharedMemoryBufInfo::new(
+            ChunkDescriptor::new(rng.gen(), rng.gen(), rng.gen()),
             rng.gen(),
             rng.gen(),
-            Alphanumeric.sample_string(&mut rng, len),
+            Descriptor {
+                id: rng.gen(),
+                index_and_bitpos: rng.gen(),
+            },
+            HeaderDescriptor {
+                id: rng.gen(),
+                index: rng.gen(),
+            },
             rng.gen(),
         )
     });
@@ -361,7 +386,7 @@ fn codec_shm_info() {
 // Common
 #[test]
 fn codec_extension() {
-    let _ = env_logger::try_init();
+    zenoh_util::try_init_log_from_env();
 
     macro_rules! run_extension_single {
         ($ext:ty, $buff:expr) => {

@@ -21,7 +21,7 @@ use std::thread::sleep;
 
 // use std::collections::HashMap;
 use async_std::task;
-use zenoh::payload::StringOrBase64;
+use zenoh::bytes::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::{prelude::Config, time::Timestamp};
@@ -51,7 +51,7 @@ async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
     println!("Getting replies on '{key_expr}': '{replies:?}'...");
     let mut samples = Vec::new();
     for reply in replies {
-        if let Ok(sample) = reply.sample {
+        if let Ok(sample) = reply.into_result() {
             samples.push(sample);
         }
     }

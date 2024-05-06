@@ -20,7 +20,8 @@ use std::sync::Arc;
 use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::declare::{InterestId, SubscriberId};
+use zenoh_protocol::network::declare::SubscriberId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::{declare::ext, Push},
@@ -28,15 +29,13 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-#[allow(clippy::too_many_arguments)] // TODO refactor
 pub(crate) fn declare_sub_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: InterestId,
     expr: Option<&WireExpr>,
-    current: bool,
-    future: bool,
+    mode: InterestMode,
     aggregate: bool,
 ) {
     if let Some(expr) = expr {
@@ -46,7 +45,7 @@ pub(crate) fn declare_sub_interest(
             .cloned()
         {
             Some(mut prefix) => {
-                log::debug!(
+                tracing::debug!(
                     "{} Declare sub interest {} ({}{})",
                     face,
                     id,
@@ -82,12 +81,11 @@ pub(crate) fn declare_sub_interest(
                     face,
                     id,
                     Some(&mut res),
-                    current,
-                    future,
+                    mode,
                     aggregate,
                 );
             }
-            None => log::error!(
+            None => tracing::error!(
                 "{} Declare sub interest {} for unknown scope {}!",
                 face,
                 id,
@@ -96,7 +94,7 @@ pub(crate) fn declare_sub_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_sub_interest(&mut wtables, face, id, None, current, future, aggregate);
+        hat_code.declare_sub_interest(&mut wtables, face, id, None, mode, aggregate);
     }
 }
 
@@ -106,7 +104,7 @@ pub(crate) fn undeclare_sub_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
 ) {
-    log::debug!("{} Undeclare sub interest {}", face, id,);
+    tracing::debug!("{} Undeclare sub interest {}", face, id,);
     let mut wtables = zwrite!(tables.tables);
     hat_code.undeclare_sub_interest(&mut wtables, face, id);
 }
@@ -126,7 +124,7 @@ pub(crate) fn declare_subscription(
         .cloned()
     {
         Some(mut prefix) => {
-            log::debug!(
+            tracing::debug!(
                 "{} Declare subscriber {} ({}{})",
                 face,
                 id,
@@ -171,7 +169,7 @@ pub(crate) fn declare_subscription(
             }
             drop(wtables);
         }
-        None => log::error!(
+        None => tracing::error!(
             "{} Declare subscriber {} for unknown scope {}!",
             face,
             id,
@@ -188,6 +186,7 @@ pub(crate) fn undeclare_subscription(
     expr: &WireExpr,
     node_id: NodeId,
 ) {
+    tracing::debug!("Undeclare subscription {}", face);
     let res = if expr.is_empty() {
         None
     } else {
@@ -196,7 +195,7 @@ pub(crate) fn undeclare_subscription(
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    log::error!(
+                    tracing::error!(
                         "{} Undeclare unknown subscriber {}{}!",
                         face,
                         prefix.expr(),
@@ -206,7 +205,7 @@ pub(crate) fn undeclare_subscription(
                 }
             },
             None => {
-                log::error!(
+                tracing::error!(
                     "{} Undeclare subscriber with unknown scope {}",
                     face,
                     expr.scope
@@ -217,7 +216,7 @@ pub(crate) fn undeclare_subscription(
     };
     let mut wtables = zwrite!(tables.tables);
     if let Some(mut res) = hat_code.undeclare_subscription(&mut wtables, face, id, res, node_id) {
-        log::debug!("{} Undeclare subscriber {} ({})", face, id, res.expr());
+        tracing::debug!("{} Undeclare subscriber {} ({})", face, id, res.expr());
         disable_matches_data_routes(&mut wtables, &mut res);
         drop(wtables);
 
@@ -234,7 +233,7 @@ pub(crate) fn undeclare_subscription(
         Resource::clean(&mut res);
         drop(wtables);
     } else {
-        log::error!("{} Undeclare unknown subscriber {}", face, id);
+        tracing::error!("{} Undeclare unknown subscriber {}", face, id);
     }
 }
 
@@ -362,14 +361,14 @@ macro_rules! treat_timestamp {
                         Ok(()) => (),
                         Err(e) => {
                             if $drop {
-                                log::error!(
+                                tracing::error!(
                                     "Error treating timestamp for received Data ({}). Drop it!",
                                     e
                                 );
                                 return;
                             } else {
                                 data.timestamp = Some(hlc.new_timestamp());
-                                log::error!(
+                                tracing::error!(
                                     "Error treating timestamp for received Data ({}). Replace timestamp: {:?}",
                                     e,
                                     data.timestamp);
@@ -379,7 +378,7 @@ macro_rules! treat_timestamp {
                 } else {
                     // Timestamp not present; add one
                     data.timestamp = Some(hlc.new_timestamp());
-                    log::trace!("Adding timestamp to DataInfo: {:?}", data.timestamp);
+                    tracing::trace!("Adding timestamp to DataInfo: {:?}", data.timestamp);
                 }
             }
         }
@@ -467,7 +466,7 @@ pub fn full_reentrant_route_data(
     let tables = zread!(tables_ref.tables);
     match tables.get_mapping(face, &expr.scope, expr.mapping).cloned() {
         Some(prefix) => {
-            log::trace!(
+            tracing::trace!(
                 "{} Route data for res {}{}",
                 face,
                 prefix.expr(),
@@ -572,7 +571,7 @@ pub fn full_reentrant_route_data(
             }
         }
         None => {
-            log::error!("{} Route data with unknown scope {}!", face, expr.scope);
+            tracing::error!("{} Route data with unknown scope {}!", face, expr.scope);
         }
     }
 }

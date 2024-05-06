@@ -20,7 +20,7 @@ edition = { workspace = true }
 publish = false
 
 [features]
-default = ["no_mangle", "zenoh/default"]
+default = ["no_mangle", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
 no_mangle = []
 
 [lib]
@@ -36,13 +36,12 @@ crate-type = ["cdylib"]
 [dependencies]
 async-std = { workspace = true, features = ["default"] }
 const_format = { workspace = true }
-env_logger = { workspace = true }
+zenoh-util = {workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-log = { workspace = true }
+tracing = {workspace = true}
 serde_json = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"] }
 zenoh-core = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
-zenoh-util = { workspace = true }

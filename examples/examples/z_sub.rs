@@ -16,10 +16,10 @@ use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     let (mut config, key_expr) = parse_args();
 
@@ -32,7 +32,6 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring Subscriber on '{}'...", &key_expr);
-
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Press CTRL-C to quit...");
@@ -41,12 +40,19 @@ async fn main() {
             .payload()
             .deserialize::<String>()
             .unwrap_or_else(|e| format!("{}", e));
-        println!(
+        print!(
             ">> [Subscriber] Received {} ('{}': '{}')",
             sample.kind(),
             sample.key_expr().as_str(),
             payload
         );
+        if let Some(att) = sample.attachment() {
+            let att = att
+                .deserialize::<String>()
+                .unwrap_or_else(|e| format!("{}", e));
+            print!(" ({})", att);
+        }
+        println!();
     }
 }
 

@@ -12,32 +12,34 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
+use crate::bytes::ZBytes;
 use crate::encoding::Encoding;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
-use crate::payload::Payload;
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::SyncResolve;
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
+use crate::sample::builder::ValueBuilderTrait;
 use crate::value::Value;
-use async_std::task;
-use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
+use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::network::declare::QueryableId;
+use zenoh_protocol::network::Interest;
 use zenoh_protocol::{
-    core::{
-        key_expr::{keyexpr, OwnedKeyExpr},
-        ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
-    },
+    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
         declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
@@ -50,8 +52,6 @@ use zenoh_transport::unicast::TransportUnicast;
 
 pub struct AdminContext {
     runtime: Runtime,
-    plugins_mgr: Mutex<plugins::PluginsManager>,
-    zid_str: String,
     version: String,
     metadata: serde_json::Value,
 }
@@ -67,6 +67,7 @@ pub struct AdminSpace {
     context: Arc<AdminContext>,
 }
 
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
@@ -81,33 +82,45 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        let plugins_mgr = zlock!(self.context.plugins_mgr);
-        let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
-            "Plugin `{}` is not running, but its configuration is being changed",
-            name
-        ))?;
-        plugin.instance().config_checker(path, current, new)
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        {
+            let plugins_mgr = self.context.runtime.plugins_manager();
+            let Some(plugin) = plugins_mgr.started_plugin(name) else {
+                tracing::warn!("Plugin `{}` is not started", name);
+                // If plugin not started, just allow any config. The plugin `name` will be attempted to start with this config
+                // on config comparison (see `PluginDiff`)
+                return Ok(None);
+            };
+            plugin.instance().config_checker(path, current, new)
+        }
+        #[cfg(not(all(feature = "unstable", feature = "plugins")))]
+        {
+            let _ = (name, path, current, new);
+            Ok(None)
+        }
     }
 }
 
 impl AdminSpace {
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
     fn start_plugin(
         plugin_mgr: &mut plugins::PluginsManager,
         config: &crate::config::PluginLoad,
         start_args: &Runtime,
+        required: bool,
     ) -> ZResult<()> {
         let name = &config.name;
         let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-            log::warn!("Plugin `{}` was already declared", declared.name());
+            tracing::warn!("Plugin `{}` was already declared", declared.name());
             declared
         } else if let Some(paths) = &config.paths {
-            plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
+            plugin_mgr.declare_dynamic_plugin_by_paths(name, paths, required)?
         } else {
-            plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
+            plugin_mgr.declare_dynamic_plugin_by_name(name, name, required)?
         };
 
         let loaded = if let Some(loaded) = declared.loaded_mut() {
-            log::warn!(
+            tracing::warn!(
                 "Plugin `{}` was already loaded from {}",
                 loaded.name(),
                 loaded.path()
@@ -118,10 +131,10 @@ impl AdminSpace {
         };
 
         if let Some(started) = loaded.started_mut() {
-            log::warn!("Plugin `{}` was already started", started.name());
+            tracing::warn!("Plugin `{}` was already started", started.name());
         } else {
             let started = loaded.start(start_args)?;
-            log::info!(
+            tracing::info!(
                 "Successfully started plugin `{}` from {}",
                 started.name(),
                 started.path()
@@ -131,61 +144,77 @@ impl AdminSpace {
         Ok(())
     }
 
-    pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
+    pub async fn start(runtime: &Runtime, version: String) {
         let zid_str = runtime.state.zid.to_string();
+        let whatami_str = runtime.state.whatami.to_str();
+        let mut config = runtime.config().lock();
         let metadata = runtime.state.metadata.clone();
-        let root_key: OwnedKeyExpr = format!("@/router/{zid_str}").try_into().unwrap();
+        let root_key: OwnedKeyExpr = format!("@/{whatami_str}/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
-        handlers.insert(root_key.clone(), Arc::new(router_data));
+        handlers.insert(root_key.clone(), Arc::new(local_data));
         handlers.insert(
-            format!("@/router/{zid_str}/metrics").try_into().unwrap(),
-            Arc::new(router_metrics),
-        );
-        handlers.insert(
-            format!("@/router/{zid_str}/linkstate/routers")
+            format!("@/{whatami_str}/{zid_str}/metrics")
                 .try_into()
                 .unwrap(),
-            Arc::new(routers_linkstate_data),
+            Arc::new(metrics),
         );
+        if runtime.state.whatami == WhatAmI::Router {
+            handlers.insert(
+                format!("@/{whatami_str}/{zid_str}/linkstate/routers")
+                    .try_into()
+                    .unwrap(),
+                Arc::new(routers_linkstate_data),
+            );
+        }
+        if runtime.state.whatami != WhatAmI::Client
+            && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate"
+        {
+            handlers.insert(
+                format!("@/{whatami_str}/{zid_str}/linkstate/peers")
+                    .try_into()
+                    .unwrap(),
+                Arc::new(peers_linkstate_data),
+            );
+        }
         handlers.insert(
-            format!("@/router/{zid_str}/linkstate/peers")
-                .try_into()
-                .unwrap(),
-            Arc::new(peers_linkstate_data),
-        );
-        handlers.insert(
-            format!("@/router/{zid_str}/subscriber/**")
+            format!("@/{whatami_str}/{zid_str}/subscriber/**")
                 .try_into()
                 .unwrap(),
             Arc::new(subscribers_data),
         );
         handlers.insert(
-            format!("@/router/{zid_str}/queryable/**")
+            format!("@/{whatami_str}/{zid_str}/queryable/**")
                 .try_into()
                 .unwrap(),
             Arc::new(queryables_data),
         );
+
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
         handlers.insert(
-            format!("@/router/{zid_str}/plugins/**").try_into().unwrap(),
+            format!("@/{whatami_str}/{zid_str}/plugins/**")
+                .try_into()
+                .unwrap(),
             Arc::new(plugins_data),
         );
+
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
         handlers.insert(
-            format!("@/router/{zid_str}/status/plugins/**")
+            format!("@/{whatami_str}/{zid_str}/status/plugins/**")
                 .try_into()
                 .unwrap(),
             Arc::new(plugins_status),
         );
 
-        let mut active_plugins = plugins_mgr
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        let mut active_plugins = runtime
+            .plugins_manager()
             .started_plugins_iter()
             .map(|rec| (rec.name().to_string(), rec.path().to_string()))
             .collect::<HashMap<_, _>>();
 
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
-            plugins_mgr: Mutex::new(plugins_mgr),
-            zid_str,
             version,
             metadata,
         });
@@ -198,85 +227,86 @@ impl AdminSpace {
             context,
         });
 
-        admin
-            .context
-            .runtime
-            .state
-            .config
-            .lock()
-            .set_plugin_validator(Arc::downgrade(&admin));
+        config.set_plugin_validator(Arc::downgrade(&admin));
 
-        let cfg_rx = admin.context.runtime.state.config.subscribe();
-        task::spawn({
-            let admin = admin.clone();
-            async move {
-                while let Ok(change) = cfg_rx.recv_async().await {
-                    let change = change.strip_prefix('/').unwrap_or(&change);
-                    if !change.starts_with("plugins") {
-                        continue;
-                    }
+        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        {
+            let cfg_rx = admin.context.runtime.state.config.subscribe();
 
-                    let requested_plugins = {
-                        let cfg_guard = admin.context.runtime.state.config.lock();
-                        cfg_guard.plugins().load_requests().collect::<Vec<_>>()
-                    };
-                    let mut diffs = Vec::new();
-                    for plugin in active_plugins.keys() {
-                        if !requested_plugins.iter().any(|r| &r.name == plugin) {
-                            diffs.push(PluginDiff::Delete(plugin.clone()))
+            tokio::task::spawn({
+                let admin = admin.clone();
+                async move {
+                    while let Ok(change) = cfg_rx.recv_async().await {
+                        let change = change.strip_prefix('/').unwrap_or(&change);
+                        if !change.starts_with("plugins") {
+                            continue;
                         }
-                    }
-                    for request in requested_plugins {
-                        if let Some(active) = active_plugins.get(&request.name) {
-                            if request
-                                .paths
-                                .as_ref()
-                                .map(|p| p.contains(active))
-                                .unwrap_or(true)
-                            {
-                                continue;
+
+                        let requested_plugins = {
+                            let cfg_guard = admin.context.runtime.state.config.lock();
+                            cfg_guard.plugins().load_requests().collect::<Vec<_>>()
+                        };
+                        let mut diffs = Vec::new();
+                        for plugin in active_plugins.keys() {
+                            if !requested_plugins.iter().any(|r| &r.name == plugin) {
+                                diffs.push(PluginDiff::Delete(plugin.clone()))
                             }
-                            diffs.push(PluginDiff::Delete(request.name.clone()))
                         }
-                        diffs.push(PluginDiff::Start(request))
-                    }
-                    let mut plugins_mgr = zlock!(admin.context.plugins_mgr);
-                    for diff in diffs {
-                        match diff {
-                            PluginDiff::Delete(name) => {
-                                active_plugins.remove(name.as_str());
-                                if let Some(running) = plugins_mgr.started_plugin_mut(&name) {
-                                    running.stop()
+                        for request in requested_plugins {
+                            if let Some(active) = active_plugins.get(&request.name) {
+                                if request
+                                    .paths
+                                    .as_ref()
+                                    .map(|p| p.contains(active))
+                                    .unwrap_or(true)
+                                {
+                                    continue;
                                 }
+                                diffs.push(PluginDiff::Delete(request.name.clone()))
                             }
-                            PluginDiff::Start(plugin) => {
-                                if let Err(e) = Self::start_plugin(
-                                    &mut plugins_mgr,
-                                    &plugin,
-                                    &admin.context.runtime,
-                                ) {
-                                    if plugin.required {
-                                        panic!("Failed to load plugin `{}`: {}", plugin.name, e)
-                                    } else {
-                                        log::error!(
-                                            "Failed to load plugin `{}`: {}",
-                                            plugin.name,
-                                            e
-                                        )
+                            diffs.push(PluginDiff::Start(request))
+                        }
+                        let mut plugins_mgr = admin.context.runtime.plugins_manager();
+                        for diff in diffs {
+                            match diff {
+                                PluginDiff::Delete(name) => {
+                                    active_plugins.remove(name.as_str());
+                                    if let Some(running) = plugins_mgr.started_plugin_mut(&name) {
+                                        running.stop()
+                                    }
+                                }
+                                PluginDiff::Start(plugin) => {
+                                    if let Err(e) = Self::start_plugin(
+                                        &mut plugins_mgr,
+                                        &plugin,
+                                        &admin.context.runtime,
+                                        plugin.required,
+                                    ) {
+                                        if plugin.required {
+                                            panic!("Failed to load plugin `{}`: {}", plugin.name, e)
+                                        } else {
+                                            tracing::error!(
+                                                "Failed to load plugin `{}`: {}",
+                                                plugin.name,
+                                                e
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    tracing::info!("Running plugins: {:?}", &active_plugins)
                 }
-                log::info!("Running plugins: {:?}", &active_plugins)
-            }
-        });
+            });
+        }
 
         let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
+            interest_id: None,
+
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -288,6 +318,7 @@ impl AdminSpace {
         });
 
         primitives.send_declare(Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -317,8 +348,12 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
+    fn send_interest(&self, msg: Interest) {
+        tracing::trace!("Recv interest {:?}", msg);
+    }
+
     fn send_declare(&self, msg: Declare) {
-        log::trace!("Recv declare {:?}", msg);
+        tracing::trace!("Recv declare {:?}", msg);
         if let DeclareBody::DeclareKeyExpr(m) = msg.body {
             match self.key_expr_to_string(&m.wire_expr) {
                 Ok(s) => {
@@ -334,7 +369,7 @@ impl Primitives for AdminSpace {
         {
             let conf = self.context.runtime.state.config.lock();
             if !conf.adminspace.permissions().write {
-                log::error!(
+                tracing::error!(
                     "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
                     msg.wire_expr
                 );
@@ -342,41 +377,46 @@ impl Primitives for AdminSpace {
             }
         }
 
-        if let Some(key) = msg
-            .wire_expr
-            .as_str()
-            .strip_prefix(&format!("@/router/{}/config/", &self.context.zid_str))
-        {
+        if let Some(key) = msg.wire_expr.as_str().strip_prefix(&format!(
+            "@/{}/{}/config/",
+            self.context.runtime.state.whatami, self.context.runtime.state.zid
+        )) {
             match msg.payload {
                 PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
                     Ok(json) => {
-                        log::trace!(
-                            "Insert conf value /@/router/{}/config/{} : {}",
-                            &self.context.zid_str,
+                        tracing::trace!(
+                            "Insert conf value /@/{}/{}/config/{} : {}",
+                            self.context.runtime.state.whatami,
+                            self.context.runtime.state.zid,
                             key,
                             json
                         );
                         if let Err(e) = (&self.context.runtime.state.config).insert_json5(key, json)
                         {
                             error!(
-                                "Error inserting conf value /@/router/{}/config/{} : {} - {}",
-                                &self.context.zid_str, key, json, e
+                                "Error inserting conf value /@/{}/{}/config/{} : {} - {}",
+                                self.context.runtime.state.whatami,
+                                self.context.runtime.state.zid,
+                                key,
+                                json,
+                                e
                             );
                         }
                     }
                     Err(e) => error!(
-                        "Received non utf8 conf value on /@/router/{}/config/{} : {}",
-                        &self.context.zid_str, key, e
+                        "Received non utf8 conf value on /@/{}/{}/config/{} : {}",
+                        self.context.runtime.state.whatami, self.context.runtime.state.zid, key, e
                     ),
                 },
                 PushBody::Del(_) => {
-                    log::trace!(
-                        "Deleting conf value /@/router/{}/config/{}",
-                        &self.context.zid_str,
+                    tracing::trace!(
+                        "Deleting conf value /@/{}/{}/config/{}",
+                        self.context.runtime.state.whatami,
+                        self.context.runtime.state.zid,
                         key
                     );
                     if let Err(e) = self.context.runtime.state.config.remove(key) {
-                        log::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
+                        tracing::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
                     }
                 }
             }
@@ -391,7 +431,7 @@ impl Primitives for AdminSpace {
                 {
                     let conf = self.context.runtime.state.config.lock();
                     if !conf.adminspace.permissions().read {
-                        log::error!(
+                        tracing::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
                         msg.wire_expr
                     );
@@ -407,7 +447,7 @@ impl Primitives for AdminSpace {
                 let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
                     Ok(key_expr) => key_expr.into_owned(),
                     Err(e) => {
-                        log::error!("Unknown KeyExpr: {}", e);
+                        tracing::error!("Unknown KeyExpr: {}", e);
                         primitives.send_response_final(ResponseFinal {
                             rid: msg.id,
                             ext_qos: ext::QoSType::RESPONSE_FINAL,
@@ -418,14 +458,11 @@ impl Primitives for AdminSpace {
                 };
 
                 let zid = self.zid;
-                let parameters = query.parameters.to_owned();
                 let query = Query {
                     inner: Arc::new(QueryInner {
                         key_expr: key_expr.clone(),
-                        parameters,
-                        value: query
-                            .ext_body
-                            .map(|b| Value::from(b.payload).with_encoding(b.encoding)),
+                        parameters: query.parameters.into(),
+                        value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
                         qid: msg.id,
                         zid,
                         primitives,
@@ -458,6 +495,11 @@ impl Primitives for AdminSpace {
 }
 
 impl crate::net::primitives::EPrimitives for AdminSpace {
+    #[inline]
+    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
+        (self as &dyn Primitives).send_interest(ctx.msg)
+    }
+
     #[inline]
     fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
         (self as &dyn Primitives).send_declare(ctx.msg)
@@ -493,19 +535,27 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 }
 
-fn router_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}", context.zid_str).try_into().unwrap();
+fn local_data(context: &AdminContext, query: Query) {
+    let reply_key: OwnedKeyExpr = format!(
+        "@/{}/{}",
+        context.runtime.state.whatami, context.runtime.state.zid
+    )
+    .try_into()
+    .unwrap();
 
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
+    #[cfg(all(feature = "unstable", feature = "plugins"))]
     let plugins: serde_json::Value = {
-        let plugins_mgr = zlock!(context.plugins_mgr);
+        let plugins_mgr = context.runtime.plugins_manager();
         plugins_mgr
             .started_plugins_iter()
             .map(|rec| (rec.name(), json!({ "path": rec.path() })))
             .collect()
     };
+    #[cfg(not(all(feature = "unstable", feature = "plugins")))]
+    let plugins = serde_json::Value::Null;
 
     // locators info
     let locators: Vec<serde_json::Value> = transport_mgr
@@ -527,8 +577,11 @@ fn router_data(context: &AdminContext, query: Query) {
         });
         #[cfg(feature = "stats")]
         {
-            let stats = crate::prelude::Parameters::decode(&query.selector())
-                .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+            let stats = query
+                .selector()
+                .parameters()
+                .iter()
+                .any(|(k, v)| k == "_stats" && v != "false");
             if stats {
                 json.as_object_mut().unwrap().insert(
                     "stats".to_string(),
@@ -540,14 +593,15 @@ fn router_data(context: &AdminContext, query: Query) {
         }
         json
     };
-    let transports: Vec<serde_json::Value> = task::block_on(transport_mgr.get_transports_unicast())
+    let transports: Vec<serde_json::Value> = zenoh_runtime::ZRuntime::Net
+        .block_in_place(transport_mgr.get_transports_unicast())
         .iter()
         .map(transport_to_json)
         .collect();
 
     #[allow(unused_mut)]
     let mut json = json!({
-        "zid": context.zid_str,
+        "zid": context.runtime.state.zid,
         "version": context.version,
         "metadata": context.metadata,
         "locators": locators,
@@ -557,8 +611,11 @@ fn router_data(context: &AdminContext, query: Query) {
 
     #[cfg(feature = "stats")]
     {
-        let stats = crate::prelude::Parameters::decode(&query.selector())
-            .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+        let stats = query
+            .selector()
+            .parameters()
+            .iter()
+            .any(|(k, v)| k == "_stats" && v != "false");
         if stats {
             json.as_object_mut().unwrap().insert(
                 "stats".to_string(),
@@ -567,27 +624,30 @@ fn router_data(context: &AdminContext, query: Query) {
         }
     }
 
-    log::trace!("AdminSpace router_data: {:?}", json);
-    let payload = match Payload::try_from(json) {
+    tracing::trace!("AdminSpace router_data: {:?}", json);
+    let payload = match ZBytes::try_from(json) {
         Ok(p) => p,
         Err(e) => {
-            log::error!("Error serializing AdminSpace reply: {:?}", e);
+            tracing::error!("Error serializing AdminSpace reply: {:?}", e);
             return;
         }
     };
     if let Err(e) = query
         .reply(reply_key, payload)
-        .with_encoding(Encoding::APPLICATION_JSON)
+        .encoding(Encoding::APPLICATION_JSON)
         .res_sync()
     {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
+        tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
 
-fn router_metrics(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}/metrics", context.zid_str)
-        .try_into()
-        .unwrap();
+fn metrics(context: &AdminContext, query: Query) {
+    let reply_key: OwnedKeyExpr = format!(
+        "@/{}/{}/metrics",
+        context.runtime.state.whatami, context.runtime.state.zid
+    )
+    .try_into()
+    .unwrap();
     #[allow(unused_mut)]
     let mut metrics = format!(
         r#"# HELP zenoh_build Informations about zenoh.
@@ -608,14 +668,17 @@ zenoh_build{{version="{}"}} 1
     );
 
     if let Err(e) = query.reply(reply_key, metrics).res() {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
+        tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
 
 fn routers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/routers", context.zid_str)
-        .try_into()
-        .unwrap();
+    let reply_key: OwnedKeyExpr = format!(
+        "@/{}/{}/linkstate/routers",
+        context.runtime.state.whatami, context.runtime.state.zid
+    )
+    .try_into()
+    .unwrap();
 
     let tables = zread!(context.runtime.state.router.tables.tables);
 
@@ -623,14 +686,17 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
         .res()
     {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
+        tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
 
 fn peers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/peers", context.zid_str)
-        .try_into()
-        .unwrap();
+    let reply_key: OwnedKeyExpr = format!(
+        "@/{}/{}/linkstate/peers",
+        context.runtime.state.whatami, context.runtime.state.zid
+    )
+    .try_into()
+    .unwrap();
 
     let tables = zread!(context.runtime.state.router.tables.tables);
 
@@ -638,7 +704,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
         .res()
     {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
+        tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
 
@@ -646,14 +712,21 @@ fn subscribers_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
     for sub in tables.hat_code.get_subscriptions(&tables) {
         let key = KeyExpr::try_from(format!(
-            "@/router/{}/subscriber/{}",
-            context.zid_str,
-            sub.expr()
+            "@/{}/{}/subscriber/{}",
+            context.runtime.state.whatami,
+            context.runtime.state.zid,
+            sub.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, Payload::empty()).res() {
-                log::error!("Error sending AdminSpace reply: {:?}", e);
+            let payload =
+                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
+            if let Err(e) = query
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .res_sync()
+            {
+                tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
     }
@@ -663,46 +736,61 @@ fn queryables_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
     for qabl in tables.hat_code.get_queryables(&tables) {
         let key = KeyExpr::try_from(format!(
-            "@/router/{}/queryable/{}",
-            context.zid_str,
-            qabl.expr()
+            "@/{}/{}/queryable/{}",
+            context.runtime.state.whatami,
+            context.runtime.state.zid,
+            qabl.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(key, Payload::empty()).res() {
-                log::error!("Error sending AdminSpace reply: {:?}", e);
+            let payload =
+                ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
+            if let Err(e) = query
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .res_sync()
+            {
+                tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
     }
 }
 
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 fn plugins_data(context: &AdminContext, query: Query) {
-    let guard = zlock!(context.plugins_mgr);
-    let root_key = format!("@/router/{}/plugins", &context.zid_str);
+    let guard = context.runtime.plugins_manager();
+    let root_key = format!(
+        "@/{}/{}/plugins",
+        context.runtime.state.whatami, &context.runtime.state.zid
+    );
     let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
-    log::debug!("requested plugins status {:?}", query.key_expr());
+    tracing::debug!("requested plugins status {:?}", query.key_expr());
     if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
         let statuses = guard.plugins_status(names);
         for status in statuses {
-            log::debug!("plugin status: {:?}", status);
+            tracing::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            match Payload::try_from(status) {
+            match ZBytes::try_from(status) {
                 Ok(zbuf) => {
                     if let Err(e) = query.reply(key, zbuf).res_sync() {
-                        log::error!("Error sending AdminSpace reply: {:?}", e);
+                        tracing::error!("Error sending AdminSpace reply: {:?}", e);
                     }
                 }
-                Err(e) => log::debug!("Admin query error: {}", e),
+                Err(e) => tracing::debug!("Admin query error: {}", e),
             }
         }
     }
 }
 
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 fn plugins_status(context: &AdminContext, query: Query) {
     let selector = query.selector();
-    let guard = zlock!(context.plugins_mgr);
-    let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
+    let guard = context.runtime.plugins_manager();
+    let mut root_key = format!(
+        "@/{}/{}/status/plugins/",
+        context.runtime.state.whatami, &context.runtime.state.zid
+    );
 
     for plugin in guard.started_plugins_iter() {
         with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
@@ -711,11 +799,11 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query.reply(key_expr, plugin.path()).res() {
-                            log::error!("Error sending AdminSpace reply: {:?}", e);
+                            tracing::error!("Error sending AdminSpace reply: {:?}", e);
                         }
                     }
                 } else {
-                    log::error!("Error: invalid plugin path key {}", plugin_path_key);
+                    tracing::error!("Error: invalid plugin path key {}", plugin_path_key);
                 }
             });
             let matches_plugin = |plugin_status_space: &mut String| {
@@ -732,35 +820,36 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match Payload::try_from(response.value) {
+                            match ZBytes::try_from(response.value) {
                                 Ok(zbuf) => {
                                     if let Err(e) = query.reply(key_expr, zbuf).res_sync() {
-                                        log::error!("Error sending AdminSpace reply: {:?}", e);
+                                        tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
                                 },
-                                Err(e) => log::debug!("Admin query error: {}", e),
+                                Err(e) => tracing::debug!("Admin query error: {}", e),
                             }
                         } else {
-                            log::error!("Error: plugin {} replied with an invalid key", plugin_key);
+                            tracing::error!("Error: plugin {} replied with an invalid key", plugin_key);
                         }
                     }
                 }
                 Ok(Err(e)) => {
-                    log::error!("Plugin {} bailed from responding to {}: {}", plugin.name(), query.key_expr(), e)
+                    tracing::error!("Plugin {} bailed from responding to {}: {}", plugin.name(), query.key_expr(), e)
                 }
                 Err(e) => match e
                     .downcast_ref::<String>()
                     .map(|s| s.as_str())
                     .or_else(|| e.downcast_ref::<&str>().copied())
                 {
-                    Some(e) => log::error!("Plugin {} panicked while responding to {}: {}", plugin.name(), query.key_expr(), e),
-                    None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.name(), query.key_expr()),
+                    Some(e) => tracing::error!("Plugin {} panicked while responding to {}: {}", plugin.name(), query.key_expr(), e),
+                    None => tracing::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.name(), query.key_expr()),
                 },
             }
         });
     }
 }
 
+#[cfg(all(feature = "unstable", feature = "plugins"))]
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     prefix: &mut String,
     suffixes: &[&str],

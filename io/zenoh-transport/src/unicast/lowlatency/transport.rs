@@ -21,12 +21,12 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
-use async_executor::Task;
-use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkMessage;
@@ -59,8 +59,8 @@ pub(crate) struct TransportUnicastLowlatency {
     pub(super) stats: Arc<TransportStats>,
 
     // The handles for TX/RX tasks
-    pub(crate) handle_keepalive: Arc<RwLock<Option<Task<()>>>>,
-    pub(crate) handle_rx: Arc<RwLock<Option<JoinHandle<()>>>>,
+    pub(crate) token: CancellationToken,
+    pub(crate) tracker: TaskTracker,
 }
 
 impl TransportUnicastLowlatency {
@@ -78,8 +78,8 @@ impl TransportUnicastLowlatency {
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
-            handle_keepalive: Arc::new(RwLock::new(None)),
-            handle_rx: Arc::new(RwLock::new(None)),
+            token: CancellationToken::new(),
+            tracker: TaskTracker::new(),
         }) as Arc<dyn TransportUnicastTrait>
     }
 
@@ -87,7 +87,7 @@ impl TransportUnicastLowlatency {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn finalize(&self, reason: u8) -> ZResult<()> {
-        log::debug!(
+        tracing::debug!(
             "[{}] Finalizing transport with peer: {}",
             self.manager.config.zid,
             self.config.zid
@@ -107,7 +107,7 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) async fn delete(&self) -> ZResult<()> {
-        log::debug!(
+        tracing::debug!(
             "[{}] Deleting transport with peer: {}",
             self.manager.config.zid,
             self.config.zid
@@ -127,8 +127,12 @@ impl TransportUnicastLowlatency {
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close and drop the link
-        self.stop_keepalive().await;
-        self.stop_rx().await;
+        self.token.cancel();
+        self.tracker.close();
+        self.tracker.wait().await;
+        // self.stop_keepalive().await;
+        // self.stop_rx().await;
+
         if let Some(val) = zasyncwrite!(self.link).as_ref() {
             let _ = val.close(Some(close::reason::GENERIC)).await;
         }
@@ -146,7 +150,7 @@ impl TransportUnicastLowlatency {
         let mut a_guard = zasynclock!(self.alive);
         if *a_guard {
             let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             return Err(e.into());
         }
 
@@ -170,7 +174,9 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        let guard = async_std::task::block_on(async { zasyncread!(self.link) });
+        let handle = tokio::runtime::Handle::current();
+        let guard =
+            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
         if let Some(val) = guard.as_ref() {
             return [val.link()].to_vec();
         }
@@ -187,7 +193,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool {
-        self.config.is_shm
+        self.config.shm.is_some()
     }
 
     fn is_qos(&self) -> bool {
@@ -223,7 +229,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
-        log::trace!("Adding link: {}", link);
+        tracing::trace!("Adding link: {}", link);
 
         let _ = self.sync(other_initial_sn).await;
 
@@ -244,25 +250,25 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
             // start keepalive task
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            self.start_keepalive(&self.manager.tx_executor, keep_alive);
+            self.start_keepalive(keep_alive);
 
             // start RX task
             self.internal_start_rx(other_lease);
         });
 
-        return Ok((start_link, ack));
+        Ok((start_link, ack))
     }
 
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
     async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
-        log::trace!("Closing link {} with peer: {}", link, self.config.zid);
+        tracing::trace!("Closing link {} with peer: {}", link, self.config.zid);
         self.finalize(reason).await
     }
 
     async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing transport with peer: {}", self.config.zid);
+        tracing::trace!("Closing transport with peer: {}", self.config.zid);
         self.finalize(reason).await
     }
 }

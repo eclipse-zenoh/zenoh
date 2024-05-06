@@ -36,7 +36,7 @@ impl DynamicPluginSource {
                 for path in paths {
                     match unsafe { LibLoader::load_file(path) } {
                         Ok((l, p)) => return Ok((l, p)),
-                        Err(e) => log::debug!("Attempt to load {} failed: {}", path, e),
+                        Err(e) => tracing::debug!("Attempt to load {} failed: {}", path, e),
                     }
                 }
                 bail!("Plugin not found in {:?}", &paths)
@@ -55,11 +55,11 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     DynamicPluginStarter<StartArgs, Instance>
 {
     fn get_vtable(lib: &Library, path: &Path) -> ZResult<PluginVTable<StartArgs, Instance>> {
-        log::debug!("Loading plugin {}", path.to_str().unwrap(),);
+        tracing::debug!("Loading plugin {}", path.to_str().unwrap(),);
         let get_plugin_loader_version =
             unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")? };
         let plugin_loader_version = get_plugin_loader_version();
-        log::debug!("Plugin loader version: {}", &plugin_loader_version);
+        tracing::debug!("Plugin loader version: {}", &plugin_loader_version);
         if plugin_loader_version != PLUGIN_LOADER_VERSION {
             bail!(
                 "Plugin loader version mismatch: host = {}, plugin = {}",
@@ -71,7 +71,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
         let mut plugin_compatibility_record = get_compatibility();
         let mut host_compatibility_record =
             Compatibility::with_empty_plugin_version::<StartArgs, Instance>();
-        log::debug!(
+        tracing::debug!(
             "Plugin compativilty record: {:?}",
             &plugin_compatibility_record
         );
@@ -106,6 +106,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
 
 pub struct DynamicPlugin<StartArgs, Instance> {
     name: String,
+    required: bool,
     report: PluginReport,
     source: DynamicPluginSource,
     starter: Option<DynamicPluginStarter<StartArgs, Instance>>,
@@ -113,9 +114,10 @@ pub struct DynamicPlugin<StartArgs, Instance> {
 }
 
 impl<StartArgs, Instance> DynamicPlugin<StartArgs, Instance> {
-    pub fn new(name: String, source: DynamicPluginSource) -> Self {
+    pub fn new(name: String, source: DynamicPluginSource, required: bool) -> Self {
         Self {
             name,
+            required,
             report: PluginReport::new(),
             source,
             starter: None,
@@ -173,10 +175,10 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartA
         if self.starter.is_none() {
             let (lib, path) = self.source.load().add_error(&mut self.report)?;
             let starter = DynamicPluginStarter::new(lib, path).add_error(&mut self.report)?;
-            log::debug!("Plugin {} loaded from {}", self.name, starter.path());
+            tracing::debug!("Plugin {} loaded from {}", self.name, starter.path());
             self.starter = Some(starter);
         } else {
-            log::warn!("Plugin `{}` already loaded", self.name);
+            tracing::warn!("Plugin `{}` already loaded", self.name);
         }
         Ok(self)
     }
@@ -202,6 +204,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArg
     fn as_status(&self) -> &dyn PluginStatus {
         self
     }
+    fn required(&self) -> bool {
+        self.required
+    }
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         let starter = self
             .starter
@@ -213,10 +218,10 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArg
             let instance = starter
                 .start(self.name(), args)
                 .add_error(&mut self.report)?;
-            log::debug!("Plugin `{}` started", self.name);
+            tracing::debug!("Plugin `{}` started", self.name);
             self.instance = Some(instance);
         } else {
-            log::warn!("Plugin `{}` already started", self.name);
+            tracing::warn!("Plugin `{}` already started", self.name);
         }
         Ok(self)
     }
@@ -243,7 +248,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> StartedPlugin<StartAr
         self
     }
     fn stop(&mut self) {
-        log::debug!("Plugin `{}` stopped", self.name);
+        tracing::debug!("Plugin `{}` stopped", self.name);
         self.report.clear();
         self.instance = None;
     }

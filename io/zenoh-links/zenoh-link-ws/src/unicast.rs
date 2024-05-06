@@ -12,10 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_std::prelude::*;
-use async_std::sync::Mutex as AsyncMutex;
-use async_std::task;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
@@ -24,20 +20,22 @@ use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use tokio::task::JoinHandle;
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
-use zenoh_core::{zasynclock, zread, zwrite};
+use tokio_util::sync::CancellationToken;
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, ZResult};
-use zenoh_sync::Signal;
 
 use super::{get_ws_addr, get_ws_url, TCP_ACCEPT_THROTTLE_TIME, WS_DEFAULT_MTU, WS_LOCATOR_PREFIX};
 
@@ -64,7 +62,7 @@ impl LinkUnicastWs {
     ) -> LinkUnicastWs {
         // Set the TCP nodelay option
         if let Err(err) = get_stream(&socket).set_nodelay(true) {
-            log::warn!(
+            tracing::warn!(
                 "Unable to set NODEALY option on TCP link {} => {}: {}",
                 src_addr,
                 dst_addr,
@@ -126,12 +124,12 @@ impl LinkUnicastWs {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastWs {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing WebSocket link: {}", self);
+        tracing::trace!("Closing WebSocket link: {}", self);
         let mut guard = zasynclock!(self.send);
         // Close the underlying TCP socket
         guard.close().await.map_err(|e| {
             let e = zerror!("WebSocket link shutdown {}: {:?}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -142,7 +140,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
         guard.send(msg).await.map_err(|e| {
             let e = zerror!("Write error on WebSocket link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e
         })?;
 
@@ -203,14 +201,14 @@ impl LinkUnicastTrait for LinkUnicastWs {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *WS_DEFAULT_MTU
     }
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
         // @TODO: Not supported for now
-        log::debug!("The get_interface_names for LinkUnicastWs is not supported");
+        tracing::debug!("The get_interface_names for LinkUnicastWs is not supported");
         vec![]
     }
 
@@ -227,11 +225,11 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
 impl Drop for LinkUnicastWs {
     fn drop(&mut self) {
-        task::block_on(async {
+        zenoh_runtime::ZRuntime::Acceptor.block_in_place(async {
             let mut guard = zasynclock!(self.send);
             // Close the underlying TCP socket
             guard.close().await.unwrap_or_else(|e| {
-                log::warn!("`LinkUnicastWs::Drop` error when closing WebSocket {}", e)
+                tracing::warn!("`LinkUnicastWs::Drop` error when closing WebSocket {}", e)
             });
         })
     }
@@ -258,37 +256,38 @@ impl fmt::Debug for LinkUnicastWs {
 /*************************************/
 struct ListenerUnicastWs {
     endpoint: EndPoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerUnicastWs {
     fn new(
         endpoint: EndPoint,
-        active: Arc<AtomicBool>,
-        signal: Signal,
+        token: CancellationToken,
         handle: JoinHandle<ZResult<()>>,
     ) -> ListenerUnicastWs {
         ListenerUnicastWs {
             endpoint,
-            active,
-            signal,
+            token,
             handle,
         }
+    }
+
+    async fn stop(&self) {
+        self.token.cancel();
     }
 }
 
 pub struct LinkManagerUnicastWs {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastWs>>>,
+    listeners: Arc<AsyncRwLock<HashMap<SocketAddr, ListenerUnicastWs>>>,
 }
 
 impl LinkManagerUnicastWs {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
 }
@@ -358,25 +357,24 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         )?;
 
         // Spawn the accept loop for the listener
-        let active = Arc::new(AtomicBool::new(true));
-        let signal = Signal::new();
-
-        let c_active = active.clone();
-        let c_signal = signal.clone();
+        let token = CancellationToken::new();
+        let c_token = token.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
-        let handle = task::spawn(async move {
+
+        let task = async move {
             // Wait for the accept loop to terminate
-            let res = accept_task(socket, c_active, c_signal, c_manager).await;
-            zwrite!(c_listeners).remove(&c_addr);
+            let res = accept_task(socket, c_token, c_manager).await;
+            zasyncwrite!(c_listeners).remove(&c_addr);
             res
-        });
+        };
+        let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
         let locator = endpoint.to_locator();
-        let listener = ListenerUnicastWs::new(endpoint, active, signal, handle);
+        let listener = ListenerUnicastWs::new(endpoint, token, handle);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(local_addr, listener);
+        zasyncwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(locator)
     }
@@ -385,34 +383,33 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         let addr = get_ws_addr(endpoint.address()).await?;
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+        let listener = zasyncwrite!(self.listeners).remove(&addr).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the TCP (WebSocket) listener because it has not been found: {}",
                 addr
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e
         })?;
 
         // Send the stop signal
-        listener.active.store(false, Ordering::Release);
-        listener.signal.trigger();
-        listener.handle.await
+        listener.stop().await;
+        listener.handle.await?
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners)
             .values()
             .map(|l| l.endpoint.clone())
             .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
+    async fn get_locators(&self) -> Vec<Locator> {
         let mut locators = Vec::new();
         let default_ipv4 = Ipv4Addr::UNSPECIFIED;
         let default_ipv6 = Ipv6Addr::UNSPECIFIED;
 
-        let guard = zread!(self.listeners);
+        let guard = zasyncread!(self.listeners);
         for (key, value) in guard.iter() {
             let listener_locator = value.endpoint.to_locator();
             if key.ip() == default_ipv4 {
@@ -430,7 +427,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                             }
                         }
                     }
-                    Err(err) => log::error!("Unable to get local addresses: {}", err),
+                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
                 }
             } else if key.ip() == default_ipv6 {
                 match zenoh_util::net::get_local_addresses(None) {
@@ -447,7 +444,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                             }
                         }
                     }
-                    Err(err) => log::error!("Unable to get local addresses: {}", err),
+                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
                 }
             } else {
                 locators.push(listener_locator.clone());
@@ -461,56 +458,48 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
 
 async fn accept_task(
     socket: TcpListener,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-    enum Action {
-        Accept((TcpStream, SocketAddr)),
-        Stop,
-    }
-
-    async fn accept(socket: &TcpListener) -> ZResult<Action> {
+    async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
-        Ok(Action::Accept(res))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok(res)
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TCP (WebSocket) connections: {}", e);
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
-    log::trace!(
+    tracing::trace!(
         "Ready to accept TCP (WebSocket) connections on: {:?}",
         src_addr
     );
-    while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
-        let (stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
-            Ok(action) => match action {
-                Action::Accept((stream, addr)) => (stream, addr),
-                Action::Stop => break,
+
+    loop {
+        let (stream, dst_addr) = tokio::select! {
+            res = accept(&socket) => {
+                match res {
+                    Ok(res) => res,
+                    Err(e) => {
+                        tracing::warn!("{}. Hint: increase the system open file limit.", e);
+                        // Throttle the accept loop upon an error
+                        // NOTE: This might be due to various factors. However, the most common case is that
+                        //       the process has reached the maximum number of open files in the system. On
+                        //       Linux systems this limit can be changed by using the "ulimit" command line
+                        //       tool. In case of systemd-based systems, this can be changed by using the
+                        //       "sysctl" command line tool.
+                        tokio::time::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
+                        continue;
+                    }
+                }
             },
-            Err(e) => {
-                log::warn!("{}. Hint: increase the system open file limit.", e);
-                // Throttle the accept loop upon an error
-                // NOTE: This might be due to various factors. However, the most common case is that
-                //       the process has reached the maximum number of open files in the system. On
-                //       Linux systems this limit can be changed by using the "ulimit" command line
-                //       tool. In case of systemd-based systems, this can be changed by using the
-                //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
-                continue;
-            }
+
+            _ = token.cancelled() => break,
         };
 
-        log::debug!(
+        tracing::debug!(
             "Accepted TCP (WebSocket) connection on {:?}: {:?}",
             src_addr,
             dst_addr
@@ -520,7 +509,7 @@ async fn accept_task(
             .await
             .map_err(|e| {
                 let e = zerror!("Error when creating the WebSocket session: {}", e);
-                log::trace!("{}", e);
+                tracing::trace!("{}", e);
                 e
             })?;
         // Create the new link object
@@ -528,7 +517,7 @@ async fn accept_task(
 
         // Communicate the new link to the initial transport manager
         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-            log::error!("{}-{}: {}", file!(), line!(), e)
+            tracing::error!("{}-{}: {}", file!(), line!(), e)
         }
     }
 

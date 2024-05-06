@@ -12,16 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{Runtime, RuntimeSession};
-use async_std::net::UdpSocket;
-use async_std::prelude::FutureExt;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
+use tokio::net::UdpSocket;
 use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_config::{unwrap_or_default, ModeDependent};
+use zenoh_config::{
+    get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default, ModeDependent,
+};
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohId},
@@ -33,10 +34,6 @@ const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
-const CONNECTION_TIMEOUT: Duration = Duration::from_millis(10_000);
-const CONNECTION_RETRY_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
-const CONNECTION_RETRY_MAX_PERIOD: Duration = Duration::from_millis(4_000);
-const CONNECTION_RETRY_PERIOD_INCREASE_FACTOR: u32 = 2;
 const ROUTER_DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 
@@ -68,7 +65,7 @@ impl Runtime {
         match peers.len() {
             0 => {
                 if scouting {
-                    log::info!("Scouting for router ...");
+                    tracing::info!("Scouting for router ...");
                     let ifaces = Runtime::get_interfaces(&ifaces);
                     if ifaces.is_empty() {
                         bail!("Unable to find multicast interface!")
@@ -88,23 +85,7 @@ impl Runtime {
                     bail!("No peer specified and multicast scouting desactivated!")
                 }
             }
-            _ => {
-                for locator in &peers {
-                    match self
-                        .manager()
-                        .open_transport_unicast(locator.clone())
-                        .timeout(CONNECTION_TIMEOUT)
-                        .await
-                    {
-                        Ok(Ok(_)) => return Ok(()),
-                        Ok(Err(e)) => log::warn!("Unable to connect to {}! {}", locator, e),
-                        Err(e) => log::warn!("Unable to connect to {}! {}", locator, e),
-                    }
-                }
-                let e = zerror!("Unable to connect to any of {:?}! ", peers);
-                log::error!("{}", &e);
-                Err(e.into())
-            }
+            _ => self.connect_peers(&peers, true).await,
         }
     }
 
@@ -143,14 +124,12 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        for peer in peers {
-            self.spawn_peer_connector(peer).await?;
-        }
+        self.connect_peers(&peers, false).await?;
 
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
-        async_std::task::sleep(delay).await;
+        tokio::time::sleep(delay).await;
         Ok(())
     }
 
@@ -188,9 +167,7 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        for peer in peers {
-            self.spawn_peer_connector(peer).await?;
-        }
+        self.connect_peers(&peers, false).await?;
 
         if scouting {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
@@ -217,29 +194,138 @@ impl Runtime {
                 let this = self.clone();
                 match (listen, autoconnect.is_empty()) {
                     (true, false) => {
-                        self.spawn(async move {
-                            async_std::prelude::FutureExt::race(
-                                this.responder(&mcast_socket, &sockets),
-                                this.connect_all(&sockets, autoconnect, &addr),
-                            )
-                            .await;
+                        self.spawn_abortable(async move {
+                            tokio::select! {
+                                _ = this.responder(&mcast_socket, &sockets) => {},
+                                _ = this.connect_all(&sockets, autoconnect, &addr) => {},
+                            }
                         });
                     }
                     (true, true) => {
-                        self.spawn(async move {
+                        self.spawn_abortable(async move {
                             this.responder(&mcast_socket, &sockets).await;
                         });
                     }
                     (false, false) => {
-                        self.spawn(
-                            async move { this.connect_all(&sockets, autoconnect, &addr).await },
-                        );
+                        self.spawn_abortable(async move {
+                            this.connect_all(&sockets, autoconnect, &addr).await
+                        });
                     }
                     _ => {}
                 }
             }
         }
         Ok(())
+    }
+
+    async fn connect_peers(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+        let timeout = self.get_global_connect_timeout();
+        if timeout.is_zero() {
+            self.connect_peers_impl(peers, single_link).await
+        } else {
+            let res = tokio::time::timeout(timeout, async {
+                self.connect_peers_impl(peers, single_link).await.ok()
+            })
+            .await;
+            match res {
+                Ok(_) => Ok(()),
+                Err(_) => {
+                    let e = zerror!(
+                        "{:?} Unable to connect to any of {:?}! ",
+                        self.manager().get_locators(),
+                        peers
+                    );
+                    tracing::error!("{}", &e);
+                    Err(e.into())
+                }
+            }
+        }
+    }
+
+    async fn connect_peers_impl(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+        if single_link {
+            self.connect_peers_single_link(peers).await
+        } else {
+            self.connect_peers_multiply_links(peers).await
+        }
+    }
+
+    async fn connect_peers_single_link(&self, peers: &[EndPoint]) -> ZResult<()> {
+        for peer in peers {
+            let endpoint = peer.clone();
+            let retry_config = self.get_connect_retry_config(&endpoint);
+            tracing::debug!(
+                "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
+                endpoint,
+                self.get_global_connect_timeout(),
+                retry_config
+            );
+            if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+                // try to connect and exit immediately without retry
+                if self
+                    .peer_connector(endpoint, retry_config.timeout())
+                    .await
+                    .is_ok()
+                {
+                    return Ok(());
+                }
+            } else {
+                // try to connect with retry waiting
+                self.peer_connector_retry(endpoint).await;
+                return Ok(());
+            }
+        }
+        let e = zerror!(
+            "{:?} Unable to connect to any of {:?}! ",
+            self.manager().get_locators(),
+            peers
+        );
+        tracing::error!("{}", &e);
+        Err(e.into())
+    }
+
+    async fn connect_peers_multiply_links(&self, peers: &[EndPoint]) -> ZResult<()> {
+        for peer in peers {
+            let endpoint = peer.clone();
+            let retry_config = self.get_connect_retry_config(&endpoint);
+            tracing::debug!(
+                "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
+                endpoint,
+                self.get_global_connect_timeout(),
+                retry_config
+            );
+            if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+                // try to connect and exit immediately without retry
+                if let Err(e) = self.peer_connector(endpoint, retry_config.timeout()).await {
+                    if retry_config.exit_on_failure {
+                        return Err(e);
+                    }
+                }
+            } else if retry_config.exit_on_failure {
+                // try to connect with retry waiting
+                self.peer_connector_retry(endpoint).await;
+            } else {
+                // try to connect in background
+                self.spawn_peer_connector(endpoint).await?
+            }
+        }
+        Ok(())
+    }
+
+    async fn peer_connector(&self, peer: EndPoint, timeout: std::time::Duration) -> ZResult<()> {
+        match tokio::time::timeout(timeout, self.manager().open_transport_unicast(peer.clone()))
+            .await
+        {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(e)) => {
+                tracing::warn!("Unable to connect to {}! {}", peer, e);
+                Err(e)
+            }
+            Err(e) => {
+                tracing::warn!("Unable to connect to {}! {}", peer, e);
+                Err(e.into())
+            }
+        }
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
@@ -291,31 +377,125 @@ impl Runtime {
         Ok(())
     }
 
+    fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
+        let guard = &self.state.config.lock();
+        zenoh_config::get_retry_config(guard, Some(endpoint), true)
+    }
+
+    fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
+        let guard = &self.state.config.lock();
+        zenoh_config::get_retry_config(guard, Some(endpoint), false)
+    }
+
+    fn get_global_connect_retry_config(&self) -> zenoh_config::ConnectionRetryConf {
+        let guard = &self.state.config.lock();
+        zenoh_config::get_retry_config(guard, None, false)
+    }
+
+    fn get_global_listener_timeout(&self) -> std::time::Duration {
+        let guard = &self.state.config.lock();
+        get_global_listener_timeout(guard)
+    }
+
+    fn get_global_connect_timeout(&self) -> std::time::Duration {
+        let guard = &self.state.config.lock();
+        get_global_connect_timeout(guard)
+    }
+
     async fn bind_listeners(&self, listeners: &[EndPoint]) -> ZResult<()> {
-        for listener in listeners {
-            let endpoint = listener.clone();
-            match self.manager().add_listener(endpoint).await {
-                Ok(listener) => log::debug!("Listener added: {}", listener),
-                Err(err) => {
-                    log::error!("Unable to open listener {}: {}", listener, err);
-                    return Err(err);
+        let timeout = self.get_global_listener_timeout();
+        if timeout.is_zero() {
+            self.bind_listeners_impl(listeners).await
+        } else {
+            let res = tokio::time::timeout(timeout, async {
+                self.bind_listeners_impl(listeners).await.ok()
+            })
+            .await;
+            match res {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    tracing::error!("Unable to open listeners: {}", e);
+                    Err(Box::new(e))
                 }
             }
         }
+    }
 
+    async fn bind_listeners_impl(&self, listeners: &[EndPoint]) -> ZResult<()> {
+        for listener in listeners {
+            let endpoint = listener.clone();
+            let retry_config = self.get_listen_retry_config(&endpoint);
+            tracing::debug!("Try to add listener: {:?}: {:?}", endpoint, retry_config);
+            if retry_config.timeout().is_zero() || self.get_global_listener_timeout().is_zero() {
+                // try to add listener and exit immediately without retry
+                if let Err(e) = self.add_listener(endpoint).await {
+                    if retry_config.exit_on_failure {
+                        return Err(e);
+                    }
+                };
+            } else if retry_config.exit_on_failure {
+                // try to add listener with retry waiting
+                self.add_listener_retry(endpoint, retry_config).await
+            } else {
+                // try to add listener in background
+                self.spawn_add_listener(endpoint, retry_config).await
+            }
+        }
+        self.print_locators();
+        Ok(())
+    }
+
+    async fn spawn_add_listener(
+        &self,
+        listener: EndPoint,
+        retry_config: zenoh_config::ConnectionRetryConf,
+    ) {
+        let this = self.clone();
+        self.spawn(async move {
+            this.add_listener_retry(listener, retry_config).await;
+            this.print_locators();
+        });
+    }
+
+    async fn add_listener_retry(
+        &self,
+        listener: EndPoint,
+        retry_config: zenoh_config::ConnectionRetryConf,
+    ) {
+        let mut period = retry_config.period();
+        loop {
+            if self.add_listener(listener.clone()).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(period.next_duration()).await;
+        }
+    }
+
+    async fn add_listener(&self, listener: EndPoint) -> ZResult<()> {
+        let endpoint = listener.clone();
+        match self.manager().add_listener(endpoint).await {
+            Ok(listener) => tracing::debug!("Listener added: {}", listener),
+            Err(err) => {
+                tracing::warn!("Unable to open listener {}: {}", listener, err);
+                return Err(err);
+            }
+        }
+        Ok(())
+    }
+
+    fn print_locators(&self) {
         let mut locators = self.state.locators.write().unwrap();
         *locators = self.manager().get_locators();
         for locator in &*locators {
-            log::info!("Zenoh can be reached at: {}", locator);
+            tracing::info!("Zenoh can be reached at: {}", locator);
         }
-        Ok(())
     }
 
     pub fn get_interfaces(names: &str) -> Vec<IpAddr> {
         if names == "auto" {
             let ifaces = zenoh_util::net::get_multicast_interfaces();
             if ifaces.is_empty() {
-                log::warn!(
+                tracing::warn!(
                     "Unable to find active, non-loopback multicast interface. Will use [::]."
                 );
                 vec![Ipv6Addr::UNSPECIFIED.into()]
@@ -331,12 +511,12 @@ impl Runtime {
                         Ok(opt_addr) => match opt_addr {
                             Some(addr) => Some(addr),
                             None => {
-                                log::error!("Unable to find interface {}", name);
+                                tracing::error!("Unable to find interface {}", name);
                                 None
                             }
                         },
                         Err(err) => {
-                            log::error!("Unable to find interface {}: {}", name, err);
+                            tracing::error!("Unable to find interface {}: {}", name, err);
                             None
                         }
                     },
@@ -349,12 +529,12 @@ impl Runtime {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
-                log::error!("Unable to create datagram socket: {}", err);
+                tracing::error!("Unable to create datagram socket: {}", err);
                 bail!(err => "Unable to create datagram socket");
             }
         };
         if let Err(err) = socket.set_reuse_address(true) {
-            log::error!("Unable to set SO_REUSEADDR option: {}", err);
+            tracing::error!("Unable to set SO_REUSEADDR option: {}", err);
             bail!(err => "Unable to set SO_REUSEADDR option");
         }
         let addr: IpAddr = {
@@ -368,18 +548,20 @@ impl Runtime {
             }
         };
         match socket.bind(&SocketAddr::new(addr, sockaddr.port()).into()) {
-            Ok(()) => log::debug!("UDP port bound to {}", sockaddr),
+            Ok(()) => tracing::debug!("UDP port bound to {}", sockaddr),
             Err(err) => {
-                log::error!("Unable to bind UDP port {}: {}", sockaddr, err);
+                tracing::error!("Unable to bind UDP port {}: {}", sockaddr, err);
                 bail!(err => "Unable to bind UDP port {}", sockaddr);
             }
         }
 
         match sockaddr.ip() {
             IpAddr::V6(addr) => match socket.join_multicast_v6(&addr, 0) {
-                Ok(()) => log::debug!("Joined multicast group {} on interface 0", sockaddr.ip()),
+                Ok(()) => {
+                    tracing::debug!("Joined multicast group {} on interface 0", sockaddr.ip())
+                }
                 Err(err) => {
-                    log::error!(
+                    tracing::error!(
                         "Unable to join multicast group {} on interface 0: {}",
                         sockaddr.ip(),
                         err
@@ -394,12 +576,12 @@ impl Runtime {
                 for iface in ifaces {
                     if let IpAddr::V4(iface_addr) = iface {
                         match socket.join_multicast_v4(&addr, iface_addr) {
-                            Ok(()) => log::debug!(
+                            Ok(()) => tracing::debug!(
                                 "Joined multicast group {} on interface {}",
                                 sockaddr.ip(),
                                 iface_addr,
                             ),
-                            Err(err) => log::warn!(
+                            Err(err) => tracing::warn!(
                                 "Unable to join multicast group {} on interface {}: {}",
                                 sockaddr.ip(),
                                 iface_addr,
@@ -407,7 +589,7 @@ impl Runtime {
                             ),
                         }
                     } else {
-                        log::warn!(
+                        tracing::warn!(
                             "Cannot join IpV4 multicast group {} on IpV6 iface {}",
                             sockaddr.ip(),
                             iface
@@ -416,15 +598,23 @@ impl Runtime {
                 }
             }
         }
-        log::info!("zenohd listening scout messages on {}", sockaddr);
-        Ok(std::net::UdpSocket::from(socket).into())
+        tracing::info!("zenohd listening scout messages on {}", sockaddr);
+
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
+        socket.set_nonblocking(true)?;
+
+        // UdpSocket::from_std requires a runtime even though it's a sync function
+        let udp_socket = zenoh_runtime::ZRuntime::Net
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
+        Ok(udp_socket)
     }
 
     pub fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
-                log::warn!("Unable to create datagram socket: {}", err);
+                tracing::warn!("Unable to create datagram socket: {}", err);
                 bail!(err=> "Unable to create datagram socket");
             }
         };
@@ -436,14 +626,22 @@ impl Runtime {
                     .unwrap_or(SocketAddr::new(addr, 0).into())
                     .as_socket()
                     .unwrap_or(SocketAddr::new(addr, 0));
-                log::debug!("UDP port bound to {}", local_addr);
+                tracing::debug!("UDP port bound to {}", local_addr);
             }
             Err(err) => {
-                log::warn!("Unable to bind udp port {}:0: {}", addr, err);
+                tracing::warn!("Unable to bind udp port {}:0: {}", addr, err);
                 bail!(err => "Unable to bind udp port {}:0", addr);
             }
         }
-        Ok(std::net::UdpSocket::from(socket).into())
+
+        // Must set to nonblocking according to the doc of tokio
+        // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
+        socket.set_nonblocking(true)?;
+
+        // UdpSocket::from_std requires a runtime even though it's a sync function
+        let udp_socket = zenoh_runtime::ZRuntime::Net
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
+        Ok(udp_socket)
     }
 
     async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {
@@ -452,58 +650,56 @@ impl Runtime {
             .await?
         {
             let this = self.clone();
-            self.spawn(async move { this.peer_connector(peer).await });
+            self.spawn(async move { this.peer_connector_retry(peer).await });
             Ok(())
         } else {
             bail!("Forbidden multicast endpoint in connect list!")
         }
     }
 
-    async fn peer_connector(&self, peer: EndPoint) {
-        let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
+    async fn peer_connector_retry(&self, peer: EndPoint) {
+        let retry_config = self.get_connect_retry_config(&peer);
+        let mut period = retry_config.period();
+        let cancellation_token = self.get_cancellation_token();
         loop {
-            log::trace!("Trying to connect to configured peer {}", peer);
+            tracing::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            match self
-                .manager()
-                .open_transport_unicast(endpoint)
-                .timeout(CONNECTION_TIMEOUT)
-                .await
-            {
-                Ok(Ok(transport)) => {
-                    log::debug!("Successfully connected to configured peer {}", peer);
-                    if let Ok(Some(orch_transport)) = transport.get_callback() {
-                        if let Some(orch_transport) = orch_transport
-                            .as_any()
-                            .downcast_ref::<super::RuntimeSession>()
-                        {
-                            *zwrite!(orch_transport.endpoint) = Some(peer);
+            tokio::select! {
+                res = tokio::time::timeout(retry_config.timeout(), self.manager().open_transport_unicast(endpoint)) => {
+                    match res {
+                        Ok(Ok(transport)) => {
+                            tracing::debug!("Successfully connected to configured peer {}", peer);
+                            if let Ok(Some(orch_transport)) = transport.get_callback() {
+                                if let Some(orch_transport) = orch_transport
+                                    .as_any()
+                                    .downcast_ref::<super::RuntimeSession>()
+                                {
+                                    *zwrite!(orch_transport.endpoint) = Some(peer);
+                                }
+                            }
+                            break;
+                        }
+                        Ok(Err(e)) => {
+                            tracing::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                period.duration()
+                            );
+                        }
+                        Err(e) => {
+                            tracing::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                period.duration()
+                            );
                         }
                     }
-                    break;
                 }
-                Ok(Err(e)) => {
-                    log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                        peer,
-                        e,
-                        delay
-                    );
-                }
-                Err(e) => {
-                    log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                        peer,
-                        e,
-                        delay
-                    );
-                }
+                _ = cancellation_token.cancelled() => { break; }
             }
-            async_std::task::sleep(delay).await;
-            delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
-            if delay > CONNECTION_RETRY_MAX_PERIOD {
-                delay = CONNECTION_RETRY_MAX_PERIOD;
-            }
+            tokio::time::sleep(period.next_duration()).await;
         }
     }
 
@@ -533,7 +729,7 @@ impl Runtime {
 
             loop {
                 for socket in sockets {
-                    log::trace!(
+                    tracing::trace!(
                         "Send {:?} to {} on interface {}",
                         scout.body,
                         mcast_addr,
@@ -545,7 +741,7 @@ impl Runtime {
                         .send_to(wbuf.as_slice(), mcast_addr.to_string())
                         .await
                     {
-                        log::debug!(
+                        tracing::debug!(
                             "Unable to send {:?} to {} on interface {}: {}",
                             scout.body,
                             mcast_addr,
@@ -556,7 +752,7 @@ impl Runtime {
                         );
                     }
                 }
-                async_std::task::sleep(delay).await;
+                tokio::time::sleep(delay).await;
                 if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
                     delay *= SCOUT_PERIOD_INCREASE_FACTOR;
                 }
@@ -573,31 +769,34 @@ impl Runtime {
                             let codec = Zenoh080::new();
                             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
                             if let Ok(msg) = res {
-                                log::trace!("Received {:?} from {}", msg.body, peer);
+                                tracing::trace!("Received {:?} from {}", msg.body, peer);
                                 if let ScoutingBody::Hello(hello) = &msg.body {
                                     if matcher.matches(hello.whatami) {
                                         if let Loop::Break = f(hello.clone()).await {
                                             break;
                                         }
                                     } else {
-                                        log::warn!("Received unexpected Hello: {:?}", msg.body);
+                                        tracing::warn!("Received unexpected Hello: {:?}", msg.body);
                                     }
                                 }
                             } else {
-                                log::trace!(
+                                tracing::trace!(
                                     "Received unexpected UDP datagram from {}: {:?}",
                                     peer,
                                     &buf.as_slice()[..n]
                                 );
                             }
                         }
-                        Err(e) => log::debug!("Error receiving UDP datagram: {}", e),
+                        Err(e) => tracing::debug!("Error receiving UDP datagram: {}", e),
                     }
                 }
             }
             .boxed()
         }));
-        async_std::prelude::FutureExt::race(send, recvs).await;
+        tokio::select! {
+            _ = send => {},
+            _ = recvs => {},
+        }
     }
 
     #[must_use]
@@ -609,49 +808,52 @@ impl Runtime {
             let is_multicast = match inspector.is_multicast(locator).await {
                 Ok(im) => im,
                 Err(e) => {
-                    log::trace!("{} {} on {}: {}", ERR, zid, locator, e);
+                    tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e);
                     continue;
                 }
             };
 
             let endpoint = locator.to_owned().into();
+            let retry_config = self.get_connect_retry_config(&endpoint);
             let manager = self.manager();
             if is_multicast {
-                match manager
-                    .open_transport_multicast(endpoint)
-                    .timeout(CONNECTION_TIMEOUT)
-                    .await
+                match tokio::time::timeout(
+                    retry_config.timeout(),
+                    manager.open_transport_multicast(endpoint),
+                )
+                .await
                 {
                     Ok(Ok(transport)) => {
-                        log::debug!(
+                        tracing::debug!(
                             "Successfully connected to newly scouted peer: {:?}",
                             transport
                         );
                         return true;
                     }
-                    Ok(Err(e)) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
-                    Err(e) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                 }
             } else {
-                match manager
-                    .open_transport_unicast(endpoint)
-                    .timeout(CONNECTION_TIMEOUT)
-                    .await
+                match tokio::time::timeout(
+                    retry_config.timeout(),
+                    manager.open_transport_unicast(endpoint),
+                )
+                .await
                 {
                     Ok(Ok(transport)) => {
-                        log::debug!(
+                        tracing::debug!(
                             "Successfully connected to newly scouted peer: {:?}",
                             transport
                         );
                         return true;
                     }
-                    Ok(Err(e)) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
-                    Err(e) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                 }
             }
         }
 
-        log::warn!(
+        tracing::warn!(
             "Unable to connect to any locator of scouted peer {}: {:?}",
             zid,
             locators
@@ -676,10 +878,10 @@ impl Runtime {
             };
 
             if !has_unicast && !has_multicast {
-                log::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
+                tracing::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
                 let _ = self.connect(zid, locators).await;
             } else {
-                log::trace!("Already connected scouted peer: {}", zid);
+                tracing::trace!("Already connected scouted peer: {}", zid);
             }
         }
     }
@@ -693,13 +895,13 @@ impl Runtime {
     ) -> ZResult<()> {
         let scout = async {
             Runtime::scout(sockets, what, addr, move |hello| async move {
-                log::info!("Found {:?}", hello);
+                tracing::info!("Found {:?}", hello);
                 if !hello.locators.is_empty() {
                     if self.connect(&hello.zid, &hello.locators).await {
                         return Loop::Break;
                     }
                 } else {
-                    log::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::warn!("Received Hello with no locators: {:?}", hello);
                 }
                 Loop::Continue
             })
@@ -707,10 +909,13 @@ impl Runtime {
             Ok(())
         };
         let timeout = async {
-            async_std::task::sleep(timeout).await;
+            tokio::time::sleep(timeout).await;
             bail!("timeout")
         };
-        async_std::prelude::FutureExt::race(scout, timeout).await
+        tokio::select! {
+            res = scout => { res },
+            res = timeout => { res }
+        }
     }
 
     async fn connect_all(
@@ -723,7 +928,7 @@ impl Runtime {
             if !hello.locators.is_empty() {
                 self.connect_peer(&hello.zid, &hello.locators).await
             } else {
-                log::warn!("Received Hello with no locators: {:?}", hello);
+                tracing::warn!("Received Hello with no locators: {:?}", hello);
             }
             Loop::Continue
         })
@@ -759,11 +964,11 @@ impl Runtime {
             .iter()
             .filter_map(|sock| sock.local_addr().ok())
             .collect();
-        log::debug!("Waiting for UDP datagram...");
+        tracing::debug!("Waiting for UDP datagram...");
         loop {
             let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
             if local_addrs.iter().any(|addr| *addr == peer) {
-                log::trace!("Ignore UDP datagram from own socket");
+                tracing::trace!("Ignore UDP datagram from own socket");
                 continue;
             }
 
@@ -771,7 +976,7 @@ impl Runtime {
             let codec = Zenoh080::new();
             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
             if let Ok(msg) = res {
-                log::trace!("Received {:?} from {}", msg.body, peer);
+                tracing::trace!("Received {:?} from {}", msg.body, peer);
                 if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
                     if what.matches(self.whatami()) {
                         let mut wbuf = vec![];
@@ -787,7 +992,7 @@ impl Runtime {
                         }
                         .into();
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
-                        log::trace!(
+                        tracing::trace!(
                             "Send {:?} to {} on interface {}",
                             hello.body,
                             peer,
@@ -798,12 +1003,12 @@ impl Runtime {
                         codec.write(&mut writer, &hello).unwrap();
 
                         if let Err(err) = socket.send_to(wbuf.as_slice(), peer).await {
-                            log::error!("Unable to send {:?} to {}: {}", hello.body, peer, err);
+                            tracing::error!("Unable to send {:?} to {}: {}", hello.body, peer, err);
                         }
                     }
                 }
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Received unexpected UDP datagram from {}: {:?}",
                     peer,
                     &buf.as_slice()[..n]
@@ -816,13 +1021,14 @@ impl Runtime {
         match session.runtime.whatami() {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
+                let cancellation_token = runtime.get_cancellation_token();
                 session.runtime.spawn(async move {
-                    let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
+                    let retry_config = runtime.get_global_connect_retry_config();
+                    let mut period = retry_config.period();
                     while runtime.start_client().await.is_err() {
-                        async_std::task::sleep(delay).await;
-                        delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
-                        if delay > CONNECTION_RETRY_MAX_PERIOD {
-                            delay = CONNECTION_RETRY_MAX_PERIOD;
+                        tokio::select! {
+                            _ = tokio::time::sleep(period.next_duration()) => {}
+                            _ = cancellation_token.cancelled() => { break; }
                         }
                     }
                 });
@@ -844,7 +1050,7 @@ impl Runtime {
                         let runtime = session.runtime.clone();
                         session
                             .runtime
-                            .spawn(async move { runtime.peer_connector(endpoint).await });
+                            .spawn(async move { runtime.peer_connector_retry(endpoint).await });
                     }
                 }
             }

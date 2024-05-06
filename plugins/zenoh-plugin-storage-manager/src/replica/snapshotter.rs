@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{Digest, DigestConfig, LogEntry};
+use async_std::stream::{interval, StreamExt};
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
@@ -113,8 +114,11 @@ impl Snapshotter {
     // Periodically update parameters for snapshot
     async fn task_update_snapshot_params(&self) {
         sleep(Duration::from_secs(2)).await;
+
+        let mut interval = interval(self.replica_config.delta);
         loop {
-            sleep(self.replica_config.delta).await;
+            let _ = interval.next().await;
+
             let mut last_snapshot_time = self.content.last_snapshot_time.write().await;
             let mut last_interval = self.content.last_interval.write().await;
             let (time, interval) = Snapshotter::compute_snapshot_params(
@@ -258,8 +262,7 @@ impl Snapshotter {
             *last_snapshot_time,
             new_stable_content,
             deleted_content,
-        )
-        .await;
+        );
         *digest = updated_digest;
     }
 
@@ -304,8 +307,7 @@ impl Snapshotter {
             *last_snapshot_time,
             new_stable,
             deleted_stable,
-        )
-        .await;
+        );
         *digest = updated_digest;
         drop(digest);
 
@@ -318,9 +320,9 @@ impl Snapshotter {
         let stable = replica_data.stable_log.read().await;
         let volatile = replica_data.volatile_log.read().await;
         let digest = replica_data.digest.read().await;
-        log::trace!("Stable log:: {:?}", stable);
-        log::trace!("Volatile log:: {:?}", volatile);
-        log::trace!("Digest:: {:?}", digest);
+        tracing::trace!("Stable log:: {:?}", stable);
+        tracing::trace!("Volatile log:: {:?}", volatile);
+        tracing::trace!("Digest:: {:?}", digest);
     }
 
     // Expose digest

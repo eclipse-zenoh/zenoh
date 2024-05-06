@@ -44,17 +44,28 @@ pub mod flag {
 pub struct Err {
     pub encoding: Encoding,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    #[cfg(feature = "shared-memory")]
+    pub ext_shm: Option<ext::ShmType>,
     pub ext_unknown: Vec<ZExtUnknown>,
     pub payload: ZBuf,
 }
 
 pub mod ext {
+    #[cfg(feature = "shared-memory")]
+    use crate::{common::ZExtUnit, zextunit};
     use crate::{common::ZExtZBuf, zextzbuf};
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
     pub type SourceInfo = zextzbuf!(0x1, false);
     pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
+
+    /// # Shared Memory extension
+    /// Used to carry additional information about the shared-memory layour of data
+    #[cfg(feature = "shared-memory")]
+    pub type Shm = zextunit!(0x2, true);
+    #[cfg(feature = "shared-memory")]
+    pub type ShmType = crate::zenoh::ext::ShmType<{ Shm::ID }>;
 }
 
 impl Err {
@@ -66,6 +77,8 @@ impl Err {
 
         let encoding = Encoding::rand();
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
+        #[cfg(feature = "shared-memory")]
+        let ext_shm = rng.gen_bool(0.5).then_some(ext::ShmType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(
@@ -78,6 +91,8 @@ impl Err {
         Self {
             encoding,
             ext_sinfo,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
             payload,
         }

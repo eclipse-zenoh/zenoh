@@ -31,6 +31,7 @@ pub trait DeclaredPlugin<StartArgs, Instance>: PluginStatus {
 }
 pub trait LoadedPlugin<StartArgs, Instance>: PluginStatus {
     fn as_status(&self) -> &dyn PluginStatus;
+    fn required(&self) -> bool;
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>>;
     fn started(&self) -> Option<&dyn StartedPlugin<StartArgs, Instance>>;
     fn started_mut(&mut self) -> Option<&mut dyn StartedPlugin<StartArgs, Instance>>;
@@ -44,11 +45,11 @@ pub trait StartedPlugin<StartArgs, Instance>: PluginStatus {
 }
 
 struct PluginRecord<StartArgs: PluginStartArgs, Instance: PluginInstance>(
-    Box<dyn DeclaredPlugin<StartArgs, Instance> + Send>,
+    Box<dyn DeclaredPlugin<StartArgs, Instance> + Send + Sync>,
 );
 
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginRecord<StartArgs, Instance> {
-    fn new<P: DeclaredPlugin<StartArgs, Instance> + Send + 'static>(plugin: P) -> Self {
+    fn new<P: DeclaredPlugin<StartArgs, Instance> + Send + Sync + 'static>(plugin: P) -> Self {
         Self(Box::new(plugin))
     }
 }
@@ -126,10 +127,11 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         P: Plugin<StartArgs = StartArgs, Instance = Instance> + Send + Sync,
     >(
         mut self,
+        required: bool,
     ) -> Self {
-        let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new();
+        let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new(required);
         self.plugins.push(PluginRecord::new(plugin_loader));
-        log::debug!(
+        tracing::debug!(
             "Declared static plugin {}",
             self.plugins.last().unwrap().name()
         );
@@ -141,6 +143,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         &mut self,
         name: S,
         plugin_name: &str,
+        required: bool,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
         let plugin_name = format!("{}{}", self.default_lib_prefix, plugin_name);
@@ -149,9 +152,12 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
             .as_ref()
             .ok_or("Dynamic plugin loading is disabled")?
             .clone();
-        log::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
-        let loader =
-            DynamicPlugin::new(name, DynamicPluginSource::ByName((libloader, plugin_name)));
+        tracing::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
+        let loader = DynamicPlugin::new(
+            name,
+            DynamicPluginSource::ByName((libloader, plugin_name)),
+            required,
+        );
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
     }
@@ -161,11 +167,12 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         &mut self,
         name: S,
         paths: &[P],
+        required: bool,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
         let paths = paths.iter().map(|p| p.as_ref().into()).collect();
-        log::debug!("Declared dynamic plugin {} by paths {:?}", &name, &paths);
-        let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths));
+        tracing::debug!("Declared dynamic plugin {} by paths {:?}", &name, &paths);
+        let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths), required);
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
     }
@@ -269,7 +276,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
     for PluginsManager<StartArgs, Instance>
 {
     fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec> {
-        log::debug!(
+        tracing::debug!(
             "Plugin manager with prefix `{}` : requested plugins_status {:?}",
             self.default_lib_prefix,
             names

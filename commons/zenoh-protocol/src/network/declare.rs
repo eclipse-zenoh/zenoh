@@ -18,27 +18,29 @@ use crate::{
     zextz64, zextzbuf,
 };
 use alloc::borrow::Cow;
-pub use interest::*;
+pub use common::*;
 pub use keyexpr::*;
 pub use queryable::*;
 pub use subscriber::*;
 pub use token::*;
 
 pub mod flag {
-    // pub const X: u8 = 1 << 5; // 0x20 Reserved
-    // pub const X: u8 = 1 << 6; // 0x40 Reserved
+    pub const I: u8 = 1 << 5; // 0x20 Interest      if I==1 then the declare is in a response to an Interest with future==false
+                              // pub const X: u8 = 1 << 6; // 0x40 Reserved
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
 /// Flags:
-/// - X: Reserved
+/// - I: Interest       If I==1 then interest_id is present
 /// - X: Reserved
 /// - Z: Extension      If Z==1 then at least one extension is present
 ///
 /// 7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |Z|X|X| DECLARE |
+/// |Z|X|I| DECLARE |
 /// +-+-+-+---------+
+/// ~interest_id:z32~  if I==1
+/// +---------------+
 /// ~  [decl_exts]  ~  if Z==1
 /// +---------------+
 /// ~  declaration  ~
@@ -46,6 +48,7 @@ pub mod flag {
 ///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Declare {
+    pub interest_id: Option<super::interest::InterestId>,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_nodeid: ext::NodeIdType,
@@ -81,9 +84,7 @@ pub mod id {
     pub const D_TOKEN: u8 = 0x06;
     pub const U_TOKEN: u8 = 0x07;
 
-    pub const D_INTEREST: u8 = 0x08;
-    pub const F_INTEREST: u8 = 0x09;
-    pub const U_INTEREST: u8 = 0x0A;
+    pub const D_FINAL: u8 = 0x1A;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,9 +97,7 @@ pub enum DeclareBody {
     UndeclareQueryable(UndeclareQueryable),
     DeclareToken(DeclareToken),
     UndeclareToken(UndeclareToken),
-    DeclareInterest(DeclareInterest),
-    FinalInterest(FinalInterest),
-    UndeclareInterest(UndeclareInterest),
+    DeclareFinal(DeclareFinal),
 }
 
 impl DeclareBody {
@@ -108,7 +107,7 @@ impl DeclareBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..11) {
+        match rng.gen_range(0..9) {
             0 => DeclareBody::DeclareKeyExpr(DeclareKeyExpr::rand()),
             1 => DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr::rand()),
             2 => DeclareBody::DeclareSubscriber(DeclareSubscriber::rand()),
@@ -117,9 +116,7 @@ impl DeclareBody {
             5 => DeclareBody::UndeclareQueryable(UndeclareQueryable::rand()),
             6 => DeclareBody::DeclareToken(DeclareToken::rand()),
             7 => DeclareBody::UndeclareToken(UndeclareToken::rand()),
-            8 => DeclareBody::DeclareInterest(DeclareInterest::rand()),
-            9 => DeclareBody::FinalInterest(FinalInterest::rand()),
-            10 => DeclareBody::UndeclareInterest(UndeclareInterest::rand()),
+            8 => DeclareBody::DeclareFinal(DeclareFinal::rand()),
             _ => unreachable!(),
         }
     }
@@ -132,22 +129,49 @@ impl Declare {
 
         let mut rng = rand::thread_rng();
 
-        let body = DeclareBody::rand();
+        let interest_id = rng
+            .gen_bool(0.5)
+            .then_some(rng.gen::<super::interest::InterestId>());
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_nodeid = ext::NodeIdType::rand();
+        let body = DeclareBody::rand();
 
         Self {
-            body,
+            interest_id,
             ext_qos,
             ext_tstamp,
             ext_nodeid,
+            body,
         }
     }
 }
 
 pub mod common {
     use super::*;
+
+    /// ```text
+    /// Flags:
+    /// - X: Reserved
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|X|X| D_FINAL |
+    /// +---------------+
+    /// ~ [final_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct DeclareFinal;
+
+    impl DeclareFinal {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            Self
+        }
+    }
 
     pub mod ext {
         use super::*;
@@ -553,7 +577,7 @@ pub mod queryable {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|0_2|  U_QBL  |
+    /// |Z|X|X|  U_QBL  |
     /// +---------------+
     /// ~  qbls_id:z32  ~
     /// +---------------+
@@ -658,419 +682,6 @@ pub mod token {
             let mut rng = rand::thread_rng();
 
             let id: TokenId = rng.gen();
-            let ext_wire_expr = common::ext::WireExprType::rand();
-
-            Self { id, ext_wire_expr }
-        }
-    }
-}
-
-pub mod interest {
-    use core::{
-        fmt::{self, Debug},
-        ops::{Add, AddAssign, Sub, SubAssign},
-    };
-
-    use super::*;
-
-    pub type InterestId = u32;
-
-    pub mod flag {
-        pub const C: u8 = 1 << 5; // 0x20 Current       if C==1 then the interest refers to the current declarations.
-        pub const F: u8 = 1 << 6; // 0x40 Future        if F==1 then the interest refers to the future declarations.
-        pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
-    }
-
-    /// # DeclareInterest message
-    ///
-    /// The DECLARE INTEREST message is sent to request the transmission of existing and future
-    /// declarations of a given kind matching a target keyexpr. E.g., a declare interest could be sent to
-    /// request the transmisison of all existing subscriptions matching `a/*`. A FINAL INTEREST is used to
-    /// mark the end of the transmission of exisiting matching declarations.
-    ///
-    /// E.g., the [`DeclareInterest`]/[`FinalInterest`]/[`UndeclareInterest`] message flow is the following:
-    ///
-    /// ```text
-    ///     A                   B
-    ///     |   DECL INTEREST   |
-    ///     |------------------>| -- This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
-    ///     |                   |
-    ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------|
-    ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------|
-    ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------|
-    ///     |                   |
-    ///     |   FINAL INTEREST  |
-    ///     |<------------------|  -- The FinalInterest signals that all known subscribers have been transmitted.
-    ///     |                   |
-    ///     |  DECL SUBSCRIBER  |
-    ///     |<------------------|  -- This is a new subscriber declaration.
-    ///     | UNDECL SUBSCRIBER |
-    ///     |<------------------|  -- This is a new subscriber undeclaration.
-    ///     |                   |
-    ///     |        ...        |
-    ///     |                   |
-    ///     |  UNDECL INTEREST  |
-    ///     |------------------>|  -- This is an UndeclareInterest to stop receiving subscriber declarations/undeclarations.
-    ///     |                   |
-    /// ```
-    ///
-    /// The DECLARE INTEREST message structure is defined as follows:
-    ///
-    /// ```text
-    /// Flags:
-    /// - C: Current        if C==1 then the interest refers to the current declarations.
-    /// - F: Future         if F==1 then the interest refers to the future declarations. Note that if F==0 then:
-    ///                     - Declarations SHOULD NOT be sent after the FinalInterest;
-    ///                     - UndeclareInterest SHOULD NOT be sent after the FinalInterest.
-    /// - Z: Extension      If Z==1 then at least one extension is present
-    ///
-    /// 7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// |Z|F|C|  D_INT  |
-    /// +---------------+
-    /// ~ intst_id:z32  ~
-    /// +---------------+
-    /// |A|M|N|R|T|Q|S|K|  (*)
-    /// +---------------+
-    /// ~ key_scope:z16 ~  if R==1
-    /// +---------------+
-    /// ~  key_suffix   ~  if R==1 && N==1 -- <u8;z16>
-    /// +---------------+
-    /// ~  [decl_exts]  ~  if Z==1
-    /// +---------------+
-    ///
-    /// (*) - if K==1 then the interest refers to key expressions
-    ///     - if S==1 then the interest refers to subscribers
-    ///     - if Q==1 then the interest refers to queryables
-    ///     - if T==1 then the interest refers to tokens
-    ///     - if R==1 then the interest is restricted to the matching key expression, else it is for all key expressions.
-    ///     - if N==1 then the key expr has name/suffix. If R==0 then N should be set to 0.
-    ///     - if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver.
-    ///               If R==0 then M should be set to 0.
-    ///     - if A==1 then the replies SHOULD be aggregated
-    /// ```
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct DeclareInterest {
-        pub id: InterestId,
-        pub interest: Interest,
-        pub wire_expr: Option<WireExpr<'static>>,
-    }
-
-    impl DeclareInterest {
-        pub fn flags(&self) -> u8 {
-            let mut interest = self.interest;
-            if self.interest.current() {
-                interest += Interest::CURRENT;
-            }
-            if self.interest.future() {
-                interest += Interest::FUTURE;
-            }
-            interest.flags
-        }
-
-        pub fn options(&self) -> u8 {
-            let mut interest = self.interest;
-            if let Some(we) = self.wire_expr.as_ref() {
-                interest += Interest::RESTRICTED;
-                if we.has_suffix() {
-                    interest += Interest::NAMED;
-                }
-                if let Mapping::Sender = we.mapping {
-                    interest += Interest::MAPPING;
-                }
-            }
-            interest.options
-        }
-
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let id: InterestId = rng.gen();
-            let wire_expr = rng.gen_bool(0.5).then_some(WireExpr::rand());
-            let interest = Interest::rand();
-
-            Self {
-                id,
-                wire_expr,
-                interest,
-            }
-        }
-    }
-
-    #[derive(Clone, Copy)]
-    pub struct Interest {
-        flags: u8,
-        options: u8,
-    }
-
-    impl Interest {
-        // Header
-        pub const CURRENT: Interest = Interest::flags(interest::flag::C);
-        pub const FUTURE: Interest = Interest::flags(interest::flag::F);
-        // Flags
-        pub const KEYEXPRS: Interest = Interest::options(1);
-        pub const SUBSCRIBERS: Interest = Interest::options(1 << 1);
-        pub const QUERYABLES: Interest = Interest::options(1 << 2);
-        pub const TOKENS: Interest = Interest::options(1 << 3);
-        const RESTRICTED: Interest = Interest::options(1 << 4);
-        const NAMED: Interest = Interest::options(1 << 5);
-        const MAPPING: Interest = Interest::options(1 << 6);
-        pub const AGGREGATE: Interest = Interest::options(1 << 7);
-        pub const ALL: Interest = Interest::options(
-            Interest::KEYEXPRS.options
-                | Interest::SUBSCRIBERS.options
-                | Interest::QUERYABLES.options
-                | Interest::TOKENS.options,
-        );
-
-        const fn flags(flags: u8) -> Self {
-            Self { flags, options: 0 }
-        }
-
-        const fn options(options: u8) -> Self {
-            Self { flags: 0, options }
-        }
-
-        pub const fn empty() -> Self {
-            Self {
-                flags: 0,
-                options: 0,
-            }
-        }
-
-        pub const fn current(&self) -> bool {
-            imsg::has_flag(self.flags, Self::CURRENT.flags)
-        }
-
-        pub const fn future(&self) -> bool {
-            imsg::has_flag(self.flags, Self::FUTURE.flags)
-        }
-
-        pub const fn keyexprs(&self) -> bool {
-            imsg::has_flag(self.options, Self::KEYEXPRS.options)
-        }
-
-        pub const fn subscribers(&self) -> bool {
-            imsg::has_flag(self.options, Self::SUBSCRIBERS.options)
-        }
-
-        pub const fn queryables(&self) -> bool {
-            imsg::has_flag(self.options, Self::QUERYABLES.options)
-        }
-
-        pub const fn tokens(&self) -> bool {
-            imsg::has_flag(self.options, Self::TOKENS.options)
-        }
-
-        pub const fn restricted(&self) -> bool {
-            imsg::has_flag(self.options, Self::RESTRICTED.options)
-        }
-
-        pub const fn named(&self) -> bool {
-            imsg::has_flag(self.options, Self::NAMED.options)
-        }
-
-        pub const fn mapping(&self) -> bool {
-            imsg::has_flag(self.options, Self::MAPPING.options)
-        }
-
-        pub const fn aggregate(&self) -> bool {
-            imsg::has_flag(self.options, Self::AGGREGATE.options)
-        }
-
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let mut s = Self::empty();
-            if rng.gen_bool(0.5) {
-                s += Interest::CURRENT;
-            }
-            if rng.gen_bool(0.5) {
-                s += Interest::FUTURE;
-            }
-            if rng.gen_bool(0.5) {
-                s += Interest::KEYEXPRS;
-            }
-            if rng.gen_bool(0.5) {
-                s += Interest::SUBSCRIBERS;
-            }
-            if rng.gen_bool(0.5) {
-                s += Interest::TOKENS;
-            }
-            if rng.gen_bool(0.5) {
-                s += Interest::AGGREGATE;
-            }
-            s
-        }
-    }
-
-    impl PartialEq for Interest {
-        fn eq(&self, other: &Self) -> bool {
-            self.current() == other.current()
-                && self.future() == other.future()
-                && self.keyexprs() == other.keyexprs()
-                && self.subscribers() == other.subscribers()
-                && self.queryables() == other.queryables()
-                && self.tokens() == other.tokens()
-                && self.aggregate() == other.aggregate()
-        }
-    }
-
-    impl Debug for Interest {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "Interest {{ ")?;
-            if self.current() {
-                write!(f, "C:Y, ")?;
-            } else {
-                write!(f, "C:N, ")?;
-            }
-            if self.future() {
-                write!(f, "F:Y, ")?;
-            } else {
-                write!(f, "F:N, ")?;
-            }
-            if self.keyexprs() {
-                write!(f, "K:Y, ")?;
-            } else {
-                write!(f, "K:N, ")?;
-            }
-            if self.subscribers() {
-                write!(f, "S:Y, ")?;
-            } else {
-                write!(f, "S:N, ")?;
-            }
-            if self.queryables() {
-                write!(f, "Q:Y, ")?;
-            } else {
-                write!(f, "Q:N, ")?;
-            }
-            if self.tokens() {
-                write!(f, "T:Y, ")?;
-            } else {
-                write!(f, "T:N, ")?;
-            }
-            if self.aggregate() {
-                write!(f, "A:Y")?;
-            } else {
-                write!(f, "A:N")?;
-            }
-            write!(f, " }}")?;
-            Ok(())
-        }
-    }
-
-    impl Eq for Interest {}
-
-    impl Add for Interest {
-        type Output = Self;
-
-        fn add(self, rhs: Self) -> Self::Output {
-            Self {
-                flags: self.flags | rhs.flags,
-                options: self.options | rhs.options,
-            }
-        }
-    }
-
-    impl AddAssign for Interest {
-        fn add_assign(&mut self, rhs: Self) {
-            self.flags |= rhs.flags;
-            self.options |= rhs.options;
-        }
-    }
-
-    impl Sub for Interest {
-        type Output = Self;
-
-        fn sub(self, rhs: Self) -> Self::Output {
-            Self {
-                flags: self.flags & !rhs.flags,
-                options: self.options & !rhs.options,
-            }
-        }
-    }
-
-    impl SubAssign for Interest {
-        fn sub_assign(&mut self, rhs: Self) {
-            self.flags &= !rhs.flags;
-            self.options &= !rhs.options;
-        }
-    }
-
-    impl From<(u8, u8)> for Interest {
-        fn from(value: (u8, u8)) -> Self {
-            let (flags, options) = value;
-            Self { flags, options }
-        }
-    }
-
-    /// ```text
-    /// Flags:
-    /// - X: Reserved
-    /// - X: Reserved
-    /// - Z: Extension      If Z==1 then at least one extension is present
-    ///
-    /// 7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X|  F_INT  |
-    /// +---------------+
-    /// ~ intst_id:z32  ~  
-    /// +---------------+
-    /// ~  [decl_exts]  ~  if Z==1
-    /// +---------------+
-    /// ```
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct FinalInterest {
-        pub id: InterestId,
-    }
-
-    impl FinalInterest {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let id: InterestId = rng.gen();
-
-            Self { id }
-        }
-    }
-
-    /// ```text
-    /// Flags:
-    /// - X: Reserved
-    /// - X: Reserved
-    /// - Z: Extension      If Z==1 then at least one extension is present
-    ///
-    /// 7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X|  U_INT  |
-    /// +---------------+
-    /// ~ intst_id:z32  ~  
-    /// +---------------+
-    /// ~  [decl_exts]  ~  if Z==1
-    /// +---------------+
-    /// ```
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct UndeclareInterest {
-        pub id: InterestId,
-        pub ext_wire_expr: common::ext::WireExprType,
-    }
-
-    impl UndeclareInterest {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let id: InterestId = rng.gen();
             let ext_wire_expr = common::ext::WireExprType::rand();
 
             Self { id, ext_wire_expr }

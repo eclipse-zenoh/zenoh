@@ -11,14 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use crate::multicast::shm::SharedMemoryMulticast;
 use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
 use crate::TransportManager;
-use async_std::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionMulticastConf;
 #[cfg(feature = "shared-memory")]
@@ -26,8 +24,10 @@ use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
-use zenoh_protocol::core::ZenohId;
-use zenoh_protocol::{core::endpoint, transport::close};
+use zenoh_protocol::{
+    core::{Parameters, ZenohId},
+    transport::close,
+};
 use zenoh_result::{bail, zerror, ZResult};
 
 pub struct TransportManagerConfigMulticast {
@@ -59,9 +59,6 @@ pub struct TransportManagerStateMulticast {
     pub(crate) protocols: Arc<Mutex<HashMap<String, LinkManagerMulticast>>>,
     // Established transports
     pub(crate) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
-    // Shared memory
-    #[cfg(feature = "shared-memory")]
-    pub(super) shm: Arc<SharedMemoryMulticast>,
 }
 
 pub struct TransportManagerParamsMulticast {
@@ -107,10 +104,7 @@ impl TransportManagerBuilderMulticast {
         self
     }
 
-    pub async fn from_config(
-        mut self,
-        config: &Config,
-    ) -> ZResult<TransportManagerBuilderMulticast> {
+    pub fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilderMulticast> {
         self = self.lease(Duration::from_millis(
             *config.transport().link().tx().lease(),
         ));
@@ -144,8 +138,6 @@ impl TransportManagerBuilderMulticast {
         let state = TransportManagerStateMulticast {
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
-            #[cfg(feature = "shared-memory")]
-            shm: Arc::new(SharedMemoryMulticast::make()?),
         };
 
         let params = TransportManagerParamsMulticast { config, state };
@@ -173,7 +165,7 @@ impl Default for TransportManagerBuilderMulticast {
             #[cfg(feature = "transport_compression")]
             is_compression: *compression.enabled(),
         };
-        async_std::task::block_on(tmb.from_config(&Config::default())).unwrap()
+        tmb.from_config(&Config::default()).unwrap()
     }
 }
 
@@ -183,7 +175,7 @@ impl TransportManager {
     }
 
     pub async fn close_multicast(&self) {
-        log::trace!("TransportManagerMulticast::clear())");
+        tracing::trace!("TransportManagerMulticast::clear())");
 
         zasynclock!(self.state.multicast.protocols).clear();
 
@@ -264,7 +256,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(Parameters::iter(config))?;
         }
 
         // Open the link
@@ -303,7 +295,7 @@ impl TransportManager {
 
         res.map(|_| ()).ok_or_else(|| {
             let e = zerror!("Can not delete the transport for locator: {}", locator);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
@@ -334,7 +326,7 @@ impl TransportManager {
 
         res.map(|_| ()).ok_or_else(|| {
             let e = zerror!("Can not delete the transport for locator: {}", locator);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }

@@ -14,13 +14,14 @@
 #![recursion_limit = "256"]
 
 use futures::select;
-use log::{debug, info};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
+use tracing::{debug, info};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
@@ -109,7 +110,7 @@ impl RunningPluginTrait for RunningPlugin {
                     guard.flag.store(false, Relaxed);
                     guard.flag = Arc::new(AtomicBool::new(true));
                     match KeyExpr::try_from(selector.clone()) {
-                        Err(e) => log::error!("{}", e),
+                        Err(e) => tracing::error!("{}", e),
                         Ok(selector) => {
                             async_std::task::spawn(run(
                                 guard.runtime.clone(),
@@ -140,7 +141,7 @@ impl Drop for RunningPlugin {
 }
 
 async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     // create a zenoh Session that shares the same Runtime than zenohd
     let session = zenoh::init(runtime).res().await.unwrap();
@@ -164,7 +165,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
             // on sample received by the Subscriber
             sample = sub.recv_async() => {
                 let sample = sample.unwrap();
-                let payload = sample.payload().deserialize::<String>().unwrap_or_else(|e| format!("{}", e));
+                let payload = sample.payload().deserialize::<Cow<str>>().unwrap_or_else(|e| Cow::from(e.to_string()));
                 info!("Received data ('{}': '{}')", sample.key_expr(), payload);
                 stored.insert(sample.key_expr().to_string(), sample);
             },
@@ -173,7 +174,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
-                    if query.selector().key_expr.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
+                    if query.selector().key_expr().intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
                         query.reply_sample(sample.clone()).res().await.unwrap();
                     }
                 }

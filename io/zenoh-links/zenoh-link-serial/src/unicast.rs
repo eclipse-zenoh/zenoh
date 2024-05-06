@@ -12,25 +12,26 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_std::prelude::*;
-use async_std::sync::Mutex as AsyncMutex;
-use async_std::task::JoinHandle;
-use async_std::task::{self};
 use async_trait::async_trait;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zread, zwrite};
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{zerror, ZResult};
-use zenoh_sync::Signal;
 
 use z_serial::ZSerial;
 
@@ -94,7 +95,7 @@ impl LinkUnicastSerial {
         let res = match self.get_port_mut().bytes_to_read() {
             Ok(b) => b,
             Err(e) => {
-                log::warn!(
+                tracing::warn!(
                     "Unable to check if there are bytes to read in serial {}: {}",
                     self.src_locator,
                     e
@@ -112,11 +113,11 @@ impl LinkUnicastSerial {
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastSerial {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing Serial link: {}", self);
+        tracing::trace!("Closing Serial link: {}", self);
         let _guard = zasynclock!(self.write_lock);
         self.get_port_mut().clear().map_err(|e| {
             let e = zerror!("Unable to close Serial link {}: {}", self, e);
-            log::error!("{}", e);
+            tracing::error!("{}", e);
             e
         })?;
         self.is_connected.store(false, Ordering::Release);
@@ -127,7 +128,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         let _guard = zasynclock!(self.write_lock);
         self.get_port_mut().write(buffer).await.map_err(|e| {
             let e = zerror!("Unable to write on Serial link {}: {}", self, e);
-            log::error!("{}", e);
+            tracing::error!("{}", e);
             e
         })?;
         Ok(buffer.len())
@@ -148,9 +149,9 @@ impl LinkUnicastTrait for LinkUnicastSerial {
                 Ok(read) => return Ok(read),
                 Err(e) => {
                     let e = zerror!("Read error on Serial link {}: {}", self, e);
-                    log::error!("{}", e);
+                    tracing::error!("{}", e);
                     drop(_guard);
-                    async_std::task::sleep(std::time::Duration::from_millis(1)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                     continue;
                 }
             }
@@ -177,7 +178,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *SERIAL_DEFAULT_MTU
     }
 
@@ -187,11 +188,11 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         // e.g. for serial port "/dev/ttyUSB0" interface name will be "ttyUSB0"
         match z_serial::get_available_port_names() {
             Ok(interfaces) => {
-                log::trace!("get_interface_names for serial: {:?}", interfaces);
+                tracing::trace!("get_interface_names for serial: {:?}", interfaces);
                 interfaces
             }
             Err(e) => {
-                log::debug!("get_interface_names for serial failed: {:?}", e);
+                tracing::debug!("get_interface_names for serial failed: {:?}", e);
                 vec![]
             }
         }
@@ -229,37 +230,34 @@ impl fmt::Debug for LinkUnicastSerial {
 /*************************************/
 struct ListenerUnicastSerial {
     endpoint: EndPoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerUnicastSerial {
-    fn new(
-        endpoint: EndPoint,
-        active: Arc<AtomicBool>,
-        signal: Signal,
-        handle: JoinHandle<ZResult<()>>,
-    ) -> Self {
+    fn new(endpoint: EndPoint, token: CancellationToken, handle: JoinHandle<ZResult<()>>) -> Self {
         Self {
             endpoint,
-            active,
-            signal,
+            token,
             handle,
         }
+    }
+
+    async fn stop(&self) {
+        self.token.cancel();
     }
 }
 
 pub struct LinkManagerUnicastSerial {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<String, ListenerUnicastSerial>>>,
+    listeners: Arc<AsyncRwLock<HashMap<String, ListenerUnicastSerial>>>,
 }
 
 impl LinkManagerUnicastSerial {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
 }
@@ -275,14 +273,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(endpoint.address());
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
-        log::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+        tracing::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
         let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -301,14 +299,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(endpoint.address());
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
-        log::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+        tracing::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
         let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
                 e
             );
-            log::warn!("{}", e);
+            tracing::warn!("{}", e);
             e
         })?;
 
@@ -323,32 +321,25 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         ));
 
         // Spawn the accept loop for the listener
-        let active = Arc::new(AtomicBool::new(true));
-        let signal = Signal::new();
-        let mut listeners = zwrite!(self.listeners);
+        let token = CancellationToken::new();
+        let c_token = token.clone();
+        let mut listeners = zasyncwrite!(self.listeners);
 
         let c_path = path.clone();
-        let c_active = active.clone();
-        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
-        let handle = task::spawn(async move {
+
+        let task = async move {
             // Wait for the accept loop to terminate
-            let res = accept_read_task(
-                link,
-                c_active,
-                c_signal,
-                c_manager,
-                c_path.clone(),
-                is_connected,
-            )
-            .await;
-            zwrite!(c_listeners).remove(&c_path);
+            let res =
+                accept_read_task(link, c_token, c_manager, c_path.clone(), is_connected).await;
+            zasyncwrite!(c_listeners).remove(&c_path);
             res
-        });
+        };
+        let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
         let locator = endpoint.to_locator();
-        let listener = ListenerUnicastSerial::new(endpoint, active, signal, handle);
+        let listener = ListenerUnicastSerial::new(endpoint, token, handle);
         // Update the list of active listeners on the manager
         listeners.insert(path, listener);
 
@@ -359,30 +350,29 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(endpoint.address());
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
+        let listener = zasyncwrite!(self.listeners).remove(&path).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the Serial listener because it has not been found: {}",
                 path
             );
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e
         })?;
 
         // Send the stop signal
-        listener.active.store(false, Ordering::Release);
-        listener.signal.trigger();
-        listener.handle.await
+        listener.stop().await;
+        listener.handle.await?
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners)
             .values()
             .map(|l| l.endpoint.clone())
             .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
-        zread!(self.listeners)
+    async fn get_locators(&self) -> Vec<Locator> {
+        zasyncread!(self.listeners)
             .values()
             .map(|x| x.endpoint.to_locator())
             .collect()
@@ -391,72 +381,56 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 
 async fn accept_read_task(
     link: Arc<LinkUnicastSerial>,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
     src_path: String,
     is_connected: Arc<AtomicBool>,
 ) -> ZResult<()> {
-    enum Action {
-        Receive(Arc<LinkUnicastSerial>),
-        Stop,
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
-    }
-
     async fn receive(
         link: Arc<LinkUnicastSerial>,
-        active: Arc<AtomicBool>,
         src_path: String,
         is_connected: Arc<AtomicBool>,
-    ) -> ZResult<Action> {
-        while active.load(Ordering::Acquire) {
-            if !is_connected.load(Ordering::Acquire) {
-                if !link.is_ready() {
-                    // Waiting to be ready, if not sleep some time.
-                    task::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
-                    continue;
-                }
-
-                log::trace!("Creating serial link from {:?}", src_path);
-
-                is_connected.store(true, Ordering::Release);
-
-                return Ok(Action::Receive(link.clone()));
-            }
+    ) -> ZResult<Arc<LinkUnicastSerial>> {
+        while !is_connected.load(Ordering::Acquire) && !link.is_ready() {
+            // Waiting to be ready, if not sleep some time.
+            tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
         }
-        Ok(Action::Stop)
+
+        tracing::trace!("Creating serial link from {:?}", src_path);
+        is_connected.store(true, Ordering::Release);
+        Ok(link.clone())
     }
 
-    log::trace!("Ready to accept Serial connections on: {:?}", src_path);
+    tracing::trace!("Ready to accept Serial connections on: {:?}", src_path);
 
     loop {
-        match receive(
-            link.clone(),
-            active.clone(),
-            src_path.clone(),
-            is_connected.clone(),
-        )
-        .race(stop(signal.clone()))
-        .await
-        {
-            Ok(action) => match action {
-                Action::Receive(link) => {
-                    // Communicate the new link to the initial transport manager
-                    if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
-                        log::error!("{}-{}: {}", file!(), line!(), e)
+        tokio::select! {
+            res = receive(
+                link.clone(),
+                src_path.clone(),
+                is_connected.clone(),
+            ) => {
+                match res {
+                    Ok(link) => {
+                        // Communicate the new link to the initial transport manager
+                        if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
+                        }
+
+                        // Ensure the creation of this link is only once
+                        break;
+                    }
+                    Err(e) =>  {
+                        tracing::warn!("{}. Hint: Is the serial cable connected?", e);
+                        tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+                        continue;
+
                     }
                 }
-                Action::Stop => break Ok(()),
             },
-            Err(e) => {
-                log::warn!("{}. Hint: Is the serial cable connected?", e);
-                task::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
-                continue;
-            }
+
+            _ = token.cancelled() => break,
         }
     }
+    Ok(())
 }

@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::LifoQueue;
-use async_std::task;
 use std::{
     any::Any,
     fmt,
@@ -51,8 +50,8 @@ impl<T, F: Fn() -> T> RecyclingObjectPool<T, F> {
             .map(|obj| RecyclingObject::new(obj, Arc::downgrade(&self.inner)))
     }
 
-    pub async fn take(&self) -> RecyclingObject<T> {
-        let obj = self.inner.pull().await;
+    pub fn take(&self) -> RecyclingObject<T> {
+        let obj = self.inner.pull();
         RecyclingObject::new(obj, Arc::downgrade(&self.inner))
     }
 }
@@ -71,10 +70,10 @@ impl<T> RecyclingObject<T> {
         }
     }
 
-    pub async fn recycle(mut self) {
+    pub fn recycle(mut self) {
         if let Some(pool) = self.pool.upgrade() {
             if let Some(obj) = self.object.take() {
-                pool.push(obj).await;
+                pool.push(obj);
             }
         }
     }
@@ -113,7 +112,7 @@ impl<T> Drop for RecyclingObject<T> {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.upgrade() {
             if let Some(obj) = self.object.take() {
-                task::block_on(pool.push(obj));
+                pool.push(obj);
             }
         }
     }
@@ -142,10 +141,12 @@ impl ZSliceBuffer for RecyclingObject<Box<[u8]>> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
+
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }

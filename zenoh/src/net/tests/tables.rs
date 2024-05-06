@@ -234,8 +234,8 @@ fn multisub_test() {
     tables::close_face(&tables, &face0);
 }
 
-#[test]
-fn clean_test() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn clean_test() {
     let config = Config::default();
     let router = Router::new(
         ZenohId::try_from([1]).unwrap(),
@@ -495,6 +495,8 @@ impl ClientPrimitives {
 }
 
 impl Primitives for ClientPrimitives {
+    fn send_interest(&self, _msg: zenoh_protocol::network::Interest) {}
+
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
@@ -522,6 +524,8 @@ impl Primitives for ClientPrimitives {
 }
 
 impl EPrimitives for ClientPrimitives {
+    fn send_interest(&self, _ctx: RoutingContext<zenoh_protocol::network::Interest>) {}
+
     fn send_declare(&self, ctx: RoutingContext<zenoh_protocol::network::Declare>) {
         match ctx.msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
@@ -579,6 +583,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives0.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -606,6 +611,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives0.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -627,6 +633,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives1.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -654,6 +661,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives1.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -675,6 +683,7 @@ fn client_test() {
     Primitives::send_declare(
         primitives2.as_ref(),
         Declare {
+            interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,

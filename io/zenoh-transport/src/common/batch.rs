@@ -423,7 +423,7 @@ impl RBatch {
     pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
     where
         C: Fn() -> T + Copy,
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         #[allow(unused_variables)]
         let (l, h, p) = Self::split(self.buffer.as_slice(), &self.config);
@@ -455,10 +455,10 @@ impl RBatch {
     #[cfg(feature = "transport_compression")]
     fn decompress<T>(&self, payload: &[u8], mut buff: impl FnMut() -> T) -> ZResult<ZSlice>
     where
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         let mut into = (buff)();
-        let n = lz4_flex::block::decompress_into(payload, into.as_mut_slice())
+        let n = lz4_flex::block::decompress_into(payload, into.as_mut())
             .map_err(|_| zerror!("Decompression error"))?;
         let zslice = ZSlice::new(Arc::new(into), 0, n)
             .map_err(|_| zerror!("Invalid decompression buffer length"))?;

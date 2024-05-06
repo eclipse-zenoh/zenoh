@@ -27,14 +27,15 @@ use super::{
 use crate::runtime::Runtime;
 use std::{any::Any, sync::Arc};
 use zenoh_buffers::ZBuf;
-use zenoh_config::{unwrap_or_default, Config, WhatAmI};
+use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
 use zenoh_protocol::{
     core::WireExpr,
     network::{
         declare::{
-            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, InterestId,
-            QueryableId, SubscriberId, TokenId,
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+            SubscriberId, TokenId,
         },
+        interest::{InterestId, InterestMode},
         Oam,
     },
 };
@@ -48,6 +49,23 @@ mod router;
 
 zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct Sources {
+    routers: Vec<ZenohId>,
+    peers: Vec<ZenohId>,
+    clients: Vec<ZenohId>,
+}
+
+impl Sources {
+    pub(crate) fn empty() -> Self {
+        Self {
+            routers: vec![],
+            peers: vec![],
+            clients: vec![],
+        }
+    }
 }
 
 pub(crate) trait HatTrait:
@@ -126,8 +144,7 @@ pub(crate) trait HatPubSubTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
-        future: bool,
+        mode: InterestMode,
         aggregate: bool,
     );
     fn undeclare_sub_interest(
@@ -154,7 +171,7 @@ pub(crate) trait HatPubSubTrait {
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>>;
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_data_route(
         &self,
@@ -175,8 +192,7 @@ pub(crate) trait HatQueriesTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
-        future: bool,
+        mode: InterestMode,
         aggregate: bool,
     );
     fn undeclare_qabl_interest(
@@ -203,7 +219,7 @@ pub(crate) trait HatQueriesTrait {
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>>;
+    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_query_route(
         &self,
@@ -264,8 +280,7 @@ pub trait HatTokenTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
-        future: bool,
+        mode: InterestMode,
         aggregate: bool,
     );
 
@@ -275,4 +290,21 @@ pub trait HatTokenTrait {
         face: &mut Arc<FaceState>,
         id: InterestId,
     );
+}
+
+trait CurrentFutureTrait {
+    fn future(&self) -> bool;
+    fn current(&self) -> bool;
+}
+
+impl CurrentFutureTrait for InterestMode {
+    #[inline]
+    fn future(&self) -> bool {
+        self == &InterestMode::Future || self == &InterestMode::CurrentFuture
+    }
+
+    #[inline]
+    fn current(&self) -> bool {
+        self == &InterestMode::Current || self == &InterestMode::CurrentFuture
+    }
 }

@@ -11,32 +11,32 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::net::{SocketAddr, TcpListener, TcpStream};
-use async_std::prelude::*;
-use async_std::task;
 use async_trait::async_trait;
+use std::cell::UnsafeCell;
 use std::convert::TryInto;
 use std::fmt;
-use std::net::Shutdown;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
-use zenoh_sync::Signal;
 
 use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
     TCP_LOCATOR_PREFIX,
 };
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
 pub struct LinkUnicastTcp {
-    // The underlying socket as returned from the async-std library
-    socket: TcpStream,
+    // The underlying socket as returned from the tokio library
+    socket: UnsafeCell<TcpStream>,
     // The source socket address of this link (address used on the local host)
     src_addr: SocketAddr,
     src_locator: Locator,
@@ -45,11 +45,13 @@ pub struct LinkUnicastTcp {
     dst_locator: Locator,
 }
 
+unsafe impl Sync for LinkUnicastTcp {}
+
 impl LinkUnicastTcp {
     fn new(socket: TcpStream, src_addr: SocketAddr, dst_addr: SocketAddr) -> LinkUnicastTcp {
         // Set the TCP nodelay option
         if let Err(err) = socket.set_nodelay(true) {
-            log::warn!(
+            tracing::warn!(
                 "Unable to set NODEALY option on TCP link {} => {}: {}",
                 src_addr,
                 dst_addr,
@@ -58,13 +60,10 @@ impl LinkUnicastTcp {
         }
 
         // Set the TCP linger option
-        if let Err(err) = zenoh_util::net::set_linger(
-            &socket,
-            Some(Duration::from_secs(
-                (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
-            )),
-        ) {
-            log::warn!(
+        if let Err(err) = socket.set_linger(Some(Duration::from_secs(
+            (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
+        ))) {
+            tracing::warn!(
                 "Unable to set LINGER option on TCP link {} => {}: {}",
                 src_addr,
                 dst_addr,
@@ -74,57 +73,66 @@ impl LinkUnicastTcp {
 
         // Build the Tcp object
         LinkUnicastTcp {
-            socket,
+            socket: UnsafeCell::new(socket),
             src_addr,
             src_locator: Locator::new(TCP_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
             dst_locator: Locator::new(TCP_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
         }
     }
+    #[allow(clippy::mut_from_ref)]
+    fn get_mut_socket(&self) -> &mut TcpStream {
+        unsafe { &mut *self.socket.get() }
+    }
 }
 
 #[async_trait]
 impl LinkUnicastTrait for LinkUnicastTcp {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing TCP link: {}", self);
+        tracing::trace!("Closing TCP link: {}", self);
         // Close the underlying TCP socket
-        self.socket.shutdown(Shutdown::Both).map_err(|e| {
+        self.get_mut_socket().shutdown().await.map_err(|e| {
             let e = zerror!("TCP link shutdown {}: {:?}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        (&self.socket).write(buffer).await.map_err(|e| {
+        self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on TCP link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        (&self.socket).write_all(buffer).await.map_err(|e| {
+        self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on TCP link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        (&self.socket).read(buffer).await.map_err(|e| {
+        self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on TCP link {}: {}", self, e);
-            log::trace!("{}", e);
+            tracing::trace!("{}", e);
             e.into()
         })
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        (&self.socket).read_exact(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on TCP link {}: {}", self, e);
-            log::trace!("{}", e);
-            e.into()
-        })
+        let _ = self
+            .get_mut_socket()
+            .read_exact(buffer)
+            .await
+            .map_err(|e| {
+                let e = zerror!("Read error on TCP link {}: {}", self, e);
+                tracing::trace!("{}", e);
+                e
+            })?;
+        Ok(())
     }
 
     #[inline(always)]
@@ -138,7 +146,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *TCP_DEFAULT_MTU
     }
 
@@ -158,12 +166,17 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 }
 
-impl Drop for LinkUnicastTcp {
-    fn drop(&mut self) {
-        // Close the underlying TCP socket
-        let _ = self.socket.shutdown(Shutdown::Both);
-    }
-}
+// // WARN: This sometimes causes timeout in routing test
+// // WARN assume the drop of TcpStream would clean itself
+// // https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.into_split
+// impl Drop for LinkUnicastTcp {
+//     fn drop(&mut self) {
+//         // Close the underlying TCP socket
+//         zenoh_runtime::ZRuntime::Acceptor.block_in_place(async {
+//             let _ = self.get_mut_socket().shutdown().await;
+//         });
+//     }
+// }
 
 impl fmt::Display for LinkUnicastTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -201,7 +214,19 @@ impl LinkManagerUnicastTcp {
         dst_addr: &SocketAddr,
         iface: Option<&str>,
     ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
-        let stream = TcpStream::connect(dst_addr)
+        let socket = match dst_addr {
+            SocketAddr::V4(_) => TcpSocket::new_v4(),
+            SocketAddr::V6(_) => TcpSocket::new_v6(),
+        }?;
+
+        if let Some(iface) = iface {
+            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+        }
+
+        // Build a TcpStream from TcpSocket
+        // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
+        let stream = socket
+            .connect(*dst_addr)
             .await
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
 
@@ -213,8 +238,6 @@ impl LinkManagerUnicastTcp {
             .peer_addr()
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
 
-        zenoh_util::net::set_bind_to_device_tcp_stream(&stream, iface);
-
         Ok((stream, src_addr, dst_addr))
     }
 
@@ -223,18 +246,29 @@ impl LinkManagerUnicastTcp {
         addr: &SocketAddr,
         iface: Option<&str>,
     ) -> ZResult<(TcpListener, SocketAddr)> {
-        // Bind the TCP socket
-        let socket = TcpListener::bind(addr)
-            .await
+        let socket = match addr {
+            SocketAddr::V4(_) => TcpSocket::new_v4(),
+            SocketAddr::V6(_) => TcpSocket::new_v6(),
+        }?;
+
+        if let Some(iface) = iface {
+            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+        }
+
+        // Build a TcpListener from TcpSocket
+        // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
+        socket.set_reuseaddr(true)?;
+        socket.bind(*addr).map_err(|e| zerror!("{}: {}", addr, e))?;
+        // backlog (the maximum number of pending connections are queued): 1024
+        let listener = socket
+            .listen(1024)
             .map_err(|e| zerror!("{}: {}", addr, e))?;
 
-        zenoh_util::net::set_bind_to_device_tcp_listener(&socket, iface);
-
-        let local_addr = socket
+        let local_addr = listener
             .local_addr()
             .map_err(|e| zerror!("{}: {}", addr, e))?;
 
-        Ok((socket, local_addr))
+        Ok((listener, local_addr))
     }
 }
 
@@ -286,21 +320,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                         endpoint.config(),
                     )?;
 
-                    let active = Arc::new(AtomicBool::new(true));
-                    let signal = Signal::new();
+                    let token = self.listeners.token.child_token();
+                    let c_token = token.clone();
 
-                    let c_active = active.clone();
-                    let c_signal = signal.clone();
                     let c_manager = self.manager.clone();
-
-                    let handle = task::spawn(async move {
-                        accept_task(socket, c_active, c_signal, c_manager).await
-                    });
+                    let task = async move { accept_task(socket, c_token, c_manager).await };
 
                     let locator = endpoint.to_locator();
-
                     self.listeners
-                        .add_listener(endpoint, local_addr, active, signal, handle)
+                        .add_listener(endpoint, local_addr, task, token)
                         .await?;
 
                     return Ok(locator);
@@ -350,71 +378,61 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         Ok(())
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
+    async fn get_listeners(&self) -> Vec<EndPoint> {
         self.listeners.get_endpoints()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
+    async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
     }
 }
 
 async fn accept_task(
     socket: TcpListener,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-    enum Action {
-        Accept((TcpStream, SocketAddr)),
-        Stop,
-    }
-
-    async fn accept(socket: &TcpListener) -> ZResult<Action> {
+    async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
-        Ok(Action::Accept(res))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok(res)
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TCP connections: {}", e);
-        log::warn!("{}", e);
+        tracing::warn!("{}", e);
         e
     })?;
 
-    log::trace!("Ready to accept TCP connections on: {:?}", src_addr);
-    while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
-        let (stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
-            Ok(action) => match action {
-                Action::Accept((stream, addr)) => (stream, addr),
-                Action::Stop => break,
-            },
-            Err(e) => {
-                log::warn!("{}. Hint: increase the system open file limit.", e);
-                // Throttle the accept loop upon an error
-                // NOTE: This might be due to various factors. However, the most common case is that
-                //       the process has reached the maximum number of open files in the system. On
-                //       Linux systems this limit can be changed by using the "ulimit" command line
-                //       tool. In case of systemd-based systems, this can be changed by using the
-                //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
-                continue;
+    tracing::trace!("Ready to accept TCP connections on: {:?}", src_addr);
+    loop {
+        tokio::select! {
+            _ = token.cancelled() => break,
+            res = accept(&socket) => {
+                match res {
+                    Ok((stream, dst_addr)) => {
+                        tracing::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
+                        // Create the new link object
+                        let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
+
+                        // Communicate the new link to the initial transport manager
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                            tracing::error!("{}-{}: {}", file!(), line!(), e)
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!("{}. Hint: increase the system open file limit.", e);
+                        // Throttle the accept loop upon an error
+                        // NOTE: This might be due to various factors. However, the most common case is that
+                        //       the process has reached the maximum number of open files in the system. On
+                        //       Linux systems this limit can be changed by using the "ulimit" command line
+                        //       tool. In case of systemd-based systems, this can be changed by using the
+                        //       "sysctl" command line tool.
+                        tokio::time::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
+                    }
+
+                }
             }
         };
-
-        log::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
-        // Create the new link object
-        let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
-
-        // Communicate the new link to the initial transport manager
-        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-            log::error!("{}-{}: {}", file!(), line!(), e)
-        }
     }
 
     Ok(())

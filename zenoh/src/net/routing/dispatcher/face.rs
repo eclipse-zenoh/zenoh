@@ -24,18 +24,26 @@ use crate::KeyExpr;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
-use zenoh_protocol::network::declare::{FinalInterest, Interest, InterestId};
-use zenoh_protocol::network::{ext, Declare, DeclareBody};
+use std::sync::{Arc, Weak};
+use tokio_util::sync::CancellationToken;
+use zenoh_protocol::network::interest::{InterestId, InterestMode, InterestOptions};
+use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareFinal};
 use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
     network::{Mapping, Push, Request, RequestId, Response, ResponseFinal},
 };
 use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
+
+pub(crate) struct InterestState {
+    pub(crate) options: InterestOptions,
+    pub(crate) res: Option<Arc<Resource>>,
+    pub(crate) finalized: bool,
+}
 
 pub struct FaceState {
     pub(crate) id: usize,
@@ -44,15 +52,16 @@ pub struct FaceState {
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
-    pub(crate) local_interests: HashMap<InterestId, (Interest, Option<Arc<Resource>>, bool)>,
+    pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
-    pub(crate) pending_queries: HashMap<RequestId, Arc<Query>>,
+    pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) task_controller: TaskController,
 }
 
 impl FaceState {
@@ -83,6 +92,7 @@ impl FaceState {
             mcast_group,
             in_interceptors,
             hat,
+            task_controller: TaskController::default(),
         })
     }
 
@@ -160,13 +170,117 @@ impl fmt::Display for FaceState {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct WeakFace {
+    pub(crate) tables: Weak<TablesLock>,
+    pub(crate) state: Weak<FaceState>,
+}
+
+impl WeakFace {
+    pub fn upgrade(&self) -> Option<Face> {
+        Some(Face {
+            tables: self.tables.upgrade()?,
+            state: self.state.upgrade()?,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct Face {
     pub(crate) tables: Arc<TablesLock>,
     pub(crate) state: Arc<FaceState>,
 }
 
+impl Face {
+    pub fn downgrade(&self) -> WeakFace {
+        WeakFace {
+            tables: Arc::downgrade(&self.tables),
+            state: Arc::downgrade(&self.state),
+        }
+    }
+}
+
 impl Primitives for Face {
+    fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        if msg.mode != InterestMode::Final {
+            if msg.options.keyexprs() && msg.mode != InterestMode::Current {
+                register_expr_interest(
+                    &self.tables,
+                    &mut self.state.clone(),
+                    msg.id,
+                    msg.wire_expr.as_ref(),
+                );
+            }
+            if msg.options.subscribers() {
+                declare_sub_interest(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    msg.id,
+                    msg.wire_expr.as_ref(),
+                    msg.mode,
+                    msg.options.aggregate(),
+                );
+            }
+            if msg.options.queryables() {
+                declare_qabl_interest(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    msg.id,
+                    msg.wire_expr.as_ref(),
+                    msg.mode,
+                    msg.options.aggregate(),
+                );
+            }
+            if msg.options.tokens() {
+                declare_token_interest(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    msg.id,
+                    msg.wire_expr.as_ref(),
+                    msg.mode,
+                    msg.options.aggregate(),
+                );
+            }
+            if msg.mode != InterestMode::Future {
+                self.state.primitives.send_declare(RoutingContext::new_out(
+                    Declare {
+                        interest_id: Some(msg.id),
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareFinal(DeclareFinal),
+                    },
+                    self.clone(),
+                ));
+            }
+        } else {
+            unregister_expr_interest(&self.tables, &mut self.state.clone(), msg.id);
+            undeclare_sub_interest(
+                ctrl_lock.as_ref(),
+                &self.tables,
+                &mut self.state.clone(),
+                msg.id,
+            );
+            undeclare_qabl_interest(
+                ctrl_lock.as_ref(),
+                &self.tables,
+                &mut self.state.clone(),
+                msg.id,
+            );
+            undeclare_token_interest(
+                ctrl_lock.as_ref(),
+                &self.tables,
+                &mut self.state.clone(),
+                msg.id,
+            );
+        }
+        drop(ctrl_lock);
+    }
+
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match msg.body {
@@ -238,89 +352,13 @@ impl Primitives for Face {
                     msg.ext_nodeid.node_id,
                 );
             }
-            zenoh_protocol::network::DeclareBody::DeclareInterest(m) => {
-                if m.interest.keyexprs() && m.interest.future() {
-                    register_expr_interest(
-                        &self.tables,
-                        &mut self.state.clone(),
-                        m.id,
-                        m.wire_expr.as_ref(),
-                    );
+            zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
+                if let Some(id) = msg.interest_id {
+                    get_mut_unchecked(&mut self.state.clone())
+                        .local_interests
+                        .entry(id)
+                        .and_modify(|interest| interest.finalized = true);
                 }
-                if m.interest.subscribers() {
-                    declare_sub_interest(
-                        ctrl_lock.as_ref(),
-                        &self.tables,
-                        &mut self.state.clone(),
-                        m.id,
-                        m.wire_expr.as_ref(),
-                        m.interest.current(),
-                        m.interest.future(),
-                        m.interest.aggregate(),
-                    );
-                }
-                if m.interest.tokens() {
-                    declare_token_interest(
-                        ctrl_lock.as_ref(),
-                        &self.tables,
-                        &mut self.state.clone(),
-                        m.id,
-                        m.wire_expr.as_ref(),
-                        m.interest.current(),
-                        m.interest.future(),
-                        m.interest.aggregate(),
-                    );
-                }
-                if m.interest.queryables() {
-                    declare_qabl_interest(
-                        ctrl_lock.as_ref(),
-                        &self.tables,
-                        &mut self.state.clone(),
-                        m.id,
-                        m.wire_expr.as_ref(),
-                        m.interest.current(),
-                        m.interest.future(),
-                        m.interest.aggregate(),
-                    );
-                }
-                if m.interest.current() {
-                    self.state.primitives.send_declare(RoutingContext::new_out(
-                        Declare {
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::FinalInterest(FinalInterest { id: m.id }),
-                        },
-                        self.clone(),
-                    ));
-                }
-            }
-            zenoh_protocol::network::DeclareBody::FinalInterest(m) => {
-                get_mut_unchecked(&mut self.state.clone())
-                    .local_interests
-                    .entry(m.id)
-                    .and_modify(|interest| interest.2 = true);
-            }
-            zenoh_protocol::network::DeclareBody::UndeclareInterest(m) => {
-                unregister_expr_interest(&self.tables, &mut self.state.clone(), m.id);
-                undeclare_sub_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    m.id,
-                );
-                undeclare_qabl_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    m.id,
-                );
-                undeclare_token_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    m.id,
-                );
             }
         }
         drop(ctrl_lock);

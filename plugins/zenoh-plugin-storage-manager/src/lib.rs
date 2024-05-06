@@ -66,8 +66,8 @@ impl Plugin for StoragesPlugin {
     type Instance = zenoh::plugins::RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
-        std::mem::drop(env_logger::try_init());
-        log::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
+        zenoh_util::try_init_log_from_env();
+        tracing::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
         let config =
             { PluginConfig::try_from((name, runtime.config().lock().plugin(name).unwrap())) }?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
@@ -99,7 +99,7 @@ impl StorageRuntimeInner {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        let _ = env_logger::try_init();
+        zenoh_util::try_init_log_from_env();
         let PluginConfig {
             name,
             backend_search_dirs,
@@ -112,7 +112,7 @@ impl StorageRuntimeInner {
             .unwrap_or_default();
 
         let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
-            .declare_static_plugin::<MemoryBackend>();
+            .declare_static_plugin::<MemoryBackend>(true);
 
         let session = Arc::new(zenoh::init(runtime.clone()).res_sync()?);
 
@@ -135,7 +135,7 @@ impl StorageRuntimeInner {
             })
             .map_or_else(
                 |e| {
-                    log::error!(
+                    tracing::error!(
                         "Cannot spawn static volume '{}': {}",
                         MEMORY_BACKEND_NAME,
                         e
@@ -145,13 +145,13 @@ impl StorageRuntimeInner {
             );
         for volume in &volumes {
             new_self.spawn_volume(volume).map_or_else(
-                |e| log::error!("Cannot spawn volume '{}': {}", volume.name(), e),
+                |e| tracing::error!("Cannot spawn volume '{}': {}", volume.name(), e),
                 |_| (),
             );
         }
         for storage in &storages {
             new_self.spawn_storage(storage).map_or_else(
-                |e| log::error!("Cannot spawn storage '{}': {}", storage.name(), e),
+                |e| tracing::error!("Cannot spawn storage '{}': {}", storage.name(), e),
                 |_| (),
             );
         }
@@ -172,7 +172,7 @@ impl StorageRuntimeInner {
     }
     fn kill_volume<T: AsRef<str>>(&mut self, name: T) -> ZResult<()> {
         let name = name.as_ref();
-        log::info!("Killing volume '{}'", name);
+        tracing::info!("Killing volume '{}'", name);
         if let Some(storages) = self.storages.remove(name) {
             async_std::task::block_on(futures::future::join_all(
                 storages
@@ -189,7 +189,7 @@ impl StorageRuntimeInner {
     fn spawn_volume(&mut self, config: &VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
         let backend_name = config.backend();
-        log::info!(
+        tracing::info!(
             "Spawning volume '{}' with backend '{}'",
             volume_id,
             backend_name
@@ -198,10 +198,10 @@ impl StorageRuntimeInner {
             declared
         } else if let Some(paths) = config.paths() {
             self.plugins_manager
-                .declare_dynamic_plugin_by_paths(volume_id, paths)?
+                .declare_dynamic_plugin_by_paths(volume_id, paths, true)?
         } else {
             self.plugins_manager
-                .declare_dynamic_plugin_by_name(volume_id, backend_name)?
+                .declare_dynamic_plugin_by_name(volume_id, backend_name, true)?
         };
         let loaded = declared.load()?;
         loaded.start(config)?;
@@ -209,10 +209,10 @@ impl StorageRuntimeInner {
     }
     fn kill_storage(&mut self, config: &StorageConfig) {
         let volume = &config.volume_id;
-        log::info!("Killing storage '{}' from volume '{}'", config.name, volume);
+        tracing::info!("Killing storage '{}' from volume '{}'", config.name, volume);
         if let Some(storages) = self.storages.get_mut(volume) {
             if let Some(storage) = storages.get_mut(&config.name) {
-                log::debug!(
+                tracing::debug!(
                     "Closing storage '{}' from volume '{}'",
                     config.name,
                     config.volume_id
@@ -233,7 +233,7 @@ impl StorageRuntimeInner {
                 volume_id, storage.name
             ))?;
         let storage_name = storage.name.clone();
-        log::info!(
+        tracing::info!(
             "Spawning storage '{}' from volume '{}' with backend '{}'",
             storage_name,
             volume_id,
@@ -283,13 +283,13 @@ impl RunningPluginTrait for StorageRuntime {
         let name = { zlock!(self.0).name.clone() };
         let old = PluginConfig::try_from((&name, old))?;
         let new = PluginConfig::try_from((&name, new))?;
-        log::debug!("config change requested for plugin '{}'", name);
-        log::debug!("old config: {:?}", &old);
-        log::debug!("new config: {:?}", &new);
+        tracing::debug!("config change requested for plugin '{}'", name);
+        tracing::debug!("old config: {:?}", &old);
+        tracing::debug!("new config: {:?}", &new);
         let diffs = ConfigDiff::diffs(old, new);
-        log::debug!("applying diff: {:?}", &diffs);
+        tracing::debug!("applying diff: {:?}", &diffs);
         { zlock!(self.0).update(diffs) }?;
-        log::debug!("applying diff done");
+        tracing::debug!("applying diff done");
         Ok(None)
     }
 
@@ -304,7 +304,7 @@ impl RunningPluginTrait for StorageRuntime {
         with_extended_string(&mut key, &["/version"], |key| {
             if keyexpr::new(key.as_str())
                 .unwrap()
-                .intersects(&selector.key_expr)
+                .intersects(selector.key_expr())
             {
                 responses.push(zenoh::plugins::Response::new(
                     key.clone(),
@@ -319,7 +319,7 @@ impl RunningPluginTrait for StorageRuntime {
                     with_extended_string(key, &["/__path__"], |key| {
                         if keyexpr::new(key.as_str())
                             .unwrap()
-                            .intersects(&selector.key_expr)
+                            .intersects(selector.key_expr())
                         {
                             responses.push(zenoh::plugins::Response::new(
                                 key.clone(),
@@ -329,7 +329,7 @@ impl RunningPluginTrait for StorageRuntime {
                     });
                     if keyexpr::new(key.as_str())
                         .unwrap()
-                        .intersects(&selector.key_expr)
+                        .intersects(selector.key_expr())
                     {
                         responses.push(zenoh::plugins::Response::new(
                             key.clone(),
@@ -345,7 +345,7 @@ impl RunningPluginTrait for StorageRuntime {
                     with_extended_string(key, &[storage], |key| {
                         if keyexpr::new(key.as_str())
                             .unwrap()
-                            .intersects(&selector.key_expr)
+                            .intersects(selector.key_expr())
                         {
                             if let Ok(value) = task::block_on(async {
                                 let (tx, rx) = async_std::channel::bounded(1);

@@ -11,16 +11,27 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task;
 use clap::Parser;
 use futures::future;
 use git_version::git_version;
-use std::collections::HashSet;
-use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
-use zenoh::plugins::PluginsManager;
-use zenoh::prelude::{EndPoint, WhatAmI};
-use zenoh::runtime::{AdminSpace, Runtime};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
+use zenoh::config::{Config, ModeDependentValue, PermissionsConf, ValidatedMap};
+use zenoh::prelude::r#async::*;
 use zenoh::Result;
+
+#[cfg(feature = "loki")]
+use url::Url;
+
+#[cfg(feature = "loki")]
+const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
+
+#[cfg(feature = "loki")]
+const LOKI_API_KEY_VAR: &str = "LOKI_API_KEY";
+
+#[cfg(feature = "loki")]
+const LOKI_API_KEY_HEADER_VAR: &str = "LOKI_API_KEY_HEADER";
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -80,130 +91,30 @@ struct Args {
     adminspace_permissions: Option<String>,
 }
 
-fn load_plugin(
-    plugin_mgr: &mut PluginsManager,
-    name: &str,
-    paths: &Option<Vec<String>>,
-) -> Result<()> {
-    let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-        log::warn!("Plugin `{}` was already declared", declared.name());
-        declared
-    } else if let Some(paths) = paths {
-        plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
-    } else {
-        plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
-    };
-
-    if let Some(loaded) = declared.loaded_mut() {
-        log::warn!(
-            "Plugin `{}` was already loaded from {}",
-            loaded.name(),
-            loaded.path()
-        );
-    } else {
-        let _ = declared.load()?;
-    };
-    Ok(())
-}
-
 fn main() {
-    task::block_on(async {
-        let mut log_builder =
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
-        #[cfg(feature = "stats")]
-        log_builder.format_timestamp_millis().init();
-        #[cfg(not(feature = "stats"))]
-        log_builder.init();
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            init_logging().unwrap();
 
-        log::info!("zenohd {}", *LONG_VERSION);
+            tracing::info!("zenohd {}", *LONG_VERSION);
 
-        let args = Args::parse();
-        let config = config_from_args(&args);
-        log::info!("Initial conf: {}", &config);
+            let args = Args::parse();
+            let config = config_from_args(&args);
+            tracing::info!("Initial conf: {}", &config);
 
-        let mut plugin_mgr = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
-        // Static plugins are to be added here, with `.add_static::<PluginType>()`
-        let mut required_plugins = HashSet::new();
-        for plugin_load in config.plugins().load_requests() {
-            let PluginLoad {
-                name,
-                paths,
-                required,
-            } = plugin_load;
-            log::info!(
-                "Loading {req} plugin \"{name}\"",
-                req = if required { "required" } else { "" }
-            );
-            if let Err(e) = load_plugin(&mut plugin_mgr, &name, &paths) {
-                if required {
-                    panic!("Plugin load failure: {}", e)
-                } else {
-                    log::error!("Plugin load failure: {}", e)
-                }
-            }
-            if required {
-                required_plugins.insert(name);
-            }
-        }
-
-        let runtime = match Runtime::new(config).await {
-            Ok(runtime) => runtime,
-            Err(e) => {
-                println!("{e}. Exiting...");
-                std::process::exit(-1);
-            }
-        };
-
-        for plugin in plugin_mgr.loaded_plugins_iter_mut() {
-            let required = required_plugins.contains(plugin.name());
-            log::info!(
-                "Starting {req} plugin \"{name}\"",
-                req = if required { "required" } else { "" },
-                name = plugin.name()
-            );
-            match plugin.start(&runtime) {
-                Ok(_) => {
-                    log::info!(
-                        "Successfully started plugin {} from {:?}",
-                        plugin.name(),
-                        plugin.path()
-                    );
-                }
+            let _session = match zenoh::open(config).res().await {
+                Ok(runtime) => runtime,
                 Err(e) => {
-                    let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
-                        Ok(s) => s,
-                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", plugin.name(), plugin.path()),
-                    };
-                    if required {
-                        panic!(
-                            "Plugin \"{}\" failed to start: {}",
-                            plugin.name(),
-                            if report.is_empty() {
-                                "no details provided"
-                            } else {
-                                report.as_str()
-                            }
-                        );
-                    } else {
-                        log::error!(
-                            "Required plugin \"{}\" failed to start: {}",
-                            plugin.name(),
-                            if report.is_empty() {
-                                "no details provided"
-                            } else {
-                                report.as_str()
-                            }
-                        );
-                    }
+                    println!("{e}. Exiting...");
+                    std::process::exit(-1);
                 }
-            }
-        }
-        log::info!("Finished loading plugins");
+            };
 
-        AdminSpace::start(&runtime, plugin_mgr, LONG_VERSION.clone()).await;
-
-        future::pending::<()>().await;
-    });
+            future::pending::<()>().await;
+        });
 }
 
 fn config_from_args(args: &Args) -> Config {
@@ -233,9 +144,12 @@ fn config_from_args(args: &Args) -> Config {
                 .unwrap();
         }
     }
+    config.adminspace.set_enabled(true).unwrap();
+    config.plugins_loading.set_enabled(true).unwrap();
     if !args.plugin_search_dir.is_empty() {
         config
-            .set_plugins_search_dirs(args.plugin_search_dir.clone())
+            .plugins_loading
+            .set_search_dirs(Some(args.plugin_search_dir.clone()))
             .unwrap();
     }
     for plugin in &args.plugin {
@@ -352,15 +266,68 @@ fn config_from_args(args: &Args) -> Config {
                     if let Err(e) =
                         config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
                     {
-                        log::warn!("Couldn't perform configuration {}: {}", json, e);
+                        tracing::warn!("Couldn't perform configuration {}: {}", json, e);
                     }
                 }
-                Err(e) => log::warn!("Couldn't perform configuration {}: {}", json, e),
+                Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
             }
         }
     }
-    log::debug!("Config: {:?}", &config);
+    tracing::debug!("Config: {:?}", &config);
     config
+}
+
+fn init_logging() -> Result<()> {
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("z=info"));
+
+    let fmt_layer = tracing_subscriber::fmt::Layer::new()
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_level(true)
+        .with_target(true);
+
+    let tracing_sub = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer);
+
+    #[cfg(feature = "loki")]
+    match (
+        get_loki_endpoint(),
+        get_loki_apikey(),
+        get_loki_apikey_header(),
+    ) {
+        (Some(loki_url), Some(header), Some(apikey)) => {
+            let (loki_layer, task) = tracing_loki::builder()
+                .label("service", "zenoh")?
+                .http_header(header, apikey)?
+                .build_url(Url::parse(&loki_url)?)?;
+
+            tracing_sub.with(loki_layer).init();
+            tokio::spawn(task);
+            return Ok(());
+        }
+        _ => {
+            tracing::warn!("Missing one of the required header for Loki!")
+        }
+    };
+
+    tracing_sub.init();
+    Ok(())
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_endpoint() -> Option<String> {
+    std::env::var(LOKI_ENDPOINT_VAR).ok()
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_apikey() -> Option<String> {
+    std::env::var(LOKI_API_KEY_VAR).ok()
+}
+
+#[cfg(feature = "loki")]
+pub fn get_loki_apikey_header() -> Option<String> {
+    std::env::var(LOKI_API_KEY_HEADER_VAR).ok()
 }
 
 #[test]
@@ -382,6 +349,7 @@ fn test_default_features() {
             " zenoh/transport_udp",
             " zenoh/transport_unixsock-stream",
             " zenoh/transport_ws",
+            // " zenoh/transport_vsock",
             " zenoh/unstable",
             " zenoh/default",
         )
@@ -407,6 +375,7 @@ fn test_no_default_features() {
             // " zenoh/transport_udp",
             // " zenoh/transport_unixsock-stream",
             // " zenoh/transport_ws",
+            // " zenoh/transport_vsock",
             " zenoh/unstable",
             // " zenoh/default",
         )

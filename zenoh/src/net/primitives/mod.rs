@@ -18,11 +18,15 @@ use std::any::Any;
 
 pub use demux::*;
 pub use mux::*;
-use zenoh_protocol::network::{Declare, Push, Request, Response, ResponseFinal};
+use zenoh_protocol::network::{
+    interest::Interest, Declare, Push, Request, Response, ResponseFinal,
+};
 
 use super::routing::RoutingContext;
 
 pub trait Primitives: Send + Sync {
+    fn send_interest(&self, msg: Interest);
+
     fn send_declare(&self, msg: Declare);
 
     fn send_push(&self, msg: Push);
@@ -38,6 +42,8 @@ pub trait Primitives: Send + Sync {
 
 pub(crate) trait EPrimitives: Send + Sync {
     fn as_any(&self) -> &dyn Any;
+
+    fn send_interest(&self, ctx: RoutingContext<Interest>);
 
     fn send_declare(&self, ctx: RoutingContext<Declare>);
 
@@ -56,6 +62,8 @@ pub(crate) trait EPrimitives: Send + Sync {
 pub struct DummyPrimitives;
 
 impl Primitives for DummyPrimitives {
+    fn send_interest(&self, _msg: Interest) {}
+
     fn send_declare(&self, _msg: Declare) {}
 
     fn send_push(&self, _msg: Push) {}
@@ -70,6 +78,8 @@ impl Primitives for DummyPrimitives {
 }
 
 impl EPrimitives for DummyPrimitives {
+    fn send_interest(&self, _ctx: RoutingContext<Interest>) {}
+
     fn send_declare(&self, _ctx: RoutingContext<Declare>) {}
 
     fn send_push(&self, _msg: Push) {}

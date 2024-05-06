@@ -17,7 +17,10 @@ use std::sync::Arc;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::WireExpr,
-    network::declare::{common::ext, InterestId, TokenId},
+    network::{
+        declare::{common::ext, TokenId},
+        interest::{InterestId, InterestMode},
+    },
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -45,7 +48,7 @@ pub(crate) fn declare_token(
         .cloned()
     {
         Some(mut prefix) => {
-            log::debug!(
+            tracing::debug!(
                 "{} Declare token {} ({}{})",
                 face,
                 id,
@@ -78,7 +81,7 @@ pub(crate) fn declare_token(
 
             // NOTE(fuzzypixelz): I removed all data route handling.
         }
-        None => log::error!(
+        None => tracing::error!(
             "{} Declare token {} for unknown scope {}!",
             face,
             id,
@@ -103,7 +106,7 @@ pub(crate) fn undeclare_token(
             Some(prefix) => match Resource::get_resource(prefix, expr.wire_expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    log::error!(
+                    tracing::error!(
                         "{} Undeclare unknown token token {}{}!",
                         face,
                         prefix.expr(),
@@ -113,7 +116,7 @@ pub(crate) fn undeclare_token(
                 }
             },
             None => {
-                log::error!(
+                tracing::error!(
                     "{} Undeclare liveliness token with unknown scope {}",
                     face,
                     expr.wire_expr.scope
@@ -125,7 +128,7 @@ pub(crate) fn undeclare_token(
 
     let mut wtables = zwrite!(tables.tables);
     if let Some(mut res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id) {
-        log::debug!("{} Undeclare token {} ({})", face, id, res.expr());
+        tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
         disable_matches_data_routes(&mut wtables, &mut res);
         drop(wtables);
 
@@ -142,7 +145,7 @@ pub(crate) fn undeclare_token(
         Resource::clean(&mut res);
         drop(wtables);
     } else {
-        log::error!("{} Undeclare unknown token {}", face, id);
+        tracing::error!("{} Undeclare unknown token {}", face, id);
     }
 }
 
@@ -153,8 +156,7 @@ pub(crate) fn declare_token_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
     expr: Option<&WireExpr>,
-    current: bool,
-    future: bool,
+    mode: InterestMode,
     aggregate: bool,
 ) {
     if let Some(expr) = expr {
@@ -164,7 +166,7 @@ pub(crate) fn declare_token_interest(
             .cloned()
         {
             Some(mut prefix) => {
-                log::debug!(
+                tracing::debug!(
                     "{} Declare token interest {} ({}{})",
                     face,
                     id,
@@ -200,12 +202,11 @@ pub(crate) fn declare_token_interest(
                     face,
                     id,
                     Some(&mut res),
-                    current,
-                    future,
+                    mode,
                     aggregate,
                 );
             }
-            None => log::error!(
+            None => tracing::error!(
                 "{} Declare token interest {} for unknown scope {}!",
                 face,
                 id,
@@ -214,7 +215,7 @@ pub(crate) fn declare_token_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_token_interest(&mut wtables, face, id, None, current, future, aggregate);
+        hat_code.declare_token_interest(&mut wtables, face, id, None, mode, aggregate);
     }
 }
 
@@ -224,7 +225,7 @@ pub(crate) fn undeclare_token_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
 ) {
-    log::debug!("{} Undeclare liveliness interest {}", face, id,);
+    tracing::debug!("{} Undeclare liveliness interest {}", face, id,);
     let mut wtables = zwrite!(tables.tables);
     hat_code.undeclare_token_interest(&mut wtables, face, id);
 }

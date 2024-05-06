@@ -158,7 +158,7 @@ async fn timer_task(
                     }
                     Err(_) => {
                         // Channel error
-                        log::trace!("{}", e);
+                        tracing::trace!("{}", e);
                         return Ok(());
                     }
                 }
@@ -170,7 +170,7 @@ async fn timer_task(
                 }
                 Err(_) => {
                     // Channel error
-                    log::trace!("{}", e);
+                    tracing::trace!("{}", e);
                     return Ok(());
                 }
             },
@@ -205,7 +205,7 @@ impl Timer {
                 .recv_async()
                 .race(timer_task(c_e, ev_receiver))
                 .await;
-            log::trace!("A - Timer task no longer running...");
+            tracing::trace!("A - Timer task no longer running...");
         };
         if spawn_blocking {
             task::spawn_blocking(|| task::block_on(fut));
@@ -235,7 +235,7 @@ impl Timer {
                     .recv_async()
                     .race(timer_task(c_e, ev_receiver))
                     .await;
-                log::trace!("A - Timer task no longer running...");
+                tracing::trace!("A - Timer task no longer running...");
             };
             if spawn_blocking {
                 task::spawn_blocking(|| task::block_on(fut));
@@ -255,7 +255,7 @@ impl Timer {
             // Stop the timer task
             let _ = sl_sender.send(());
 
-            log::trace!("Stopping timer...");
+            tracing::trace!("Stopping timer...");
             // Remove the channels handlers
             self.sl_sender = None;
             self.ev_sender = None;
@@ -267,7 +267,7 @@ impl Timer {
             // Stop the timer task
             let _ = sl_sender.send_async(()).await;
 
-            log::trace!("Stopping timer...");
+            tracing::trace!("Stopping timer...");
             // Remove the channels handlers
             self.sl_sender = None;
             self.ev_sender = None;

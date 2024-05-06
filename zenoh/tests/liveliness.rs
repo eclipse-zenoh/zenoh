@@ -11,87 +11,71 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
-
 #[cfg(feature = "unstable")]
-#[test]
-fn zenoh_liveliness() {
-    task::block_on(async {
-        zasync_executor_init!();
-
-        let mut c1 = config::peer();
-        c1.listen
-            .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
-            .unwrap();
-        c1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = ztimeout!(zenoh::open(c1).res_async()).unwrap();
-        let mut c2 = config::peer();
-        c2.connect
-            .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
-            .unwrap();
-        c2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = ztimeout!(zenoh::open(c2).res_async()).unwrap();
-
-        let replies = ztimeout!(session2
-            .liveliness()
-            .get("zenoh_liveliness_test")
-            .res_async())
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_liveliness() {
+    let mut c1 = config::peer();
+    c1.listen
+        .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
         .unwrap();
-        assert!(replies.into_iter().count() == 0);
-
-        let sub = ztimeout!(session2
-            .liveliness()
-            .declare_subscriber("zenoh_liveliness_test")
-            .res_async())
+    c1.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let session1 = ztimeout!(zenoh::open(c1).res_async()).unwrap();
+    let mut c2 = config::peer();
+    c2.connect
+        .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
         .unwrap();
+    c2.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let session2 = ztimeout!(zenoh::open(c2).res_async()).unwrap();
 
-        let token = ztimeout!(session1
-            .liveliness()
-            .declare_token("zenoh_liveliness_test")
-            .res_async())
+    let sub = ztimeout!(session2
+        .liveliness()
+        .declare_subscriber("zenoh_liveliness_test")
+        .res_async())
+    .unwrap();
+
+    let token = ztimeout!(session1
+        .liveliness()
+        .declare_token("zenoh_liveliness_test")
+        .res_async())
+    .unwrap();
+
+    tokio::time::sleep(SLEEP).await;
+
+    let replies = ztimeout!(session2
+        .liveliness()
+        .get("zenoh_liveliness_test")
+        .res_async())
+    .unwrap();
+    let sample: Sample = ztimeout!(replies.recv_async())
+        .unwrap()
+        .into_result()
         .unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == "zenoh_liveliness_test");
 
-        task::sleep(SLEEP).await;
+    assert!(ztimeout!(replies.recv_async()).is_err());
 
-        let replies = ztimeout!(session2
-            .liveliness()
-            .get("zenoh_liveliness_test")
-            .res_async())
-        .unwrap();
-        let sample = ztimeout!(replies.recv_async()).unwrap().sample.unwrap();
-        assert!(sample.kind() == SampleKind::Put);
-        assert!(sample.key_expr().as_str() == "zenoh_liveliness_test");
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == "zenoh_liveliness_test");
 
-        assert!(ztimeout!(replies.recv_async()).is_err());
+    drop(token);
 
-        let sample = ztimeout!(sub.recv_async()).unwrap();
-        assert!(sample.kind() == SampleKind::Put);
-        assert!(sample.key_expr().as_str() == "zenoh_liveliness_test");
+    tokio::time::sleep(SLEEP).await;
 
-        drop(token);
+    let replies = ztimeout!(session2
+        .liveliness()
+        .get("zenoh_liveliness_test")
+        .res_async())
+    .unwrap();
+    assert!(ztimeout!(replies.recv_async()).is_err());
 
-        task::sleep(SLEEP).await;
-
-        let replies = ztimeout!(session2
-            .liveliness()
-            .get("zenoh_liveliness_test")
-            .res_async())
-        .unwrap();
-        assert!(ztimeout!(replies.recv_async()).is_err());
-
-        assert!(replies.try_recv().is_err());
-    });
+    assert!(replies.try_recv().is_err());
 }

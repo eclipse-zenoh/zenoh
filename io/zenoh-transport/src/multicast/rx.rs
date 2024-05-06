@@ -42,7 +42,7 @@ impl TransportMulticastInner {
         #[cfg(feature = "shared-memory")]
         {
             if self.manager.config.multicast.is_shm {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.multicast.shm.reader)?;
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)?;
             }
         }
 
@@ -66,7 +66,7 @@ impl TransportMulticastInner {
                 "Ingoring Join on {} of peer: {}. Inconsistent parameters.",
                 peer.locator, peer.zid,
             );
-            log::debug!("{}", e);
+            tracing::debug!("{}", e);
             bail!("{}", e);
         }
 
@@ -80,7 +80,7 @@ impl TransportMulticastInner {
         batch_size: BatchSize,
     ) -> ZResult<()> {
         if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
-            log::debug!(
+            tracing::debug!(
                 "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
                 locator,
                 join.zid,
@@ -90,7 +90,7 @@ impl TransportMulticastInner {
         }
 
         if join.version != self.manager.config.version {
-            log::debug!(
+            tracing::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
                 locator,
                 join.zid,
@@ -101,7 +101,7 @@ impl TransportMulticastInner {
         }
 
         if join.resolution != self.manager.config.resolution {
-            log::debug!(
+            tracing::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: {:?}.",
                 locator,
                 join.zid,
@@ -112,7 +112,7 @@ impl TransportMulticastInner {
         }
 
         if join.batch_size != batch_size {
-            log::debug!(
+            tracing::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported Batch Size: {:?}. Expected: {:?}.",
                 locator,
                 join.zid,
@@ -123,7 +123,7 @@ impl TransportMulticastInner {
         }
 
         if !self.manager.config.multicast.is_qos && join.ext_qos.is_some() {
-            log::debug!(
+            tracing::debug!(
                 "Ingoring Join on {} from peer: {}. QoS is not supported.",
                 locator,
                 join.zid,
@@ -226,7 +226,7 @@ impl TransportMulticastInner {
     ) -> ZResult<()> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
-            log::debug!(
+            tracing::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
                 self.manager.config.zid,
                 sn,
@@ -259,7 +259,7 @@ impl TransportMulticastInner {
                 .decode()
                 .map_err(|_| zerror!("{}: decoding error", locator))?;
 
-            log::trace!("Received: {:?}", msg);
+            tracing::trace!("Received: {:?}", msg);
 
             #[cfg(feature = "stats")]
             {
@@ -269,7 +269,7 @@ impl TransportMulticastInner {
             let r_guard = zread!(self.peers);
             match r_guard.get(&locator) {
                 Some(peer) => {
-                    peer.active();
+                    peer.set_active();
                     match msg.body {
                         TransportBody::Frame(msg) => self.handle_frame(msg, peer)?,
                         TransportBody::Fragment(fragment) => {
@@ -282,7 +282,7 @@ impl TransportMulticastInner {
                             self.del_peer(&locator, reason)?;
                         }
                         _ => {
-                            log::debug!(
+                            tracing::debug!(
                                 "Transport: {}. Message handling not implemented: {:?}",
                                 self.manager.config.zid,
                                 msg

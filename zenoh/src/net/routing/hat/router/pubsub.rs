@@ -19,7 +19,7 @@ use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::HatPubSubTrait;
+use crate::net::routing::hat::{CurrentFutureTrait, HatPubSubTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use petgraph::graph::NodeIndex;
@@ -28,7 +28,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::{InterestId, SubscriberId};
+use zenoh_protocol::network::declare::SubscriberId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{Reliability, WhatAmI, ZenohId},
     network::declare::{
@@ -57,6 +58,7 @@ fn send_sourced_subscription_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -72,7 +74,7 @@ fn send_sourced_subscription_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -105,6 +107,7 @@ fn propagate_simple_subscription_to(
             let key_expr = Resource::decl_key(res, dst_face);
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -136,6 +139,7 @@ fn propagate_simple_subscription_to(
                     let key_expr = Resource::decl_key(res, dst_face);
                     dst_face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -199,7 +203,7 @@ fn propagate_sourced_subscription(
                     tree_sid.index() as NodeId,
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating sub {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -207,7 +211,7 @@ fn propagate_sourced_subscription(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating sub {}: cannot get index of {}!",
             res.expr(),
             source
@@ -380,6 +384,7 @@ fn send_forget_sourced_subscription_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -394,7 +399,7 @@ fn send_forget_sourced_subscription_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -405,6 +410,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -433,6 +439,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -473,6 +480,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -509,7 +517,7 @@ fn propagate_forget_sourced_subscription(
                     Some(tree_sid.index() as NodeId),
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating forget sub {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -517,7 +525,7 @@ fn propagate_forget_sourced_subscription(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating forget sub {}: cannot get index of {}!",
             res.expr(),
             source
@@ -625,6 +633,7 @@ pub(super) fn undeclare_client_subscription(
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -653,6 +662,7 @@ pub(super) fn undeclare_client_subscription(
                         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
+                                    interest_id: None,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -705,6 +715,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 let key_expr = Resource::decl_key(sub, face);
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
+                        interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -843,6 +854,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 if forget {
                                     dst_face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
+                                            interest_id: None,
                                             ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
                                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -868,6 +880,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 };
                                 dst_face.primitives.send_declare(RoutingContext::with_expr(
                                     Declare {
+                                        interest_id: None,
                                         ext_qos: ext::QoSType::DECLARE,
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -917,7 +930,7 @@ fn insert_faces_for_subs(
             }
         }
     } else {
-        log::trace!("Tree for node sid:{} not yet ready", source);
+        tracing::trace!("Tree for node sid:{} not yet ready", source);
     }
 }
 
@@ -928,11 +941,11 @@ impl HatPubSubTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
-        future: bool,
+        mode: InterestMode,
         aggregate: bool,
     ) {
-        if current && face.whatami == WhatAmI::Client {
+        if mode.current() && face.whatami == WhatAmI::Client {
+            let interest_id = mode.future().then_some(id);
             let sub_info = SubscriberInfo {
                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
             };
@@ -945,11 +958,17 @@ impl HatPubSubTrait for HatCode {
                                 || remote_peer_subs(tables, sub)
                                 || remote_router_subs(tables, sub))
                     }) {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
+                        let id = if mode.future() {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face).local_subs.insert((*res).clone(), id);
+                            id
+                        } else {
+                            0
+                        };
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -970,11 +989,17 @@ impl HatPubSubTrait for HatCode {
                                 || remote_peer_subs(tables, sub)
                                 || remote_router_subs(tables, sub))
                         {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                            let id = if mode.future() {
+                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                                id
+                            } else {
+                                0
+                            };
                             let wire_expr = Resource::decl_key(sub, face);
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
+                                    interest_id,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -996,11 +1021,17 @@ impl HatPubSubTrait for HatCode {
                             || remote_peer_subs(tables, sub)
                             || remote_router_subs(tables, sub))
                     {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                        let id = if mode.future() {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                            id
+                        } else {
+                            0
+                        };
                         let wire_expr = Resource::decl_key(sub, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -1016,7 +1047,7 @@ impl HatPubSubTrait for HatCode {
                 }
             }
         }
-        if future {
+        if mode.future() {
             face_hat_mut!(face)
                 .remote_sub_interests
                 .insert(id, (res.cloned(), aggregate));
@@ -1101,8 +1132,41 @@ impl HatPubSubTrait for HatCode {
         }
     }
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        hat!(tables).router_subs.iter().cloned().collect()
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known suscriptions (keys)
+        hat!(tables)
+            .router_subs
+            .iter()
+            .map(|s| {
+                (
+                    s.clone(),
+                    // Compute the list of routers, peers and clients that are known
+                    // sources of those subscriptions
+                    Sources {
+                        routers: Vec::from_iter(res_hat!(s).router_subs.iter().cloned()),
+                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
+                            Vec::from_iter(res_hat!(s).peer_subs.iter().cloned())
+                        } else {
+                            s.session_ctxs
+                                .values()
+                                .filter_map(|f| {
+                                    (f.face.whatami == WhatAmI::Peer && f.subs.is_some())
+                                        .then_some(f.face.zid)
+                                })
+                                .collect()
+                        },
+                        clients: s
+                            .session_ctxs
+                            .values()
+                            .filter_map(|f| {
+                                (f.face.whatami == WhatAmI::Client && f.subs.is_some())
+                                    .then_some(f.face.zid)
+                            })
+                            .collect(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn compute_data_route(
@@ -1117,7 +1181,7 @@ impl HatPubSubTrait for HatCode {
         if key_expr.ends_with('/') {
             return Arc::new(route);
         }
-        log::trace!(
+        tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -1126,7 +1190,7 @@ impl HatPubSubTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return Arc::new(route);
             }
         };

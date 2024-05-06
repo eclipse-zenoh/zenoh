@@ -31,14 +31,26 @@ jobs:
   checks:
     name: Code checks
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [ "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
+    container:
+      image: ${{ matrix.image }}
+      options: --sysctl net.ipv6.conf.all.disable_ipv6=0 -e DEBIAN_FRONTEND=noninteractive
     steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
+      - name: Update and install packages
+        run: apt-get update && apt-get install -y curl git build-essential pkg-config libssl-dev
 
       - name: Install Rust toolchain
         run: |
-          rustup show
-          rustup component add rustfmt clippy
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install rustup components
+        run: rustup component add rustfmt clippy
 
       - name: Code format check
         run: cargo fmt --check
@@ -58,15 +70,26 @@ jobs:
     name: Tests
     needs: checks
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [ "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
+    container:
+      image: ${{ matrix.image }}
+      options: --sysctl net.ipv6.conf.all.disable_ipv6=0 -e DEBIAN_FRONTEND=noninteractive
     steps:
+      - name: Update and install packages
+        run: apt-get update && apt-get install -y curl git build-essential pkg-config libssl-dev
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
       - name: Clone this repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        run: rustup show
-
       - name: Install nextest
-        run: cargo install --locked cargo-nextest
+        run: cargo +stable install --locked cargo-nextest
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
@@ -83,7 +106,7 @@ jobs:
           ASYNC_STD_THREAD_COUNT: 4
 
   doc:
-    name: Doc generation
+    name: Generate documentation
     needs: checks
     runs-on: ubuntu-latest
     steps:
@@ -94,7 +117,7 @@ jobs:
       - name: Install Rust toolchain nightly for docs gen
         run: rustup toolchain install nightly
 
-      - name: generate doc
+      - name: Run rustdoc using Nightly Rust and Zenoh unstable
         # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
         run: >
           cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features unstable -j3

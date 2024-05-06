@@ -18,9 +18,10 @@ use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
 use std::str;
+use zenoh::bytes::StringOrBase64;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
-use zenoh::payload::StringOrBase64;
 use zenoh::prelude::r#async::*;
+use zenoh::sample::builder::SampleBuilder;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 
@@ -55,20 +56,20 @@ impl Aligner {
     pub async fn start(&self) {
         while let Ok((from, incoming_digest)) = self.rx_digest.recv_async().await {
             if self.in_processed(incoming_digest.checksum).await {
-                log::trace!(
+                tracing::trace!(
                     "[ALIGNER]Skipping already processed digest: {}",
                     incoming_digest.checksum
                 );
                 continue;
             } else if self.snapshotter.get_digest().await.checksum == incoming_digest.checksum {
-                log::trace!(
+                tracing::trace!(
                     "[ALIGNER]Skipping matching digest: {}",
                     incoming_digest.checksum
                 );
                 continue;
             } else {
                 // process this digest
-                log::debug!(
+                tracing::debug!(
                     "[ALIGNER]Processing digest: {:?} from {}",
                     incoming_digest,
                     from
@@ -88,7 +89,7 @@ impl Aligner {
         let checksum = other.checksum;
         let timestamp = other.timestamp;
         let (missing_content, no_content_err) = self.get_missing_content(&other, from).await;
-        log::debug!(
+        tracing::debug!(
             "[ALIGNER] Missing {} entries; query corresponding samples",
             missing_content.len()
         );
@@ -101,19 +102,17 @@ impl Aligner {
                 .await;
 
             // Missing data might be empty since some samples in digest might be outdated
-            log::debug!("[ALIGNER] Received {} queried samples", missing_data.len());
-            log::trace!("[ALIGNER] Received queried samples: {missing_data:?}");
+            tracing::debug!("[ALIGNER] Received {} queried samples", missing_data.len());
+            tracing::trace!("[ALIGNER] Received queried samples: {missing_data:?}");
 
             for (key, (ts, value)) in missing_data {
-                let Value {
-                    payload, encoding, ..
-                } = value;
-                let sample = Sample::new(key, payload)
-                    .with_encoding(encoding)
-                    .with_timestamp(ts);
-                log::debug!("[ALIGNER] Adding {:?} to storage", sample);
+                let sample = SampleBuilder::put(key, value.payload().clone())
+                    .encoding(value.encoding().clone())
+                    .timestamp(ts)
+                    .into();
+                tracing::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
-                    log::error!("[ALIGNER] Error adding sample to storage: {}", e)
+                    tracing::error!("[ALIGNER] Error adding sample to storage: {}", e)
                 });
             }
 
@@ -149,7 +148,7 @@ impl Aligner {
     }
 
     async fn get_missing_content(&self, other: &Digest, from: &str) -> (Vec<LogEntry>, bool) {
-        log::debug!("[ALIGNER] Get missing content from {from} ...");
+        tracing::debug!("[ALIGNER] Get missing content from {from} ...");
         // get my digest
         let this = &self.snapshotter.get_digest().await;
 
@@ -162,9 +161,9 @@ impl Aligner {
 
         let ((cold_data, no_cold_err), (warm_data, no_warm_err), (hot_data, no_hot_err)) =
             futures::join!(cold_alignment, warm_alignment, hot_alignment);
-        log::debug!("[ALIGNER] Missing content from {from} in Cold era: {cold_data:?}");
-        log::debug!("[ALIGNER] Missing content from {from} in Warm era: {warm_data:?}");
-        log::debug!("[ALIGNER] Missing content from {from} in Hot era: {hot_data:?}");
+        tracing::debug!("[ALIGNER] Missing content from {from} in Cold era: {cold_data:?}");
+        tracing::debug!("[ALIGNER] Missing content from {from} in Warm era: {warm_data:?}");
+        tracing::debug!("[ALIGNER] Missing content from {from} in Hot era: {hot_data:?}");
         (
             [cold_data, warm_data, hot_data].concat(),
             no_cold_err && no_warm_err && no_hot_err,
@@ -215,7 +214,7 @@ impl Aligner {
                         other_intervals.insert(i, c);
                     }
                     Err(e) => {
-                        log::error!("[ALIGNER] Error decoding reply: {}", e);
+                        tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
                     }
                 };
@@ -261,7 +260,7 @@ impl Aligner {
                             other_subintervals.insert(i, c);
                         }
                         Err(e) => {
-                            log::error!("[ALIGNER] Error decoding reply: {}", e);
+                            tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                             no_err = false;
                         }
                     };
@@ -302,7 +301,7 @@ impl Aligner {
                         other_content.insert(i, c);
                     }
                     Err(e) => {
-                        log::error!("[ALIGNER] Error decoding reply: {}", e);
+                        tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
                     }
                 };
@@ -317,11 +316,11 @@ impl Aligner {
 
     async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
         let mut no_err = true;
-        let selector = KeyExpr::from(&self.digest_key)
-            .join(&from)
-            .unwrap()
-            .with_parameters(&properties);
-        log::trace!("[ALIGNER] Sending Query '{}'...", selector);
+        let selector = Selector::new(
+            KeyExpr::from(&self.digest_key).join(&from).unwrap(),
+            properties,
+        );
+        tracing::trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         match self
             .session
@@ -333,9 +332,9 @@ impl Aligner {
         {
             Ok(replies) => {
                 while let Ok(reply) = replies.recv_async().await {
-                    match reply.sample {
+                    match reply.into_result() {
                         Ok(sample) => {
-                            log::trace!(
+                            tracing::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",
                                 sample.key_expr().as_str(),
                                 StringOrBase64::from(sample.payload())
@@ -343,7 +342,7 @@ impl Aligner {
                             return_val.push(sample);
                         }
                         Err(err) => {
-                            log::error!(
+                            tracing::error!(
                                 "[ALIGNER] Received error for query on selector {} :{:?}",
                                 selector,
                                 err
@@ -354,11 +353,17 @@ impl Aligner {
                 }
             }
             Err(err) => {
-                log::error!("[ALIGNER] Query failed on selector `{}`: {}", selector, err);
+                tracing::error!(
+                    "[ALIGNER] Query failed on selector `{}`: {:?}",
+                    selector,
+                    err
+                );
                 no_err = false;
             }
         };
-        log::trace!("[ALIGNER] On Query '{selector}' received: {return_val:?} (no_err:{no_err})");
+        tracing::trace!(
+            "[ALIGNER] On Query '{selector}' received: {return_val:?} (no_err:{no_err})"
+        );
         (return_val, no_err)
     }
 }

@@ -21,7 +21,7 @@ use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::declare::InterestId;
+use zenoh_protocol::network::interest::InterestId;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -302,7 +302,8 @@ impl Resource {
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
             if Arc::strong_count(res) <= 3 && res.childs.is_empty() {
-                log::debug!("Unregister resource {}", res.expr());
+                // consider only childless resource held by only one external object (+ 1 strong count for resclone, + 1 strong count for res.parent to a total of 3 )
+                tracing::debug!("Unregister resource {}", res.expr());
                 if let Some(context) = mutres.context.as_mut() {
                     for match_ in &mut context.matches {
                         let mut match_ = match_.upgrade().unwrap();
@@ -315,12 +316,24 @@ impl Resource {
                         }
                     }
                 }
+                mutres.nonwild_prefix.take();
                 {
                     get_mut_unchecked(parent).childs.remove(&res.suffix);
                 }
                 Resource::clean(parent);
             }
         }
+    }
+
+    pub fn close(self: &mut Arc<Resource>) {
+        let r = get_mut_unchecked(self);
+        for c in r.childs.values_mut() {
+            Self::close(c);
+        }
+        r.parent.take();
+        r.childs.clear();
+        r.nonwild_prefix.take();
+        r.session_ctxs.clear();
     }
 
     #[cfg(test)]
@@ -351,8 +364,8 @@ impl Resource {
                 Some(res) => Resource::make_resource(tables, res, rest),
                 None => {
                     let mut new = Arc::new(Resource::new(from, chunk, None));
-                    if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
-                        log::debug!("Register resource {}", new.expr());
+                    if tracing::enabled!(tracing::Level::DEBUG) && rest.is_empty() {
+                        tracing::debug!("Register resource {}", new.expr());
                     }
                     let res = Resource::make_resource(tables, &mut new, rest);
                     get_mut_unchecked(from)
@@ -376,8 +389,8 @@ impl Resource {
                         Some(res) => Resource::make_resource(tables, res, rest),
                         None => {
                             let mut new = Arc::new(Resource::new(from, chunk, None));
-                            if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
-                                log::debug!("Register resource {}", new.expr());
+                            if tracing::enabled!(tracing::Level::DEBUG) && rest.is_empty() {
+                                tracing::debug!("Register resource {}", new.expr());
                             }
                             let res = Resource::make_resource(tables, &mut new, rest);
                             get_mut_unchecked(from)
@@ -479,6 +492,7 @@ impl Resource {
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -638,7 +652,7 @@ impl Resource {
             }
             get_mut_unchecked(res).context_mut().matches = matches;
         } else {
-            log::error!("Call match_resource() on context less res {}", res.expr());
+            tracing::error!("Call match_resource() on context less res {}", res.expr());
         }
     }
 
@@ -677,7 +691,7 @@ pub(crate) fn register_expr(
                 let mut fullexpr = prefix.expr();
                 fullexpr.push_str(expr.suffix.as_ref());
                 if res.expr() != fullexpr {
-                    log::error!(
+                    tracing::error!(
                         "{} Resource {} remapped. Remapping unsupported!",
                         face,
                         expr_id
@@ -723,7 +737,7 @@ pub(crate) fn register_expr(
                 drop(wtables);
             }
         },
-        None => log::error!(
+        None => tracing::error!(
             "{} Declare resource with unknown scope {}!",
             face,
             expr.scope
@@ -735,7 +749,7 @@ pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, ex
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
-        None => log::error!("{} Undeclare unknown resource!", face),
+        None => tracing::error!("{} Undeclare unknown resource!", face),
     }
     drop(wtables);
 }
@@ -777,7 +791,7 @@ pub(crate) fn register_expr_interest(
                     .insert(id, Some(res));
                 drop(wtables);
             }
-            None => log::error!(
+            None => tracing::error!(
                 "Declare keyexpr interest with unknown scope {}!",
                 expr.scope
             ),

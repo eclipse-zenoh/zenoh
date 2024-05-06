@@ -19,7 +19,7 @@ use crate::net::routing::dispatcher::queries::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::HatQueriesTrait;
+use crate::net::routing::hat::{CurrentFutureTrait, HatQueriesTrait, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
@@ -31,7 +31,8 @@ use std::sync::Arc;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::{InterestId, QueryableId};
+use zenoh_protocol::network::declare::QueryableId;
+use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr, ZenohId},
     network::declare::{
@@ -126,6 +127,7 @@ fn send_sourced_queryable_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -141,7 +143,7 @@ fn send_sourced_queryable_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -173,6 +175,7 @@ fn propagate_simple_queryable(
             let key_expr = Resource::decl_key(res, &mut dst_face);
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -209,7 +212,7 @@ fn propagate_sourced_queryable(
                     tree_sid.index() as NodeId,
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating qabl {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -217,7 +220,7 @@ fn propagate_sourced_queryable(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating qabl {}: cannot get index of {}!",
             res.expr(),
             source
@@ -342,6 +345,7 @@ fn send_forget_sourced_queryable_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -356,7 +360,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                         ));
                     }
                 }
-                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
+                None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -367,6 +371,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
         if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
+                    interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -393,6 +398,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                 if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
+                            interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -428,7 +434,7 @@ fn propagate_forget_sourced_queryable(
                     tree_sid.index() as NodeId,
                 );
             } else {
-                log::trace!(
+                tracing::trace!(
                     "Propagating forget qabl {}: tree for node {} sid:{} not yet ready",
                     res.expr(),
                     tree_sid.index(),
@@ -436,7 +442,7 @@ fn propagate_forget_sourced_queryable(
                 );
             }
         }
-        None => log::error!(
+        None => tracing::error!(
             "Error propagating forget qabl {}: cannot get index of {}!",
             res.expr(),
             source
@@ -508,6 +514,7 @@ pub(super) fn undeclare_client_queryable(
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
+                        interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -534,6 +541,7 @@ pub(super) fn undeclare_client_queryable(
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -656,7 +664,7 @@ fn insert_target_for_qabls(
             }
         }
     } else {
-        log::trace!("Tree for node sid:{} not yet ready", source);
+        tracing::trace!("Tree for node sid:{} not yet ready", source);
     }
 }
 
@@ -671,11 +679,11 @@ impl HatQueriesTrait for HatCode {
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
-        future: bool,
+        mode: InterestMode,
         aggregate: bool,
     ) {
-        if current && face.whatami == WhatAmI::Client {
+        if mode.current() && face.whatami == WhatAmI::Client {
+            let interest_id = mode.future().then_some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
                     if hat!(tables).peer_qabls.iter().any(|qabl| {
@@ -684,13 +692,19 @@ impl HatQueriesTrait for HatCode {
                             && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
                     }) {
                         let info = local_qabl_info(tables, res, face);
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .insert((*res).clone(), (id, info));
+                        let id = if mode.future() {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face)
+                                .local_qabls
+                                .insert((*res).clone(), (id, info));
+                            id
+                        } else {
+                            0
+                        };
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -710,13 +724,19 @@ impl HatQueriesTrait for HatCode {
                             && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
                         {
                             let info = local_qabl_info(tables, qabl, face);
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face)
-                                .local_qabls
-                                .insert(qabl.clone(), (id, info));
+                            let id = if mode.future() {
+                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(face)
+                                    .local_qabls
+                                    .insert(qabl.clone(), (id, info));
+                                id
+                            } else {
+                                0
+                            };
                             let key_expr = Resource::decl_key(qabl, face);
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
+                                    interest_id,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -737,13 +757,19 @@ impl HatQueriesTrait for HatCode {
                         && (remote_client_qabls(qabl, face) || remote_peer_qabls(tables, qabl))
                     {
                         let info = local_qabl_info(tables, qabl, face);
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .insert(qabl.clone(), (id, info));
+                        let id = if mode.future() {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face)
+                                .local_qabls
+                                .insert(qabl.clone(), (id, info));
+                            id
+                        } else {
+                            0
+                        };
                         let key_expr = Resource::decl_key(qabl, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
+                                interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -759,7 +785,7 @@ impl HatQueriesTrait for HatCode {
                 }
             }
         }
-        if future {
+        if mode.future() {
             face_hat_mut!(face)
                 .remote_qabl_interests
                 .insert(id, res.cloned());
@@ -817,8 +843,31 @@ impl HatQueriesTrait for HatCode {
         }
     }
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>> {
-        hat!(tables).peer_qabls.iter().cloned().collect()
+    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known queryables (keys)
+        hat!(tables)
+            .peer_qabls
+            .iter()
+            .map(|s| {
+                (
+                    s.clone(),
+                    // Compute the list of routers, peers and clients that are known
+                    // sources of those queryables
+                    Sources {
+                        routers: vec![],
+                        peers: Vec::from_iter(res_hat!(s).peer_qabls.keys().cloned()),
+                        clients: s
+                            .session_ctxs
+                            .values()
+                            .filter_map(|f| {
+                                (f.face.whatami == WhatAmI::Client && f.qabl.is_some())
+                                    .then_some(f.face.zid)
+                            })
+                            .collect(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn compute_query_route(
@@ -833,7 +882,7 @@ impl HatQueriesTrait for HatCode {
         if key_expr.ends_with('/') {
             return EMPTY_ROUTE.clone();
         }
-        log::trace!(
+        tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
@@ -842,7 +891,7 @@ impl HatQueriesTrait for HatCode {
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
             Ok(ke) => ke,
             Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
+                tracing::warn!("Invalid KE reached the system: {}", e);
                 return EMPTY_ROUTE.clone();
             }
         };
@@ -916,7 +965,7 @@ impl HatQueriesTrait for HatCode {
             let key_expr = match OwnedKeyExpr::try_from(key_expr) {
                 Ok(ke) => ke,
                 Err(e) => {
-                    log::warn!("Invalid KE reached the system: {}", e);
+                    tracing::warn!("Invalid KE reached the system: {}", e);
                     return result;
                 }
             };

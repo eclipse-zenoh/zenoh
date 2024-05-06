@@ -15,10 +15,10 @@ use crate::unicast::establishment::{
     ext::auth::pubkey::{self, AuthPubKey, AuthPubKeyFsm, ZPublicKey},
     AcceptFsm, OpenFsm,
 };
-use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
 use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
+use tokio::sync::{Mutex, RwLock};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, Writer},

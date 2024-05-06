@@ -28,17 +28,21 @@ readme = "README.md"
 [features]
 default = ["zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
+loki = ["tracing-loki","url"]
 
 [dependencies]
-async-std = { workspace = true, features = ["attributes"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 clap = { workspace = true, features = ["derive"] }
-env_logger = { workspace = true }
+zenoh-util = {workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
-log = { workspace = true }
-zenoh = { workspace = true, features = ["unstable"] }
+tracing = {workspace = true}
+tracing-subscriber = {workspace = true}
+tracing-loki = {workspace = true, optional = true }
+url = {workspace = true, optional = true }
+zenoh = { workspace = true, features = ["unstable", "plugins"] }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
@@ -55,10 +59,10 @@ license-file = ["../LICENSE", "0"]
 depends = "$auto"
 maintainer-scripts = ".deb"
 assets = [
-	# binary
-	["target/release/zenohd", "/usr/bin/", "755"],
-	# config
-	[".service/zenohd.json5", "/etc/zenohd/", "644"],
-	# service
-	[".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
+  # binary
+  ["target/release/zenohd", "/usr/bin/", "755"],
+  # config
+  [".service/zenohd.json5", "/etc/zenohd/", "644"],
+  # service
+  [".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
 ]

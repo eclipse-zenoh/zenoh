@@ -61,7 +61,8 @@ impl fmt::Debug for SubscriberState {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -71,7 +72,7 @@ impl fmt::Debug for SubscriberState {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[derive(Debug)]
 pub(crate) struct SubscriberInner<'a> {
@@ -89,7 +90,8 @@ impl<'a> SubscriberInner<'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -101,7 +103,7 @@ impl<'a> SubscriberInner<'a> {
     ///     .await
     ///     .unwrap();
     /// subscriber.undeclare().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
@@ -119,7 +121,8 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -129,7 +132,7 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 ///     .await
 ///     .unwrap();
 /// subscriber.undeclare().res().await.unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberUndeclaration<'a> {
@@ -171,7 +174,8 @@ impl Drop for SubscriberInner<'_> {
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -181,7 +185,7 @@ impl Drop for SubscriberInner<'_> {
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -201,9 +205,6 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     #[cfg(not(feature = "unstable"))]
     pub(crate) reliability: Reliability,
 
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) mode: Mode,
-
     #[cfg(feature = "unstable")]
     pub origin: Locality,
     #[cfg(not(feature = "unstable"))]
@@ -220,7 +221,8 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -230,7 +232,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Callback>
@@ -262,7 +264,8 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -273,7 +276,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
@@ -290,7 +293,8 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -303,7 +307,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
@@ -394,7 +398,7 @@ where
                     alive: true,
                     kind: SubscriberKind::Subscriber,
                 },
-                receiver,
+                handler: receiver,
             })
     }
 }
@@ -422,7 +426,8 @@ where
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -435,21 +440,22 @@ where
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
 /// }
-/// # })
+/// # }
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct Subscriber<'a, Receiver> {
+pub struct Subscriber<'a, Handler> {
     pub(crate) subscriber: SubscriberInner<'a>,
-    pub receiver: Receiver,
+    pub(crate) handler: Handler,
 }
 
-impl<'a, Receiver> Subscriber<'a, Receiver> {
+impl<'a, Handler> Subscriber<'a, Handler> {
     /// Returns the [`EntityGlobalId`] of this Subscriber.
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -458,7 +464,7 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     ///     .await
     ///     .unwrap();
     /// let subscriber_id = subscriber.id();
-    /// # })
+    /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
@@ -473,6 +479,20 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
         &self.subscriber.state.key_expr
     }
 
+    /// Returns a reference to this subscriber's handler.
+    /// An handler is anything that implements [`IntoHandler`].
+    /// The default handler is [`DefaultHandler`].
+    pub fn handler(&self) -> &Handler {
+        &self.handler
+    }
+
+    /// Returns a mutable reference to this subscriber's handler.
+    /// An handler is anything that implements [`IntoHandler`].
+    /// The default handler is [`DefaultHandler`].
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.handler
+    }
+
     /// Close a [`Subscriber`].
     ///
     /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
@@ -480,7 +500,8 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -489,7 +510,7 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     ///     .await
     ///     .unwrap();
     /// subscriber.undeclare().res().await.unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
@@ -503,16 +524,16 @@ impl<'a, T> Undeclarable<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> 
     }
 }
 
-impl<Receiver> Deref for Subscriber<'_, Receiver> {
-    type Target = Receiver;
+impl<Handler> Deref for Subscriber<'_, Handler> {
+    type Target = Handler;
 
     fn deref(&self) -> &Self::Target {
-        &self.receiver
+        self.handler()
     }
 }
-impl<Receiver> DerefMut for Subscriber<'_, Receiver> {
+impl<Handler> DerefMut for Subscriber<'_, Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.receiver
+        self.handler_mut()
     }
 }
 

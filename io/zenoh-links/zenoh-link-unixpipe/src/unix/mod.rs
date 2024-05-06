@@ -44,9 +44,9 @@ impl LocatorInspector for UnixPipeLocatorInspector {
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct UnixPipeConfigurator;
-#[async_trait]
+
 impl ConfigurationInspector<Config> for UnixPipeConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
+    fn inspect_config(&self, config: &Config) -> ZResult<String> {
         let mut properties: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().unixpipe();
@@ -56,8 +56,7 @@ impl ConfigurationInspector<Config> for UnixPipeConfigurator {
             properties.push((config::FILE_ACCESS_MASK, &file_access_mask_));
         }
 
-        let mut s = String::new();
-        Parameters::extend(properties.drain(..), &mut s);
+        let s = Parameters::from_iter(properties.drain(..));
 
         Ok(s)
     }

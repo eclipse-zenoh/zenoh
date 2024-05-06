@@ -11,17 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     let (config, key_expr, value, attachment) = parse_args();
 
@@ -33,19 +32,15 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
-        sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {value}");
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
-        let mut put = publisher.put(buf);
-        if let Some(attachment) = &attachment {
-            put = put.with_attachment(
-                attachment
-                    .split('&')
-                    .map(|pair| split_once(pair, '='))
-                    .collect(),
-            )
-        }
-        put.res().await.unwrap();
+        publisher
+            .put(buf)
+            .attachment(&attachment)
+            .res()
+            .await
+            .unwrap();
     }
 }
 
@@ -64,17 +59,6 @@ struct Args {
     attach: Option<String>,
     #[command(flatten)]
     common: CommonArgs,
-}
-
-fn split_once(s: &str, c: char) -> (&[u8], &[u8]) {
-    let s_bytes = s.as_bytes();
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s_bytes.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s_bytes, &[]),
-    }
 }
 
 fn parse_args() -> (Config, KeyExpr<'static>, String, Option<String>) {

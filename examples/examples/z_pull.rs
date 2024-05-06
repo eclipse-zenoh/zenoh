@@ -11,16 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
 use std::time::Duration;
-use zenoh::{config::Config, handlers::RingBuffer, prelude::r#async::*};
+use zenoh::{config::Config, handlers::RingChannel, prelude::r#async::*};
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
-    env_logger::init();
+    zenoh_util::try_init_log_from_env();
 
     let (config, key_expr, size, interval) = parse_args();
 
@@ -30,36 +29,66 @@ async fn main() {
     println!("Declaring Subscriber on '{key_expr}'...");
     let subscriber = session
         .declare_subscriber(&key_expr)
-        .with(RingBuffer::new(size))
+        .with(RingChannel::new(size))
         .res()
         .await
         .unwrap();
 
-    println!("Pulling data every {:#?} seconds", interval);
+    println!("Press CTRL-C to quit...");
+
+    // Blocking recv. If the ring is empty, wait for the first sample to arrive.
     loop {
-        print!(">> [Subscriber] Pulling ");
-        match subscriber.recv() {
-            Ok(Some(sample)) => {
+        // Use .recv() for the synchronous version.
+        match subscriber.recv_async().await {
+            Ok(sample) => {
                 let payload = sample
                     .payload()
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(
-                    "{} ('{}': '{}')",
+                    ">> [Subscriber] Pulled {} ('{}': '{}')... performing a computation of {:#?}",
                     sample.kind(),
                     sample.key_expr().as_str(),
                     payload,
+                    interval
                 );
-            }
-            Ok(None) => {
-                println!("nothing... sleep for {:#?}", interval);
-                sleep(interval).await;
+                tokio::time::sleep(interval).await;
             }
             Err(e) => {
-                println!("Pull error: {e}");
+                println!(">> [Subscriber] Pull error: {e}");
+                return;
             }
         }
     }
+
+    // Non-blocking recv. This can be usually used to implement a polling mechanism.
+    // loop {
+    //     match subscriber.try_recv() {
+    //         Ok(Some(sample)) => {
+    //             let payload = sample
+    //                 .payload()
+    //                 .deserialize::<String>()
+    //                 .unwrap_or_else(|e| format!("{}", e));
+    //             println!(
+    //                 ">> [Subscriber] Pulled {} ('{}': '{}')",
+    //                 sample.kind(),
+    //                 sample.key_expr().as_str(),
+    //                 payload,
+    //             );
+    //         }
+    //         Ok(None) => {
+    //             println!(
+    //                 ">> [Subscriber] Pulled nothing... sleep for {:#?}",
+    //                 interval
+    //             );
+    //             tokio::time::sleep(interval).await;
+    //         }
+    //         Err(e) => {
+    //             println!(">> [Subscriber] Pull error: {e}");
+    //             return;
+    //         }
+    //     }
+    // }
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Debug)]
@@ -68,10 +97,10 @@ struct SubArgs {
     /// The Key Expression to subscribe to.
     key: KeyExpr<'static>,
     /// The size of the ringbuffer.
-    #[arg(long, default_value = "3")]
+    #[arg(short, long, default_value = "3")]
     size: usize,
     /// The interval for pulling the ringbuffer.
-    #[arg(long, default_value = "5.0")]
+    #[arg(short, long, default_value = "5.0")]
     interval: f32,
     #[command(flatten)]
     common: CommonArgs,

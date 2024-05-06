@@ -17,27 +17,18 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
-use config::{
-    TLS_ROOT_CA_CERTIFICATE_BASE64, TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_BASE64,
-    TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_NAME_VERIFICATION, TLS_SERVER_PRIVATE_KEY_BASE64,
-    TLS_SERVER_PRIVATE_KEY_FILE,
-};
-use secrecy::ExposeSecret;
-use std::net::SocketAddr;
-use zenoh_config::Config;
+
 use zenoh_core::zconfigurable;
-use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::{
-    endpoint::{Address, Parameters},
-    Locator,
-};
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_link_commons::LocatorInspector;
+use zenoh_protocol::{core::Locator, transport::BatchSize};
+use zenoh_result::ZResult;
 
 mod unicast;
+mod utils;
 mod verify;
 pub use unicast::*;
+pub use utils::TlsConfigurator as QuicConfigurator;
 
 // Default ALPN protocol
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
@@ -48,7 +39,7 @@ pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the QUIC MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
-const QUIC_MAX_MTU: u16 = u16::MAX;
+const QUIC_MAX_MTU: BatchSize = BatchSize::MAX;
 pub const QUIC_LOCATOR_PREFIX: &str = "quic";
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -65,81 +56,9 @@ impl LocatorInspector for QuicLocatorInspector {
     }
 }
 
-#[derive(Default, Clone, Copy, Debug)]
-pub struct QuicConfigurator;
-
-#[async_trait]
-impl ConfigurationInspector<Config> for QuicConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
-        let mut ps: Vec<(&str, &str)> = vec![];
-
-        let c = config.transport().link().tls();
-
-        match (c.root_ca_certificate(), c.root_ca_certificate_base64()) {
-            (Some(_), Some(_)) => {
-                bail!("Only one between 'root_ca_certificate' and 'root_ca_certificate_base64' can be present!")
-            }
-            (Some(ca_certificate), None) => {
-                ps.push((TLS_ROOT_CA_CERTIFICATE_FILE, ca_certificate));
-            }
-            (None, Some(ca_certificate)) => {
-                ps.push((
-                    TLS_ROOT_CA_CERTIFICATE_BASE64,
-                    ca_certificate.expose_secret(),
-                ));
-            }
-            _ => {}
-        }
-
-        match (c.server_private_key(), c.server_private_key_base64()) {
-            (Some(_), Some(_)) => {
-                bail!("Only one between 'server_private_key' and 'server_private_key_base64' can be present!")
-            }
-            (Some(server_private_key), None) => {
-                ps.push((TLS_SERVER_PRIVATE_KEY_FILE, server_private_key));
-            }
-            (None, Some(server_private_key)) => {
-                ps.push((
-                    TLS_SERVER_PRIVATE_KEY_BASE64,
-                    server_private_key.expose_secret(),
-                ));
-            }
-            _ => {}
-        }
-
-        match (c.server_certificate(), c.server_certificate_base64()) {
-            (Some(_), Some(_)) => {
-                bail!("Only one between 'server_certificate' and 'server_certificate_base64' can be present!")
-            }
-            (Some(server_certificate), None) => {
-                ps.push((TLS_SERVER_CERTIFICATE_FILE, server_certificate));
-            }
-            (None, Some(server_certificate)) => {
-                ps.push((
-                    TLS_SERVER_CERTIFICATE_BASE64,
-                    server_certificate.expose_secret(),
-                ));
-            }
-            _ => {}
-        }
-
-        if let Some(server_name_verification) = c.server_name_verification() {
-            match server_name_verification {
-                true => ps.push((TLS_SERVER_NAME_VERIFICATION, "true")),
-                false => ps.push((TLS_SERVER_NAME_VERIFICATION, "false")),
-            };
-        }
-
-        let mut s = String::new();
-        Parameters::extend(ps.drain(..), &mut s);
-
-        Ok(s)
-    }
-}
-
 zconfigurable! {
     // Default MTU (QUIC PDU) in bytes.
-    static ref QUIC_DEFAULT_MTU: u16 = QUIC_MAX_MTU;
+    static ref QUIC_DEFAULT_MTU: BatchSize = QUIC_MAX_MTU;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:
@@ -159,25 +78,20 @@ pub mod config {
     pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
     pub const TLS_SERVER_PRIVATE_KEY_BASE64: &str = "server_private_key_base64";
 
-    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "tls_server_certificate_file";
-    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
-    pub const TLS_SERVER_CERTIFICATE_BASE64: &str = "tls_server_certificate_base64";
+    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
+    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
+    pub const TLS_SERVER_CERTIFICATE_BASE64: &str = "server_certificate_base64";
+
+    pub const TLS_CLIENT_PRIVATE_KEY_FILE: &str = "client_private_key_file";
+    pub const TLS_CLIENT_PRIVATE_KEY_RAW: &str = "client_private_key_raw";
+    pub const TLS_CLIENT_PRIVATE_KEY_BASE64: &str = "client_private_key_base64";
+
+    pub const TLS_CLIENT_CERTIFICATE_FILE: &str = "client_certificate_file";
+    pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "client_certificate_raw";
+    pub const TLS_CLIENT_CERTIFICATE_BASE64: &str = "client_certificate_base64";
+
+    pub const TLS_CLIENT_AUTH: &str = "client_auth";
 
     pub const TLS_SERVER_NAME_VERIFICATION: &str = "server_name_verification";
     pub const TLS_SERVER_NAME_VERIFICATION_DEFAULT: &str = "true";
-}
-
-async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
-    match address.as_str().to_socket_addrs().await?.next() {
-        Some(addr) => Ok(addr),
-        None => bail!("Couldn't resolve QUIC locator address: {}", address),
-    }
-}
-
-pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
-    use base64::engine::general_purpose;
-    use base64::Engine;
-    Ok(general_purpose::STANDARD
-        .decode(data)
-        .map_err(|e| zerror!("Unable to perform base64 decoding: {e:?}"))?)
 }

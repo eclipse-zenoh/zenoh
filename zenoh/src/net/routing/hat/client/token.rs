@@ -16,13 +16,18 @@ use std::sync::{atomic::Ordering, Arc};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
-    declare::{common::ext::WireExprType, Interest, InterestId, TokenId},
-    ext, Declare, DeclareBody, DeclareInterest, DeclareToken, UndeclareInterest, UndeclareToken,
+    declare::{common::ext::WireExprType, TokenId},
+    ext,
+    interest::{InterestId, InterestMode, InterestOptions},
+    Declare, DeclareBody, DeclareToken, Interest, UndeclareToken,
 };
 use zenoh_sync::get_mut_unchecked;
 
 use crate::net::routing::{
-    dispatcher::{face::FaceState, tables::Tables},
+    dispatcher::{
+        face::{FaceState, InterestState},
+        tables::Tables,
+    },
     hat::HatTokenTrait,
     router::{NodeId, Resource, SessionContext},
     RoutingContext, PREFIX_LIVELINESS,
@@ -54,6 +59,7 @@ fn propagate_simple_token_to(
                     id,
                     wire_expr: key_expr,
                 }),
+                interest_id: todo!(),
             },
             res.expr(),
         ));
@@ -135,6 +141,7 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                         id,
                         ext_wire_expr: WireExprType::null(),
                     }),
+                    interest_id: todo!(),
                 },
                 res.expr(),
             ));
@@ -173,6 +180,7 @@ pub(super) fn undeclare_client_token(
                                 id,
                                 ext_wire_expr: WireExprType::null(),
                             }),
+                            interest_id: todo!(),
                         },
                         res.expr(),
                     ));
@@ -222,10 +230,9 @@ impl HatTokenTrait for HatCode {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: zenoh_protocol::network::declare::InterestId,
+        id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
-        future: bool,
+        mode: InterestMode,
         _aggregate: bool,
     ) {
         face_hat_mut!(face)
@@ -237,28 +244,25 @@ impl HatTokenTrait for HatCode {
             .filter(|f| f.whatami != WhatAmI::Client)
         {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-            let mut interest = Interest::KEYEXPRS + Interest::TOKENS;
-            if current {
-                interest += Interest::CURRENT;
-            }
-            if future {
-                interest += Interest::FUTURE;
-            }
+            let options = InterestOptions::KEYEXPRS + InterestOptions::TOKENS;
             get_mut_unchecked(dst_face).local_interests.insert(
                 id,
-                (interest, res.as_ref().map(|res| (*res).clone()), !current),
+                InterestState {
+                    options,
+                    res: res.as_ref().map(|res| (*res).clone()),
+                    finalized: mode == InterestMode::Future,
+                },
             );
             let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
-            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
+            dst_face.primitives.send_interest(RoutingContext::with_expr(
+                Interest {
+                    id,
+                    mode,
+                    options,
+                    wire_expr,
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareInterest(DeclareInterest {
-                        id,
-                        interest,
-                        wire_expr,
-                    }),
                 },
                 res.as_ref().map(|res| res.expr()).unwrap_or_default(),
             ));
@@ -269,7 +273,7 @@ impl HatTokenTrait for HatCode {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: zenoh_protocol::network::declare::InterestId,
+        id: InterestId,
     ) {
         if let Some(interest) = face_hat_mut!(face).remote_token_interests.remove(&id) {
             if !tables.faces.values().any(|f| {
@@ -290,20 +294,22 @@ impl HatTokenTrait for HatCode {
                         .cloned()
                         .collect::<Vec<InterestId>>()
                     {
-                        let (int, res, _) = dst_face.local_interests.get(&id).unwrap();
-                        if int.tokens() && (*res == interest) {
-                            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                                Declare {
+                        let InterestState { options, res, .. } =
+                            dst_face.local_interests.get(&id).unwrap();
+                        if options.tokens() && (*res == interest) {
+                            dst_face.primitives.send_interest(RoutingContext::with_expr(
+                                Interest {
+                                    id,
+                                    mode: InterestMode::Final,
+                                    options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
+                                    wire_expr: None,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareInterest(UndeclareInterest {
-                                        id,
-                                        ext_wire_expr: WireExprType::null(),
-                                    }),
                                 },
                                 res.as_ref().map(|res| res.expr()).unwrap_or_default(),
                             ));
+
                             get_mut_unchecked(dst_face).local_interests.remove(&id);
                         }
                     }

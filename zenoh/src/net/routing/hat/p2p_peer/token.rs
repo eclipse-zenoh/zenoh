@@ -17,13 +17,15 @@ use std::sync::{atomic::Ordering, Arc};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{common::ext::WireExprType, TokenId},
-    ext, Declare, DeclareBody, DeclareToken, UndeclareToken,
+    ext,
+    interest::{InterestId, InterestMode},
+    Declare, DeclareBody, DeclareToken, UndeclareToken,
 };
 use zenoh_sync::get_mut_unchecked;
 
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
-    hat::HatTokenTrait,
+    hat::{CurrentFutureTrait, HatTokenTrait},
     router::{NodeId, Resource, SessionContext},
     RoutingContext, PREFIX_LIVELINESS,
 };
@@ -58,6 +60,7 @@ fn propagate_simple_token_to(
                         id: 0,
                         wire_expr: key_expr,
                     }),
+                    interest_id: todo!(),
                 },
                 res.expr(),
             ));
@@ -88,6 +91,7 @@ fn propagate_simple_token_to(
                                 id,
                                 wire_expr: key_expr,
                             }),
+                            interest_id: todo!(),
                         },
                         res.expr(),
                     ));
@@ -179,6 +183,7 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                         id,
                         ext_wire_expr: WireExprType::null(),
                     }),
+                    interest_id: todo!(),
                 },
                 res.expr(),
             ));
@@ -203,6 +208,7 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                                 id,
                                 ext_wire_expr: WireExprType::null(),
                             }),
+                            interest_id: todo!(),
                         },
                         res.expr(),
                     ));
@@ -244,6 +250,7 @@ pub(super) fn undeclare_client_token(
                                 id,
                                 ext_wire_expr: WireExprType::null(),
                             }),
+                            interest_id: todo!(),
                         },
                         res.expr(),
                     ));
@@ -268,6 +275,7 @@ pub(super) fn undeclare_client_token(
                                         id,
                                         ext_wire_expr: WireExprType::null(),
                                     }),
+                                    interest_id: todo!(),
                                 },
                                 res.expr(),
                             ));
@@ -319,13 +327,12 @@ impl HatTokenTrait for HatCode {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: zenoh_protocol::network::declare::InterestId,
+        id: InterestId,
         res: Option<&mut Arc<Resource>>,
-        current: bool,
-        future: bool,
+        mode: InterestMode,
         aggregate: bool,
     ) {
-        if current && face.whatami == WhatAmI::Client {
+        if mode.current() && face.whatami == WhatAmI::Client {
             if let Some(res) = res.as_ref() {
                 if aggregate {
                     if tables.faces.values().any(|src_face| {
@@ -344,6 +351,7 @@ impl HatTokenTrait for HatCode {
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                                interest_id: todo!(),
                             },
                             res.expr(),
                         ));
@@ -370,6 +378,7 @@ impl HatTokenTrait for HatCode {
                                                 id,
                                                 wire_expr,
                                             }),
+                                            interest_id: todo!(),
                                         },
                                         token.expr(),
                                     ));
@@ -396,6 +405,7 @@ impl HatTokenTrait for HatCode {
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
                                     body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                                    interest_id: todo!(),
                                 },
                                 token.expr(),
                             ));
@@ -404,7 +414,7 @@ impl HatTokenTrait for HatCode {
                 }
             }
         }
-        if future {
+        if mode.future() {
             face_hat_mut!(face)
                 .remote_token_interests
                 .insert(id, (res.cloned(), aggregate));
@@ -415,7 +425,7 @@ impl HatTokenTrait for HatCode {
         &self,
         _tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        id: zenoh_protocol::network::declare::InterestId,
+        id: InterestId,
     ) {
         face_hat_mut!(face).remote_token_interests.remove(&id);
     }

@@ -16,9 +16,9 @@
 
 use crate::backends_mgt::StoreIntercept;
 use crate::storages_mgt::StorageMessage;
+use async_std::stream::{interval, StreamExt};
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
-use async_std::task::sleep;
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
 use std::collections::{HashMap, HashSet};
@@ -26,7 +26,7 @@ use std::str;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use urlencoding::encode;
-use zenoh::payload::StringOrBase64;
+use zenoh::bytes::StringOrBase64;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
@@ -81,7 +81,7 @@ impl Replica {
         name: &str,
         rx: Receiver<StorageMessage>,
     ) {
-        log::trace!("[REPLICA] Opening session...");
+        tracing::trace!("[REPLICA] Opening session...");
         let startup_entries = match store_intercept.storage.get_all_entries().await {
             Ok(entries) => {
                 let mut result = Vec::new();
@@ -90,7 +90,7 @@ impl Replica {
                         if let Some(prefix) = storage_config.clone().strip_prefix {
                             result.push((prefix, entry.1));
                         } else {
-                            log::error!("Empty key found with timestamp `{}`", entry.1);
+                            tracing::error!("Empty key found with timestamp `{}`", entry.1);
                         }
                     } else {
                         result.push((
@@ -105,7 +105,7 @@ impl Replica {
                 result
             }
             Err(e) => {
-                log::error!("[REPLICA] Error fetching entries from storage: {}", e);
+                tracing::error!("[REPLICA] Error fetching entries from storage: {}", e);
                 return;
             }
         };
@@ -182,12 +182,12 @@ impl Replica {
         );
 
         select!(
-            () = digest_sub => log::trace!("[REPLICA] Exiting digest subscriber"),
-            () = align_q => log::trace!("[REPLICA] Exiting align queryable"),
-            () = aligner => log::trace!("[REPLICA] Exiting aligner"),
-            () = digest_pub => log::trace!("[REPLICA] Exiting digest publisher"),
-            () = snapshot_task => log::trace!("[REPLICA] Exiting snapshot task"),
-            () = storage_task => log::trace!("[REPLICA] Exiting storage task"),
+            () = digest_sub => tracing::trace!("[REPLICA] Exiting digest subscriber"),
+            () = align_q => tracing::trace!("[REPLICA] Exiting align queryable"),
+            () = aligner => tracing::trace!("[REPLICA] Exiting aligner"),
+            () = digest_pub => tracing::trace!("[REPLICA] Exiting digest publisher"),
+            () = snapshot_task => tracing::trace!("[REPLICA] Exiting snapshot task"),
+            () = storage_task => tracing::trace!("[REPLICA] Exiting storage task"),
         )
     }
 
@@ -200,7 +200,7 @@ impl Replica {
             .join("**")
             .unwrap();
 
-        log::debug!(
+        tracing::debug!(
             "[DIGEST_SUB] Declaring Subscriber named {} on '{}'",
             self.name,
             digest_key
@@ -216,13 +216,13 @@ impl Replica {
             let sample = match subscriber.recv_async().await {
                 Ok(sample) => sample,
                 Err(e) => {
-                    log::error!("[DIGEST_SUB] Error receiving sample: {}", e);
+                    tracing::error!("[DIGEST_SUB] Error receiving sample: {}", e);
                     continue;
                 }
             };
             let from = &sample.key_expr().as_str()
                 [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
-            log::trace!(
+            tracing::trace!(
                 "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
                 from,
                 sample.kind(),
@@ -233,7 +233,7 @@ impl Replica {
             {
                 Ok(digest) => digest,
                 Err(e) => {
-                    log::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
+                    tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
                     continue;
                 }
             };
@@ -248,10 +248,12 @@ impl Replica {
                 )
                 .await;
             if to_be_processed {
-                log::trace!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
+                tracing::trace!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
                 match tx.send_async((from.to_string(), digest)).await {
                     Ok(()) => {}
-                    Err(e) => log::error!("[DIGEST_SUB] Error sending digest to aligner: {}", e),
+                    Err(e) => {
+                        tracing::error!("[DIGEST_SUB] Error sending digest to aligner: {}", e)
+                    }
                 }
             };
             received.insert(from.to_string(), ts);
@@ -265,7 +267,7 @@ impl Replica {
             .join(&self.name)
             .unwrap();
 
-        log::debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
+        tracing::debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
         let publisher = self
             .session
             .declare_publisher(digest_key)
@@ -273,8 +275,11 @@ impl Replica {
             .await
             .unwrap();
 
+        // Ensure digest gets published every interval, accounting for
+        // time it takes to publish.
+        let mut interval = interval(self.replica_config.publication_interval);
         loop {
-            sleep(self.replica_config.publication_interval).await;
+            let _ = interval.next().await;
 
             let digest = snapshotter.get_digest().await;
             let digest = digest.compress();
@@ -284,10 +289,10 @@ impl Replica {
             drop(digests_published);
             drop(digest);
 
-            log::trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
+            tracing::trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
             match publisher.put(digest_json).res().await {
                 Ok(()) => {}
-                Err(e) => log::error!("[DIGEST_PUB] Digest publication failed: {}", e),
+                Err(e) => tracing::error!("[DIGEST_PUB] Digest publication failed: {}", e),
             }
         }
     }
@@ -306,13 +311,13 @@ impl Replica {
         }
         let digests_published = self.digests_published.read().await;
         if digests_published.contains(&checksum) {
-            log::trace!("[DIGEST_SUB] Dropping since matching digest already seen");
+            tracing::trace!("[DIGEST_SUB] Dropping since matching digest already seen");
             return false;
         }
         // TODO: test this part
         if received.contains_key(from) && *received.get(from).unwrap() > ts {
             // not the latest from that replica
-            log::trace!("[DIGEST_SUB] Dropping older digest at {} from {}", ts, from);
+            tracing::trace!("[DIGEST_SUB] Dropping older digest at {} from {}", ts, from);
             return false;
         }
         // TODO: test this part
@@ -323,7 +328,7 @@ impl Replica {
                     self.replica_config.delta,
                 )
         {
-            log::error!("[DIGEST_SUB] Mismatching digest configs, cannot be aligned");
+            tracing::error!("[DIGEST_SUB] Mismatching digest configs, cannot be aligned");
             return false;
         }
         true
