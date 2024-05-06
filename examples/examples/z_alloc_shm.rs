@@ -21,29 +21,15 @@ async fn main() {
 }
 
 async fn run() -> ZResult<()> {
-    // Construct an SHM backend
-    let backend = {
-        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
-        // The initialisation of SHM backend is completely backend-specific and user is free to do
-        // anything reasonable here. This code is execuated at the provider's first use
-
-        // Alignment for POSIX SHM provider
-        // All allocations will be aligned corresponding to this alignment -
-        // that means that the provider will be able to satisfy allocation layouts
-        // with alignment <= provider_alignment
-        let provider_alignment = AllocAlignment::default();
-
-        // Create layout for POSIX Provider's memory
-        let provider_layout = MemoryLayout::new(65536, provider_alignment).unwrap();
-
-        PosixSharedMemoryProviderBackend::builder()
-            .with_layout(provider_layout)
-            .res()
-            .unwrap()
-    };
-
-    // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
-    let shared_memory_provider = SharedMemoryProviderBuilder::builder()
+    // create an SHM backend...
+    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixSharedMemoryProviderBackend::builder()
+        .with_size(65536)
+        .unwrap()
+        .res()
+        .unwrap();
+    // ...and an SHM provider
+    let provider = SharedMemoryProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -54,14 +40,10 @@ async fn run() -> ZResult<()> {
     // This layout is reusable and can handle series of similar allocations
     let buffer_layout = {
         // OPTION 1: Simple (default) configuration:
-        let simple_layout = shared_memory_provider
-            .alloc_layout()
-            .size(512)
-            .res()
-            .unwrap();
+        let simple_layout = provider.alloc_layout().size(512).res().unwrap();
 
         // OPTION 2: Comprehensive configuration:
-        let _comprehensive_layout = shared_memory_provider
+        let _comprehensive_layout = provider
             .alloc_layout()
             .size(512)
             .alignment(AllocAlignment::new(2))

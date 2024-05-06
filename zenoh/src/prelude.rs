@@ -26,7 +26,7 @@
 
 // Reexport API in flat namespace
 pub(crate) mod flat {
-    #[cfg(feature = "shared-memory")]
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
     pub use crate::shm::*;
     pub use crate::{
         buffers::*,
@@ -51,7 +51,7 @@ pub(crate) mod flat {
 
 // Reexport API in hierarchical namespace
 pub(crate) mod mods {
-    #[cfg(feature = "shared-memory")]
+    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
     pub use crate::shm;
     pub use crate::{
         buffers, bytes, config, core, encoding, handlers, key_expr, publication, query, queryable,

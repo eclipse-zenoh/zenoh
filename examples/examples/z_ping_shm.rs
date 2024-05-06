@@ -45,34 +45,23 @@ fn main() {
 
     let mut samples = Vec::with_capacity(n);
 
-    // Construct an SHM backend
-    let backend = {
-        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
-        // The initialisation of SHM backend is completely backend-specific and user is free to do
-        // anything reasonable here. This code is execuated at the provider's first use
-
-        // Alignment for POSIX SHM provider
-        // All allocations will be aligned corresponding to this alignment -
-        // that means that the provider will be able to satisfy allocation layouts
-        // with alignment <= provider_alignment
-        let provider_alignment = AllocAlignment::default();
-
-        // Create layout for POSIX Provider's memory
-        let provider_layout = MemoryLayout::new(size, provider_alignment).unwrap();
-
-        PosixSharedMemoryProviderBackend::builder()
-            .with_layout(provider_layout)
-            .res()
-            .unwrap()
-    };
-
-    // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
-    let shared_memory_provider = SharedMemoryProviderBuilder::builder()
+    // create an SHM backend...
+    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixSharedMemoryProviderBackend::builder()
+        .with_size(size)
+        .unwrap()
+        .res()
+        .unwrap();
+    // ...and an SHM provider
+    let provider = SharedMemoryProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
 
-    let buf = shared_memory_provider
+    // Allocate an SHM buffer
+    // NOTE: For allocation API please check z_alloc_shm.rs example
+    // NOTE: For buf's API please check z_bytes_shm.rs example
+    let buf = provider
         .alloc_layout()
         .size(size)
         .res()
@@ -81,7 +70,7 @@ fn main() {
         .res()
         .unwrap();
 
-    // convert ZSliceShmMut into ZSlice as ZSliceShmMut does not support Clone
+    // convert ZShmMut into ZSlice as ZShmMut does not support Clone
     let buf: ZSlice = buf.into();
 
     // -- warmup --
