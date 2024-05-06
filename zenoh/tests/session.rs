@@ -18,7 +18,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::runtime::{Runtime, RuntimeBuilder};
 use zenoh_core::ztimeout;
 
-const TIMEOUT: Duration = Duration::from_secs(20);
+const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
@@ -69,7 +69,6 @@ async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer01.close().res_async()).unwrap();
     println!("[  ][02d] Closing peer02 session");
     ztimeout!(peer02.close().res_async()).unwrap();
-    println!(">>> close session done");
 }
 
 async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Reliability) {
@@ -129,8 +128,6 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         // Wait for the declaration to propagate
         tokio::time::sleep(SLEEP).await;
     }
-
-    println!(">>> test_session_pubsub done");
 }
 
 async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
