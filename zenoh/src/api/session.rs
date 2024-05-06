@@ -28,7 +28,7 @@ use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, Config, Notifier, WhatAmI};
+use zenoh_config::{unwrap_or_default, Config, Notifier};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{declare::SubscriberId, ext};
@@ -99,7 +99,6 @@ zconfigurable! {
     pub(crate) static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
     pub(crate) static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
     pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub(crate) static ref API_OPEN_SESSION_DELAY: u64 = 200;
 }
 
 pub(crate) struct SessionState {
@@ -849,7 +848,6 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            let peer_linkstate = unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
             #[cfg(all(feature = "unstable", feature = "shared-memory"))]
@@ -866,12 +864,6 @@ impl Session {
             .await;
             session.owns_runtime = true;
             runtime.start().await?;
-            if runtime.whatami() == WhatAmI::Router
-                || (runtime.whatami() == WhatAmI::Peer && peer_linkstate)
-            {
-                // Workaround for the declare_and_shoot problem
-                tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-            }
             Ok(session)
         })
     }
