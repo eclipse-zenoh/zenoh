@@ -145,20 +145,17 @@ lazy_static! {
         .collect();
 }
 
-// To drop the data mannually since Rust does not drop static variables.
-pub fn cleanup() {
-    unsafe {
-        std::mem::drop((ZRUNTIME_POOL.deref() as *const ZRuntimePool).read());
-        std::mem::drop((ZRUNTIME_INDEX.deref() as *const HashMap<ZRuntime, AtomicUsize>).read());
-    }
-}
-
-// A runtime guard used to explicitly drop the static variables
+// A runtime guard used to explicitly drop the static variables that Rust doesn't drop by default
 pub struct ZRuntimePoolGuard;
 
 impl Drop for ZRuntimePoolGuard {
     fn drop(&mut self) {
-        cleanup()
+        unsafe {
+            std::mem::drop((ZRUNTIME_POOL.deref() as *const ZRuntimePool).read());
+            std::mem::drop(
+                (ZRUNTIME_INDEX.deref() as *const HashMap<ZRuntime, AtomicUsize>).read(),
+            );
+        }
     }
 }
 
