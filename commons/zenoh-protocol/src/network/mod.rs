@@ -217,11 +217,12 @@ impl From<ResponseFinal> for NetworkMessage {
 
 // Extensions
 pub mod ext {
+    use core::fmt;
+
     use crate::{
         common::{imsg, ZExtZ64},
         core::{CongestionControl, EntityId, Priority, ZenohId},
     };
-    use core::fmt;
 
     /// ```text
     ///  7 6 5 4 3 2 1 0

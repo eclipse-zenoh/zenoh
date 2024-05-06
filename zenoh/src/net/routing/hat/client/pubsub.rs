@@ -11,31 +11,39 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{face_hat, face_hat_mut, get_routes_entries};
-use super::{HatCode, HatFace};
-use crate::net::routing::dispatcher::face::{FaceState, InterestState};
-use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::Tables;
-use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::{HatPubSubTrait, Sources};
-use crate::net::routing::router::{update_data_routes_from, RoutesIndexes};
-use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
-use crate::KeyExpr;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::SubscriberId;
-use zenoh_protocol::network::interest::{Interest, InterestId, InterestMode, InterestOptions};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc},
+};
+
 use zenoh_protocol::{
-    core::{Reliability, WhatAmI},
-    network::declare::{
-        common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareSubscriber, UndeclareSubscriber,
+    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI},
+    network::{
+        declare::{
+            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
+            DeclareSubscriber, SubscriberId, UndeclareSubscriber,
+        },
+        interest::{InterestId, InterestMode, InterestOptions},
+        Interest,
     },
 };
 use zenoh_sync::get_mut_unchecked;
+
+use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        dispatcher::{
+            face::{FaceState, InterestState},
+            resource::{NodeId, Resource, SessionContext},
+            tables::{Route, RoutingExpr, Tables},
+        },
+        hat::{HatPubSubTrait, Sources},
+        router::{update_data_routes_from, RoutesIndexes},
+        RoutingContext, PREFIX_LIVELINESS,
+    },
+};
 
 #[inline]
 fn propagate_simple_subscription_to(
@@ -517,5 +525,63 @@ impl HatPubSubTrait for HatCode {
 
     fn get_data_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
         get_routes_entries()
+    }
+
+    fn get_matching_subscriptions(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+    ) -> HashMap<usize, Arc<FaceState>> {
+        let mut matching_subscriptions = HashMap::new();
+        if key_expr.ends_with('/') {
+            return matching_subscriptions;
+        }
+        tracing::trace!("get_matching_subscriptions({})", key_expr,);
+
+        for face in tables
+            .faces
+            .values()
+            .filter(|f| f.whatami != WhatAmI::Client)
+        {
+            if face.local_interests.values().any(|interest| {
+                interest.finalized
+                    && interest.options.subscribers()
+                    && interest
+                        .res
+                        .as_ref()
+                        .map(|res| {
+                            KeyExpr::try_from(res.expr())
+                                .map(|intres| intres.includes(key_expr))
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(true)
+            }) && face_hat!(face).remote_subs.values().any(|sub| {
+                KeyExpr::try_from(sub.expr())
+                    .map(|subres| subres.intersects(key_expr))
+                    .unwrap_or(false)
+            }) {
+                matching_subscriptions.insert(face.id, face.clone());
+            }
+        }
+
+        let res = Resource::get_resource(&tables.root_res, key_expr);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+
+            for (sid, context) in &mres.session_ctxs {
+                if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
+                    matching_subscriptions
+                        .entry(*sid)
+                        .or_insert_with(|| context.face.clone());
+                }
+            }
+        }
+        matching_subscriptions
     }
 }

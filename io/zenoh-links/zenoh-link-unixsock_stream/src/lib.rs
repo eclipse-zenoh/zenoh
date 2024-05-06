@@ -20,8 +20,10 @@
 use async_trait::async_trait;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::{endpoint::Address, Locator};
-use zenoh_protocol::transport::BatchSize;
+use zenoh_protocol::{
+    core::{endpoint::Address, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::ZResult;
 #[cfg(target_family = "unix")]
 mod unicast;

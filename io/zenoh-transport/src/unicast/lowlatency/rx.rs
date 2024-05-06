@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastLowlatency;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     ZSlice,
@@ -21,6 +20,8 @@ use zenoh_core::zread;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{network::NetworkMessage, transport::TransportMessageLowLatency};
 use zenoh_result::{zerror, ZResult};
+
+use super::transport::TransportUnicastLowlatency;
 
 /*************************************/
 /*            TRANSPORT RX           */

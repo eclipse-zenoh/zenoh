@@ -12,23 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
-use zenoh::shm::protocol_implementations::posix::{
-    posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-    protocol_id::POSIX_PROTOCOL_ID,
-};
-use zenoh::shm::provider::shared_memory_provider::SharedMemoryProviderBuilder;
-use zenoh::shm::provider::shared_memory_provider::{BlockOn, GarbageCollect};
-use zenoh::shm::provider::types::AllocAlignment;
-use zenoh::shm::provider::types::MemoryLayout;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 const N: usize = 10;
 const K: u32 = 3;
 
 #[tokio::main]
-async fn main() -> Result<(), zenoh::Error> {
+async fn main() -> Result<(), ZError> {
     // Initiate logging
     zenoh_util::try_init_log_from_env();
 
@@ -40,7 +31,7 @@ async fn main() -> Result<(), zenoh::Error> {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Creating POSIX SHM backend...");
     // Construct an SHM backend
@@ -71,7 +62,7 @@ async fn main() -> Result<(), zenoh::Error> {
         .backend(backend)
         .res();
 
-    let publisher = session.declare_publisher(&path).res().await.unwrap();
+    let publisher = session.declare_publisher(&path).await.unwrap();
 
     println!("Allocating Shared Memory Buffer...");
     let layout = shared_memory_provider
@@ -104,7 +95,7 @@ async fn main() -> Result<(), zenoh::Error> {
             path,
             String::from_utf8_lossy(&sbuf[0..slice_len])
         );
-        publisher.put(sbuf).res().await?;
+        publisher.put(sbuf).await?;
     }
 
     Ok(())

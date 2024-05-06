@@ -16,14 +16,13 @@ use std::sync::Arc;
 
 use zenoh_result::ZResult;
 
+use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 use crate::api::{
     client::{
         shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
     },
     common::types::SegmentID,
 };
-
-use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 
 /// Client factory implementation for particular shared memory protocol
 #[zenoh_macros::unstable_doc]

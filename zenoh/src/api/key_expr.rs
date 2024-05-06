@@ -12,52 +12,22 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
-//!
-//! In Zenoh, operations are performed on keys. To allow addressing multiple keys with a single operation, we use Key Expressions (KE).
-//! KEs are a small language that express sets of keys through a glob-like language.
-//!
-//! These semantics can be a bit difficult to implement, so this module provides the following facilities:
-//!
-//! # Storing Key Expressions
-//! This module provides 3 flavours to store strings that have been validated to respect the KE syntax:
-//! - [`keyexpr`] is the equivalent of a [`str`],
-//! - [`OwnedKeyExpr`] works like an [`std::sync::Arc<str>`],
-//! - [`KeyExpr`] works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
-//! routing and network usage.
-//!
-//! All of these types [`Deref`](core::ops::Deref) to [`keyexpr`], which notably has methods to check whether a given [`keyexpr::intersects`] with another,
-//! or even if a [`keyexpr::includes`] another.
-//!
-//! # Tying values to Key Expressions
-//! When storing values tied to Key Expressions, you might want something more specialized than a [`HashMap`](std::collections::HashMap) if you want to respect
-//! the Key Expression semantics with high performance.
-//!
-//! Enter [KeTrees](keyexpr_tree). These are data-structures specially built to store KE-value pairs in a manner that supports the set-semantics of KEs.
-//!
-//! # Building and parsing Key Expressions
-//! A common issue in REST API is the association of meaning to sections of the URL, and respecting that API in a convenient manner.
-//! The same issue arises naturally when designing a KE space, and [`KeFormat`](format::KeFormat) was designed to help you with this,
-//! both in constructing and in parsing KEs that fit the formats you've defined.
-//!
-//! [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
-//! as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
-
 use std::{
     convert::{TryFrom, TryInto},
-    future::Ready,
+    future::{IntoFuture, Ready},
     str::FromStr,
 };
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-pub use zenoh_keyexpr::*;
-pub use zenoh_macros::{kedefine, keformat, kewrite};
+
+use zenoh_core::{Resolvable, Wait};
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
     core::{key_expr::canon::Canonizable, ExprId, WireExpr},
     network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
 
-use crate::{net::primitives::Primitives, Session, Undeclarable};
+use super::session::{Session, Undeclarable};
+use crate::net::primitives::Primitives;
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
@@ -309,8 +279,8 @@ impl FromStr for KeyExpr<'static> {
         Ok(Self(KeyExprInner::Owned(s.parse()?)))
     }
 }
-impl<'a> From<super::KeyExpr<'a>> for OwnedKeyExpr {
-    fn from(val: super::KeyExpr<'a>) -> Self {
+impl<'a> From<KeyExpr<'a>> for OwnedKeyExpr {
+    fn from(val: KeyExpr<'a>) -> Self {
         match val.0 {
             KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                 key_expr.into()
@@ -539,7 +509,7 @@ impl<'a> KeyExpr<'a> {
             _ => false,
         }
     }
-    pub(crate) fn to_wire(&'a self, session: &crate::Session) -> WireExpr<'a> {
+    pub(crate) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,
@@ -594,11 +564,11 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
-/// session.undeclare(key_expr).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
+/// session.undeclare(key_expr).await.unwrap();
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
@@ -611,8 +581,8 @@ impl Resolvable for KeyExprUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for KeyExprUndeclaration<'_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Wait for KeyExprUndeclaration<'_> {
+    fn wait(self) -> <Self as Resolvable>::To {
         let KeyExprUndeclaration { session, expr } = self;
         let expr_id = match &expr.0 {
             KeyExprInner::Wire {
@@ -661,11 +631,12 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
     }
 }
 
-impl AsyncResolve for KeyExprUndeclaration<'_> {
-    type Future = Ready<Self::To>;
+impl IntoFuture for KeyExprUndeclaration<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 

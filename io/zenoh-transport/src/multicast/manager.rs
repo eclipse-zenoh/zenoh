@@ -11,11 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
-use crate::TransportManager;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+
 use tokio::sync::Mutex;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionMulticastConf;
@@ -29,6 +26,11 @@ use zenoh_protocol::{
     transport::close,
 };
 use zenoh_result::{bail, zerror, ZResult};
+
+use crate::{
+    multicast::{transport::TransportMulticastInner, TransportMulticast},
+    TransportManager,
+};
 
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,

@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -24,6 +23,8 @@ use zenoh_protocol::{
         id,
     },
 };
+
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 // FragmentHeader
 impl<W> WCodec<&FragmentHeader, &mut W> for Zenoh080

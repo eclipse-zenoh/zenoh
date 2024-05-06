@@ -11,17 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::str::FromStr;
-use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicUsize, Arc};
-use std::time::Duration;
+use std::{
+    str::FromStr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh::config::{Config, ModeDependentValue};
-use zenoh::prelude::r#async::*;
-use zenoh::Result;
-use zenoh_core::ztimeout;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
-use zenoh_result::bail;
+use zenoh::{
+    core::Result,
+    internal::{bail, ztimeout},
+    prelude::*,
+};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
@@ -50,7 +54,7 @@ impl Task {
         match self {
             // The Sub task checks if the incoming message matches the expected size until it receives enough counts.
             Self::Sub(ke, expected_size) => {
-                let sub = ztimeout!(session.declare_subscriber(ke).res_async())?;
+                let sub = ztimeout!(session.declare_subscriber(ke))?;
                 let mut counter = 0;
                 loop {
                     tokio::select! {
@@ -80,10 +84,11 @@ impl Task {
                         _  = token.cancelled() => break,
 
                         // WARN: this won't yield after a timeout since the put is a blocking call
-                        res = tokio::time::timeout(std::time::Duration::from_secs(1), session
+                        res = tokio::time::timeout(std::time::Duration::from_secs(1), async {session
                             .put(ke, vec![0u8; *payload_size])
                             .congestion_control(CongestionControl::Block)
-                            .res()) => {
+                            .await
+                        }) => {
                             let _ = res?;
                         }
                     }
@@ -97,7 +102,7 @@ impl Task {
                 while counter < MSG_COUNT {
                     tokio::select! {
                         _  = token.cancelled() => break,
-                        replies = session.get(ke).timeout(Duration::from_secs(10)).res() => {
+                        replies = async { session.get(ke).timeout(Duration::from_secs(10)).await } => {
                             let replies = replies?;
                             while let Ok(reply) = replies.recv_async().await {
                                 match reply.result() {
@@ -127,14 +132,14 @@ impl Task {
 
             // The Queryable task keeps replying to requested messages until all checkpoints are finished.
             Self::Queryable(ke, payload_size) => {
-                let queryable = ztimeout!(session.declare_queryable(ke).res_async())?;
+                let queryable = ztimeout!(session.declare_queryable(ke))?;
                 let payload = vec![0u8; *payload_size];
 
                 loop {
                     tokio::select! {
                         _  = token.cancelled() => break,
                         query = queryable.recv_async() => {
-                            ztimeout!(query?.reply(ke.to_owned(), payload.clone()).res_async())?;
+                            ztimeout!(query?.reply(ke.to_owned(), payload.clone()))?;
                         },
                     }
                 }
@@ -279,7 +284,7 @@ impl Recipe {
 
                     // In case of client can't connect to some peers/routers
                     loop {
-                        if let Ok(session) = ztimeout!(zenoh::open(config.clone()).res_async()) {
+                        if let Ok(session) = ztimeout!(zenoh::open(config.clone())) {
                             break session.into_arc();
                         } else {
                             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -315,7 +320,7 @@ impl Recipe {
                 // node_task_tracker.wait().await;
 
                 // Close the session once all the task assoicated with the node are done.
-                ztimeout!(Arc::try_unwrap(session).unwrap().close().res_async())?;
+                ztimeout!(Arc::try_unwrap(session).unwrap().close())?;
 
                 println!("Node: {} is closed.", &node.name);
                 Result::Ok(())

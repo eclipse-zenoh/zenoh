@@ -12,25 +12,26 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Subscribing primitives.
-use crate::handlers::{locked, Callback, DefaultHandler, IntoHandler};
-use crate::key_expr::KeyExpr;
-use crate::prelude::Locality;
-use crate::sample::Sample;
-use crate::Id;
-use crate::Undeclarable;
-use crate::{Result as ZResult, SessionRef};
-use std::fmt;
-use std::future::Ready;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
+
+use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
+use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
+use zenoh_result::ZResult;
 
-/// The kind of reliability.
-pub use zenoh_protocol::core::Reliability;
+use super::{
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    key_expr::KeyExpr,
+    sample::{Locality, Sample},
+    session::{SessionRef, Undeclarable},
+    Id,
+};
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
@@ -63,13 +64,12 @@ impl fmt::Debug for SubscriberState {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()) })
-///     .res()
 ///     .await
 ///     .unwrap();
 /// # }
@@ -92,17 +92,16 @@ impl<'a> SubscriberInner<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(data_handler)
-    ///     .res()
     ///     .await
     ///     .unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
     /// # }
     /// ```
     #[inline]
@@ -123,15 +122,14 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .res()
 ///     .await
 ///     .unwrap();
-/// subscriber.undeclare().res().await.unwrap();
+/// subscriber.undeclare().await.unwrap();
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
@@ -143,8 +141,8 @@ impl Resolvable for SubscriberUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for SubscriberUndeclaration<'_> {
-    fn res_sync(mut self) -> <Self as Resolvable>::To {
+impl Wait for SubscriberUndeclaration<'_> {
+    fn wait(mut self) -> <Self as Resolvable>::To {
         self.subscriber.alive = false;
         self.subscriber
             .session
@@ -152,11 +150,12 @@ impl SyncResolve for SubscriberUndeclaration<'_> {
     }
 }
 
-impl AsyncResolve for SubscriberUndeclaration<'_> {
-    type Future = Ready<Self::To>;
+impl IntoFuture for SubscriberUndeclaration<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
@@ -176,13 +175,12 @@ impl Drop for SubscriberInner<'_> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .best_effort()
-///     .res()
 ///     .await
 ///     .unwrap();
 /// # }
@@ -223,13 +221,12 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # }
@@ -266,14 +263,13 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback_mut(move |_sample| { n += 1; })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # }
@@ -295,13 +291,12 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
@@ -312,7 +307,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Sample>,
+        Handler: IntoHandler<'static, Sample>,
     {
         let SubscriberBuilder {
             session,
@@ -372,12 +367,12 @@ where
     type To = ZResult<Subscriber<'a, Handler::Handler>>;
 }
 
-impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, Handler>
+impl<'a, Handler> Wait for SubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
@@ -403,15 +398,16 @@ where
     }
 }
 
-impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, Handler>
+impl<'a, Handler> IntoFuture for SubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
 {
-    type Future = Ready<Self::To>;
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
@@ -428,13 +424,12 @@ where
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .with(flume::bounded(32))
-///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
@@ -456,11 +451,10 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// let subscriber_id = subscriber.id();
@@ -502,14 +496,13 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .res()
     ///     .await
     ///     .unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
     /// # }
     /// ```
     #[inline]

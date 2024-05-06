@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportMulticastInner;
 use zenoh_core::zread;
 use zenoh_protocol::network::NetworkMessage;
 
+use super::transport::TransportMulticastInner;
 #[cfg(feature = "shared-memory")]
 use crate::shm::map_zmsg_to_partner;
 

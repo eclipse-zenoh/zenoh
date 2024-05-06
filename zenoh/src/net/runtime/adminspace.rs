@@ -10,45 +10,49 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-use super::routing::dispatcher::face::Face;
-use super::Runtime;
-use crate::bytes::ZBytes;
-use crate::encoding::Encoding;
-use crate::key_expr::KeyExpr;
-use crate::net::primitives::Primitives;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::SyncResolve;
-use crate::queryable::Query;
-use crate::queryable::QueryInner;
-use crate::sample::builder::ValueBuilderTrait;
-use crate::value::Value;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    sync::{Arc, Mutex},
+};
+
 use serde_json::json;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::sync::Arc;
-use std::sync::Mutex;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_core::Wait;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::network::declare::QueryableId;
-use zenoh_protocol::network::Interest;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
-        declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
-        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
-        ResponseFinal,
+        declare::{
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+        },
+        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
+        Response, ResponseFinal,
     },
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
+
+use super::{routing::dispatcher::face::Face, Runtime};
+#[cfg(all(feature = "unstable", feature = "plugins"))]
+use crate::api::plugins::PluginsManager;
+use crate::{
+    api::{
+        builders::sample::ValueBuilderTrait,
+        bytes::ZBytes,
+        key_expr::KeyExpr,
+        queryable::{Query, QueryInner},
+        value::Value,
+    },
+    encoding::Encoding,
+    net::primitives::Primitives,
+};
 
 pub struct AdminContext {
     runtime: Runtime,
@@ -71,7 +75,7 @@ pub struct AdminSpace {
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
-    Start(crate::config::PluginLoad),
+    Start(zenoh_config::PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -104,8 +108,8 @@ impl ConfigValidator for AdminSpace {
 impl AdminSpace {
     #[cfg(all(feature = "unstable", feature = "plugins"))]
     fn start_plugin(
-        plugin_mgr: &mut plugins::PluginsManager,
-        config: &crate::config::PluginLoad,
+        plugin_mgr: &mut PluginsManager,
+        config: &zenoh_config::PluginLoad,
         start_args: &Runtime,
         required: bool,
     ) -> ZResult<()> {
@@ -635,7 +639,7 @@ fn local_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(reply_key, payload)
         .encoding(Encoding::APPLICATION_JSON)
-        .res_sync()
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -667,7 +671,7 @@ zenoh_build{{version="{}"}} 1
             .openmetrics_text(),
     );
 
-    if let Err(e) = query.reply(reply_key, metrics).res() {
+    if let Err(e) = query.reply(reply_key, metrics).wait() {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
@@ -684,7 +688,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
-        .res()
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -702,7 +706,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
-        .res()
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -724,7 +728,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
-                .res_sync()
+                .wait()
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
@@ -748,7 +752,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
-                .res_sync()
+                .wait()
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
@@ -773,7 +777,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
             let status = serde_json::to_value(status).unwrap();
             match ZBytes::try_from(status) {
                 Ok(zbuf) => {
-                    if let Err(e) = query.reply(key, zbuf).res_sync() {
+                    if let Err(e) = query.reply(key, zbuf).wait() {
                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                     }
                 }
@@ -798,7 +802,14 @@ fn plugins_status(context: &AdminContext, query: Query) {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
-                        if let Err(e) = query.reply(key_expr, plugin.path()).res() {
+                        if let Err(e) = query
+                            .reply(
+                                key_expr,
+                                serde_json::to_string(plugin.path())
+                                    .unwrap_or_else(|_| String::from("{}")),
+                            )
+                            .wait()
+                        {
                             tracing::error!("Error sending AdminSpace reply: {:?}", e);
                         }
                     }
@@ -822,7 +833,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             match ZBytes::try_from(response.value) {
                                 Ok(zbuf) => {
-                                    if let Err(e) = query.reply(key_expr, zbuf).res_sync() {
+                                    if let Err(e) = query.reply(key_expr, zbuf).wait() {
                                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
                                 },

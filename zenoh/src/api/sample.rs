@@ -13,20 +13,19 @@
 //
 
 //! Sample primitives
-use crate::bytes::ZBytes;
-use crate::encoding::Encoding;
-use crate::prelude::{KeyExpr, Value};
-use crate::sample::builder::QoSBuilderTrait;
-use crate::time::Timestamp;
-use crate::Priority;
+use std::{convert::TryFrom, fmt};
+
 #[cfg(feature = "unstable")]
 use serde::Serialize;
-use std::{convert::TryFrom, fmt};
-use zenoh_protocol::core::CongestionControl;
-use zenoh_protocol::core::EntityGlobalId;
-use zenoh_protocol::network::declare::ext::QoSType;
+use zenoh_protocol::{
+    core::{CongestionControl, EntityGlobalId, Timestamp},
+    network::declare::ext::QoSType,
+};
 
-pub mod builder;
+use super::{
+    builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
+    publication::Priority, value::Value,
+};
 
 pub type SourceSn = u64;
 
@@ -153,10 +152,9 @@ pub struct SourceInfo {
 #[test]
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
-    use crate::{
-        sample::{SourceInfo, SourceSn},
-        ZenohId,
-    };
+    use zenoh_protocol::core::ZenohId;
+
+    use crate::api::sample::{SourceInfo, SourceSn};
 
     assert_eq!(std::mem::size_of::<ZenohId>(), 16);
     assert_eq!(std::mem::size_of::<Option<ZenohId>>(), 17);
@@ -320,16 +318,25 @@ impl Sample {
         &self.encoding
     }
 
-    /// Gets the timestamp of this Sample.
+    /// Gets the timestamp of this Sample
     #[inline]
     pub fn timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
-    /// Gets the quality of service settings this Sample was sent with.
-    #[inline]
-    pub fn qos(&self) -> &QoS {
-        &self.qos
+    /// Gets the congetion control of this Sample
+    pub fn congestion_control(&self) -> CongestionControl {
+        self.qos.congestion_control()
+    }
+
+    /// Gets the priority of this Sample
+    pub fn priority(&self) -> Priority {
+        self.qos.priority()
+    }
+
+    /// Gets the express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
+    pub fn express(&self) -> bool {
+        self.qos.express()
     }
 
     /// Gets infos on the source of this Sample.
@@ -355,12 +362,12 @@ impl From<Sample> for Value {
 
 /// Structure containing quality of service data
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub struct QoS {
+pub(crate) struct QoS {
     inner: QoSType,
 }
 
 #[derive(Debug)]
-pub struct QoSBuilder(QoS);
+pub(crate) struct QoSBuilder(QoS);
 
 impl From<QoS> for QoSBuilder {
     fn from(qos: QoS) -> Self {

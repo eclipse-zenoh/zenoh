@@ -233,6 +233,8 @@ macro_rules! zcondfeat {
 #[macro_export]
 macro_rules! ztimeout {
     ($f:expr) => {
-        tokio::time::timeout(TIMEOUT, $f).await.unwrap()
+        tokio::time::timeout(TIMEOUT, ::core::future::IntoFuture::into_future($f))
+            .await
+            .unwrap()
     };
 }

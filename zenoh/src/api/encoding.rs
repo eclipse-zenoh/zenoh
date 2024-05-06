@@ -11,13 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::bytes::ZBytes;
-use phf::phf_map;
 use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
+
+use phf::phf_map;
 use zenoh_buffers::{ZBuf, ZSlice};
 use zenoh_protocol::core::EncodingId;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::slice::{zsliceshm::ZSliceShm, zsliceshmmut::ZSliceShmMut};
+
+use super::bytes::ZBytes;
 
 /// Default encoding values used by Zenoh.
 ///

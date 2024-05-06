@@ -13,15 +13,14 @@
 //
 
 use alloc::vec;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 use core::{
     cmp::PartialEq,
     fmt, iter,
     ops::{Index, IndexMut, RangeBounds},
     ptr, slice,
 };
-
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
 
 #[derive(Clone, Eq)]
 enum SingleOrVecInner<T> {

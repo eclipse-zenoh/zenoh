@@ -11,18 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::collections::{HashMap, VecDeque};
-use std::convert::TryInto;
-use std::future::Ready;
-use std::time::Duration;
-use zenoh::prelude::r#async::*;
-use zenoh::queryable::{Query, Queryable};
-use zenoh::subscriber::FlumeSubscriber;
-use zenoh::SessionRef;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_result::{bail, ZResult};
-use zenoh_task::TerminatableTask;
-use zenoh_util::core::ResolveFuture;
+use std::{
+    collections::{HashMap, VecDeque},
+    convert::TryInto,
+    future::{IntoFuture, Ready},
+    time::Duration,
+};
+
+use zenoh::{
+    core::{Error, Resolvable, Resolve, Result as ZResult},
+    internal::{bail, ResolveFuture, TerminatableTask},
+    key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
+    prelude::Wait,
+    queryable::{Query, Queryable},
+    runtime::ZRuntime,
+    sample::{Locality, Sample},
+    session::{SessionDeclarations, SessionRef},
+    subscriber::FlumeSubscriber,
+};
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
@@ -56,7 +62,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<Error>,
     {
         self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
         self
@@ -94,17 +100,18 @@ impl<'a> Resolvable for PublicationCacheBuilder<'a, '_, '_> {
     type To = ZResult<PublicationCache<'a>>;
 }
 
-impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Wait for PublicationCacheBuilder<'_, '_, '_> {
+    fn wait(self) -> <Self as Resolvable>::To {
         PublicationCache::new(self)
     }
 }
 
-impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
-    type Future = Ready<Self::To>;
+impl<'a> IntoFuture for PublicationCacheBuilder<'a, '_, '_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
@@ -147,7 +154,7 @@ impl<'a> PublicationCache<'a> {
             .session
             .declare_subscriber(&key_expr)
             .allowed_origin(Locality::SessionLocal)
-            .res_sync()?;
+            .wait()?;
 
         // declare the queryable which returns the cached publications
         let mut queryable = conf.session.declare_queryable(&queryable_key_expr);
@@ -157,7 +164,7 @@ impl<'a> PublicationCache<'a> {
         if let Some(complete) = conf.complete {
             queryable = queryable.complete(complete);
         }
-        let queryable = queryable.res_sync()?;
+        let queryable = queryable.wait()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.handler().clone();
@@ -170,7 +177,7 @@ impl<'a> PublicationCache<'a> {
         let token = TerminatableTask::create_cancellation_token();
         let token2 = token.clone();
         let task = TerminatableTask::spawn(
-            zenoh_runtime::ZRuntime::Application,
+            ZRuntime::Application,
             async move {
                 let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                     HashMap::with_capacity(resources_limit.unwrap_or(32));
@@ -213,7 +220,7 @@ impl<'a> PublicationCache<'a> {
                                                     continue;
                                                 }
                                             }
-                                            if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
+                                            if let Err(e) = query.reply_sample(sample.clone()).await {
                                                 tracing::warn!("Error replying to query: {}", e);
                                             }
                                         }
@@ -227,7 +234,7 @@ impl<'a> PublicationCache<'a> {
                                                         continue;
                                                     }
                                                 }
-                                                if let Err(e) = query.reply_sample(sample.clone()).res_async().await {
+                                                if let Err(e) = query.reply_sample(sample.clone()).await {
                                                     tracing::warn!("Error replying to query: {}", e);
                                                 }
                                             }
@@ -259,8 +266,8 @@ impl<'a> PublicationCache<'a> {
                 local_sub,
                 task,
             } = self;
-            _queryable.undeclare().res_async().await?;
-            local_sub.undeclare().res_async().await?;
+            _queryable.undeclare().await?;
+            local_sub.undeclare().await?;
             task.terminate(Duration::from_secs(10));
             Ok(())
         })

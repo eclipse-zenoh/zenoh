@@ -11,21 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::time::Duration;
+
 use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
-use std::time::Duration;
-use zenoh::query::ReplyKeyExpr;
-use zenoh::sample::Locality;
-use zenoh::Result as ZResult;
 use zenoh::{
+    core::Result as ZResult,
     liveliness::LivelinessSubscriberBuilder,
-    prelude::Sample,
-    query::{QueryConsolidation, QueryTarget},
+    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
+    sample::{Locality, Sample},
     subscriber::{Reliability, Subscriber, SubscriberBuilder},
 };
 
-use crate::ExtractSample;
-use crate::{querying_subscriber::QueryingSubscriberBuilder, FetchingSubscriberBuilder};
+use crate::{
+    querying_subscriber::QueryingSubscriberBuilder, ExtractSample, FetchingSubscriberBuilder,
+};
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
 pub trait SubscriberForward<'a, S> {
@@ -60,10 +60,10 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
@@ -71,9 +71,8 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     ///         session
     ///             .get("key/expr")
     ///             .callback(cb)
-    ///             .res_sync()
+    ///             .wait()
     ///     })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
@@ -106,14 +105,13 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .querying()
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
@@ -141,10 +139,10 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
@@ -152,9 +150,8 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     ///         session
     ///             .get("key/expr")
     ///             .callback(cb)
-    ///             .res_sync()
+    ///             .wait()
     ///     })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
@@ -199,14 +196,13 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .querying()
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
@@ -254,10 +250,10 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .liveliness()
     ///     .declare_subscriber("key/expr")
@@ -267,9 +263,8 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     ///             .liveliness()
     ///             .get("key/expr")
     ///             .callback(cb)
-    ///             .res_sync()
+    ///             .wait()
     ///     })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
@@ -315,15 +310,14 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .liveliness()
     ///     .declare_subscriber("key/expr")
     ///     .querying()
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {

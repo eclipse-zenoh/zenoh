@@ -11,22 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::handlers::{locked, Callback, DefaultHandler};
-use crate::net::runtime::{orchestrator::Loop, Runtime};
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+    net::SocketAddr,
+    ops::Deref,
+    time::Duration,
+};
 
-use std::time::Duration;
-use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
 use tokio::net::UdpSocket;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::core::WhatAmIMatcher;
+use zenoh_core::{Resolvable, Wait};
+use zenoh_protocol::{core::WhatAmIMatcher, scouting::Hello};
 use zenoh_result::ZResult;
 use zenoh_task::TerminatableTask;
 
-/// Constants and helpers for zenoh `whatami` flags.
-pub use zenoh_protocol::core::WhatAmI;
-
-/// A zenoh Hello message.
-pub use zenoh_protocol::scouting::Hello;
+use crate::{
+    api::handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    net::runtime::{orchestrator::Loop, Runtime},
+};
 
 /// A builder for initializing a [`Scout`].
 ///
@@ -34,11 +36,9 @@ pub use zenoh_protocol::scouting::Hello;
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-/// use zenoh::scouting::WhatAmI;
+/// use zenoh::prelude::*;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
-///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
@@ -61,12 +61,10 @@ impl ScoutBuilder<DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::scouting::WhatAmI;
+    /// use zenoh::prelude::*;
     ///
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
     ///     .callback(|hello| { println!("{}", hello); })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # }
@@ -97,13 +95,11 @@ impl ScoutBuilder<DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::scouting::WhatAmI;
+    /// use zenoh::prelude::*;
     ///
     /// let mut n = 0;
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
     ///     .callback_mut(move |_hello| { n += 1; })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # }
@@ -125,12 +121,10 @@ impl ScoutBuilder<DefaultHandler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::scouting::WhatAmI;
+    /// use zenoh::prelude::*;
     ///
     /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
     ///     .with(flume::bounded(32))
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(hello) = receiver.recv_async().await {
@@ -141,7 +135,7 @@ impl ScoutBuilder<DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
-        Handler: crate::prelude::IntoHandler<'static, Hello>,
+        Handler: IntoHandler<'static, Hello>,
     {
         let ScoutBuilder {
             what,
@@ -158,32 +152,33 @@ impl ScoutBuilder<DefaultHandler> {
 
 impl<Handler> Resolvable for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Scout<Handler::Handler>>;
 }
 
-impl<Handler> SyncResolve for ScoutBuilder<Handler>
+impl<Handler> Wait for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-        scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
+        _scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
     }
 }
 
-impl<Handler> AsyncResolve for ScoutBuilder<Handler>
+impl<Handler> IntoFuture for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<'static, Hello> + Send,
     Handler::Handler: Send,
 {
-    type Future = Ready<Self::To>;
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
@@ -193,12 +188,10 @@ where
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-/// use zenoh::scouting::WhatAmI;
+/// use zenoh::prelude::*;
 ///
 /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
 ///     .callback(|hello| { println!("{}", hello); })
-///     .res()
 ///     .await
 ///     .unwrap();
 /// # }
@@ -215,12 +208,10 @@ impl ScoutInner {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::scouting::WhatAmI;
+    /// use zenoh::prelude::*;
     ///
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
     ///     .callback(|hello| { println!("{}", hello); })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// scout.stop();
@@ -252,12 +243,10 @@ impl fmt::Debug for ScoutInner {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-/// use zenoh::scouting::WhatAmI;
+/// use zenoh::prelude::*;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
 ///     .with(flume::bounded(32))
-///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
@@ -287,12 +276,10 @@ impl<Receiver> Scout<Receiver> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::r#async::*;
-    /// use zenoh::scouting::WhatAmI;
+    /// use zenoh::prelude::*;
     ///
     /// let scout = zenoh::scout(WhatAmI::Router, config::default())
     ///     .with(flume::bounded(32))
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// let _router = scout.recv_async().await;
@@ -304,7 +291,7 @@ impl<Receiver> Scout<Receiver> {
     }
 }
 
-fn scout(
+fn _scout(
     what: WhatAmIMatcher,
     config: zenoh_config::Config,
     callback: Callback<'static, Hello>,
@@ -348,4 +335,46 @@ fn scout(
         }
     }
     Ok(ScoutInner { scout_task: None })
+}
+
+/// Scout for routers and/or peers.
+///
+/// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
+///
+/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
+///
+/// # Arguments
+///
+/// * `what` - The kind of zenoh process to scout for
+/// * `config` - The configuration [`Config`] to use for scouting
+///
+/// # Examples
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+/// use zenoh::scouting::WhatAmI;
+///
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+///     .await
+///     .unwrap();
+/// while let Ok(hello) = receiver.recv_async().await {
+///     println!("{}", hello);
+/// }
+/// # }
+/// ```
+pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
+    what: I,
+    config: TryIntoConfig,
+) -> ScoutBuilder<DefaultHandler>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error:
+        Into<zenoh_result::Error>,
+{
+    ScoutBuilder {
+        what: what.into(),
+        config: config.try_into().map_err(|e| e.into()),
+        handler: DefaultHandler::default(),
+    }
 }

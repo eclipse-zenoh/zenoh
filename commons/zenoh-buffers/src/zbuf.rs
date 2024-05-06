@@ -11,6 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::{sync::Arc, vec::Vec};
+use core::{cmp, iter, mem, num::NonZeroUsize, ops::RangeBounds, ptr};
+#[cfg(feature = "std")]
+use std::io;
+
+use zenoh_collections::SingleOrVec;
+
 #[cfg(feature = "shared-memory")]
 use crate::ZSliceKind;
 use crate::{
@@ -22,11 +29,6 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice, ZSliceBuffer,
 };
-use alloc::{sync::Arc, vec::Vec};
-use core::{cmp, iter, mem, num::NonZeroUsize, ops::RangeBounds, ptr};
-#[cfg(feature = "std")]
-use std::io;
-use zenoh_collections::SingleOrVec;
 
 fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
     unsafe { &mut (*(Arc::as_ptr(arc) as *mut T)) }
@@ -776,9 +778,10 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn zbuf_seek() {
+        use std::io::Seek;
+
         use super::{HasReader, ZBuf};
         use crate::reader::Reader;
-        use std::io::Seek;
 
         let mut buf = ZBuf::empty();
         buf.push_zslice([0u8, 1u8, 2u8, 3u8].into());

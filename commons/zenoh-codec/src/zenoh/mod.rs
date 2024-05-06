@@ -17,11 +17,6 @@ pub mod put;
 pub mod query;
 pub mod reply;
 
-#[cfg(not(feature = "shared-memory"))]
-use crate::Zenoh080Bounded;
-#[cfg(feature = "shared-memory")]
-use crate::Zenoh080Sliced;
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -34,6 +29,12 @@ use zenoh_protocol::{
     core::{Encoding, EntityGlobalId, EntityId, ZenohId},
     zenoh::{ext, id, PushBody, RequestBody, ResponseBody},
 };
+
+#[cfg(not(feature = "shared-memory"))]
+use crate::Zenoh080Bounded;
+#[cfg(feature = "shared-memory")]
+use crate::Zenoh080Sliced;
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
 // Push
 impl<W> WCodec<&PushBody, &mut W> for Zenoh080

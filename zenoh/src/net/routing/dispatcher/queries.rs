@@ -11,23 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::face::FaceState;
-use super::resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource};
-use super::tables::NodeId;
-use super::tables::{RoutingExpr, Tables, TablesLock};
-use crate::net::routing::hat::HatTrait;
-use crate::net::routing::RoutingContext;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Weak},
+    time::Duration,
+};
+
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::sync::{Arc, Weak};
-use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
         declare::{ext, queryable::ext::QueryableInfoType, QueryableId},
+        interest::{InterestId, InterestMode},
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
@@ -35,6 +32,13 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
+
+use super::{
+    face::FaceState,
+    resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource},
+    tables::{NodeId, RoutingExpr, Tables, TablesLock},
+};
+use crate::net::routing::{hat::HatTrait, RoutingContext};
 
 #[allow(clippy::too_many_arguments)] // TODO refactor
 pub(crate) fn declare_qabl_interest(

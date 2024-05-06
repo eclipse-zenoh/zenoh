@@ -11,15 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::prelude::r#async::*;
-use zenoh::shm::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
-use zenoh::shm::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
-use zenoh::shm::provider::shared_memory_provider::{
-    BlockOn, GarbageCollect, SharedMemoryProviderBuilder,
-};
-use zenoh::shm::provider::shared_memory_provider::{Deallocate, Defragment};
-use zenoh::shm::provider::types::{AllocAlignment, MemoryLayout};
-use zenoh::Result;
+use zenoh::prelude::*;
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +20,7 @@ async fn main() {
     run().await.unwrap()
 }
 
-async fn run() -> Result<()> {
+async fn run() -> ZResult<()> {
     // Construct an SHM backend
     let backend = {
         // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
@@ -128,9 +120,9 @@ async fn run() -> Result<()> {
     sbuf[0..8].fill(0);
 
     // Declare Session and Publisher (common code)
-    let session = zenoh::open(Config::default()).res_async().await?;
-    let publisher = session.declare_publisher("my/key/expr").res_async().await?;
+    let session = zenoh::open(Config::default()).await?;
+    let publisher = session.declare_publisher("my/key/expr").await?;
 
     // Publish SHM buffer
-    publisher.put(sbuf).res_async().await
+    publisher.put(sbuf).await
 }

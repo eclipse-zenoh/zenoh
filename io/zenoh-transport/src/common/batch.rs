@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::num::NonZeroUsize;
+
 use zenoh_buffers::{
     buffer::Buffer,
     reader::{DidntRead, HasReader},
@@ -497,7 +498,6 @@ impl Decode<(TransportMessage, BatchSize)> for &mut RBatch {
 mod tests {
     use std::vec;
 
-    use super::*;
     use rand::Rng;
     use zenoh_buffers::ZBuf;
     use zenoh_core::zcondfeat;
@@ -510,6 +510,8 @@ mod tests {
         },
         zenoh::{PushBody, Put},
     };
+
+    use super::*;
 
     #[test]
     fn rw_batch() {

@@ -161,7 +161,7 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
     let formatter_doc = format!("And instance of a formatter for `{source}`.");
 
     quote! {
-            use ::zenoh::Result as ZResult;
+            use ::zenoh::core::Result as ZResult;
             const FORMAT_INNER: ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> = unsafe {
                 ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])
             };

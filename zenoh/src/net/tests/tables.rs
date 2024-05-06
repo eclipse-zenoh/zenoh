@@ -11,23 +11,33 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::primitives::{DummyPrimitives, EPrimitives, Primitives};
-use crate::net::routing::dispatcher::tables::{self, Tables};
-use crate::net::routing::router::*;
-use crate::net::routing::RoutingContext;
-use std::convert::{TryFrom, TryInto};
-use std::sync::Arc;
+use std::{
+    convert::{TryFrom, TryInto},
+    sync::Arc,
+};
+
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_config::Config;
 use zenoh_core::zlock;
-use zenoh_protocol::core::Encoding;
-use zenoh_protocol::core::{
-    key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, ZenohId, EMPTY_EXPR_ID,
+use zenoh_protocol::{
+    core::{
+        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohId, EMPTY_EXPR_ID,
+    },
+    network::{
+        declare::subscriber::ext::SubscriberInfo, ext, Declare, DeclareBody, DeclareKeyExpr,
+    },
+    zenoh::{PushBody, Put},
 };
-use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareKeyExpr};
-use zenoh_protocol::zenoh::{PushBody, Put};
+
+use crate::net::{
+    primitives::{DummyPrimitives, EPrimitives, Primitives},
+    routing::{
+        dispatcher::tables::{self, Tables},
+        router::*,
+        RoutingContext,
+    },
+};
 
 #[test]
 fn base_test() {

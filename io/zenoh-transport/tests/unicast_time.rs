@@ -16,6 +16,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohId};

@@ -11,23 +11,28 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::face::FaceState;
-use super::resource::{DataRoutes, Direction, Resource};
-use super::tables::{NodeId, Route, RoutingExpr, Tables, TablesLock};
-use crate::net::routing::hat::HatTrait;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
+
 use zenoh_core::zread;
-use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::declare::SubscriberId;
-use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
-    core::{WhatAmI, WireExpr},
-    network::{declare::ext, Push},
+    core::{key_expr::keyexpr, WhatAmI, WireExpr},
+    network::{
+        declare::{ext, subscriber::ext::SubscriberInfo, SubscriberId},
+        interest::{InterestId, InterestMode},
+        Push,
+    },
     zenoh::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
+
+use super::{
+    face::FaceState,
+    resource::{DataRoutes, Direction, Resource},
+    tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
+};
+#[zenoh_macros::unstable]
+use crate::key_expr::KeyExpr;
+use crate::net::routing::hat::HatTrait;
 
 pub(crate) fn declare_sub_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
@@ -407,18 +412,11 @@ fn get_data_route(
 
 #[zenoh_macros::unstable]
 #[inline]
-pub(crate) fn get_local_data_route(
+pub(crate) fn get_matching_subscriptions(
     tables: &Tables,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
-) -> Arc<Route> {
-    res.as_ref()
-        .and_then(|res| res.data_route(WhatAmI::Client, 0))
-        .unwrap_or_else(|| {
-            tables
-                .hat_code
-                .compute_data_route(tables, expr, 0, WhatAmI::Client)
-        })
+    key_expr: &KeyExpr<'_>,
+) -> HashMap<usize, Arc<FaceState>> {
+    tables.hat_code.get_matching_subscriptions(tables, key_expr)
 }
 
 #[cfg(feature = "stats")]

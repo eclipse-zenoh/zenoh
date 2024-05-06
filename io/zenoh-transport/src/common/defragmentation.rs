@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::seq_num::SeqNum;
 use zenoh_buffers::{buffer::Buffer, reader::HasReader, ZBuf, ZSlice};
 use zenoh_codec::{RCodec, Zenoh080Reliability};
 use zenoh_protocol::{
@@ -20,6 +19,8 @@ use zenoh_protocol::{
     transport::TransportSn,
 };
 use zenoh_result::{bail, ZResult};
+
+use super::seq_num::SeqNum;
 
 #[derive(Debug)]
 pub(crate) struct DefragBuffer {

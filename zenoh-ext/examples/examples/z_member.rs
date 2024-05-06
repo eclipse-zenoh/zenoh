@@ -11,17 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{sync::Arc, time::Duration};
+
 use futures::StreamExt;
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_ext::group::*;
 
 #[tokio::main]
 async fn main() {
     zenoh_util::try_init_log_from_env();
-    let z = Arc::new(zenoh::open(Config::default()).res().await.unwrap());
+    let z = Arc::new(zenoh::open(Config::default()).await.unwrap());
     let member = Member::new(z.zid().to_string())
         .unwrap()
         .lease(Duration::from_secs(3));

@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
 use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+
+use clap::Parser;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -25,19 +25,18 @@ async fn main() {
     let (config, selector, value, target, timeout) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Sending Query '{selector}'...");
     let replies = session
         .get(&selector)
-        // // By default get receives replies from a FIFO. 
-        // // Uncomment this line to use a ring channel instead. 
+        // // By default get receives replies from a FIFO.
+        // // Uncomment this line to use a ring channel instead.
         // // More information on the ring channel are available in the z_pull example.
-        .with(zenoh::handlers::RingChannel::default())
+        // .with(zenoh::handlers::RingChannel::default())
         .value(value)
         .target(target)
         .timeout(timeout)
-        .res()
         .await
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {

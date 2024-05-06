@@ -11,33 +11,46 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::router::*;
-use super::tables::TablesLock;
-use super::token::{
-    declare_token, declare_token_interest, undeclare_token, undeclare_token_interest,
+use std::{
+    any::Any,
+    collections::HashMap,
+    fmt,
+    sync::{Arc, Weak},
 };
-use super::{resource::*, tables};
-use crate::net::primitives::{McastMux, Mux, Primitives};
-use crate::net::routing::interceptor::{InterceptorTrait, InterceptorsChain};
-use crate::net::routing::RoutingContext;
-use crate::KeyExpr;
-use std::any::Any;
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::{Arc, Weak};
+
 use tokio_util::sync::CancellationToken;
-use zenoh_protocol::network::interest::{InterestId, InterestMode, InterestOptions};
-use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareFinal};
-use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
-    network::{Mapping, Push, Request, RequestId, Response, ResponseFinal},
+    network::{
+        declare::ext,
+        interest::{InterestId, InterestMode, InterestOptions},
+        Declare, DeclareBody, DeclareFinal, Mapping, Push, Request, RequestId, Response,
+        ResponseFinal,
+    },
+    zenoh::RequestBody,
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
+
+use super::{
+    super::router::*,
+    resource::*,
+    tables::{self, TablesLock},
+    token::{declare_token, declare_token_interest, undeclare_token, undeclare_token_interest},
+};
+use crate::{
+    api::key_expr::KeyExpr,
+    net::{
+        primitives::{McastMux, Mux, Primitives},
+        routing::{
+            interceptor::{InterceptorTrait, InterceptorsChain},
+            RoutingContext,
+        },
+    },
+};
 
 pub(crate) struct InterestState {
     pub(crate) options: InterestOptions,

@@ -12,23 +12,24 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::fuzzer::KeyExprFuzzer;
 use alloc::vec::Vec;
+use core::{
+    convert::{TryFrom, TryInto},
+    fmt::Debug,
+    ops::Deref,
+};
+#[cfg(feature = "std")]
+use std::collections::HashMap;
+
+#[cfg(not(feature = "std"))]
+use hashbrown::HashMap;
 use rand::Rng;
 
 use super::{
     impls::{KeyedSetProvider, VecSetProvider},
     *,
 };
-use core::{
-    convert::{TryFrom, TryInto},
-    fmt::Debug,
-    ops::Deref,
-};
-#[cfg(not(feature = "std"))]
-use hashbrown::HashMap;
-#[cfg(feature = "std")]
-use std::collections::HashMap;
+use crate::fuzzer::KeyExprFuzzer;
 
 fn insert<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'static>(
     ketree: &mut KeBoxTree<V, bool, KeyedSetProvider>,

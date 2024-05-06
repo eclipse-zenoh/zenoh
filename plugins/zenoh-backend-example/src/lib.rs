@@ -11,10 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::collections::{hash_map::Entry, HashMap};
+
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use std::collections::{hash_map::Entry, HashMap};
-use zenoh::{prelude::OwnedKeyExpr, time::Timestamp, value::Value};
+use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, value::Value};
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,

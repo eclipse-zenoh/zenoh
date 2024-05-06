@@ -14,14 +14,15 @@
 
 //! `zenohd`'s plugin system. For more details, consult the [detailed documentation](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Plugins/Zenoh%20Plugins.md).
 
-use crate::{prelude::Selector, runtime::Runtime};
 use zenoh_core::zconfigurable;
-
 use zenoh_plugin_trait::{
     Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, StructVersion,
 };
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_result::ZResult;
+
+use super::selector::Selector;
+use crate::net::runtime::Runtime;
 
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();

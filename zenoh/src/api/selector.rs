@@ -13,20 +13,23 @@
 //
 
 //! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
-
-use crate::{prelude::KeyExpr, queryable::Query};
 use std::{
     collections::HashMap,
     convert::TryFrom,
     ops::{Deref, DerefMut},
     str::FromStr,
 };
+
 use zenoh_protocol::core::{
     key_expr::{keyexpr, OwnedKeyExpr},
     Properties,
 };
 #[cfg(feature = "unstable")]
-use ::{zenoh_result::ZResult, zenoh_util::time_range::TimeRange};
+use zenoh_result::ZResult;
+#[cfg(feature = "unstable")]
+use zenoh_util::time_range::TimeRange;
+
+use super::{key_expr::KeyExpr, queryable::Query};
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of parameters
@@ -331,7 +334,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 
 #[test]
 fn selector_accessors() {
-    use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
+    use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
 
     for selector in [
         "hello/there?_timetrick",

@@ -23,7 +23,8 @@ use std::{
 use thread_priority::ThreadBuilder;
 #[cfg(unix)]
 use thread_priority::{
-    set_current_thread_priority, RealtimeThreadSchedulePolicy, ThreadPriority, ThreadPriorityValue, ThreadSchedulePolicy::Realtime
+    set_current_thread_priority, RealtimeThreadSchedulePolicy, ThreadPriority, ThreadPriorityValue,
+    ThreadSchedulePolicy::Realtime,
 };
 
 pub struct PeriodicTask {
@@ -44,7 +45,7 @@ impl PeriodicTask {
         let running = Arc::new(AtomicBool::new(true));
 
         let c_running = running.clone();
-        
+
         #[cfg(unix)]
         let builder = ThreadBuilder::default()
             .name(name)
@@ -54,7 +55,7 @@ impl PeriodicTask {
         // TODO: deal with windows realtime scheduling
         #[cfg(windows)]
         let builder = ThreadBuilder::default().name(name);
-                
+
         let _ = builder.spawn(move |result| {
                 if let Err(e) = result {
                     #[cfg(windows)]
@@ -79,7 +80,7 @@ impl PeriodicTask {
                     let cycle_start = std::time::Instant::now();
 
                     f();
-                    
+
                     // sleep for next iteration
                     let elapsed = cycle_start.elapsed();
                     if elapsed < interval {

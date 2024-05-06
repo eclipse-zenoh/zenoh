@@ -13,7 +13,6 @@
 //
 extern crate alloc;
 
-use super::{canon::Canonizable, keyexpr};
 // use crate::core::WireExpr;
 use alloc::{borrow::ToOwned, boxed::Box, string::String, sync::Arc};
 use core::{
@@ -22,6 +21,8 @@ use core::{
     ops::{Deref, Div},
     str::FromStr,
 };
+
+use super::{canon::Canonizable, keyexpr};
 
 /// A [`Arc<str>`] newtype that is statically known to be a valid key expression.
 ///

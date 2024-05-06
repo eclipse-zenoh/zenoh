@@ -19,13 +19,16 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 mod unicast;
 
-use async_trait::async_trait;
 use std::str::FromStr;
+
+use async_trait::async_trait;
 pub use unicast::*;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::{endpoint::Address, EndPoint, Locator};
-use zenoh_protocol::transport::BatchSize;
+use zenoh_protocol::{
+    core::{endpoint::Address, EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::ZResult;
 
 // Maximum MTU (Serial PDU) in bytes.

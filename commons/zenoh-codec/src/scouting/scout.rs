@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use core::convert::TryFrom;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -25,6 +25,8 @@ use zenoh_protocol::{
         scout::{flag, Scout},
     },
 };
+
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
 impl<W> WCodec<&Scout, &mut W> for Zenoh080
 where

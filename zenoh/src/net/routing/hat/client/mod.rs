@@ -17,13 +17,21 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use crate::{
-    net::routing::{
-        dispatcher::face::Face,
-        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
-    },
-    runtime::Runtime,
+use std::{
+    any::Any,
+    collections::HashMap,
+    sync::{atomic::AtomicU32, Arc},
 };
+
+use zenoh_config::WhatAmI;
+use zenoh_protocol::network::{
+    declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
+    interest::InterestId,
+    Oam,
+};
+use zenoh_result::ZResult;
+use zenoh_sync::get_mut_unchecked;
+use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
     pubsub::{pubsub_new_face, undeclare_client_subscription},
@@ -36,20 +44,13 @@ use super::{
     },
     HatBaseTrait, HatTrait,
 };
-use std::{
-    any::Any,
-    collections::HashMap,
-    sync::{atomic::AtomicU32, Arc},
+use crate::net::{
+    routing::{
+        dispatcher::face::Face,
+        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+    },
+    runtime::Runtime,
 };
-use zenoh_config::WhatAmI;
-use zenoh_protocol::network::declare::{
-    queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId,
-};
-use zenoh_protocol::network::interest::InterestId;
-use zenoh_protocol::network::Oam;
-use zenoh_result::ZResult;
-use zenoh_sync::get_mut_unchecked;
-use zenoh_transport::unicast::TransportUnicast;
 
 mod pubsub;
 mod queries;

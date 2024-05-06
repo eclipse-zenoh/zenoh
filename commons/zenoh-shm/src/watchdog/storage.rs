@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use lazy_static::lazy_static;
 use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex},
 };
 
+use lazy_static::lazy_static;
 use zenoh_result::{zerror, ZResult};
 
 use super::{allocated_watchdog::AllocatedWatchdog, descriptor::OwnedDescriptor, segment::Segment};

@@ -11,11 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::PseudoRng;
-use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
-use aes::Aes128;
+use aes::{
+    cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit},
+    Aes128,
+};
 use rand::Rng;
 use zenoh_result::{bail, ZResult};
+
+use super::PseudoRng;
 
 pub struct BlockCipher {
     inner: Aes128,
@@ -68,8 +71,9 @@ impl BlockCipher {
 mod tests {
     #[test]
     fn cipher() {
-        use super::{BlockCipher, PseudoRng};
         use rand::{RngCore, SeedableRng};
+
+        use super::{BlockCipher, PseudoRng};
 
         fn encrypt_decrypt(cipher: &BlockCipher, prng: &mut PseudoRng) {
             println!("\n[1]");

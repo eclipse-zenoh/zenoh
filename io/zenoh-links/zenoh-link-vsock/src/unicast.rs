@@ -12,17 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{cell::UnsafeCell, collections::HashMap, fmt, sync::Arc, time::Duration};
+
 use async_trait::async_trait;
 use libc::VMADDR_PORT_ANY;
-use std::cell::UnsafeCell;
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::RwLock as AsyncRwLock;
-use tokio::task::JoinHandle;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::RwLock as AsyncRwLock,
+    task::JoinHandle,
+};
 use tokio_util::sync::CancellationToken;
+use tokio_vsock::{
+    VsockAddr, VsockListener, VsockStream, VMADDR_CID_ANY, VMADDR_CID_HOST, VMADDR_CID_HYPERVISOR,
+    VMADDR_CID_LOCAL,
+};
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
@@ -34,10 +37,6 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{VSOCK_ACCEPT_THROTTLE_TIME, VSOCK_DEFAULT_MTU, VSOCK_LOCATOR_PREFIX};
-use tokio_vsock::{
-    VsockAddr, VsockListener, VsockStream, VMADDR_CID_ANY, VMADDR_CID_HOST, VMADDR_CID_HYPERVISOR,
-    VMADDR_CID_LOCAL,
-};
 
 pub const VSOCK_VMADDR_CID_ANY: &str = "VMADDR_CID_ANY";
 pub const VSOCK_VMADDR_CID_HYPERVISOR: &str = "VMADDR_CID_HYPERVISOR";

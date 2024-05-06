@@ -22,6 +22,11 @@ use std::{
 use async_trait::async_trait;
 use zenoh_result::ZResult;
 
+use super::{
+    chunk::{AllocatedChunk, ChunkDescriptor},
+    shared_memory_provider_backend::SharedMemoryProviderBackend,
+    types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
+};
 use crate::{
     api::{common::types::ProtocolID, slice::zsliceshmmut::ZSliceShmMut},
     header::{
@@ -36,12 +41,6 @@ use crate::{
         validator::GLOBAL_VALIDATOR,
     },
     SharedMemoryBuf, SharedMemoryBufInfo,
-};
-
-use super::{
-    chunk::{AllocatedChunk, ChunkDescriptor},
-    shared_memory_provider_backend::SharedMemoryProviderBackend,
-    types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
 };
 
 #[derive(Debug)]

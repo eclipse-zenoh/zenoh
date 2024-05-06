@@ -20,9 +20,8 @@ use std::{
 
 use zenoh_buffers::{ZBuf, ZSlice};
 
-use crate::SharedMemoryBuf;
-
 use super::{traits::SHMBuf, zsliceshmmut::zsliceshmmut};
+use crate::SharedMemoryBuf;
 
 /// An immutable SHM slice
 #[zenoh_macros::unstable_doc]

@@ -11,33 +11,43 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{face_hat, face_hat_mut, get_routes_entries};
-use super::{HatCode, HatFace};
-use crate::net::routing::dispatcher::face::FaceState;
-use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::Tables;
-use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::{CurrentFutureTrait, HatQueriesTrait, Sources};
-use crate::net::routing::router::RoutesIndexes;
-use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc},
+};
+
 use ordered_float::OrderedFloat;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use zenoh_buffers::ZBuf;
-use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
-use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::network::declare::QueryableId;
-use zenoh_protocol::network::interest::{InterestId, InterestMode};
 use zenoh_protocol::{
-    core::{WhatAmI, WireExpr},
-    network::declare::{
-        common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
-        DeclareQueryable, UndeclareQueryable,
+    core::{
+        key_expr::{
+            include::{Includer, DEFAULT_INCLUDER},
+            OwnedKeyExpr,
+        },
+        WhatAmI, WireExpr,
+    },
+    network::{
+        declare::{
+            common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
+            DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
+        },
+        interest::{InterestId, InterestMode},
     },
 };
 use zenoh_sync::get_mut_unchecked;
+
+use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        resource::{NodeId, Resource, SessionContext},
+        tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+    },
+    hat::{CurrentFutureTrait, HatQueriesTrait, Sources},
+    router::RoutesIndexes,
+    RoutingContext, PREFIX_LIVELINESS,
+};
 
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
@@ -550,10 +560,7 @@ impl HatQueriesTrait for HatCode {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for (sid, context) in &mres.session_ctxs {
-                if match tables.whatami {
-                    WhatAmI::Router => context.face.whatami != WhatAmI::Router,
-                    _ => source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client,
-                } {
+                if source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                     if let Some(qabl_info) = context.qabl.as_ref() {
                         route.push(QueryTargetQabl {

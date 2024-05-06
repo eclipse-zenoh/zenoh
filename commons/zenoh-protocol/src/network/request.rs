@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, zenoh::RequestBody};
 use core::sync::atomic::AtomicU32;
+
+use crate::{core::WireExpr, zenoh::RequestBody};
 
 /// The resolution of a RequestId
 pub type RequestId = u32;
@@ -64,11 +65,12 @@ pub struct Request {
 }
 
 pub mod ext {
+    use core::{num::NonZeroU32, time::Duration};
+
     use crate::{
         common::{ZExtZ64, ZExtZBuf},
         zextz64, zextzbuf,
     };
-    use core::{num::NonZeroU32, time::Duration};
 
     pub type QoS = zextz64!(0x1, false);
     pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;

@@ -20,14 +20,17 @@
 mod multicast;
 mod unicast;
 
+use std::net::SocketAddr;
+
 use async_trait::async_trait;
 pub use multicast::*;
-use std::net::SocketAddr;
 pub use unicast::*;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::{endpoint::Address, Locator};
-use zenoh_protocol::transport::BatchSize;
+use zenoh_protocol::{
+    core::{endpoint::Address, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{zerror, ZResult};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the

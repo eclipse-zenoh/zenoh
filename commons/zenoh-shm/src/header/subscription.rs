@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use lazy_static::lazy_static;
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
 };
 
+use lazy_static::lazy_static;
 use zenoh_result::{zerror, ZResult};
 
 use super::{

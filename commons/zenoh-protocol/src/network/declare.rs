@@ -11,18 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::borrow::Cow;
+
+pub use common::*;
+pub use keyexpr::*;
+pub use queryable::*;
+pub use subscriber::*;
+pub use token::*;
+
 use crate::{
     common::{imsg, ZExtZ64, ZExtZBuf},
     core::{ExprId, Reliability, WireExpr},
     network::Mapping,
     zextz64, zextzbuf,
 };
-use alloc::borrow::Cow;
-pub use common::*;
-pub use keyexpr::*;
-pub use queryable::*;
-pub use subscriber::*;
-pub use token::*;
 
 pub mod flag {
     pub const I: u8 = 1 << 5; // 0x20 Interest      if I==1 then the declare is in a response to an Interest with future==false
@@ -301,9 +303,8 @@ pub mod keyexpr {
 }
 
 pub mod subscriber {
-    use crate::core::EntityId;
-
     use super::*;
+    use crate::core::EntityId;
 
     pub type SubscriberId = EntityId;
 
@@ -461,9 +462,8 @@ pub mod subscriber {
 }
 
 pub mod queryable {
-    use crate::core::EntityId;
-
     use super::*;
+    use crate::core::EntityId;
 
     pub type QueryableId = EntityId;
 

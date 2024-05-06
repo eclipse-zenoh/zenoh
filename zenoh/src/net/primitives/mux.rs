@@ -11,18 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::sync::OnceLock;
+
+use zenoh_protocol::network::{
+    interest::Interest, Declare, NetworkBody, NetworkMessage, Push, Request, Response,
+    ResponseFinal,
+};
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
+
 use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::face::{Face, WeakFace},
     interceptor::{InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
-use std::sync::OnceLock;
-use zenoh_protocol::network::{
-    interest::Interest, Declare, NetworkBody, NetworkMessage, Push, Request, Response,
-    ResponseFinal,
-};
-use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub struct Mux {
     pub handler: TransportUnicast,

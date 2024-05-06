@@ -11,6 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{
+    convert::TryInto,
+    fmt,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use tokio::task::JoinHandle;
+use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+use zenoh_core::{zcondfeat, zlock};
+use zenoh_link::{Link, LinkMulticast, Locator};
+use zenoh_protocol::{
+    core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
+    transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
+};
+use zenoh_result::{zerror, ZResult};
+use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
+
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -24,22 +42,6 @@ use crate::{
     },
     multicast::transport::TransportMulticastInner,
 };
-use std::{
-    convert::TryInto,
-    fmt,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-use tokio::task::JoinHandle;
-use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
-use zenoh_core::{zcondfeat, zlock};
-use zenoh_link::{Link, LinkMulticast, Locator};
-use zenoh_protocol::{
-    core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
-    transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
-};
-use zenoh_result::{zerror, ZResult};
-use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
 /****************************/
 /* TRANSPORT MULTICAST LINK */
