@@ -147,6 +147,7 @@ impl<'a> Liveliness<'a> {
         LivelinessSubscriberBuilder {
             session: self.session.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            background: false,
             handler: DefaultHandler::default(),
         }
     }
@@ -409,7 +410,18 @@ impl Drop for LivelinessToken<'_> {
 pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub session: SessionRef<'a>,
     pub key_expr: ZResult<KeyExpr<'b>>,
+    pub background: bool,
     pub handler: Handler,
+}
+
+impl<'a, 'b, Handler> LivelinessSubscriberBuilder<'a, 'b, Handler> {
+    /// Run the subscriber in background, binding its lifetime to the session one.
+    ///
+    /// Background subscribers are undeclared when the session is closed, not when they are dropped.
+    fn background(mut self, background: bool) -> Self {
+        self.background = background;
+        self
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -442,11 +454,13 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         let LivelinessSubscriberBuilder {
             session,
             key_expr,
+            background,
             handler: _,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
+            background,
             handler: callback,
         }
     }
@@ -511,11 +525,13 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         let LivelinessSubscriberBuilder {
             session,
             key_expr,
+            background,
             handler: _,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
+            background,
             handler,
         }
     }
@@ -546,6 +562,7 @@ where
                 &key_expr,
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 Locality::default(),
+                self.background,
                 callback,
                 &SubscriberInfo::DEFAULT,
             )
