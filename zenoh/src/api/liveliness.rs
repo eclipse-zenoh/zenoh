@@ -418,7 +418,7 @@ impl<'a, 'b, Handler> LivelinessSubscriberBuilder<'a, 'b, Handler> {
     /// Run the subscriber in background, binding its lifetime to the session one.
     ///
     /// Background subscribers are undeclared when the session is closed, not when they are dropped.
-    fn background(mut self, background: bool) -> Self {
+    pub fn background(mut self, background: bool) -> Self {
         self.background = background;
         self
     }
