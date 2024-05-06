@@ -16,7 +16,10 @@ use std::{
     fmt,
     future::{IntoFuture, Ready},
     ops::{Deref, DerefMut},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use zenoh_core::{Resolvable, Wait};
@@ -39,6 +42,7 @@ pub(crate) struct SubscriberState {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,
+    pub(crate) background: AtomicBool,
     pub(crate) callback: Callback<'static, Sample>,
 }
 
@@ -160,7 +164,7 @@ impl IntoFuture for SubscriberUndeclaration<'_> {
 
 impl Drop for SubscriberInner<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.alive && !self.state.background.load(Ordering::Relaxed) {
             let _ = self.session.unsubscribe(self.state.id);
         }
     }
@@ -206,6 +210,11 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     pub(crate) origin: Locality,
 
     #[cfg(feature = "unstable")]
+    pub background: bool,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) background: bool,
+
+    #[cfg(feature = "unstable")]
     pub handler: Handler,
     #[cfg(not(feature = "unstable"))]
     pub(crate) handler: Handler,
@@ -237,16 +246,16 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             reliability,
-
             origin,
+            background,
             handler: _,
         } = self;
         SubscriberBuilder {
             session,
             key_expr,
             reliability,
-
             origin,
+            background,
             handler: callback,
         }
     }
@@ -311,6 +320,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             reliability,
             origin,
+            background,
             handler: _,
         } = self;
         SubscriberBuilder {
@@ -318,6 +328,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             reliability,
             origin,
+            background,
             handler,
         }
     }
@@ -353,6 +364,15 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
         self.origin = origin;
         self
     }
+
+    /// Run the subscriber in background, binding its lifetime to the session one.
+    ///
+    /// Background subscribers are undeclared when the session is closed, not when they are dropped.
+    #[inline]
+    pub fn background(mut self, background: bool) -> Self {
+        self.background = background;
+        self
+    }
 }
 
 // Push mode
@@ -378,6 +398,7 @@ where
                 &key_expr,
                 &None,
                 self.origin,
+                self.background,
                 callback,
                 &SubscriberInfo {
                     reliability: self.reliability,
@@ -504,6 +525,25 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         self.subscriber.undeclare()
+    }
+
+    /// Returns whether the subscriber run in background.
+    ///
+    /// Background subscribers have their lifetime bound to the session one. They are undeclared when the session is closed, not when they are dropped.
+    #[inline]
+    pub fn background(self) -> bool {
+        self.subscriber.state.background.load(Ordering::Relaxed)
+    }
+
+    /// Set whether the subscriber run in background.
+    ///
+    /// Background subscribers have their lifetime bound to the session one. They are undeclared when the session is closed, not when they are dropped.
+    #[inline]
+    pub fn set_background(self, background: bool) {
+        self.subscriber
+            .state
+            .background
+            .store(background, Ordering::Relaxed);
     }
 }
 

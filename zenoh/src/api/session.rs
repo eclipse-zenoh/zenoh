@@ -18,7 +18,7 @@ use std::{
     future::{IntoFuture, Ready},
     ops::Deref,
     sync::{
-        atomic::{AtomicU16, Ordering},
+        atomic::{AtomicBool, AtomicU16, Ordering},
         Arc, RwLock,
     },
     time::Duration,
@@ -308,6 +308,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
+            background: false,
             handler: DefaultHandler::default(),
         }
     }
@@ -530,6 +531,14 @@ impl Session {
     pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
+            {
+                let state = zread!(self.state);
+                for (&id, subscriber) in &state.subscribers {
+                    if subscriber.background.load(Ordering::Relaxed) {
+                        self.unsubscribe(id)?;
+                    }
+                }
+            }
             self.task_controller.terminate_all(Duration::from_secs(10));
             if self.owns_runtime {
                 self.runtime.close().await?;
@@ -1001,6 +1010,7 @@ impl Session {
         key_expr: &KeyExpr,
         scope: &Option<KeyExpr>,
         origin: Locality,
+        background: bool,
         callback: Callback<'static, Sample>,
         info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
@@ -1018,6 +1028,7 @@ impl Session {
             key_expr: key_expr.clone().into_owned(),
             scope: scope.clone().map(|e| e.into_owned()),
             origin,
+            background: AtomicBool::new(background),
             callback,
         };
 
@@ -1866,6 +1877,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
+            background: false,
             handler: DefaultHandler::default(),
         }
     }
