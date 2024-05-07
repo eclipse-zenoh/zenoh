@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#![cfg_attr(doc_auto_cfg, feature(doc_auto_cfg))]
+
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
 //! rest and computations. It elegantly blends traditional pub/sub with geo distributed
 //! storage, queries and computations, while retaining a level of time and space efficiency
