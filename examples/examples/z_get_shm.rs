@@ -55,7 +55,6 @@ async fn main() {
     let mut sbuf = provider
         .alloc(1024)
         .with_policy::<BlockOn<GarbageCollect>>()
-        .res_async()
         .await
         .unwrap();
 

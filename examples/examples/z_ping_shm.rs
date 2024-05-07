@@ -61,7 +61,7 @@ fn main() {
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example
     // NOTE: For buf's API please check z_bytes_shm.rs example
-    let buf = provider.alloc(size).res().unwrap();
+    let buf = provider.alloc(size).wait().unwrap();
 
     // convert ZShmMut into ZSlice as ZShmMut does not support Clone
     let buf: ZSlice = buf.into();

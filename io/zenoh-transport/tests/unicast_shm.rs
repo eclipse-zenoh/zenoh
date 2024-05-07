@@ -241,18 +241,15 @@ mod tests {
             ztimeout!(peer_shm01_manager.get_transport_unicast(&peer_net01)).unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
-        let layout = shm01.alloc(MSG_SIZE).make_layout().unwrap();
+        let layout = shm01.alloc(MSG_SIZE).into_layout().unwrap();
 
         // Send the message
         println!("Transport SHM [3a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = ztimeout!(layout
-                .alloc()
-                .with_policy::<BlockOn<GarbageCollect>>()
-                .res_async())
-            .unwrap();
+            let mut sbuf =
+                ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let message: NetworkMessage = Push {
@@ -292,11 +289,8 @@ mod tests {
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = ztimeout!(layout
-                .alloc()
-                .with_policy::<BlockOn<GarbageCollect>>()
-                .res_async())
-            .unwrap();
+            let mut sbuf =
+                ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let message: NetworkMessage = Push {

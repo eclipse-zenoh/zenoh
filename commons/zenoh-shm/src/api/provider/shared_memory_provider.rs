@@ -14,12 +14,15 @@
 
 use std::{
     collections::VecDeque,
+    future::{Future, IntoFuture},
     marker::PhantomData,
+    pin::Pin,
     sync::{atomic::Ordering, Arc, Mutex},
     time::Duration,
 };
 
 use async_trait::async_trait;
+use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
 use super::{
@@ -108,7 +111,7 @@ where
 
     /// Try to build an allocation layout
     #[zenoh_macros::unstable_doc]
-    pub fn make_layout(self) -> Result<AllocLayout<'a, IDSource, Backend>, ZLayoutError> {
+    pub fn into_layout(self) -> Result<AllocLayout<'a, IDSource, Backend>, ZLayoutError> {
         AllocLayout::new(self.0)
     }
 
@@ -120,16 +123,29 @@ where
             _phantom: PhantomData,
         }
     }
+}
 
-    /// Get the result
-    #[zenoh_macros::unstable_doc]
-    pub fn res(self) -> BufLayoutAllocResult {
+#[zenoh_macros::unstable_doc]
+impl<'a, IDSource, Backend> Resolvable for AllocLayoutSizedBuilder<'a, IDSource, Backend>
+where
+    IDSource: ProtocolIDSource,
+    Backend: SharedMemoryProviderBackend,
+{
+    type To = BufLayoutAllocResult;
+}
+
+// Sync alloc policy
+impl<'a, IDSource, Backend> Wait for AllocLayoutSizedBuilder<'a, IDSource, Backend>
+where
+    IDSource: ProtocolIDSource,
+    Backend: SharedMemoryProviderBackend,
+{
+    fn wait(self) -> <Self as Resolvable>::To {
         let builder = AllocBuilder2::<'a, IDSource, Backend, JustAlloc> {
             data: self.0,
             _phantom: PhantomData,
         };
-
-        builder.res()
+        builder.wait()
     }
 }
 
@@ -262,10 +278,7 @@ pub trait AllocPolicy {
 #[zenoh_macros::unstable_doc]
 #[async_trait]
 pub trait AsyncAllocPolicy {
-    async fn alloc_async<
-        IDSource: ProtocolIDSource + Send + Sync,
-        Backend: SharedMemoryProviderBackend + Sync,
-    >(
+    async fn alloc_async<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend + Sync>(
         layout: &MemoryLayout,
         provider: &SharedMemoryProvider<IDSource, Backend>,
     ) -> ChunkAllocResult;
@@ -403,13 +416,14 @@ where
 {
     _phantom: PhantomData<InnerPolicy>,
 }
+
 #[async_trait]
 impl<InnerPolicy> AsyncAllocPolicy for BlockOn<InnerPolicy>
 where
     InnerPolicy: AllocPolicy,
 {
     async fn alloc_async<
-        IDSource: ProtocolIDSource + Send + Sync,
+        IDSource: ProtocolIDSource,
         Backend: SharedMemoryProviderBackend + Sync,
     >(
         layout: &MemoryLayout,
@@ -529,44 +543,54 @@ where
     }
 }
 
-// Alloc policy
-impl<'a, IDSource, Backend, Policy> AllocBuilder2<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> Resolvable for AllocBuilder2<'a, IDSource, Backend, Policy>
+where
+    IDSource: ProtocolIDSource,
+    Backend: SharedMemoryProviderBackend,
+{
+    type To = BufLayoutAllocResult;
+}
+
+// Sync alloc policy
+impl<'a, IDSource, Backend, Policy> Wait for AllocBuilder2<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: SharedMemoryProviderBackend,
     Policy: AllocPolicy,
 {
-    /// Get the result
-    #[zenoh_macros::unstable_doc]
-    pub fn res(self) -> BufLayoutAllocResult {
+    fn wait(self) -> <Self as Resolvable>::To {
         let layout = AllocLayout::new(self.data).map_err(ZLayoutAllocError::Layout)?;
 
         layout
             .alloc()
             .with_policy::<Policy>()
-            .res()
+            .wait()
             .map_err(ZLayoutAllocError::Alloc)
     }
 }
 
-// Async Alloc policy
-impl<'a, IDSource, Backend, Policy> AllocBuilder2<'a, IDSource, Backend, Policy>
+// Async alloc policy
+impl<'a, IDSource, Backend, Policy> IntoFuture for AllocBuilder2<'a, IDSource, Backend, Policy>
 where
-    IDSource: ProtocolIDSource + Send + Sync,
+    IDSource: ProtocolIDSource,
     Backend: SharedMemoryProviderBackend + Sync,
     Policy: AsyncAllocPolicy,
 {
-    /// Get the async result
-    #[zenoh_macros::unstable_doc]
-    pub async fn res_async(self) -> BufLayoutAllocResult {
-        let layout = AllocLayout::new(self.data).map_err(ZLayoutAllocError::Layout)?;
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as Resolvable>::To> + 'a>>;
 
-        layout
-            .alloc()
-            .with_policy::<Policy>()
-            .res_async()
-            .await
-            .map_err(ZLayoutAllocError::Alloc)
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(
+            async move {
+                let layout = AllocLayout::new(self.data).map_err(ZLayoutAllocError::Layout)?;
+                layout
+                    .alloc()
+                    .with_policy::<Policy>()
+                    .await
+                    .map_err(ZLayoutAllocError::Alloc)
+            }
+            .into_future(),
+        )
     }
 }
 
@@ -598,36 +622,48 @@ where
     }
 }
 
-// Alloc policy
-impl<'a, IDSource, Backend, Policy> AllocBuilder<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> Resolvable for AllocBuilder<'a, IDSource, Backend, Policy>
+where
+    IDSource: ProtocolIDSource,
+    Backend: SharedMemoryProviderBackend,
+{
+    type To = BufAllocResult;
+}
+
+// Sync alloc policy
+impl<'a, IDSource, Backend, Policy> Wait for AllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: SharedMemoryProviderBackend,
     Policy: AllocPolicy,
 {
-    /// Get the result
-    #[zenoh_macros::unstable_doc]
-    pub fn res(self) -> BufAllocResult {
+    fn wait(self) -> <Self as Resolvable>::To {
         self.layout
             .provider
             .alloc_inner::<Policy>(self.layout.size, &self.layout.provider_layout)
     }
 }
 
-// Async Alloc policy
-impl<'a, IDSource, Backend, Policy> AllocBuilder<'a, IDSource, Backend, Policy>
+// Async alloc policy
+impl<'a, IDSource, Backend, Policy> IntoFuture for AllocBuilder<'a, IDSource, Backend, Policy>
 where
-    IDSource: ProtocolIDSource + Send + Sync,
+    IDSource: ProtocolIDSource,
     Backend: SharedMemoryProviderBackend + Sync,
     Policy: AsyncAllocPolicy,
 {
-    /// Get the async result
-    #[zenoh_macros::unstable_doc]
-    pub async fn res_async(self) -> BufAllocResult {
-        self.layout
-            .provider
-            .alloc_inner_async::<Policy>(self.layout.size, &self.layout.provider_layout)
-            .await
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as Resolvable>::To> + 'a>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(
+            async move {
+                self.layout
+                    .provider
+                    .alloc_inner_async::<Policy>(self.layout.size, &self.layout.provider_layout)
+                    .await
+            }
+            .into_future(),
+        )
     }
 }
 
@@ -703,7 +739,7 @@ where
 
 /// Trait to create ProtocolID sources for SharedMemoryProvider
 #[zenoh_macros::unstable_doc]
-pub trait ProtocolIDSource {
+pub trait ProtocolIDSource: Send + Sync {
     fn id(&self) -> ProtocolID;
 }
 
@@ -938,7 +974,7 @@ where
 // PRIVATE impls for Sync backend
 impl<IDSource, Backend> SharedMemoryProvider<IDSource, Backend>
 where
-    IDSource: ProtocolIDSource + Send + Sync,
+    IDSource: ProtocolIDSource,
     Backend: SharedMemoryProviderBackend + Sync,
 {
     async fn alloc_inner_async<Policy>(

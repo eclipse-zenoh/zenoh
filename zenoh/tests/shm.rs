@@ -122,17 +122,14 @@ mod tests {
             let shm_segment_size = shm01.available();
 
             // Prepare a layout for allocations
-            let layout = shm01.alloc(size).make_layout().unwrap();
+            let layout = shm01.alloc(size).into_layout().unwrap();
 
             // Put data
             println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
             for c in 0..msg_count {
                 // Allocate new message
-                let sbuf = ztimeout!(layout
-                    .alloc()
-                    .with_policy::<BlockOn<GarbageCollect>>()
-                    .res_async())
-                .unwrap();
+                let sbuf =
+                    ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
                 println!("{c} created");
 
                 // Publish this message

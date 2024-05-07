@@ -1831,6 +1831,8 @@ mod tests {
 
         use rand::Rng;
         use zenoh_buffers::{ZBuf, ZSlice};
+        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        use zenoh_core::Wait;
         use zenoh_protocol::core::Properties;
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
         use zenoh_shm::api::{
@@ -1961,10 +1963,10 @@ mod tests {
                 .res();
 
             // Prepare a layout for allocations
-            let layout = provider.alloc(1024).make_layout().unwrap();
+            let layout = provider.alloc(1024).into_layout().unwrap();
 
             // allocate an SHM buffer
-            let mutable_shm_buf = layout.alloc().res().unwrap();
+            let mutable_shm_buf = layout.alloc().wait().unwrap();
 
             // convert to immutable SHM buffer
             let immutable_shm_buf: ZShm = mutable_shm_buf.into();

@@ -11,13 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::{
-    bytes::ZBytes,
-    shm::{
-        zshm, zshmmut, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, ZShm,
-        ZShmMut, POSIX_PROTOCOL_ID,
-    },
-};
+use zenoh::prelude::*;
 
 fn main() {
     // create an SHM backend...
@@ -36,7 +30,7 @@ fn main() {
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example
     // NOTE: For buf's API please check z_bytes_shm.rs example
-    let mut owned_shm_buf_mut = provider.alloc(1024).res().unwrap();
+    let mut owned_shm_buf_mut = provider.alloc(1024).wait().unwrap();
 
     // mutable and immutable API
     let _data: &[u8] = &owned_shm_buf_mut;

@@ -42,7 +42,7 @@ async fn run() -> ZResult<()> {
     // allocation API which is shown later in this example...
     let _direct_allocation = {
         // OPTION: Simple allocation
-        let simple = provider.alloc(512).res().unwrap();
+        let simple = provider.alloc(512).wait().unwrap();
 
         // OPTION: Allocation with custom alignemnt and alloc policy customization
         let _comprehensive = provider
@@ -50,7 +50,7 @@ async fn run() -> ZResult<()> {
             .with_alignment(AllocAlignment::new(2))
             // for more examples on policies, please see allocation policy usage below (for layout allocation API)
             .with_policy::<GarbageCollect>()
-            .res()
+            .wait()
             .unwrap();
 
         // OPTION: Allocation with custom alignemnt and async alloc policy
@@ -59,7 +59,6 @@ async fn run() -> ZResult<()> {
             .with_alignment(AllocAlignment::new(2))
             // for more examples on policies, please see allocation policy usage below (for layout allocation API)
             .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
-            .res_async()
             .await
             .unwrap();
 
@@ -72,13 +71,13 @@ async fn run() -> ZResult<()> {
     // This layout is reusable and can handle series of similar allocations
     let buffer_layout = {
         // OPTION: Simple configuration:
-        let simple_layout = provider.alloc(512).make_layout().unwrap();
+        let simple_layout = provider.alloc(512).into_layout().unwrap();
 
         // OPTION: Comprehensive configuration:
         let _comprehensive_layout = provider
             .alloc(512)
             .with_alignment(AllocAlignment::new(2))
-            .make_layout()
+            .into_layout()
             .unwrap();
 
         simple_layout
@@ -101,13 +100,12 @@ async fn run() -> ZResult<()> {
         // Some examples on how to use layout's interface:
 
         // OPTION: The default allocation with default JustAlloc policy
-        let default_alloc = buffer_layout.alloc().res().unwrap();
+        let default_alloc = buffer_layout.alloc().wait().unwrap();
 
         // OPTION: The async allocation
         let _async_alloc = buffer_layout
             .alloc()
             .with_policy::<BlockOn>()
-            .res_async()
             .await
             .unwrap();
 
@@ -115,14 +113,14 @@ async fn run() -> ZResult<()> {
         let _comprehensive_alloc = buffer_layout
             .alloc()
             .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
-            .res()
+            .wait()
             .unwrap();
 
         // OPTION: The comprehensive allocation policy that deallocates up to 1000 buffers if provider is not able to allocate
         let _comprehensive_alloc = buffer_layout
             .alloc()
             .with_policy::<Deallocate<1000, Defragment<GarbageCollect>>>()
-            .res()
+            .wait()
             .unwrap();
 
         default_alloc
