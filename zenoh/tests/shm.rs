@@ -176,7 +176,7 @@ mod tests {
             // Initiate logging
             zenoh_util::try_init_log_from_env();
 
-            let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
+            let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:19447"]).await;
             test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
             close_session(peer01, peer02).await;
         });
@@ -190,7 +190,7 @@ mod tests {
             zenoh_util::try_init_log_from_env();
 
             let (peer01, peer02) =
-                open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
+                open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;
             test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
             close_session(peer01, peer02).await;
         });
