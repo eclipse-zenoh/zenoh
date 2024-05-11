@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.publication}
+
 use std::future::{IntoFuture, Ready};
 
 use zenoh_core::{Resolvable, Result as ZResult, Wait};

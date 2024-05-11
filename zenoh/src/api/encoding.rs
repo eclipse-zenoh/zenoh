@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.encoding}
+
 use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
 
 use phf::phf_map;

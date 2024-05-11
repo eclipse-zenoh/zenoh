@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.value}
 
 //! Value primitives.
 use super::{bytes::ZBytes, encoding::Encoding};

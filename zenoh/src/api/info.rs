@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.info}
 
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 use std::future::{IntoFuture, Ready};

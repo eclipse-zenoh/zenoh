@@ -26,7 +26,7 @@ use crate::{
     keyexpr_tree::{support::IWildness, *},
 };
 
-pub struct KeArcTreeInner<
+pub(crate) struct KeArcTreeInner<
     Weight,
     Wildness: IWildness,
     Children: IChildrenProvider<
@@ -59,7 +59,6 @@ fn ketree_borrow_mut<'a, T, Token: TokenTrait>(
 /// The tree and its nodes have shared ownership, while their mutability is managed through the `Token`.
 ///
 /// Most of its methods are declared in the [`ITokenKeyExprTree`] trait.
-// tags{ketree.arc}
 pub struct KeArcTree<
     Weight,
     Token: TokenTrait = DefaultToken,
@@ -145,7 +144,6 @@ where
         &'a Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
         &'a mut Token,
     );
-    // tags{ketree.arc.node}
     fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node> {
         let inner = ketree_borrow(&self.inner, token);
         let mut chunks = at.chunks();
@@ -158,12 +156,10 @@ where
         }
         Some((node.as_node(), token))
     }
-    // tags{ketree.arc.node.mut}
     fn node_mut(&'a self, token: &'a mut Token, at: &keyexpr) -> Option<Self::NodeMut> {
         self.node(unsafe { core::mem::transmute(&*token) }, at)
             .map(|(node, _)| (node, token))
     }
-    // tags{ketree.arc.node.or_create}
     fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut {
         let inner = ketree_borrow_mut(&self.inner, token);
         if at.is_wild() {
@@ -211,7 +207,6 @@ where
         >,
         &'a Token,
     >;
-    // tags{ketree.arc.tree_iter}
     fn tree_iter(&'a self, token: &'a Token) -> Self::TreeIter {
         let inner = ketree_borrow(&self.inner, token);
         TokenPacker {
@@ -233,7 +228,6 @@ where
         >,
         &'a mut Token,
     >;
-    // tags{ketree.arc.tree_iter.mut}
     fn tree_iter_mut(&'a self, token: &'a mut Token) -> Self::TreeIterMut {
         let inner = ketree_borrow(&self.inner, token);
         TokenPacker {
@@ -255,7 +249,6 @@ where
         >,
         Self::IntersectionItem,
     >;
-    // tags{ketree.arc.intersecting}
     fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection {
         let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() || key.is_wild() {
@@ -280,7 +273,6 @@ where
         >,
         Self::IntersectionItemMut,
     >;
-    // tags{ketree.arc.intersecting.mut}
     fn intersecting_nodes_mut(
         &'a self,
         token: &'a mut Token,
@@ -310,7 +302,6 @@ where
         >,
         Self::InclusionItem,
     >;
-    // tags{ketree.arc.included}
     fn included_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Inclusion {
         let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() || key.is_wild() {
@@ -335,7 +326,6 @@ where
         >,
         Self::InclusionItemMut,
     >;
-    // tags{ketree.arc.included.mut}
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
         let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() || key.is_wild() {
@@ -363,7 +353,6 @@ where
         >,
         Self::IncluderItem,
     >;
-    // tags{ketree.arc.including}
     fn nodes_including(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Includer {
         let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() || key.is_wild() {
@@ -388,7 +377,6 @@ where
         >,
         Self::IncluderItemMut,
     >;
-    // tags{ketree.arc.including.mut}
     fn nodes_including_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::IncluderMut {
         let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() || key.is_wild() {
@@ -404,7 +392,6 @@ where
     }
     type PruneNode = KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>;
 
-    // tags{ketree.arc.prune.where}
     fn prune_where<F: FnMut(&mut Self::PruneNode) -> bool>(
         &self,
         token: &mut Token,

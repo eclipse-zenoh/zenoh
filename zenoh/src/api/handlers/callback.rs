@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.handlers}
 
 //! Callback handler trait.
 use super::{Dyn, IntoHandler};

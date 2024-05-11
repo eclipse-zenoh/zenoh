@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.sample}
 
 //! Sample primitives
 use std::{convert::TryFrom, fmt};

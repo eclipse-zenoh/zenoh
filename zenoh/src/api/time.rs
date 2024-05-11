@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.time}
+
 use std::convert::TryFrom;
 
 use zenoh_protocol::core::{Timestamp, TimestampId};

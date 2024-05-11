@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.plugins}
+
 use zenoh_config::{Config, PluginLoad};
 use zenoh_result::ZResult;
 

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.scouting}
+
 use std::{
     fmt,
     future::{IntoFuture, Ready},

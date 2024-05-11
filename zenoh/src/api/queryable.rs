@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.queryable}
+
 use std::{
     fmt,
     future::{IntoFuture, Ready},

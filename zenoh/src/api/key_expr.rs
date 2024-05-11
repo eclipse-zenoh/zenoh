@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.key_expr}
 
 use std::{
     convert::{TryFrom, TryInto},

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.session}
+
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},

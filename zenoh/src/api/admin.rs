@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.admin}
+
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
