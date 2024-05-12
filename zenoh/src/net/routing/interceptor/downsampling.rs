@@ -52,7 +52,7 @@ pub(crate) struct DownsamplingInterceptorFactory {
 }
 
 impl DownsamplingInterceptorFactory {
-    pub fn new(conf: DownsamplingItemConf) -> Self {
+    pub(crate) fn new(conf: DownsamplingItemConf) -> Self {
         Self {
             interfaces: conf.interfaces,
             rules: conf.rules,
@@ -114,8 +114,8 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 }
 
 struct Timestate {
-    pub threshold: tokio::time::Duration,
-    pub latest_message_timestamp: tokio::time::Instant,
+    pub(crate) threshold: tokio::time::Duration,
+    pub(crate) latest_message_timestamp: tokio::time::Instant,
 }
 
 pub(crate) struct DownsamplingInterceptor {
@@ -169,7 +169,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
 const NANOS_PER_SEC: f64 = 1_000_000_000.0;
 
 impl DownsamplingInterceptor {
-    pub fn new(rules: Vec<DownsamplingRuleConf>) -> Self {
+    pub(crate) fn new(rules: Vec<DownsamplingRuleConf>) -> Self {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
         for (id, rule) in rules.into_iter().enumerate() {

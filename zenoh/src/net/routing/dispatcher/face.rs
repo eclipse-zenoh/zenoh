@@ -167,7 +167,7 @@ pub(crate) struct WeakFace {
 }
 
 impl WeakFace {
-    pub fn upgrade(&self) -> Option<Face> {
+    pub(crate) fn upgrade(&self) -> Option<Face> {
         Some(Face {
             tables: self.tables.upgrade()?,
             state: self.state.upgrade()?,
@@ -182,7 +182,7 @@ pub(crate) struct Face {
 }
 
 impl Face {
-    pub fn downgrade(&self) -> WeakFace {
+    pub(crate) fn downgrade(&self) -> WeakFace {
         WeakFace {
             tables: Arc::downgrade(&self.tables),
             state: Arc::downgrade(&self.state),

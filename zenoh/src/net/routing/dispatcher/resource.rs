@@ -200,7 +200,7 @@ impl Resource {
         }
     }
 
-    pub fn expr(&self) -> String {
+    pub(crate) fn expr(&self) -> String {
         match &self.parent {
             Some(parent) => parent.expr() + &self.suffix,
             None => String::from(""),
@@ -217,7 +217,7 @@ impl Resource {
         self.context.as_mut().unwrap()
     }
 
-    pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
+    pub(crate) fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
         match &res.nonwild_prefix {
             None => (Some(res.clone()), "".to_string()),
             Some((nonwild_prefix, wildsuffix)) => {
@@ -263,7 +263,7 @@ impl Resource {
         }
     }
 
-    pub fn root() -> Arc<Resource> {
+    pub(crate) fn root() -> Arc<Resource> {
         Arc::new(Resource {
             parent: None,
             suffix: String::from(""),
@@ -274,7 +274,7 @@ impl Resource {
         })
     }
 
-    pub fn clean(res: &mut Arc<Resource>) {
+    pub(crate) fn clean(res: &mut Arc<Resource>) {
         let mut resclone = res.clone();
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
@@ -302,7 +302,7 @@ impl Resource {
         }
     }
 
-    pub fn close(self: &mut Arc<Resource>) {
+    pub(crate) fn close(self: &mut Arc<Resource>) {
         let r = get_mut_unchecked(self);
         for c in r.childs.values_mut() {
             Self::close(c);
@@ -314,7 +314,7 @@ impl Resource {
     }
 
     #[cfg(test)]
-    pub fn print_tree(from: &Arc<Resource>) -> String {
+    pub(crate) fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr();
         result.push('\n');
         for child in from.childs.values() {
@@ -323,7 +323,7 @@ impl Resource {
         result
     }
 
-    pub fn make_resource(
+    pub(crate) fn make_resource(
         tables: &mut Tables,
         from: &mut Arc<Resource>,
         suffix: &str,
@@ -382,7 +382,7 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
+    pub(crate) fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
         if suffix.is_empty() {
             Some(from.clone())
         } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
@@ -493,7 +493,11 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> WireExpr<'a> {
+    pub(crate) fn get_best_key<'a>(
+        prefix: &Arc<Resource>,
+        suffix: &'a str,
+        sid: usize,
+    ) -> WireExpr<'a> {
         fn get_best_key_<'a>(
             prefix: &Arc<Resource>,
             suffix: &'a str,
@@ -531,7 +535,7 @@ impl Resource {
         get_best_key_(prefix, suffix, sid, true)
     }
 
-    pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
+    pub(crate) fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
         fn recursive_push(from: &Arc<Resource>, matches: &mut Vec<Weak<Resource>>) {
             if from.context.is_some() {
                 matches.push(Arc::downgrade(from));
@@ -616,7 +620,11 @@ impl Resource {
         matches
     }
 
-    pub fn match_resource(_tables: &Tables, res: &mut Arc<Resource>, matches: Vec<Weak<Resource>>) {
+    pub(crate) fn match_resource(
+        _tables: &Tables,
+        res: &mut Arc<Resource>,
+        matches: Vec<Weak<Resource>>,
+    ) {
         if res.context.is_some() {
             for match_ in &matches {
                 let mut match_ = match_.upgrade().unwrap();
@@ -631,7 +639,7 @@ impl Resource {
         }
     }
 
-    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
+    pub(crate) fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
         if res.context.is_none() {
             get_mut_unchecked(res).context = Some(ResourceContext::new(hat));
         }

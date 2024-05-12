@@ -105,8 +105,8 @@ impl FlowPolicy {
 
 #[derive(Default, Debug)]
 pub(crate) struct InterfaceEnabled {
-    pub ingress: bool,
-    pub egress: bool,
+    pub(crate) ingress: bool,
+    pub(crate) egress: bool,
 }
 
 pub(crate) struct PolicyEnforcer {
@@ -124,7 +124,7 @@ pub(crate) struct PolicyInformation {
 }
 
 impl PolicyEnforcer {
-    pub fn new() -> PolicyEnforcer {
+    pub(crate) fn new() -> PolicyEnforcer {
         PolicyEnforcer {
             acl_enabled: true,
             default_permission: Permission::Deny,
@@ -137,7 +137,7 @@ impl PolicyEnforcer {
     /*
        initializes the policy_enforcer
     */
-    pub fn init(&mut self, acl_config: &AclConfig) -> ZResult<()> {
+    pub(crate) fn init(&mut self, acl_config: &AclConfig) -> ZResult<()> {
         self.acl_enabled = acl_config.enabled;
         self.default_permission = acl_config.default_permission;
         if self.acl_enabled {
@@ -196,7 +196,7 @@ impl PolicyEnforcer {
     /*
        converts the sets of rules from config format into individual rules for each subject, key-expr, action, permission
     */
-    pub fn policy_information_point(
+    pub(crate) fn policy_information_point(
         &self,
         config_rule_set: &Vec<AclConfigRules>,
     ) -> ZResult<PolicyInformation> {
@@ -237,7 +237,7 @@ impl PolicyEnforcer {
        checks each msg against the ACL ruleset for allow/deny
     */
 
-    pub fn policy_decision_point(
+    pub(crate) fn policy_decision_point(
         &self,
         subject: usize,
         flow: InterceptorFlow,

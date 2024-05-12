@@ -17,7 +17,7 @@ pub(crate) mod linkstate;
 pub(crate) struct Zenoh080Routing;
 
 impl Zenoh080Routing {
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self
     }
 }

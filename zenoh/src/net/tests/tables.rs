@@ -459,14 +459,14 @@ pub(crate) struct ClientPrimitives {
 }
 
 impl ClientPrimitives {
-    pub fn new() -> ClientPrimitives {
+    pub(crate) fn new() -> ClientPrimitives {
         ClientPrimitives {
             data: std::sync::Mutex::new(None),
             mapping: std::sync::Mutex::new(std::collections::HashMap::new()),
         }
     }
 
-    pub fn clear_data(&self) {
+    pub(crate) fn clear_data(&self) {
         *self.data.lock().unwrap() = None;
     }
 }

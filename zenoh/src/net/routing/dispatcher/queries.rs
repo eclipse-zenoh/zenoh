@@ -349,7 +349,7 @@ struct QueryCleanup {
 }
 
 impl QueryCleanup {
-    pub fn spawn_query_clean_up_task(
+    pub(crate) fn spawn_query_clean_up_task(
         face: &Arc<FaceState>,
         tables_ref: &Arc<TablesLock>,
         qid: u32,
