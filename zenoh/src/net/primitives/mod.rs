@@ -16,15 +16,15 @@ mod mux;
 
 use std::any::Any;
 
-pub use demux::*;
-pub use mux::*;
+pub(crate) use demux::*;
+pub(crate) use mux::*;
 use zenoh_protocol::network::{
     interest::Interest, Declare, Push, Request, Response, ResponseFinal,
 };
 
 use super::routing::RoutingContext;
 
-pub trait Primitives: Send + Sync {
+pub(crate) trait Primitives: Send + Sync {
     fn send_interest(&self, msg: Interest);
 
     fn send_declare(&self, msg: Declare);
@@ -57,7 +57,7 @@ pub(crate) trait EPrimitives: Send + Sync {
 }
 
 #[derive(Default)]
-pub struct DummyPrimitives;
+pub(crate) struct DummyPrimitives;
 
 impl Primitives for DummyPrimitives {
     fn send_interest(&self, _msg: Interest) {}

@@ -155,7 +155,7 @@ impl ResourceContext {
     }
 }
 
-pub struct Resource {
+pub(crate) struct Resource {
     pub(crate) parent: Option<Arc<Resource>>,
     pub(crate) suffix: String,
     pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
@@ -430,7 +430,7 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
+    pub(crate) fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -650,7 +650,7 @@ impl Resource {
     }
 }
 
-pub fn register_expr(
+pub(crate) fn register_expr(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr_id: ExprId,
@@ -728,7 +728,7 @@ pub fn register_expr(
     }
 }
 
-pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
+pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),

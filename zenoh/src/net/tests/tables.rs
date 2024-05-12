@@ -453,7 +453,7 @@ async fn clean_test() {
     assert!(res3.upgrade().is_none());
 }
 
-pub struct ClientPrimitives {
+pub(crate) struct ClientPrimitives {
     data: std::sync::Mutex<Option<WireExpr<'static>>>,
     mapping: std::sync::Mutex<std::collections::HashMap<ExprId, String>>,
 }

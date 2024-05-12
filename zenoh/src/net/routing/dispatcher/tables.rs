@@ -28,7 +28,7 @@ use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 
 use super::face::FaceState;
-pub use super::{pubsub::*, queries::*, resource::*};
+pub(crate) use super::{pubsub::*, queries::*, resource::*};
 use crate::net::routing::{
     hat,
     hat::HatTrait,
@@ -109,7 +109,7 @@ impl Tables {
     }
 
     #[doc(hidden)]
-    pub fn _get_root(&self) -> &Arc<Resource> {
+    pub(crate) fn _get_root(&self) -> &Arc<Resource> {
         &self.root_res
     }
 
@@ -169,7 +169,7 @@ impl Tables {
     }
 }
 
-pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
+pub(crate) fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
     match face.upgrade() {
         Some(mut face) => {
             tracing::debug!("Close {}", face);

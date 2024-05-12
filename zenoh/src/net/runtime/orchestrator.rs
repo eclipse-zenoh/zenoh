@@ -43,7 +43,7 @@ const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
 const ROUTER_DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 
-pub enum Loop {
+pub(crate) enum Loop {
     Continue,
     Break,
 }
@@ -709,7 +709,7 @@ impl Runtime {
         }
     }
 
-    pub async fn scout<Fut, F>(
+    pub(crate) async fn scout<Fut, F>(
         sockets: &[UdpSocket],
         matcher: WhatAmIMatcher,
         mcast_addr: &SocketAddr,

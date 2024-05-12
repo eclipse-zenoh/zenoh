@@ -17,8 +17,11 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+
+// filetag{rust.runtime}
+
 mod adminspace;
-pub mod orchestrator;
+pub(crate) mod orchestrator;
 
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use std::sync::{Mutex, MutexGuard};

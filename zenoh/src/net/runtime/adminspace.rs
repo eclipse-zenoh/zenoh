@@ -10,6 +10,9 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+
+// filetag{rust.runtime}
+
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -54,7 +57,7 @@ use crate::{
     net::primitives::Primitives,
 };
 
-pub struct AdminContext {
+pub(crate) struct AdminContext {
     runtime: Runtime,
     version: String,
     metadata: serde_json::Value,

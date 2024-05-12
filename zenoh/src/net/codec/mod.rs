@@ -14,7 +14,7 @@
 pub(crate) mod linkstate;
 
 #[derive(Clone, Copy)]
-pub struct Zenoh080Routing;
+pub(crate) struct Zenoh080Routing;
 
 impl Zenoh080Routing {
     pub const fn new() -> Self {

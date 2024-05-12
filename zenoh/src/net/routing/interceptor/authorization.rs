@@ -83,7 +83,7 @@ impl ActionPolicy {
 }
 
 #[derive(Default)]
-pub struct FlowPolicy {
+pub(crate) struct FlowPolicy {
     ingress: ActionPolicy,
     egress: ActionPolicy,
 }
@@ -104,12 +104,12 @@ impl FlowPolicy {
 }
 
 #[derive(Default, Debug)]
-pub struct InterfaceEnabled {
+pub(crate) struct InterfaceEnabled {
     pub ingress: bool,
     pub egress: bool,
 }
 
-pub struct PolicyEnforcer {
+pub(crate) struct PolicyEnforcer {
     pub(crate) acl_enabled: bool,
     pub(crate) default_permission: Permission,
     pub(crate) subject_map: SubjectMap,
@@ -118,7 +118,7 @@ pub struct PolicyEnforcer {
 }
 
 #[derive(Debug, Clone)]
-pub struct PolicyInformation {
+pub(crate) struct PolicyInformation {
     subject_map: SubjectMap,
     policy_rules: Vec<PolicyRule>,
 }

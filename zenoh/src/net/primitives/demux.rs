@@ -25,7 +25,7 @@ use crate::net::routing::{
     RoutingContext,
 };
 
-pub struct DeMux {
+pub(crate) struct DeMux {
     face: Face,
     pub(crate) transport: Option<TransportUnicast>,
     pub(crate) interceptor: Arc<InterceptorsChain>,

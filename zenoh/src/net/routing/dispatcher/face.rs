@@ -39,7 +39,7 @@ use crate::{
     },
 };
 
-pub struct FaceState {
+pub(crate) struct FaceState {
     pub(crate) id: usize,
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
@@ -161,7 +161,7 @@ impl fmt::Display for FaceState {
 }
 
 #[derive(Clone, Debug)]
-pub struct WeakFace {
+pub(crate) struct WeakFace {
     pub(crate) tables: Weak<TablesLock>,
     pub(crate) state: Weak<FaceState>,
 }
@@ -176,7 +176,7 @@ impl WeakFace {
 }
 
 #[derive(Clone)]
-pub struct Face {
+pub(crate) struct Face {
     pub(crate) tables: Arc<TablesLock>,
     pub(crate) state: Arc<FaceState>,
 }

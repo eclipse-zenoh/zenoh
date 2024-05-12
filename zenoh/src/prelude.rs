@@ -24,6 +24,8 @@
 //!use zenoh::prelude::*;
 //! ```
 
+// filetag{rust.prelude}
+
 // Reexport API in flat namespace
 pub(crate) mod flat {
     #[cfg(all(feature = "unstable", feature = "shared-memory"))]

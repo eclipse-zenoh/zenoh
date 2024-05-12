@@ -23,7 +23,7 @@ use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
-pub use super::dispatcher::{pubsub::*, queries::*, resource::*};
+pub(crate) use super::dispatcher::{pubsub::*, queries::*, resource::*};
 use super::{
     dispatcher::{
         face::{Face, FaceState},
@@ -38,13 +38,13 @@ use crate::net::{
     routing::interceptor::IngressInterceptor,
 };
 
-pub struct Router {
+pub(crate) struct Router {
     // whatami: WhatAmI,
     pub tables: Arc<TablesLock>,
 }
 
 impl Router {
-    pub fn new(
+    pub(crate) fn new(
         zid: ZenohId,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
@@ -61,7 +61,7 @@ impl Router {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn init_link_state(&mut self, runtime: Runtime) {
+    pub(crate) fn init_link_state(&mut self, runtime: Runtime) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         ctrl_lock.init(&mut tables, runtime)
@@ -108,7 +108,7 @@ impl Router {
         Arc::new(face)
     }
 
-    pub fn new_transport_unicast(&self, transport: TransportUnicast) -> ZResult<Arc<DeMux>> {
+    pub(crate) fn new_transport_unicast(&self, transport: TransportUnicast) -> ZResult<Arc<DeMux>> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
 
@@ -161,7 +161,7 @@ impl Router {
         Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
     }
 
-    pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
+    pub(crate) fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
@@ -197,7 +197,7 @@ impl Router {
         Ok(())
     }
 
-    pub fn new_peer_multicast(
+    pub(crate) fn new_peer_multicast(
         &self,
         transport: TransportMulticast,
         peer: TransportPeer,

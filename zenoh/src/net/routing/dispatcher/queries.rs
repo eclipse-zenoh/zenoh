@@ -495,7 +495,7 @@ macro_rules! inc_res_stats {
     };
 }
 
-pub fn route_query(
+pub(crate) fn route_query(
     tables_ref: &Arc<TablesLock>,
     face: &Arc<FaceState>,
     expr: &WireExpr,

@@ -45,7 +45,7 @@ pub(crate) fn downsampling_interceptor_factories(
     Ok(res)
 }
 
-pub struct DownsamplingInterceptorFactory {
+pub(crate) struct DownsamplingInterceptorFactory {
     interfaces: Option<Vec<String>>,
     rules: Vec<DownsamplingRuleConf>,
     flow: InterceptorFlow,

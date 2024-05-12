@@ -33,11 +33,11 @@ use super::{
     InterceptorFactoryTrait, InterceptorTrait,
 };
 use crate::{api::key_expr::KeyExpr, net::routing::RoutingContext};
-pub struct AclEnforcer {
+pub(crate) struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
 #[derive(Clone, Debug)]
-pub struct Interface {
+pub(crate) struct Interface {
     id: usize,
     name: String,
 }
@@ -280,7 +280,7 @@ impl InterceptorTrait for EgressAclEnforcer {
         Some(ctx)
     }
 }
-pub trait AclActionMethods {
+pub(crate) trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
     fn interface_list(&self) -> Vec<Interface>;
     fn zid(&self) -> ZenohId;

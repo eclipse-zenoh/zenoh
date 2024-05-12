@@ -74,6 +74,9 @@
 //!     }
 //! }
 //! ```
+
+// filetag{rust}
+
 #[macro_use]
 extern crate zenoh_core;
 #[macro_use]

@@ -26,7 +26,7 @@ use crate::net::routing::{
     RoutingContext,
 };
 
-pub struct Mux {
+pub(crate) struct Mux {
     pub handler: TransportUnicast,
     pub(crate) face: OnceLock<WeakFace>,
     pub(crate) interceptor: InterceptorsChain,
@@ -330,7 +330,7 @@ impl EPrimitives for Mux {
     }
 }
 
-pub struct McastMux {
+pub(crate) struct McastMux {
     pub handler: TransportMulticast,
     pub(crate) face: OnceLock<Face>,
     pub(crate) interceptor: InterceptorsChain,

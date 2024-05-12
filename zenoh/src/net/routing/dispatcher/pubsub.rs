@@ -377,7 +377,7 @@ macro_rules! inc_stats {
     };
 }
 
-pub fn full_reentrant_route_data(
+pub(crate) fn full_reentrant_route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
     expr: &WireExpr,
