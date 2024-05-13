@@ -106,17 +106,10 @@ pub mod buffer {
                     //         the iterator has 1 element.
                     Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() })
                 }
-                _ => {
-                    let mut l = 0;
-                    for s in slices.by_ref() {
-                        l += s.len();
-                    }
-                    let mut vec = Vec::with_capacity(l);
-                    for slice in slices {
-                        vec.extend_from_slice(slice);
-                    }
-                    Cow::Owned(vec)
-                }
+                _ => Cow::Owned(slices.fold(Vec::with_capacity(self.len()), |mut acc, it| {
+                    acc.extend_from_slice(it);
+                    acc
+                })),
             }
         }
     }
