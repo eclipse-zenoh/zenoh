@@ -22,14 +22,21 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
+use zenoh_buffers::ZBuf;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::core::key_expr::keyexpr;
+use zenoh_protocol::core::KnownEncoding;
 use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
+use zenoh_protocol::zenoh;
+use zenoh_protocol::zenoh::ext::ValueType;
 use zenoh_protocol::{
     core::{Encoding, WireExpr},
     network::{
         declare::ext,
-        request::{ext::TargetType, Request, RequestId},
+        request::{
+            ext::{BudgetType, TargetType, TimeoutType},
+            Request, RequestId,
+        },
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
     zenoh::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
@@ -365,6 +372,7 @@ struct QueryCleanup {
     tables: Arc<TablesLock>,
     face: Weak<FaceState>,
     qid: RequestId,
+    timeout: Duration,
 }
 
 impl QueryCleanup {
@@ -378,6 +386,7 @@ impl QueryCleanup {
             tables: tables_ref.clone(),
             face: Arc::downgrade(face),
             qid,
+            timeout,
         };
         if let Some((_, cancellation_token)) = face.pending_queries.get(&qid) {
             let c_cancellation_token = cancellation_token.clone();
@@ -396,17 +405,42 @@ impl QueryCleanup {
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
         if let Some(mut face) = self.face.upgrade() {
-            let tables_lock = zwrite!(self.tables.tables);
+            let ext_respid = Some(response::ext::ResponderIdType {
+                zid: face.zid,
+                eid: 0,
+            });
+            route_send_response(
+                &self.tables,
+                &mut face,
+                self.qid,
+                ext_respid,
+                WireExpr::empty(),
+                ResponseBody::Err(zenoh::Err {
+                    timestamp: None,
+                    is_infrastructure: false,
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                    ext_body: Some(ValueType {
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        payload: ZBuf::from("Timeout".as_bytes().to_vec()),
+                        encoding: KnownEncoding::TextPlain.into(),
+                    }),
+                    code: 0, // TODO
+                }),
+            );
+            let queries_lock = zwrite!(self.tables.queries_lock);
             if let Some(query) = get_mut_unchecked(&mut face)
                 .pending_queries
                 .remove(&self.qid)
             {
-                drop(tables_lock);
+                drop(queries_lock);
                 tracing::warn!(
-                    "Didn't receive final reply {}:{} from {}: Timeout!",
+                    "Didn't receive final reply {}:{} from {}: Timeout({:#?})!",
                     query.0.src_face,
                     self.qid,
-                    face
+                    face,
+                    self.timeout,
                 );
                 finalize_pending_query(query);
             }
@@ -513,12 +547,15 @@ macro_rules! inc_res_stats {
     };
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn route_query(
     tables_ref: &Arc<TablesLock>,
     face: &Arc<FaceState>,
     expr: &WireExpr,
     qid: RequestId,
-    target: TargetType,
+    ext_target: TargetType,
+    ext_budget: Option<BudgetType>,
+    ext_timeout: Option<TimeoutType>,
     body: RequestBody,
     routing_context: NodeId,
 ) {
@@ -555,14 +592,15 @@ pub fn route_query(
                 });
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
-                let route = compute_final_route(&rtables, &route, face, &mut expr, &target, query);
+                let route =
+                    compute_final_route(&rtables, &route, face, &mut expr, &ext_target, query);
                 let local_replies =
                     rtables
                         .hat_code
                         .compute_local_replies(&rtables, &prefix, expr.suffix, face);
                 let zid = rtables.zid;
 
-                let timeout = rtables.queries_default_timeout;
+                let timeout = ext_timeout.unwrap_or(rtables.queries_default_timeout);
 
                 drop(queries_lock);
                 drop(rtables);
@@ -643,8 +681,8 @@ pub fn route_query(
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     ext_target: *t,
-                                    ext_budget: None,
-                                    ext_timeout: None,
+                                    ext_budget,
+                                    ext_timeout,
                                     payload: body.clone(),
                                 },
                                 expr.full_expr().to_string(),
@@ -673,9 +711,9 @@ pub fn route_query(
                                     ext_qos: ext::QoSType::request_default(),
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
-                                    ext_target: target,
-                                    ext_budget: None,
-                                    ext_timeout: None,
+                                    ext_target,
+                                    ext_budget,
+                                    ext_timeout,
                                     payload: body.clone(),
                                 },
                                 expr.full_expr().to_string(),

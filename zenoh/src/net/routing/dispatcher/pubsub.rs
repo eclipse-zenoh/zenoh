@@ -429,6 +429,7 @@ pub fn full_reentrant_route_data(
     face: &FaceState,
     expr: &WireExpr,
     ext_qos: ext::QoSType,
+    ext_tstamp: Option<ext::TimestampType>,
     mut payload: PushBody,
     routing_context: NodeId,
 ) {
@@ -478,7 +479,7 @@ pub fn full_reentrant_route_data(
                             outface.primitives.send_push(Push {
                                 wire_expr: key_expr.into(),
                                 ext_qos,
-                                ext_tstamp: None,
+                                ext_tstamp,
                                 ext_nodeid: ext::NodeIdType { node_id: *context },
                                 payload,
                             })
@@ -513,7 +514,7 @@ pub fn full_reentrant_route_data(
                                 outface.primitives.send_push(Push {
                                     wire_expr: key_expr,
                                     ext_qos,
-                                    ext_tstamp: None,
+                                    ext_tstamp,
                                     ext_nodeid: ext::NodeIdType { node_id: context },
                                     payload: payload.clone(),
                                 })
@@ -540,7 +541,7 @@ pub fn full_reentrant_route_data(
                                     outface.primitives.send_push(Push {
                                         wire_expr: key_expr.into(),
                                         ext_qos,
-                                        ext_tstamp: None,
+                                        ext_tstamp,
                                         ext_nodeid: ext::NodeIdType { node_id: *context },
                                         payload: payload.clone(),
                                     })
