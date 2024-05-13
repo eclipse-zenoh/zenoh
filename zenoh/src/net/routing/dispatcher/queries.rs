@@ -427,12 +427,12 @@ impl Timed for QueryCleanup {
                     code: 0, // TODO
                 }),
             );
-            let tables_lock = zwrite!(self.tables.tables);
+            let queries_lock = zwrite!(self.tables.queries_lock);
             if let Some(query) = get_mut_unchecked(&mut face)
                 .pending_queries
                 .remove(&self.qid)
             {
-                drop(tables_lock);
+                drop(queries_lock);
                 tracing::warn!(
                     "Didn't receive final reply {}:{} from {}: Timeout!",
                     query.0.src_face,
