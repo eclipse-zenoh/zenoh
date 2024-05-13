@@ -440,6 +440,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-tungstenite"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cca750b12e02c389c1694d35c16539f88b8bbaa5945934fdc1b41a776688589"
+dependencies = [
+ "async-std",
+ "futures-io",
+ "futures-util",
+ "log",
+ "pin-project-lite 0.2.13",
+ "tungstenite",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4399,6 +4413,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79daa5ed5740825c40b389c5e50312b9c86df53fccd33f281df655642b43869d"
 dependencies = [
  "getrandom 0.2.10",
+ "serde",
 ]
 
 [[package]]
@@ -5345,6 +5360,36 @@ dependencies = [
  "tracing",
  "zenoh",
  "zenoh-core",
+ "zenoh-plugin-trait",
+ "zenoh-result",
+ "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-plugin-remote-api"
+version = "0.11.0-dev"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "async-trait",
+ "async-tungstenite",
+ "base64 0.21.4",
+ "clap",
+ "const_format",
+ "flume",
+ "futures",
+ "git-version",
+ "http-types",
+ "jsonschema",
+ "lazy_static",
+ "rustc_version 0.4.0",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tide",
+ "tracing",
+ "uuid",
+ "zenoh",
  "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",

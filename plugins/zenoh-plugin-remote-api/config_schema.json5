@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Config",
+  "type": "object",
+  "required": [
+    "websocket_port"
+  ],
+  "properties": {
+    "__config__": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "__path__": {
+      "default": null,
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "__required__": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "websocket_port": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

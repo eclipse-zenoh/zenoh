@@ -1,0 +1,81 @@
+#
+# Copyright (c) 2023 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+[package]
+rust-version = { workspace = true }
+name = "zenoh-plugin-remote-api"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = [
+    "network-programming",
+    "web-programming::http-server",
+    "websocket",
+]
+description = "The zenoh Remote Api plugin"
+
+[features]
+default = ["dynamic_plugin", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
+dynamic_plugin = []
+
+[lib]
+name = "zenoh_plugin_remote_api"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = { workspace = true, features = ["default"] }
+async-std = { workspace = true, features = ["default", "attributes"] }
+async-tungstenite = { version = "0.25.1", features = ["async-std"] }
+async-trait = "0.1.60"
+base64 = { workspace = true }
+const_format = { workspace = true }
+zenoh-util = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
+http-types = { workspace = true }
+lazy_static = { workspace = true }
+tracing = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["default"] }
+serde_json = { workspace = true }
+tide = { workspace = true }
+zenoh = { workspace = true, features = ["unstable"] }
+zenoh-plugin-trait = { workspace = true }
+zenoh-result = { workspace = true }
+uuid = { workspace = true , features = ["serde"]}
+
+[build-dependencies]
+rustc_version = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["default"] }
+serde_json = { workspace = true }
+jsonschema = { workspace = true }
+
+[dev-dependencies]
+clap = { workspace = true }
+
+[[example]]
+name = "z_serve_sse"
+path = "examples/z_serve_sse.rs"
+
+[package.metadata.deb]
+name = "zenoh-plugin-remote-api"
+maintainer = "zenoh-dev@eclipse.org"
+copyright = "2024 ZettaScale Technology"
+section = "net"
+license-file = ["../../LICENSE", "0"]
+depends = "zenohd (=0.11.0-dev-1)"

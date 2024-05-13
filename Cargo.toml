@@ -46,6 +46,7 @@ members = [
   "plugins/zenoh-plugin-example",
   "plugins/zenoh-backend-traits",
   "plugins/zenoh-plugin-rest",
+  "plugins/zenoh-plugin-remote-api",
   "plugins/zenoh-plugin-storage-manager",
   "plugins/zenoh-plugin-trait",
   "zenoh",
