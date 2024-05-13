@@ -46,7 +46,7 @@ use zenoh_protocol::{
             DeclareQueryable, DeclareSubscriber, DeclareToken, TokenId, UndeclareQueryable,
             UndeclareSubscriber, UndeclareToken,
         },
-        interest::{InterestMode, InterestOptions},
+        interest::{InterestId, InterestMode, InterestOptions},
         request::{self, ext::TargetType, Request},
         AtomicRequestId, Interest, Mapping, Push, RequestId, Response, ResponseFinal,
     },
@@ -73,7 +73,10 @@ use super::{
     info::SessionInfo,
     key_expr::{KeyExpr, KeyExprInner},
     publication::{Priority, PublisherState},
-    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
+    query::{
+        ConsolidationMode, GetBuilder, LivelinessQueryState, QueryConsolidation, QueryState,
+        QueryTarget, Reply,
+    },
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::{Selector, TIME_RANGE_KEY},
@@ -107,6 +110,7 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
+    pub(crate) interest_id_counter: AtomicRequestId,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
     #[cfg(feature = "unstable")]
@@ -123,6 +127,7 @@ pub(crate) struct SessionState {
     #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
+    pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
 }
@@ -136,6 +141,7 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
+            interest_id_counter: AtomicRequestId::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
             #[cfg(feature = "unstable")]
@@ -152,6 +158,7 @@ impl SessionState {
             #[cfg(feature = "unstable")]
             matching_listeners: HashMap::new(),
             queries: HashMap::new(),
+            liveliness_queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
         }
@@ -1912,6 +1919,64 @@ impl Session {
         Ok(())
     }
 
+    pub(crate) fn liveliness_query(
+        &self,
+        key_expr: &KeyExpr<'_>,
+        timeout: Duration,
+        callback: Callback<'static, Reply>,
+    ) -> ZResult<()> {
+        tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
+        let mut state = zwrite!(self.state);
+        let id = state.interest_id_counter.fetch_add(1, Ordering::SeqCst);
+        let token = self.task_controller.get_cancellation_token();
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
+                let state = self.state.clone();
+                let zid = self.runtime.zid();
+                async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(timeout) => {
+                            let mut state = zwrite!(state);
+                            if let Some(query) = state.liveliness_queries.remove(&id) {
+                                std::mem::drop(state);
+                                tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
+                                (query.callback)(Reply {
+                                    result: Err("Timeout".into()),
+                                    replier_id: zid,
+                                });
+                            }
+                        }
+                        _ = token.cancelled() => {}
+                    }
+                }
+            });
+
+        tracing::trace!("Register liveliness query {}", id);
+        let wexpr = key_expr.to_wire(self).to_owned();
+        state.liveliness_queries.insert(
+            id,
+            LivelinessQueryState {
+                callback,
+                key_expr: key_expr.clone().into_owned(),
+            },
+        );
+
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
+
+        primitives.send_interest(Interest {
+            id,
+            mode: InterestMode::Current,
+            options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
+            wire_expr: Some(wexpr.clone()),
+            ext_qos: request::ext::QoSType::REQUEST.into(),
+            ext_tstamp: None,
+            ext_nodeid: request::ext::NodeIdType::DEFAULT,
+        });
+
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
         &self,
@@ -2147,6 +2212,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
 impl Primitives for Session {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
+        // TODO(fuzzypixelz): Handle `InterestOptions::Final` for liveliness queries.
     }
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
@@ -2238,24 +2304,47 @@ impl Primitives for Session {
                         Ok(expr) => {
                             state.remote_tokens.insert(m.id, expr.clone());
 
-                            // NOTE(fuzzypixelz): I didn't put
-                            // self.update_status_up() here because it doesn't
-                            // make sense. An application which declares a
-                            // liveliness token is not a subscriber and thus
-                            // doens't need to to be visible to publishers
-                            // through .matching_status().
+                            if let Some(interest_id) = msg.interest_id {
+                                if let Some(query) = state.liveliness_queries.get(&interest_id) {
+                                    // NOTE(fuzzypixelz): This was shamlessly copied from `zenoh::net::routing::dispatcher::queries::route_query`
+                                    let reply = Reply {
+                                        result: Ok(Sample {
+                                            key_expr: query.key_expr.clone(),
+                                            payload: ZBytes::empty(),
+                                            kind: SampleKind::Put,
+                                            encoding: Encoding::default(),
+                                            timestamp: None,
+                                            qos: QoS::default(),
+                                            #[cfg(feature = "unstable")]
+                                            source_info: SourceInfo::empty(),
+                                            #[cfg(feature = "unstable")]
+                                            attachment: None,
+                                        }),
+                                        replier_id: ZenohId::rand(), // NOTE(fuzzypixelz): The `Session::query` function does the same thing
+                                    };
 
-                            drop(state);
+                                    (query.callback)(reply);
+                                }
+                            } else {
+                                // NOTE(fuzzypixelz): I didn't put
+                                // self.update_status_up() here because it doesn't
+                                // make sense. An application which declares a
+                                // liveliness token is not a subscriber and thus
+                                // doens't need to to be visible to publishers
+                                // through .matching_status().
 
-                            self.execute_subscriber_callbacks(
-                                false,
-                                &m.wire_expr,
-                                None,
-                                ZBuf::default(),
-                                SubscriberKind::LivelinessSubscriber,
-                                #[cfg(feature = "unstable")]
-                                None,
-                            );
+                                drop(state);
+
+                                self.execute_subscriber_callbacks(
+                                    false,
+                                    &m.wire_expr,
+                                    None,
+                                    ZBuf::default(),
+                                    SubscriberKind::LivelinessSubscriber,
+                                    #[cfg(feature = "unstable")]
+                                    None,
+                                );
+                            }
                         }
                         Err(err) => {
                             tracing::error!("Received DeclareToken for unkown wire_expr: {}", err)

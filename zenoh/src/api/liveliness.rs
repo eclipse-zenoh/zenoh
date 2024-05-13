@@ -738,20 +738,7 @@ where
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
         self.session
-            .query(
-                &self.key_expr?.into(),
-                &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
-                QueryTarget::DEFAULT,
-                QueryConsolidation::DEFAULT,
-                request::ext::QoSType::REQUEST.into(),
-                Locality::default(),
-                self.timeout,
-                None,
-                #[cfg(feature = "unstable")]
-                None,
-                SourceInfo::empty(),
-                callback,
-            )
+            .liveliness_query(&self.key_expr?, self.timeout, callback)
             .map(|_| receiver)
     }
 }
