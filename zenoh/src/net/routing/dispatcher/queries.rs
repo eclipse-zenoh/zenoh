@@ -372,6 +372,7 @@ struct QueryCleanup {
     tables: Arc<TablesLock>,
     face: Weak<FaceState>,
     qid: RequestId,
+    timeout: Duration,
 }
 
 impl QueryCleanup {
@@ -385,6 +386,7 @@ impl QueryCleanup {
             tables: tables_ref.clone(),
             face: Arc::downgrade(face),
             qid,
+            timeout,
         };
         if let Some((_, cancellation_token)) = face.pending_queries.get(&qid) {
             let c_cancellation_token = cancellation_token.clone();
@@ -434,10 +436,11 @@ impl Timed for QueryCleanup {
             {
                 drop(queries_lock);
                 tracing::warn!(
-                    "Didn't receive final reply {}:{} from {}: Timeout!",
+                    "Didn't receive final reply {}:{} from {}: Timeout({:#?})!",
                     query.0.src_face,
                     self.qid,
-                    face
+                    face,
+                    self.timeout,
                 );
                 finalize_pending_query(query);
             }
