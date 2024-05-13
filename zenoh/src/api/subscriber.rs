@@ -145,7 +145,7 @@ impl Wait for SubscriberUndeclaration<'_> {
         self.subscriber.alive = false;
         self.subscriber
             .session
-            .unsubscribe(self.subscriber.state.id)
+            .undeclare_subscriber_inner(self.subscriber.state.id)
     }
 }
 
@@ -161,7 +161,7 @@ impl IntoFuture for SubscriberUndeclaration<'_> {
 impl Drop for SubscriberInner<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.unsubscribe(self.state.id);
+            let _ = self.session.undeclare_subscriber_inner(self.state.id);
         }
     }
 }

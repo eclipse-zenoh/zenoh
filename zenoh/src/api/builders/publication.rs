@@ -314,8 +314,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     fn create_one_shot_publisher(self) -> ZResult<Publisher<'a>> {
         Ok(Publisher {
             session: self.session,
-            #[cfg(feature = "unstable")]
-            eid: 0, // This is a one shot Publisher
+            id: 0, // This is a one shot Publisher
             key_expr: self.key_expr?,
             congestion_control: self.congestion_control,
             priority: self.priority,
@@ -363,22 +362,16 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
             }
         }
         self.session
-            .declare_publication_intent(key_expr.clone())
-            .wait()?;
-        #[cfg(feature = "unstable")]
-        let eid = self.session.runtime.next_id();
-        let publisher = Publisher {
-            session: self.session,
-            #[cfg(feature = "unstable")]
-            eid,
-            key_expr,
-            congestion_control: self.congestion_control,
-            priority: self.priority,
-            is_express: self.is_express,
-            destination: self.destination,
-        };
-        tracing::trace!("publish({:?})", publisher.key_expr);
-        Ok(publisher)
+            .declare_publisher_inner(key_expr.clone(), self.destination)
+            .map(|id| Publisher {
+                session: self.session,
+                id,
+                key_expr,
+                congestion_control: self.congestion_control,
+                priority: self.priority,
+                is_express: self.is_express,
+                destination: self.destination,
+            })
     }
 }
 

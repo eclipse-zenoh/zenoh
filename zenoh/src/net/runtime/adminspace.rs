@@ -500,6 +500,11 @@ impl Primitives for AdminSpace {
 
 impl crate::net::primitives::EPrimitives for AdminSpace {
     #[inline]
+    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
+        (self as &dyn Primitives).send_interest(ctx.msg)
+    }
+
+    #[inline]
     fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
         (self as &dyn Primitives).send_declare(ctx.msg)
     }

@@ -23,8 +23,8 @@ use zenoh_protocol::{
     core::WireExpr,
     network::{
         declare, id,
-        interest::{self, InterestMode, InterestOptions},
-        Interest, Mapping,
+        interest::{self, Interest, InterestMode, InterestOptions},
+        Mapping,
     },
 };
 
