@@ -17,16 +17,18 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use ::serde::{Deserialize, Serialize};
 use async_std::net::TcpListener;
 use async_std::task::{self, JoinHandle};
 use futures::prelude::*;
 use futures::StreamExt;
 use futures::{channel::mpsc::unbounded, future, pin_mut};
-use serde::Serialize;
+// use serde::Serialize;
+use async_tungstenite::tungstenite;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use tracing::info;
-use uuid::Uuid;
+use tracing::{debug, info};
+use uuid::{serde, Uuid};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
@@ -102,25 +104,29 @@ fn path_to_key_expr<'a>(path: &'a str, zid: &str) -> ZResult<KeyExpr<'a>> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 enum RemoteAPIMsg {
     Data(DataMsg),
-    Control(ControlMessage),
+    Control(ControlMsg),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 enum DataMsg {
+    Put(KeyExpr<'static>, Vec<u8>),
     SubscriberMessage(Subscriber, Vec<u8>),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Subscriber(Uuid);
 
-#[derive(Debug, Serialize)]
-enum ControlMessage {
+#[derive(Debug, Serialize, Deserialize)]
+struct KeyExpr2(KeyExpr<'static>);
+
+#[derive(Debug, Serialize, Deserialize)]
+enum ControlMsg {
     CreateSession,
-    Session(),
-    DeleteSession(),
+    Session(Subscriber),
+    DeleteSession(Subscriber),
 
     // KeyExpr
     CreateKeyExpr,
@@ -163,6 +169,37 @@ pub async fn run_websocket_server() {
                 .try_for_each(|msg| {
                     println!("Received a message from {}", msg.to_text().unwrap());
 
+                    // TODO: Remove Clone
+                    match msg.clone() {
+                        // tungstenite::Message::Binary(bytes) => {
+                        //     #TODO: Use Bincode or another format
+                        // },
+                        tungstenite::Message::Text(text) => {
+                            match serde_json::from_str::<RemoteAPIMsg>(&text){
+                                Ok(msg) => match msg {
+                                    RemoteAPIMsg::Control(ctrl_msg) => {
+                                        handle_control_message(ctrl_msg);
+                                    },
+                                    RemoteAPIMsg::Data(data_msg) => match data_msg{
+                                        DataMsg::Put(key_expr, data) => {
+                                            todo!();
+                                        },
+                                        DataMsg::SubscriberMessage(sub, data) => {
+                                            todo!();
+                                        },
+                                    },
+                                },
+                                Err(err) => {
+                                    debug!("RemoteAPI: WS Message Cannot be Deserialized to RemoteAPIMsg {}" , err);
+                                },
+                            };
+                        },
+                        _ => {
+                            debug!("RemoteAPI: WS Message Not Text");
+                        }
+                    };
+
+
                     ch_tx.unbounded_send(msg).unwrap();
                     future::ok(())
                 });
@@ -172,4 +209,18 @@ pub async fn run_websocket_server() {
             println!("disconnected");
         }
     });
+}
+
+fn handle_control_message(ctrl_msg: ControlMsg) {
+    match ctrl_msg {
+        ControlMsg::CreateSession => todo!(),
+        ControlMsg::Session(_) => todo!(),
+        ControlMsg::DeleteSession(_) => todo!(),
+        ControlMsg::CreateKeyExpr => todo!(),
+        ControlMsg::KeyExpr() => todo!(),
+        ControlMsg::DeleteKeyExpr() => todo!(),
+        ControlMsg::CreateSubscriber => todo!(),
+        ControlMsg::Subscriber() => todo!(),
+        ControlMsg::DeleteSubscriber() => todo!(),
+    }
 }

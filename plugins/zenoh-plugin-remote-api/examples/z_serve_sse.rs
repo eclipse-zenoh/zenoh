@@ -18,4 +18,3 @@ async fn main() {
     zenoh_util::try_init_log_from_env();
     // # TODO: Implement Example
 }
-
