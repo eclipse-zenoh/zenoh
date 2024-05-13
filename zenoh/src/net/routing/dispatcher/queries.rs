@@ -22,9 +22,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
+use zenoh_buffers::ZBuf;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::core::key_expr::keyexpr;
+use zenoh_protocol::core::KnownEncoding;
 use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
+use zenoh_protocol::zenoh;
+use zenoh_protocol::zenoh::ext::ValueType;
 use zenoh_protocol::{
     core::{Encoding, WireExpr},
     network::{
@@ -399,6 +403,30 @@ impl QueryCleanup {
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
         if let Some(mut face) = self.face.upgrade() {
+            let ext_respid = Some(response::ext::ResponderIdType {
+                zid: face.zid,
+                eid: 0,
+            });
+            route_send_response(
+                &self.tables,
+                &mut face,
+                self.qid,
+                ext_respid,
+                WireExpr::empty(),
+                ResponseBody::Err(zenoh::Err {
+                    timestamp: None,
+                    is_infrastructure: false,
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                    ext_body: Some(ValueType {
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        payload: ZBuf::from("Timeout".as_bytes().to_vec()),
+                        encoding: KnownEncoding::TextPlain.into(),
+                    }),
+                    code: 0, // TODO
+                }),
+            );
             let tables_lock = zwrite!(self.tables.tables);
             if let Some(query) = get_mut_unchecked(&mut face)
                 .pending_queries
