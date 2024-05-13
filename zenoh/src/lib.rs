@@ -397,6 +397,7 @@ pub mod shm {
             protocol_id::POSIX_PROTOCOL_ID,
         },
         provider::{
+            chunk::{AllocatedChunk, ChunkDescriptor},
             shared_memory_provider::{
                 AllocBuilder, AllocBuilder2, AllocLayout, AllocLayoutSizedBuilder, AllocPolicy,
                 AsyncAllocPolicy, BlockOn, DeallocEldest, DeallocOptimal, DeallocYoungest,
@@ -405,6 +406,7 @@ pub mod shm {
                 SharedMemoryProviderBuilderBackendID, SharedMemoryProviderBuilderID,
                 StaticProtocolID,
             },
+            shared_memory_provider_backend::SharedMemoryProviderBackend,
             types::{
                 AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
                 MemoryLayout, ZAllocError, ZLayoutAllocError, ZLayoutError,
