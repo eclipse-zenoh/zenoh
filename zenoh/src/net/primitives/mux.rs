@@ -197,6 +197,31 @@ impl Primitives for Mux {
 }
 
 impl EPrimitives for Mux {
+    fn send_interest(&self, ctx: RoutingContext<Interest>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Interest(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            outface: ctx.outface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
     fn send_declare(&self, ctx: RoutingContext<Declare>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
@@ -497,6 +522,31 @@ impl Primitives for McastMux {
 }
 
 impl EPrimitives for McastMux {
+    fn send_interest(&self, ctx: RoutingContext<Interest>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Interest(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            outface: ctx.outface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
     fn send_declare(&self, ctx: RoutingContext<Declare>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {

@@ -121,7 +121,7 @@ pub mod flag {
 pub type DeclareRequestId = u32;
 pub type AtomicDeclareRequestId = AtomicU32;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InterestMode {
     Final,
     Current,

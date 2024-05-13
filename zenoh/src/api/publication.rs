@@ -14,6 +14,7 @@
 
 use std::{
     convert::TryFrom,
+    fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
     task::{Context, Poll},
@@ -32,9 +33,7 @@ use zenoh_result::{Error, ZResult};
 use {
     crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
     crate::api::sample::SourceInfo,
-    crate::api::Id,
     zenoh_protocol::core::EntityGlobalId,
-    zenoh_protocol::core::EntityId,
 };
 
 use super::{
@@ -48,7 +47,23 @@ use super::{
     sample::{DataInfo, Locality, QoS, Sample, SampleFields, SampleKind},
     session::{SessionRef, Undeclarable},
 };
-use crate::net::primitives::Primitives;
+use crate::{api::Id, net::primitives::Primitives};
+
+pub(crate) struct PublisherState {
+    pub(crate) id: Id,
+    pub(crate) remote_id: Id,
+    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) destination: Locality,
+}
+
+impl fmt::Debug for PublisherState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Publisher")
+            .field("id", &self.id)
+            .field("key_expr", &self.key_expr)
+            .finish()
+    }
+}
 
 #[zenoh_macros::unstable]
 #[derive(Clone)]
@@ -113,8 +128,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
-    #[cfg(feature = "unstable")]
-    pub(crate) eid: EntityId,
+    pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
@@ -142,7 +156,7 @@ impl<'a> Publisher<'a> {
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
             zid: self.session.zid(),
-            eid: self.eid,
+            eid: self.id,
         }
     }
 
@@ -459,11 +473,9 @@ impl Resolvable for PublisherUndeclaration<'_> {
 impl Wait for PublisherUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         let Publisher {
-            session, key_expr, ..
+            session, id: eid, ..
         } = &self.publisher;
-        session
-            .undeclare_publication_intent(key_expr.clone())
-            .wait()?;
+        session.undeclare_publisher_inner(*eid)?;
         self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
         Ok(())
     }
@@ -481,10 +493,7 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
         if !self.key_expr.is_empty() {
-            let _ = self
-                .session
-                .undeclare_publication_intent(self.key_expr.clone())
-                .wait();
+            let _ = self.session.undeclare_publisher_inner(self.id);
         }
     }
 }
