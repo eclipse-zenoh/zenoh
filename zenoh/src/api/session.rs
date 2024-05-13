@@ -1969,10 +1969,6 @@ impl Session {
         let query_inner = Arc::new(QueryInner {
             key_expr,
             parameters: parameters.to_owned().into(),
-            value: body.map(|b| Value {
-                payload: b.payload.into(),
-                encoding: b.encoding.into(),
-            }),
             qid,
             zid,
             primitives: if local {
@@ -1980,13 +1976,17 @@ impl Session {
             } else {
                 primitives
             },
-            #[cfg(feature = "unstable")]
-            attachment,
         });
         for (eid, callback) in queryables {
             callback(Query {
                 inner: query_inner.clone(),
                 eid,
+                value: body.as_ref().map(|b| Value {
+                    payload: b.payload.clone().into(),
+                    encoding: b.encoding.clone().into(),
+                }),
+                #[cfg(feature = "unstable")]
+                attachment: attachment.clone(),
             });
         }
     }

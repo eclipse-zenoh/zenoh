@@ -93,6 +93,11 @@ impl Reply {
         self.result.as_ref()
     }
 
+    /// Gets the a mutable borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
+    pub fn result_mut(&mut self) -> Result<&mut Sample, &mut Value> {
+        self.result.as_mut()
+    }
+
     /// Converts this `Reply` into the its result. Use [`Reply::result`] it you don't want to take ownership.
     pub fn into_result(self) -> Result<Sample, Value> {
         self.result

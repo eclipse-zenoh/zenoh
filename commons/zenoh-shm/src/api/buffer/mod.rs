@@ -13,5 +13,5 @@
 //
 
 pub mod traits;
-pub mod zsliceshm;
-pub mod zsliceshmmut;
+pub mod zshm;
+pub mod zshmmut;
