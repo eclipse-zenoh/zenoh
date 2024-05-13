@@ -29,7 +29,10 @@ use zenoh_protocol::{
     core::{Encoding, WireExpr},
     network::{
         declare::ext,
-        request::{ext::TargetType, Request, RequestId},
+        request::{
+            ext::{BudgetType, TargetType, TimeoutType},
+            Request, RequestId,
+        },
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
     zenoh::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
@@ -513,12 +516,15 @@ macro_rules! inc_res_stats {
     };
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn route_query(
     tables_ref: &Arc<TablesLock>,
     face: &Arc<FaceState>,
     expr: &WireExpr,
     qid: RequestId,
-    target: TargetType,
+    ext_target: TargetType,
+    ext_budget: Option<BudgetType>,
+    ext_timeout: Option<TimeoutType>,
     body: RequestBody,
     routing_context: NodeId,
 ) {
@@ -555,14 +561,15 @@ pub fn route_query(
                 });
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
-                let route = compute_final_route(&rtables, &route, face, &mut expr, &target, query);
+                let route =
+                    compute_final_route(&rtables, &route, face, &mut expr, &ext_target, query);
                 let local_replies =
                     rtables
                         .hat_code
                         .compute_local_replies(&rtables, &prefix, expr.suffix, face);
                 let zid = rtables.zid;
 
-                let timeout = rtables.queries_default_timeout;
+                let timeout = ext_timeout.unwrap_or(rtables.queries_default_timeout);
 
                 drop(queries_lock);
                 drop(rtables);
@@ -643,8 +650,8 @@ pub fn route_query(
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     ext_target: *t,
-                                    ext_budget: None,
-                                    ext_timeout: None,
+                                    ext_budget,
+                                    ext_timeout,
                                     payload: body.clone(),
                                 },
                                 expr.full_expr().to_string(),
@@ -673,9 +680,9 @@ pub fn route_query(
                                     ext_qos: ext::QoSType::request_default(),
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
-                                    ext_target: target,
-                                    ext_budget: None,
-                                    ext_timeout: None,
+                                    ext_target,
+                                    ext_budget,
+                                    ext_timeout,
                                     payload: body.clone(),
                                 },
                                 expr.full_expr().to_string(),

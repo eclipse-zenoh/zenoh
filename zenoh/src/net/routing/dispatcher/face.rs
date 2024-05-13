@@ -248,6 +248,7 @@ impl Primitives for Face {
             &self.state,
             &msg.wire_expr,
             msg.ext_qos,
+            msg.ext_tstamp,
             msg.payload,
             msg.ext_nodeid.node_id,
         );
@@ -260,10 +261,10 @@ impl Primitives for Face {
                     &self.tables,
                     &self.state,
                     &msg.wire_expr,
-                    // parameters,
                     msg.id,
                     msg.ext_target,
-                    // consolidation,
+                    msg.ext_budget,
+                    msg.ext_timeout,
                     msg.payload,
                     msg.ext_nodeid.node_id,
                 );
