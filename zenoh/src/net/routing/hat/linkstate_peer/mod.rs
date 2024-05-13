@@ -431,10 +431,6 @@ impl HatBaseTrait for HatCode {
         Ok(())
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     #[inline]
     fn ingress_filter(&self, _tables: &Tables, _face: &FaceState, _expr: &mut RoutingExpr) -> bool {
         true

@@ -470,8 +470,6 @@ impl EPrimitives for ClientPrimitives {
 
     fn send_response_final(&self, _ctx: RoutingContext<zenoh_protocol::network::ResponseFinal>) {}
 
-    fn send_close(&self) {}
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

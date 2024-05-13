@@ -50,6 +50,9 @@ fn make(ke: &mut Vec<u8>, rng: &mut impl rand::Rng) {
 }
 
 pub struct KeyExprFuzzer<Rng: rand::Rng>(pub Rng);
+// NOTE: Denying `clippy::assigning_clones` causes:
+// error[E0502]: cannot borrow `next` as mutable because it is also borrowed as immutabl
+#[allow(clippy::assigning_clones)]
 impl<Rng: rand::Rng> Iterator for KeyExprFuzzer<Rng> {
     type Item = OwnedKeyExpr;
     fn next(&mut self) -> Option<Self::Item> {

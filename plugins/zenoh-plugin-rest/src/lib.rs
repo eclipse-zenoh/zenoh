@@ -193,26 +193,6 @@ fn response(status: StatusCode, content_type: impl TryInto<Mime>, body: &str) ->
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
 
 pub struct RestPlugin {}
-#[derive(Clone, Copy, Debug)]
-struct StrError {
-    err: &'static str,
-}
-impl std::error::Error for StrError {}
-impl std::fmt::Display for StrError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.err)
-    }
-}
-#[derive(Debug, Clone)]
-struct StringError {
-    err: String,
-}
-impl std::error::Error for StringError {}
-impl std::fmt::Display for StringError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.err)
-    }
-}
 
 impl ZenohPlugin for RestPlugin {}
 

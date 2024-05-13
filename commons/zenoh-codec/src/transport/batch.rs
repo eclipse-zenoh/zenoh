@@ -53,6 +53,12 @@ pub struct Zenoh080Batch {
     pub latest_sn: LatestSn,
 }
 
+impl Default for Zenoh080Batch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Zenoh080Batch {
     pub const fn new() -> Self {
         Self {

@@ -106,7 +106,7 @@ impl FaceState {
 
     pub(crate) fn get_next_local_id(&self) -> ExprId {
         let mut id = 1;
-        while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
+        while self.local_mappings.contains_key(&id) || self.remote_mappings.contains_key(&id) {
             id += 1;
         }
         id

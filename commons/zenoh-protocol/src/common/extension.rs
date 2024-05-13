@@ -110,6 +110,12 @@ pub struct DidntConvert;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ZExtUnit<const ID: u8>;
 
+impl<const ID: u8> Default for ZExtUnit<{ ID }> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const ID: u8> ZExtUnit<{ ID }> {
     pub const ID: u8 = ID;
 

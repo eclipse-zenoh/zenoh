@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use core::{ptr, str};
+use core::ptr;
 
 pub(crate) struct Writer {
     pub ptr: *mut u8,
@@ -118,7 +118,6 @@ impl<'a, S: Split<D> + ?Sized, D: ?Sized> DoubleEndedIterator for Splitter<'a, S
 pub trait Split<Delimiter: ?Sized> {
     fn split_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, &'a Self);
     fn try_split_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, Option<&'a Self>);
-    fn rsplit_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, &'a Self);
     fn try_rsplit_once<'a>(&'a self, delimiter: &Delimiter) -> (Option<&'a Self>, &'a Self);
     fn splitter<'a>(&'a self, delimiter: &'a Delimiter) -> Splitter<'a, Self, Delimiter> {
         Splitter {
@@ -132,12 +131,6 @@ impl Split<u8> for [u8] {
         match self.iter().position(|c| c == delimiter) {
             Some(i) => (&self[..i], &self[(i + 1)..]),
             None => (self, &[]),
-        }
-    }
-    fn rsplit_once<'a>(&'a self, delimiter: &u8) -> (&'a Self, &'a Self) {
-        match self.iter().rposition(|c| c == delimiter) {
-            Some(i) => (&self[..i], &self[(i + 1)..]),
-            None => (&[], self),
         }
     }
 
@@ -163,14 +156,6 @@ impl Split<[u8]> for [u8] {
             }
         }
         (self, &[])
-    }
-    fn rsplit_once<'a>(&'a self, delimiter: &[u8]) -> (&'a Self, &'a Self) {
-        for i in (0..self.len()).rev() {
-            if self[..i].ends_with(delimiter) {
-                return (&self[..(i - delimiter.len())], &self[i..]);
-            }
-        }
-        (&[], self)
     }
 
     fn try_split_once<'a>(&'a self, delimiter: &[u8]) -> (&'a Self, Option<&'a Self>) {
@@ -200,14 +185,6 @@ impl<const N: usize> Split<[u8; N]> for [u8] {
         }
         (self, &[])
     }
-    fn rsplit_once<'a>(&'a self, delimiter: &[u8; N]) -> (&'a Self, &'a Self) {
-        for i in (0..self.len()).rev() {
-            if self[..i].ends_with(delimiter) {
-                return (&self[..(i - delimiter.len())], &self[i..]);
-            }
-        }
-        (&[], self)
-    }
 
     fn try_split_once<'a>(&'a self, delimiter: &[u8; N]) -> (&'a Self, Option<&'a Self>) {
         for i in 0..self.len() {
@@ -226,28 +203,4 @@ impl<const N: usize> Split<[u8; N]> for [u8] {
         }
         (None, self)
     }
-}
-
-pub(crate) trait Utf {
-    fn utf(&self) -> &str;
-}
-impl Utf for [u8] {
-    fn utf(&self) -> &str {
-        unsafe { str::from_utf8_unchecked(self) }
-    }
-}
-/// This macro is generally useful when introducing new matchers to debug them.
-#[allow(unused_macros)]
-macro_rules! utfdbg {
-    ($x: expr) => {{
-        let x = $x;
-        println!(
-            "[{}:{}] {} = {}",
-            file!(),
-            line!(),
-            stringify!($x),
-            $crate::key_expr::utils::Utf::utf(x)
-        );
-        x
-    }};
 }

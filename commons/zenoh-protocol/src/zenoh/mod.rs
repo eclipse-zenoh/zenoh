@@ -219,6 +219,12 @@ pub mod ext {
             Self
         }
     }
+    #[cfg(feature = "shared-memory")]
+    impl<const ID: u8> Default for ShmType<{ ID }> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     ///   7 6 5 4 3 2 1 0
     ///  +-+-+-+-+-+-+-+-+
