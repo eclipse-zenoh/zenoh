@@ -156,7 +156,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test, valgrind, typos]
+    needs: [check-labels, check, test, valgrind, typos]
     if: always()
     steps:
       - name: Check whether all jobs pass
