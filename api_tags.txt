@@ -1,5 +1,5 @@
-tags{api.encoding(), rust.encoding.encoding()}
-tags{api.key_expr(), rust.key_expr.key_expr()}
+tags{api.encoding()}
+tags{api.key_expr()}
 tags{api.key_expr.autocanonize(), rust.key_expr.key_expr.autocanonize()}
 tags{api.session.close(), rust.session.session.close()}
 tags{api.session.open(), rust.session.open()}
@@ -46,7 +46,7 @@ tags{rust.core.result()}
 tags{rust.core.sync_resolve()}
 tags{rust.core.try_init_log_from_env()}
 tags{rust.core.wait()}
-tags{rust.encoding.encoding(), api.encoding()}
+tags{rust.encoding.encoding()}
 tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_b_o_r()}
 tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_d_r()}
 tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_o_a_p__p_a_y_l_o_a_d()}
@@ -146,7 +146,7 @@ tags{rust.internal.ztimeout()}
 tags{rust.key_expr.kedefine()}
 tags{rust.key_expr.keformat()}
 tags{rust.key_expr.kewrite()}
-tags{rust.key_expr.key_expr(), api.key_expr()}
+tags{rust.key_expr.key_expr()}
 tags{rust.key_expr.key_expr.as_keyexpr()}
 tags{rust.key_expr.key_expr.autocanonize(), api.key_expr.autocanonize()}
 tags{rust.key_expr.key_expr.borrowing_clone()}
