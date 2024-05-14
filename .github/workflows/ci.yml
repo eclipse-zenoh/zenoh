@@ -26,6 +26,11 @@ env:
   CARGO_PROFILE_DEV_DEBUG: false
 
 jobs:
+  check-labels:
+    name: Check PR labels
+    uses: eclipse-zenoh/ci/.github/workflows/check-labels.yml@main
+    secrets: inherit
+
   check:
     name: Lints and doc tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
