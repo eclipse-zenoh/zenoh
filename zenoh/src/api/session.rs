@@ -48,7 +48,7 @@ use zenoh_protocol::{
         },
         interest::{InterestId, InterestMode, InterestOptions},
         request::{self, ext::TargetType, Request},
-        AtomicRequestId, Interest, Mapping, Push, RequestId, Response, ResponseFinal,
+        AtomicRequestId, DeclareFinal, Interest, Mapping, Push, RequestId, Response, ResponseFinal,
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
@@ -2212,7 +2212,6 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
 impl Primitives for Session {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
-        // TODO(fuzzypixelz): Handle `InterestOptions::Final` for liveliness queries.
     }
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
@@ -2386,8 +2385,13 @@ impl Primitives for Session {
                     }
                 }
             }
-            DeclareBody::DeclareFinal(_) => {
+            DeclareBody::DeclareFinal(DeclareFinal) => {
                 trace!("recv DeclareFinal {:?}", msg.interest_id);
+
+                if let Some(interest_id) = msg.interest_id {
+                    let mut state = zwrite!(self.state);
+                    let _ = state.liveliness_queries.remove(&interest_id);
+                }
             }
         }
     }
