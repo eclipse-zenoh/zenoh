@@ -1,5 +1,5 @@
 tags{api.encoding(), rust.encoding.encoding()}
-tags{api.key_expr()}
+tags{api.key_expr(), rust.key_expr.key_expr()}
 tags{api.key_expr.autocanonize(), rust.key_expr.key_expr.autocanonize()}
 tags{api.session.close(), rust.session.session.close()}
 tags{api.session.open(), rust.session.open()}
@@ -146,7 +146,7 @@ tags{rust.internal.ztimeout()}
 tags{rust.key_expr.kedefine()}
 tags{rust.key_expr.keformat()}
 tags{rust.key_expr.kewrite()}
-tags{rust.key_expr.key_expr()}
+tags{rust.key_expr.key_expr(), api.key_expr()}
 tags{rust.key_expr.key_expr.as_keyexpr()}
 tags{rust.key_expr.key_expr.autocanonize(), api.key_expr.autocanonize()}
 tags{rust.key_expr.key_expr.borrowing_clone()}
