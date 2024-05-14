@@ -1,7 +1,7 @@
 tags{api.encoding(), rust.encoding.encoding()}
 tags{api.key_expr(), rust.key_expr.key_expr()}
-tags{api.key_expr.canonize(), rust.key_expr.key_expr.autocanonize()}
-tags{api.session.close()}
+tags{api.key_expr.autocanonize(), rust.key_expr.key_expr.autocanonize()}
+tags{api.session.close(), rust.session.session.close()}
 tags{api.session.open(), rust.session.open()}
 tags{rust.buffers.has_reader()}
 tags{rust.buffers.reader()}
@@ -148,7 +148,7 @@ tags{rust.key_expr.keformat()}
 tags{rust.key_expr.kewrite()}
 tags{rust.key_expr.key_expr(), api.key_expr()}
 tags{rust.key_expr.key_expr.as_keyexpr()}
-tags{rust.key_expr.key_expr.autocanonize(), api.key_expr.canonize()}
+tags{rust.key_expr.key_expr.autocanonize(), api.key_expr.autocanonize()}
 tags{rust.key_expr.key_expr.borrowing_clone()}
 tags{rust.key_expr.key_expr.concat()}
 tags{rust.key_expr.key_expr.from_boxed_string_unchecked()}
@@ -434,7 +434,7 @@ tags{rust.session.open(), api.session.open()}
 tags{rust.session.open_builder()}
 tags{rust.session.open_builder.with_shm_clients()}
 tags{rust.session.session()}
-tags{rust.session.session.close()}
+tags{rust.session.session.close(), api.session.close()}
 tags{rust.session.session.config()}
 tags{rust.session.session.declare_keyexpr()}
 tags{rust.session.session.delete()}
