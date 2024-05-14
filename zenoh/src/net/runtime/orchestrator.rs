@@ -165,7 +165,7 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay, linkstate) = {
             let guard = &self.state.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 let endpoint: EndPoint = PEER_DEFAULT_LISTENER.parse().unwrap();
@@ -194,6 +194,7 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
+                unwrap_or_default!(guard.routing().peer().mode()) == *"linkstate",
             )
         };
 
@@ -205,7 +206,9 @@ impl Runtime {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
-        if (scouting || !peers.is_empty())
+        if linkstate {
+            tokio::time::sleep(delay).await;
+        } else if (scouting || !peers.is_empty())
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await
                 .is_err()
@@ -217,7 +220,7 @@ impl Runtime {
     }
 
     async fn start_router(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces) = {
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = self.state.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 let endpoint: EndPoint = ROUTER_DEFAULT_LISTENER.parse().unwrap();
@@ -245,6 +248,7 @@ impl Runtime {
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().router()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
+                Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
             )
         };
 
@@ -256,6 +260,7 @@ impl Runtime {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
+        tokio::time::sleep(delay).await;
         Ok(())
     }
 
