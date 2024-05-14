@@ -74,6 +74,11 @@ jobs:
       - name: Check licenses
         run: cargo deny check licenses
 
+      - name: Check MSRV
+        uses: ZettaScaleLabs/ci/check-msrv@develop
+        with:
+          repo: ${{ github.repository }}
+
   test:
     name: Unit tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
