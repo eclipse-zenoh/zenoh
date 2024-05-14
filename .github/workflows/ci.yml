@@ -41,6 +41,9 @@ jobs:
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Update Stable Rust toolchain
+        run: rustup update stable
+
       - name: Install dependencies
         run: cargo +stable install cargo-deny --locked
 

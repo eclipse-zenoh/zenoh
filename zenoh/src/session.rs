@@ -1698,7 +1698,7 @@ impl Session {
             let mut sample = Sample::with_info(key_expr, payload.clone(), info.clone());
             #[cfg(feature = "unstable")]
             {
-                sample.attachment = attachment.clone();
+                sample.attachment.clone_from(&attachment);
             }
             cb(sample);
         }
@@ -2719,11 +2719,6 @@ impl crate::net::primitives::EPrimitives for Session {
     #[inline]
     fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
         (self as &dyn Primitives).send_response_final(ctx.msg)
-    }
-
-    #[inline]
-    fn send_close(&self) {
-        (self as &dyn Primitives).send_close()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

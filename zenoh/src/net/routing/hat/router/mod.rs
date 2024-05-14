@@ -706,10 +706,6 @@ impl HatBaseTrait for HatCode {
         Ok(())
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     #[inline]
     fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &mut RoutingExpr) -> bool {
         face.whatami != WhatAmI::Peer

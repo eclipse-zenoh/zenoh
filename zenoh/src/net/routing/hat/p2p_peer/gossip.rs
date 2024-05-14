@@ -381,9 +381,9 @@ impl Network {
                     (oldsn < sn)
                         .then(|| {
                             node.sn = sn;
-                            node.links = links.clone();
+                            node.links.clone_from(&links);
                             (node.locators != locators && locators.is_some()).then(|| {
-                                node.locators = locators.clone();
+                                node.locators.clone_from(&locators);
                                 idx
                             })
                         })

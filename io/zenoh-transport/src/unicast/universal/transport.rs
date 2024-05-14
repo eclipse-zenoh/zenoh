@@ -37,13 +37,6 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 
-macro_rules! zlinkget {
-    ($guard:expr, $link:expr) => {
-        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter().find(|tl| tl.link == $link)
-    };
-}
-
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
@@ -356,27 +349,6 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
-        tracing::trace!("Closing link {} with peer: {}", link, self.config.zid);
-
-        let transport_link_pipeline = zlinkget!(zread!(self.links), link)
-            .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?
-            .pipeline
-            .clone();
-
-        // Close message to be sent on the target link
-        let msg: TransportMessage = Close {
-            reason,
-            session: false,
-        }
-        .into();
-
-        transport_link_pipeline.push_transport_message(msg, Priority::Background);
-
-        // Remove the link from the channel
-        self.del_link(link).await
-    }
-
     async fn close(&self, reason: u8) -> ZResult<()> {
         tracing::trace!("Closing transport with peer: {}", self.config.zid);
 

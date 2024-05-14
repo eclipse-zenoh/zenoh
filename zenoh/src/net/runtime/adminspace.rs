@@ -509,11 +509,6 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
         (self as &dyn Primitives).send_response_final(ctx.msg)
     }
 
-    #[inline]
-    fn send_close(&self) {
-        (self as &dyn Primitives).send_close()
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
