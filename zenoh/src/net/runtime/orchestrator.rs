@@ -205,9 +205,10 @@ impl Runtime {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
-        if tokio::time::timeout(delay, self.state.start_conditions.notified())
-            .await
-            .is_err()
+        if (scouting || !peers.is_empty())
+            && tokio::time::timeout(delay, self.state.start_conditions.notified())
+                .await
+                .is_err()
             && !peers.is_empty()
         {
             tracing::warn!("Scouting delay elapsed before start conditions are met.");
