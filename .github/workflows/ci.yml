@@ -48,6 +48,11 @@ jobs:
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny
 
+      - name: Check MSRV
+        uses: ZettaScaleLabs/ci/check-msrv@develop
+        with:
+          repo: ${{ github.repository }}
+
       - name: Code format check
         run: cargo fmt --check
 
@@ -73,11 +78,6 @@ jobs:
 
       - name: Check licenses
         run: cargo deny check licenses
-
-      - name: Check MSRV
-        uses: ZettaScaleLabs/ci/check-msrv@develop
-        with:
-          repo: ${{ github.repository }}
 
   test:
     name: Unit tests on ${{ matrix.os }}
