@@ -379,20 +379,34 @@ pub mod internal {
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 pub mod shm {
     pub use zenoh_shm::api::{
-        client_storage::SharedMemoryClientStorage,
+        buffer::{
+            zshm::{zshm, ZShm},
+            zshmmut::{zshmmut, ZShmMut},
+        },
+        client::{
+            shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
+        },
+        client_storage::{SharedMemoryClientStorage, GLOBAL_CLIENT_STORAGE},
+        common::types::{ChunkID, ProtocolID, SegmentID},
         protocol_implementations::posix::{
-            posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+            posix_shared_memory_client::PosixSharedMemoryClient,
+            posix_shared_memory_provider_backend::{
+                LayoutedPosixSharedMemoryProviderBackendBuilder, PosixSharedMemoryProviderBackend,
+                PosixSharedMemoryProviderBackendBuilder,
+            },
             protocol_id::POSIX_PROTOCOL_ID,
         },
         provider::{
             shared_memory_provider::{
-                BlockOn, Deallocate, Defragment, GarbageCollect, SharedMemoryProviderBuilder,
+                AllocBuilder, AllocLayout, AllocLayoutAlignedBuilder, AllocLayoutBuilder,
+                AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
+                DeallocOptimal, DeallocYoungest, Deallocate, Defragment, DynamicProtocolID,
+                ForceDeallocPolicy, GarbageCollect, JustAlloc, ProtocolIDSource,
+                SharedMemoryProvider, SharedMemoryProviderBuilder,
+                SharedMemoryProviderBuilderBackendID, SharedMemoryProviderBuilderID,
+                StaticProtocolID,
             },
-            types::{AllocAlignment, MemoryLayout},
-        },
-        slice::{
-            zsliceshm::{zsliceshm, ZSliceShm},
-            zsliceshmmut::{zsliceshmmut, ZSliceShmMut},
+            types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
         },
     };
 }

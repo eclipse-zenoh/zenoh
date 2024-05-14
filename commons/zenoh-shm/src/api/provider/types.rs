@@ -17,7 +17,7 @@ use std::fmt::Display;
 use zenoh_result::{bail, ZResult};
 
 use super::chunk::AllocatedChunk;
-use crate::api::slice::zsliceshmmut::ZSliceShmMut;
+use crate::api::buffer::zshmmut::ZShmMut;
 
 /// Allocation errors
 ///
@@ -169,4 +169,4 @@ pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
 
 /// SHM buffer allocation result
 #[zenoh_macros::unstable_doc]
-pub type BufAllocResult = Result<ZSliceShmMut, ZAllocError>;
+pub type BufAllocResult = Result<ZShmMut, ZAllocError>;
