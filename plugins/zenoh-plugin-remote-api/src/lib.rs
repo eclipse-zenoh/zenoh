@@ -19,15 +19,20 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use ::serde::{Deserialize, Serialize};
 use async_std::net::TcpListener;
+use async_std::sync::RwLock;
 use async_std::task::{self, JoinHandle};
+use async_tungstenite::tungstenite::protocol::frame::coding::Control;
 use futures::prelude::*;
 use futures::StreamExt;
 use futures::{channel::mpsc::unbounded, future, pin_mut};
 // use serde::Serialize;
-use async_tungstenite::tungstenite;
+use async_tungstenite::tungstenite::{self, Message};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use tracing::{debug, info};
+use std::net::SocketAddr;
+use std::os::unix::net::SocketAddr;
+use std::sync::Arc;
+use tracing::{debug, error, info};
 use uuid::{serde, Uuid};
 use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
@@ -48,8 +53,6 @@ pub struct RemoteApiPlugin {}
 
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(RemoteApiPlugin);
-
-// type StateMap = HashMap<(),()>;
 
 impl ZenohPlugin for RemoteApiPlugin {}
 
@@ -112,25 +115,25 @@ enum RemoteAPIMsg {
 
 #[derive(Debug, Serialize, Deserialize)]
 enum DataMsg {
-    Put(KeyExpr<'static>, Vec<u8>),
-    SubscriberMessage(Subscriber, Vec<u8>),
+    // Put(KeyExpr<'static>, Vec<u8>),
+    // SubscriberMessage(Subscriber, Vec<u8>),
 }
-
 #[derive(Debug, Serialize, Deserialize)]
 struct Subscriber(Uuid);
 
 #[derive(Debug, Serialize, Deserialize)]
-struct KeyExpr2(KeyExpr<'static>);
+struct KeyExprWrapper(KeyExpr<'static>);
 
 #[derive(Debug, Serialize, Deserialize)]
 enum ControlMsg {
-    CreateSession,
-    Session(Subscriber),
-    DeleteSession(Subscriber),
+    // Session
+    OpenSession,
+    Session(Uuid),
+    CloseSession(Uuid),
 
     // KeyExpr
     CreateKeyExpr,
-    KeyExpr(),
+    KeyExpr(KeyExprWrapper),
     DeleteKeyExpr(),
 
     // Subscriber
@@ -139,21 +142,50 @@ enum ControlMsg {
     DeleteSubscriber(),
 }
 
+type StateMap = Arc<RwLock<HashMap<SocketAddr, RemoteState>>>;
+
+struct RemoteState {
+    session_id: Uuid,
+    session: Session, // keyExpr: Vec<KeyExpr>,
+}
+
 // TODO:
 // What we want for this function achieve is to start a Zenoh session
 // Listen on the Zenoh Session
 pub async fn run_websocket_server() {
     async_std::task::spawn(async move {
-        let addr = "127.0.0.1:3012".to_string();
-        info!("Spawning Remote API Plugin on {:?}", addr);
-        // println!("Spawning Remote API Plugin on {:?}",addr);
-
+        let addr = "127.0.0.1:10000".to_string();
+        println!("Spawning Remote API Plugin on {:?}", addr);
+        // Server
         let server = TcpListener::bind(addr).await.unwrap();
-
+        let hm: HashMap<SocketAddr, RemoteState> = HashMap::new();
+        let state_map = Arc::new(RwLock::new(hm));
+        // let state_map
         while let Some(res) = server.incoming().next().await {
             let raw_stream = res.unwrap();
             println!("raw_stream {:?}", raw_stream.peer_addr());
+            let sock_adress;
+            match raw_stream.peer_addr() {
+                Ok(sock_addr) => {
+                    let mut write_guard = state_map.write().await;
+                    let config = zenoh::config::default();
+                    let session = zenoh::open(config).res().await.unwrap();
 
+                    let state = RemoteState {
+                        session_id: Uuid::new_v4(),
+                        session,
+                    };
+
+                    sock_adress = Arc::new(sock_addr.clone());
+                    if let Some(remote_state) = write_guard.insert(sock_addr, state) {
+                        println!("TODO: remote State existed in Map already, Error in Logic");
+                    }
+                }
+                Err(err) => {
+                    println!("Could not Get Peer Address");
+                    return;
+                }
+            }
             let ws_stream = async_tungstenite::accept_async(raw_stream)
                 .await
                 .expect("Error during the websocket handshake occurred");
@@ -161,66 +193,99 @@ pub async fn run_websocket_server() {
             let (ch_tx, ch_rx) = unbounded();
 
             let (ws_tx, ws_rx) = ws_stream.split();
-
             let outgoing_ws = ch_rx.map(Ok).forward(ws_tx);
+
+            let sock_adress = sock_adress.clone();
+            let state_map_cl = state_map.clone();
 
             let incoming_ws = ws_rx
                 .try_filter(|msg| future::ready(!msg.is_close()))
                 .try_for_each(|msg| {
                     println!("Received a message from {}", msg.to_text().unwrap());
-
-                    // TODO: Remove Clone
-                    match msg.clone() {
-                        // tungstenite::Message::Binary(bytes) => {
-                        //     #TODO: Use Bincode or another format
-                        // },
-                        tungstenite::Message::Text(text) => {
-                            match serde_json::from_str::<RemoteAPIMsg>(&text){
-                                Ok(msg) => match msg {
-                                    RemoteAPIMsg::Control(ctrl_msg) => {
-                                        handle_control_message(ctrl_msg);
-                                    },
-                                    RemoteAPIMsg::Data(data_msg) => match data_msg{
-                                        DataMsg::Put(key_expr, data) => {
-                                            todo!();
-                                        },
-                                        DataMsg::SubscriberMessage(sub, data) => {
-                                            todo!();
-                                        },
-                                    },
-                                },
-                                Err(err) => {
-                                    debug!("RemoteAPI: WS Message Cannot be Deserialized to RemoteAPIMsg {}" , err);
-                                },
-                            };
-                        },
-                        _ => {
-                            debug!("RemoteAPI: WS Message Not Text");
-                        }
+                    let state_map_ref = &state_map_cl;
+                    let sock_adress_ref = sock_adress.as_ref();
+                    if let Some(response) =
+                        handle_message(msg, sock_adress_ref, state_map_ref).await
+                    {
+                        ch_tx.unbounded_send(response).unwrap(); // TODO: Remove Unwrap
                     };
 
-
-                    ch_tx.unbounded_send(msg).unwrap();
                     future::ok(())
                 });
+
             //
             pin_mut!(outgoing_ws, incoming_ws);
             future::select(outgoing_ws, incoming_ws).await;
+
+            state_map.write().await.remove(&*sock_adress);
             println!("disconnected");
         }
     });
 }
 
-fn handle_control_message(ctrl_msg: ControlMsg) {
+async fn handle_message(
+    msg: Message,
+    sock_addr: &SocketAddr,
+    state_map: &StateMap,
+) -> Option<Message> {
+    match msg.clone() {
+        tungstenite::Message::Text(text) => match serde_json::from_str::<RemoteAPIMsg>(&text) {
+            Ok(msg) => match msg {
+                RemoteAPIMsg::Control(ctrl_msg) => {
+                    handle_control_message(ctrl_msg, sock_addr, state_map).await
+                }
+                RemoteAPIMsg::Data(data_msg) => handle_data_message(data_msg),
+            },
+            Err(err) => {
+                debug!(
+                    "RemoteAPI: WS Message Cannot be Deserialized to RemoteAPIMsg {}",
+                    err
+                );
+                None
+            }
+        },
+        _ => {
+            debug!("RemoteAPI: WS Message Not Text");
+            None
+        }
+    }
+}
+
+async fn handle_control_message(
+    ctrl_msg: ControlMsg,
+    sock_addr: &SocketAddr,
+    state_map: &StateMap,
+) -> Option<Message> {
     match ctrl_msg {
-        ControlMsg::CreateSession => todo!(),
-        ControlMsg::Session(_) => todo!(),
-        ControlMsg::DeleteSession(_) => todo!(),
+        ControlMsg::OpenSession => {
+            let read = state_map.read().await;
+            if let Some(state_map) = read.get(sock_addr) {
+                let json: String = serde_json::to_string(&RemoteAPIMsg::Control(
+                    ControlMsg::Session(state_map.session_id),
+                ))
+                .unwrap();
+                Some(Message::Text(json))
+            } else {
+                println!("State Map Does not contain SocketAddr");
+                None
+            }
+        }
+        ControlMsg::Session(id) => todo!(),
+        ControlMsg::CloseSession(id) => todo!(),
+
         ControlMsg::CreateKeyExpr => todo!(),
-        ControlMsg::KeyExpr() => todo!(),
+        ControlMsg::KeyExpr(k) => todo!(),
         ControlMsg::DeleteKeyExpr() => todo!(),
         ControlMsg::CreateSubscriber => todo!(),
         ControlMsg::Subscriber() => todo!(),
         ControlMsg::DeleteSubscriber() => todo!(),
     }
+}
+
+fn handle_data_message(data_msg: DataMsg) -> Option<Message> {
+    match data_msg{
+        // DataMsg::Put(_, _) => todo!(),
+        // DataMsg::SubscriberMessage(_, _) => todo!(),
+    }
+    None
 }
