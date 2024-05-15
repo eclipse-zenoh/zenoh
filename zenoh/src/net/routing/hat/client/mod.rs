@@ -26,6 +26,7 @@ use std::{
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+    interest::InterestId,
     Oam,
 };
 use zenoh_result::ZResult;
@@ -285,6 +286,7 @@ impl HatContext {
 
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
+    remote_sub_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
@@ -295,6 +297,7 @@ impl HatFace {
     fn new() -> Self {
         Self {
             next_id: AtomicU32::new(0),
+            remote_sub_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),

@@ -27,9 +27,12 @@ use zenoh_protocol::{
         },
         WhatAmI, WireExpr,
     },
-    network::declare::{
-        common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
-        DeclareQueryable, QueryableId, UndeclareQueryable,
+    network::{
+        declare::{
+            common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
+            DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
+        },
+        interest::{InterestId, InterestMode},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -99,6 +102,7 @@ fn propagate_simple_queryable(
                 .local_qabls
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(res, &mut dst_face);
+            println!("Decled key = {key_expr:?}");
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
                     interest_id: None,
@@ -127,17 +131,11 @@ fn register_client_queryable(
     // Register queryable
     {
         let res = get_mut_unchecked(res);
-        get_mut_unchecked(res.session_ctxs.entry(face.id).or_insert_with(|| {
-            Arc::new(SessionContext {
-                face: face.clone(),
-                local_expr_id: None,
-                remote_expr_id: None,
-                subs: None,
-                qabl: None,
-                in_interceptor_cache: None,
-                e_interceptor_cache: None,
-            })
-        }))
+        get_mut_unchecked(
+            res.session_ctxs
+                .entry(face.id)
+                .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
+        )
         .qabl = Some(*qabl_info);
     }
     face_hat_mut!(face).remote_qabls.insert(id, res.clone());
@@ -260,6 +258,27 @@ lazy_static::lazy_static! {
 }
 
 impl HatQueriesTrait for HatCode {
+    fn declare_qabl_interest(
+        &self,
+        _tables: &mut Tables,
+        _face: &mut Arc<FaceState>,
+        _id: InterestId,
+        _res: Option<&mut Arc<Resource>>,
+        _mode: InterestMode,
+        _aggregate: bool,
+    ) {
+        // ignore
+    }
+
+    fn undeclare_qabl_interest(
+        &self,
+        _tables: &mut Tables,
+        _face: &mut Arc<FaceState>,
+        _id: InterestId,
+    ) {
+        // ignore
+    }
+
     fn declare_queryable(
         &self,
         tables: &mut Tables,
@@ -326,6 +345,16 @@ impl HatQueriesTrait for HatCode {
                 return EMPTY_ROUTE.clone();
             }
         };
+
+        if let Some(face) = tables.faces.values().find(|f| f.whatami != WhatAmI::Client) {
+            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+            route.push(QueryTargetQabl {
+                direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                complete: 0,
+                distance: f64::MAX,
+            });
+        }
+
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
             .as_ref()

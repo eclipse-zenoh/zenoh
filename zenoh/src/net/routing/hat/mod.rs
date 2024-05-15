@@ -17,7 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{any::Any, sync::Arc};
+use std::{any::Any, collections::HashMap, sync::Arc};
 
 use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
@@ -28,6 +28,7 @@ use zenoh_protocol::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
             SubscriberId,
         },
+        interest::{InterestId, InterestMode},
         Oam,
     },
 };
@@ -41,7 +42,7 @@ use super::{
     },
     router::RoutesIndexes,
 };
-use crate::net::runtime::Runtime;
+use crate::{key_expr::KeyExpr, runtime::Runtime};
 
 mod client;
 mod linkstate_peer;
@@ -135,6 +136,22 @@ pub(crate) trait HatBaseTrait {
 }
 
 pub(crate) trait HatPubSubTrait {
+    #[allow(clippy::too_many_arguments)] // TODO refactor
+    fn declare_sub_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        mode: InterestMode,
+        aggregate: bool,
+    );
+    fn undeclare_sub_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+    );
     fn declare_subscription(
         &self,
         tables: &mut Tables,
@@ -164,9 +181,31 @@ pub(crate) trait HatPubSubTrait {
     ) -> Arc<Route>;
 
     fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
+
+    fn get_matching_subscriptions(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatQueriesTrait {
+    #[allow(clippy::too_many_arguments)] // TODO refactor
+    fn declare_qabl_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        mode: InterestMode,
+        aggregate: bool,
+    );
+    fn undeclare_qabl_interest(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+    );
     fn declare_queryable(
         &self,
         tables: &mut Tables,
@@ -217,5 +256,22 @@ pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + S
             }
         }
         WhatAmI::Router => Box::new(router::HatCode {}),
+    }
+}
+
+trait CurrentFutureTrait {
+    fn future(&self) -> bool;
+    fn current(&self) -> bool;
+}
+
+impl CurrentFutureTrait for InterestMode {
+    #[inline]
+    fn future(&self) -> bool {
+        self == &InterestMode::Future || self == &InterestMode::CurrentFuture
+    }
+
+    #[inline]
+    fn current(&self) -> bool {
+        self == &InterestMode::Current || self == &InterestMode::CurrentFuture
     }
 }

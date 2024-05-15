@@ -534,6 +534,8 @@ impl Primitives for ClientPrimitives {
 }
 
 impl EPrimitives for ClientPrimitives {
+    fn send_interest(&self, _ctx: RoutingContext<zenoh_protocol::network::Interest>) {}
+
     fn send_declare(&self, ctx: RoutingContext<zenoh_protocol::network::Declare>) {
         match ctx.msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
