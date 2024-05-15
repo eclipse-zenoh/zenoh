@@ -73,6 +73,7 @@ macro_rules! unsafe_slice_mut {
 }
 
 pub mod buffer {
+    // filetag{rust.buffers}
     use alloc::{borrow::Cow, vec::Vec};
 
     pub trait Buffer {
@@ -113,6 +114,7 @@ pub mod buffer {
 }
 
 pub mod writer {
+    // filetag{rust.buffers}
     use core::num::NonZeroUsize;
 
     use crate::ZSlice;
@@ -157,6 +159,7 @@ pub mod writer {
 }
 
 pub mod reader {
+    // filetag{rust.buffers}
     use core::num::NonZeroUsize;
 
     use crate::ZSlice;

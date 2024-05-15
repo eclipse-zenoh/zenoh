@@ -1,5 +1,5 @@
 tags{api.bytes(), rust.bytes.z_bytes()}
-tags{api.bytes.deserialize(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut()}
+tags{api.bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_bytes.deserialize()}
 tags{api.bytes.new(), rust.bytes.z_bytes.new()}
 tags{api.bytes.serialize(), rust.bytes.z_bytes.serialize()}
 tags{api.encoding(), rust.encoding.encoding()}
@@ -11,8 +11,28 @@ tags{rust.buffers.has_reader()}
 tags{rust.buffers.reader()}
 tags{rust.buffers.split_buffer()}
 tags{rust.buffers.z_buf()}
+tags{rust.buffers.z_buf.clear()}
+tags{rust.buffers.z_buf.empty()}
+tags{rust.buffers.z_buf.push_zslice()}
+tags{rust.buffers.z_buf.rand()}
+tags{rust.buffers.z_buf.splice()}
+tags{rust.buffers.z_buf.to_zslice()}
+tags{rust.buffers.z_buf.zslices()}
+tags{rust.buffers.z_buf.zslices_mut()}
 tags{rust.buffers.z_buf_reader()}
 tags{rust.buffers.z_slice()}
+tags{rust.buffers.z_slice.as_slice()}
+tags{rust.buffers.z_slice.downcast_mut()}
+tags{rust.buffers.z_slice.downcast_ref()}
+tags{rust.buffers.z_slice.empty()}
+tags{rust.buffers.z_slice.is_empty()}
+tags{rust.buffers.z_slice.len()}
+tags{rust.buffers.z_slice.make()}
+tags{rust.buffers.z_slice.new()}
+tags{rust.buffers.z_slice.new_unchecked()}
+tags{rust.buffers.z_slice.rand()}
+tags{rust.buffers.z_slice.range()}
+tags{rust.buffers.z_slice.subslice()}
 tags{rust.buffers.z_slice_buffer()}
 tags{rust.bytes.deserialize()}
 tags{rust.bytes.option_z_bytes()}
@@ -23,7 +43,7 @@ tags{rust.bytes.string_or_base64.into_string()}
 tags{rust.bytes.string_or_base64.string()}
 tags{rust.bytes.z_bytes(), api.bytes()}
 tags{rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), api.bytes.deserialize()}
-tags{rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_bytes.deserialize(), api.bytes.deserialize()}
+tags{rust.bytes.z_bytes.deserialize_mut(), api.bytes.deserialize(), rust.bytes.z_bytes.deserialize()}
 tags{rust.bytes.z_bytes.empty()}
 tags{rust.bytes.z_bytes.from_reader()}
 tags{rust.bytes.z_bytes.into()}

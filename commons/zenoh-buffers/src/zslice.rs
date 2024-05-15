@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+// filetag{rust.buffers}
+
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
     any::Any,

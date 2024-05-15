@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.buffers}
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 use alloc::sync::Arc;
