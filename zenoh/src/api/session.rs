@@ -99,7 +99,6 @@ zconfigurable! {
     pub(crate) static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
     pub(crate) static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
     pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub(crate) static ref API_OPEN_SESSION_DELAY: u64 = 500;
 }
 
 pub(crate) struct SessionState {
@@ -865,8 +864,6 @@ impl Session {
             .await;
             session.owns_runtime = true;
             runtime.start().await?;
-            // Workaround for the declare_and_shoot problem
-            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
             Ok(session)
         })
     }
