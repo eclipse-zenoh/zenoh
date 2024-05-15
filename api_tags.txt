@@ -17,9 +17,9 @@ tags{rust.bytes.string_or_base64()}
 tags{rust.bytes.string_or_base64.base64()}
 tags{rust.bytes.string_or_base64.into_string()}
 tags{rust.bytes.string_or_base64.string()}
-tags{rust.bytes.z_bytes()}
-tags{rust.bytes.z_bytes.deserialize()}
-tags{rust.bytes.z_bytes.deserialize_mut()}
+tags{rust.bytes.z_bytes(), api.bytes}
+tags{rust.bytes.z_bytes.deserialize(), api.bytes.deserialize}
+tags{rust.bytes.z_bytes.deserialize_mut(), api.bytes.deserialize}
 tags{rust.bytes.z_bytes.empty()}
 tags{rust.bytes.z_bytes.from_reader()}
 tags{rust.bytes.z_bytes.into()}
@@ -27,9 +27,9 @@ tags{rust.bytes.z_bytes.into_mut()}
 tags{rust.bytes.z_bytes.is_empty()}
 tags{rust.bytes.z_bytes.iter()}
 tags{rust.bytes.z_bytes.len()}
-tags{rust.bytes.z_bytes.new()}
+tags{rust.bytes.z_bytes.new(), api.bytes.new}
 tags{rust.bytes.z_bytes.reader()}
-tags{rust.bytes.z_bytes.serialize()}
+tags{rust.bytes.z_bytes.serialize(), api.bytes.serialize}
 tags{rust.bytes.z_bytes.writer()}
 tags{rust.bytes.z_bytes_iterator()}
 tags{rust.bytes.z_bytes_reader()}
