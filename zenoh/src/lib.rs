@@ -397,16 +397,20 @@ pub mod shm {
             protocol_id::POSIX_PROTOCOL_ID,
         },
         provider::{
+            chunk::{AllocatedChunk, ChunkDescriptor},
             shared_memory_provider::{
-                AllocBuilder, AllocLayout, AllocLayoutAlignedBuilder, AllocLayoutBuilder,
-                AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
-                DeallocOptimal, DeallocYoungest, Deallocate, Defragment, DynamicProtocolID,
-                ForceDeallocPolicy, GarbageCollect, JustAlloc, ProtocolIDSource,
-                SharedMemoryProvider, SharedMemoryProviderBuilder,
+                AllocBuilder, AllocBuilder2, AllocLayout, AllocLayoutSizedBuilder, AllocPolicy,
+                AsyncAllocPolicy, BlockOn, DeallocEldest, DeallocOptimal, DeallocYoungest,
+                Deallocate, Defragment, DynamicProtocolID, ForceDeallocPolicy, GarbageCollect,
+                JustAlloc, ProtocolIDSource, SharedMemoryProvider, SharedMemoryProviderBuilder,
                 SharedMemoryProviderBuilderBackendID, SharedMemoryProviderBuilderID,
                 StaticProtocolID,
             },
-            types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
+            shared_memory_provider_backend::SharedMemoryProviderBackend,
+            types::{
+                AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
+                MemoryLayout, ZAllocError, ZLayoutAllocError, ZLayoutError,
+            },
         },
     };
 }

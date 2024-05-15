@@ -163,6 +163,17 @@ impl MemoryLayout {
     }
 }
 
+/// Layouting errors
+///
+/// IncorrectLayoutArgs: layout arguments are incorrect
+/// ProviderIncompatibleLayout: layout incompatible with provider
+#[zenoh_macros::unstable_doc]
+#[derive(Debug)]
+pub enum ZLayoutError {
+    IncorrectLayoutArgs,
+    ProviderIncompatibleLayout,
+}
+
 /// SHM chunk allocation result
 #[zenoh_macros::unstable_doc]
 pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
@@ -170,3 +181,18 @@ pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
 /// SHM buffer allocation result
 #[zenoh_macros::unstable_doc]
 pub type BufAllocResult = Result<ZShmMut, ZAllocError>;
+
+/// Layouting and allocation errors
+///
+/// Alloc: allocation error
+/// Layout: layouting error
+#[zenoh_macros::unstable_doc]
+#[derive(Debug)]
+pub enum ZLayoutAllocError {
+    Alloc(ZAllocError),
+    Layout(ZLayoutError),
+}
+
+/// SHM buffer layouting and allocation result
+#[zenoh_macros::unstable_doc]
+pub type BufLayoutAllocResult = Result<ZShmMut, ZLayoutAllocError>;
