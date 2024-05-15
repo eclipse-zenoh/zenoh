@@ -424,16 +424,15 @@ tags{rust.sample.source_info()}
 tags{rust.sample.source_sn()}
 tags{rust.sample.timestamp_builder_trait()}
 tags{rust.sample.value_builder_trait()}
-tags{rust.scout()}
-tags{rust.scouting.hello()}
-tags{rust.scouting.scout()}
-tags{rust.scouting.scout.stop()}
-tags{rust.scouting.scout_builder()}
-tags{rust.scouting.scout_builder.callback()}
-tags{rust.scouting.scout_builder.callback_mut()}
-tags{rust.scouting.scout_builder.with()}
-tags{rust.scouting.scout_inner.stop()}
-tags{rust.scouting.what_am_i()}
+tags{rust.scout(), api.scouting.hello}
+tags{rust.scouting.hello(), api.scouting.hello}
+tags{rust.scouting.scout(), api.scouting.scout}
+tags{rust.scouting.scout.stop(), api.scouting.stop}
+tags{rust.scouting.scout_builder(), api.scouting.scout}
+tags{rust.scouting.scout_builder.callback(), api.scouting.callback}
+tags{rust.scouting.scout_builder.callback_mut(), api.scouting.callback}
+tags{rust.scouting.scout_builder.with(), api.scouting.channel}
+tags{rust.scouting.what_am_i(), api.scouting.what_am_i}
 tags{rust.selector.parameters()}
 tags{rust.selector.parameters.into_owned()}
 tags{rust.selector.parameters.set_time_range()}

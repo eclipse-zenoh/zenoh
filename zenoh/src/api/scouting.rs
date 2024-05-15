@@ -219,7 +219,7 @@ impl ScoutInner {
     /// scout.stop();
     /// # }
     /// ```
-    pub fn stop(self) {
+    pub(crate) fn stop(self) {
         std::mem::drop(self);
     }
 }
