@@ -1,6 +1,7 @@
 tags{api.bytes(), rust.bytes.z_bytes()}
-tags{api.bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_bytes.deserialize()}
+tags{api.bytes.deserialize(), rust.bytes.string_or_base64(), rust.bytes.serialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.deserialize(), rust.bytes.string_or_base64.string(), rust.bytes.string_or_base64.base64(), rust.bytes.z_bytes.deserialize(), rust.bytes.string_or_base64.into_string()}
 tags{api.bytes.new(), rust.bytes.z_bytes.new()}
+tags{api.bytes.reader()}
 tags{api.bytes.serialize(), rust.bytes.z_bytes.serialize()}
 tags{api.encoding(), rust.encoding.encoding()}
 tags{api.key_expr(), rust.key_expr.key_expr()}
@@ -34,16 +35,16 @@ tags{rust.buffers.z_slice.rand()}
 tags{rust.buffers.z_slice.range()}
 tags{rust.buffers.z_slice.subslice()}
 tags{rust.buffers.z_slice_buffer()}
-tags{rust.bytes.deserialize()}
+tags{rust.bytes.deserialize(), rust.bytes.string_or_base64.into_string(), rust.bytes.serialize(), rust.bytes.string_or_base64.base64(), rust.bytes.z_bytes.deserialize(), rust.bytes.string_or_base64.string(), api.bytes.deserialize(), rust.bytes.string_or_base64(), rust.bytes.z_bytes.deserialize_mut()}
 tags{rust.bytes.option_z_bytes()}
-tags{rust.bytes.serialize()}
-tags{rust.bytes.string_or_base64()}
-tags{rust.bytes.string_or_base64.base64()}
-tags{rust.bytes.string_or_base64.into_string()}
-tags{rust.bytes.string_or_base64.string()}
+tags{rust.bytes.serialize(), rust.bytes.deserialize(), rust.bytes.string_or_base64.string(), api.bytes.deserialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.string_or_base64.base64()}
+tags{rust.bytes.string_or_base64(), rust.bytes.serialize(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), api.bytes.deserialize(), rust.bytes.string_or_base64.base64(), rust.bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_bytes.deserialize()}
+tags{rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.deserialize(), rust.bytes.z_bytes.deserialize(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.serialize(), rust.bytes.string_or_base64(), api.bytes.deserialize()}
+tags{rust.bytes.string_or_base64.into_string(), api.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.deserialize(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.string_or_base64(), rust.bytes.z_bytes.deserialize(), rust.bytes.string_or_base64.base64()}
+tags{rust.bytes.string_or_base64.string(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.serialize(), api.bytes.deserialize(), rust.bytes.z_bytes.deserialize(), rust.bytes.string_or_base64.base64(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.deserialize()}
 tags{rust.bytes.z_bytes(), api.bytes()}
-tags{rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), api.bytes.deserialize()}
-tags{rust.bytes.z_bytes.deserialize_mut(), api.bytes.deserialize(), rust.bytes.z_bytes.deserialize()}
+tags{rust.bytes.z_bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), api.bytes.deserialize(), rust.bytes.string_or_base64.string(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.string_or_base64.into_string()}
+tags{rust.bytes.z_bytes.deserialize_mut(), rust.bytes.serialize(), rust.bytes.string_or_base64.base64(), api.bytes.deserialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.z_bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.string_or_base64.string()}
 tags{rust.bytes.z_bytes.empty()}
 tags{rust.bytes.z_bytes.from_reader()}
 tags{rust.bytes.z_bytes.into()}
