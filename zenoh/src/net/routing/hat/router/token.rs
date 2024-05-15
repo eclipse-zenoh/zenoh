@@ -689,6 +689,7 @@ impl HatTokenTrait for HatCode {
         id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,
+        _interest_id: Option<InterestId>,
     ) {
         match face.whatami {
             WhatAmI::Router => {

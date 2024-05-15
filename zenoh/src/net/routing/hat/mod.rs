@@ -270,6 +270,7 @@ pub trait HatTokenTrait {
         id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,
+        interest_id: Option<InterestId>,
     );
 
     fn undeclare_token(

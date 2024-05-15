@@ -355,6 +355,7 @@ impl Primitives for Face {
                     m.id,
                     &m.wire_expr,
                     msg.ext_nodeid.node_id,
+                    msg.interest_id,
                 );
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
@@ -367,12 +368,34 @@ impl Primitives for Face {
                     msg.ext_nodeid.node_id,
                 );
             }
-            zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
+            zenoh_protocol::network::DeclareBody::DeclareFinal(DeclareFinal) => {
                 if let Some(id) = msg.interest_id {
                     get_mut_unchecked(&mut self.state.clone())
                         .local_interests
                         .entry(id)
                         .and_modify(|interest| interest.finalized = true);
+
+                    if let Some((query, cancellation_token)) =
+                        get_mut_unchecked(&mut self.state.clone())
+                            .pending_token_queries
+                            .remove(&id)
+                    {
+                        cancellation_token.cancel();
+                        if let Some(query) = Arc::into_inner(query) {
+                            query.src_face.primitives.clone().send_declare(
+                                RoutingContext::with_expr(
+                                    Declare {
+                                        interest_id: Some(query.src_interest_id),
+                                        ext_qos: ext::QoSType::default(),
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareFinal(DeclareFinal),
+                                    },
+                                    "".to_string(),
+                                ),
+                            );
+                        }
+                    }
                 }
             }
         }

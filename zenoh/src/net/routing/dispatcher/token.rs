@@ -41,6 +41,7 @@ pub(crate) fn declare_token(
     id: TokenId,
     expr: &WireExpr,
     node_id: NodeId,
+    interest_id: Option<InterestId>,
 ) {
     let rtables = zread!(tables.tables);
     match rtables
@@ -76,7 +77,7 @@ pub(crate) fn declare_token(
                     (res, wtables)
                 };
 
-            hat_code.declare_token(&mut wtables, face, id, &mut res, node_id);
+            hat_code.declare_token(&mut wtables, face, id, &mut res, node_id, interest_id);
             drop(wtables);
 
             // NOTE(fuzzypixelz): I removed all data route handling.

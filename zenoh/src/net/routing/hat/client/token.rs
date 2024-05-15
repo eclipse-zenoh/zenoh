@@ -109,10 +109,30 @@ fn declare_client_token(
     face: &mut Arc<FaceState>,
     id: TokenId,
     res: &mut Arc<Resource>,
+    interest_id: Option<InterestId>,
 ) {
     register_client_token(tables, face, id, res);
 
     propagate_simple_token(tables, res, face);
+
+    let wire_expr = Resource::decl_key(&res, face);
+    if let Some(interest_id) = interest_id {
+        if let Some((query, _)) = face.pending_token_queries.get(&interest_id) {
+            query
+                .src_face
+                .primitives
+                .send_declare(RoutingContext::with_expr(
+                    Declare {
+                        interest_id: Some(query.src_interest_id),
+                        ext_qos: ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                    },
+                    res.expr(),
+                ))
+        }
+    }
 }
 
 #[inline]
@@ -211,8 +231,9 @@ impl HatTokenTrait for HatCode {
         id: TokenId,
         res: &mut Arc<Resource>,
         _node_id: NodeId,
+        interest_id: Option<InterestId>,
     ) {
-        declare_client_token(tables, face, id, res);
+        declare_client_token(tables, face, id, res, interest_id);
     }
 
     fn undeclare_token(

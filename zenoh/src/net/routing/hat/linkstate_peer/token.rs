@@ -548,6 +548,7 @@ impl HatTokenTrait for HatCode {
         id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,
+        _interest_id: Option<InterestId>,
     ) {
         if face.whatami != WhatAmI::Client {
             if let Some(peer) = get_peer(tables, face, node_id) {

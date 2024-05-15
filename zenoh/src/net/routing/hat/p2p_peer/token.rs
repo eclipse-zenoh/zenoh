@@ -308,6 +308,7 @@ impl HatTokenTrait for HatCode {
         id: TokenId,
         res: &mut Arc<Resource>,
         _node_id: NodeId,
+        _interest_id: Option<InterestId>,
     ) {
         declare_client_token(tables, face, id, res)
     }
