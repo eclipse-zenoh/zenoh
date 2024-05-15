@@ -22,13 +22,12 @@ use std::{
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::network::request;
 
 use super::{
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
-    query::{QueryConsolidation, QueryTarget, Reply},
-    sample::{Locality, Sample, SourceInfo},
+    query::Reply,
+    sample::{Locality, Sample},
     session::{Session, SessionRef, Undeclarable},
     subscriber::{Subscriber, SubscriberInner},
     Id,

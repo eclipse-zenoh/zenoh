@@ -115,7 +115,7 @@ fn declare_client_token(
 
     propagate_simple_token(tables, res, face);
 
-    let wire_expr = Resource::decl_key(&res, face);
+    let wire_expr = Resource::decl_key(res, face);
     if let Some(interest_id) = interest_id {
         if let Some((query, _)) = face.pending_token_queries.get(&interest_id) {
             query
