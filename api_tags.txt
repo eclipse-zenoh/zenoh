@@ -432,7 +432,7 @@ tags{rust.scouting.scout_builder(), api.scouting.scout}
 tags{rust.scouting.scout_builder.callback(), api.scouting.callback}
 tags{rust.scouting.scout_builder.callback_mut(), api.scouting.callback}
 tags{rust.scouting.scout_builder.with(), api.scouting.channel}
-tags{rust.scouting.what_am_i(), api.scouting.what_am_i}
+tags{rust.scouting.what_am_i(), api.scouting.whatami}
 tags{rust.selector.parameters()}
 tags{rust.selector.parameters.into_owned()}
 tags{rust.selector.parameters.set_time_range()}
