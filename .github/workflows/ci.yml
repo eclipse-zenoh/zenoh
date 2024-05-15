@@ -44,8 +44,8 @@ jobs:
       - name: Update Stable Rust toolchain
         run: rustup update stable
 
-      - name: Install dependencies
-        run: cargo +stable install cargo-deny --locked
+      - name: Install latest cargo-deny
+        uses: taiki-e/install-action@cargo-deny
 
       - name: Code format check
         run: cargo fmt --check
