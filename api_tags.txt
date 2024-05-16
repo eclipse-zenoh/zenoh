@@ -5,6 +5,7 @@ tags{api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into
 tags{api.bytes.serialize(), rust.bytes.z_bytes.serialize()}
 tags{api.bytes.write(), rust.bytes.z_bytes.writer(), rust.bytes.z_bytes_writer()}
 tags{api.encoding(), rust.encoding.encoding()}
+tags{api.get.callback()}
 tags{api.key_expr(), rust.key_expr.key_expr()}
 tags{api.key_expr.autocanonize(), rust.key_expr.key_expr.autocanonize()}
 tags{api.query.callback()}
@@ -18,6 +19,7 @@ tags{api.scouting.stop(), rust.scouting.scout.stop()}
 tags{api.scouting.whatami(), rust.scouting.what_am_i()}
 tags{api.session.close(), rust.session.session.close()}
 tags{api.session.open(), rust.session.open()}
+tags{api.subscriber.callback()}
 tags{api.system.clock()}
 tags{api.system.clock.elapsed()}
 tags{api.system.clock.now()}
