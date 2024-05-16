@@ -254,6 +254,8 @@ validated_struct::validator! {
                 address: Option<SocketAddr>,
                 /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
                 interface: Option<String>,
+                /// The time-to-live on multicast scouting packets. (default: 1)
+                pub ttl: Option<u32>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
