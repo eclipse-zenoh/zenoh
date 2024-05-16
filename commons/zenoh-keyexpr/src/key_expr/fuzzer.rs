@@ -56,8 +56,8 @@ impl<Rng: rand::Rng> Iterator for KeyExprFuzzer<Rng> {
         let mut next = Vec::new();
         make(&mut next, &mut self.0);
         let mut next = String::from_utf8(next).unwrap();
-        if let Some(n) = next.strip_prefix('/') {
-            next = n.to_owned()
+        if let Some(n) = next.strip_prefix('/').map(ToOwned::to_owned) {
+            next = n
         }
         Some(OwnedKeyExpr::autocanonize(next).unwrap())
     }

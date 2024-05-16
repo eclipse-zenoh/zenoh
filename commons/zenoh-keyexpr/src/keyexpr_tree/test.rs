@@ -164,7 +164,7 @@ fn test_keyset<K: Deref<Target = keyexpr> + Debug>(keys: &[K]) {
                 assert!(expected.insert(k, v).is_none());
             }
         }
-        exclone = expected.clone();
+        exclone.clone_from(&expected);
         for node in tree.included_nodes(target) {
             let ke = node.keyexpr();
             let weight = node.weight();
@@ -204,7 +204,7 @@ fn test_keyset<K: Deref<Target = keyexpr> + Debug>(keys: &[K]) {
                 assert!(expected.insert(k, v).is_none());
             }
         }
-        exclone = expected.clone();
+        exclone.clone_from(&expected);
         for node in tree.nodes_including(dbg!(target)) {
             let ke = node.keyexpr();
             let weight = node.weight();
@@ -303,7 +303,7 @@ fn test_keyset_vec<K: Deref<Target = keyexpr>>(keys: &[K]) {
                 assert!(expected.insert(k, v).is_none());
             }
         }
-        exclone = expected.clone();
+        exclone.clone_from(&expected);
         for node in tree.included_nodes(target) {
             let ke = node.keyexpr();
             let weight = node.weight();

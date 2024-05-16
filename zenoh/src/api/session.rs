@@ -537,10 +537,11 @@ impl Session {
                 self.runtime.close().await?;
             }
             let mut state = zwrite!(self.state);
-            state.primitives.as_ref().unwrap().send_close();
             // clean up to break cyclic references from self.state to itself
-            state.primitives.take();
+            let primitives = state.primitives.take();
             state.queryables.clear();
+            drop(state);
+            primitives.as_ref().unwrap().send_close();
             self.alive = false;
             Ok(())
         })
@@ -2669,11 +2670,6 @@ impl crate::net::primitives::EPrimitives for Session {
     #[inline]
     fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
         (self as &dyn Primitives).send_response_final(ctx.msg)
-    }
-
-    #[inline]
-    fn send_close(&self) {
-        (self as &dyn Primitives).send_close()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

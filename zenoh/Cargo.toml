@@ -127,6 +127,7 @@ name = "zenoh"
 # NOTE: if you change this, also change it in .github/workflows/release.yml in "doc" job.
 [package.metadata.docs.rs]
 features = ["unstable"]
+rustdoc-args = ["--cfg", "doc_auto_cfg"]
 
 [package.metadata.deb]
 name = "zenoh"

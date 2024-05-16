@@ -19,8 +19,5 @@ serde = { workspace = true }
 futures = { workspace = true }
 lazy_static = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
-tracing = { workspace = true }
 zenoh-result = { workspace = true, features = ["std"] }
-zenoh-protocol = { workspace = true }
-zenoh-collections = { workspace = true, features = ["std"] }
 zenoh-macros = { workspace = true }
