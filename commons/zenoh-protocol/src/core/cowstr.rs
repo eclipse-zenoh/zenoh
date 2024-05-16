@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
 use core::{
     fmt::{Debug, Display, Formatter},

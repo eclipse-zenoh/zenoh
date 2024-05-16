@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 use crate::{core::WireExpr, network::RequestId, zenoh::ResponseBody};
 
 /// # Response message

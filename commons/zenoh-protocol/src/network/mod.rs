@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 pub mod declare;
 pub mod interest;
 pub mod oam;

@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 pub mod close;
 pub mod fragment;
 pub mod frame;

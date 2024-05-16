@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 use core::sync::atomic::AtomicU32;
 
 use crate::{core::WireExpr, zenoh::RequestBody};

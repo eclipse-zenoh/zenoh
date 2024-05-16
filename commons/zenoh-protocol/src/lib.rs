@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+// filetag{rust.internal.protocol}
 //! ⚠️ WARNING ⚠️
 //!
 //! This crate is intended for Zenoh's internal use.

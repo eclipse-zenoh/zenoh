@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+// filetag{rust.internal.protocol}
 use alloc::{
     boxed::Box,
     format,
@@ -28,6 +28,7 @@ pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
 
+// filetag{rust.time}
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
 
@@ -336,6 +337,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
+// filetag{rust.subscriber}
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Reliability {
@@ -374,6 +376,7 @@ impl Channel {
     };
 }
 
+// filetag{rust.publication}
 /// The kind of congestion control.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]

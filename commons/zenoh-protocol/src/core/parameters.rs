@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 pub(super) const LIST_SEPARATOR: char = ';';
 pub(super) const FIELD_SEPARATOR: char = '=';
 pub(super) const VALUE_SEPARATOR: char = '|';

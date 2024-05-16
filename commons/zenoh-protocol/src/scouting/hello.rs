@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.scouting}
 use alloc::vec::Vec;
 use core::fmt;
 

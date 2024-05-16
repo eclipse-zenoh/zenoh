@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 use alloc::{string::String, vec::Vec};
 
 use crate::common::ZExtUnknown;

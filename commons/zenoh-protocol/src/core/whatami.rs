@@ -17,6 +17,7 @@ use core::{convert::TryFrom, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
 use const_format::formatcp;
 use zenoh_result::{bail, ZError};
 
+// filetag{rust.scouting}
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WhatAmI {

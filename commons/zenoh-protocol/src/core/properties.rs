@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 use alloc::{
     borrow::Cow,
     string::{String, ToString},
@@ -52,6 +53,7 @@ use super::parameters::{Parameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPAR
 /// let pi = Properties::from_iter(vec![("a", "1"), ("b", "2"), ("c", "3|4|5"), ("d", "6")]);
 /// assert_eq!(p, pi);
 /// ```
+/// filetag{rust.selector}
 #[derive(Clone, PartialEq, Eq, Hash, Default)]
 pub struct Properties<'s>(Cow<'s, str>);
 

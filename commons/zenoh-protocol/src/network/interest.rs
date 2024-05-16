@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 use core::{
     fmt::{self, Debug},
     ops::{Add, AddAssign, Sub, SubAssign},

@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.internal.protocol}
 use alloc::{borrow::ToOwned, format, string::String};
 use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
 
