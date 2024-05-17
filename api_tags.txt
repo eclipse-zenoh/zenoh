@@ -20,29 +20,17 @@ tags{api.bytes.new(), rust.bytes.z_bytes.empty(), rust.bytes.z_bytes.new()}
 tags{api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into(), rust.bytes.z_bytes.into_mut(), rust.bytes.z_bytes.is_empty(), rust.bytes.z_bytes.iter(), rust.bytes.z_bytes.len(), rust.bytes.z_bytes.reader(), rust.bytes.z_bytes_iterator(), rust.bytes.z_bytes_reader()}
 tags{api.bytes.serialize(), rust.bytes.z_bytes.serialize()}
 tags{api.bytes.write(), rust.bytes.z_bytes.writer(), rust.bytes.z_bytes_writer()}
-tags{api.collections.zslice_array()}
-tags{api.collections.zslice_map()}
 tags{api.encoding(), rust.encoding.encoding()}
-tags{api.get.callback()}
 tags{api.key_expr(), rust.key_expr.key_expr()}
 tags{api.key_expr.autocanonize(), rust.key_expr.key_expr.autocanonize()}
-tags{api.query.callback()}
 tags{api.scouting.callback(), rust.scouting.scout_builder.callback(), rust.scouting.scout_builder.callback_mut()}
 tags{api.scouting.channel(), rust.scouting.scout_builder.with()}
 tags{api.scouting.hello(), rust.scout(), rust.scouting.hello()}
-tags{api.scouting.hello.locators()}
-tags{api.scouting.hello.zid()}
 tags{api.scouting.scout(), rust.scouting.scout(), rust.scouting.scout_builder()}
 tags{api.scouting.stop(), rust.scouting.scout.stop()}
 tags{api.scouting.whatami(), rust.scouting.what_am_i()}
 tags{api.session.close(), rust.session.session.close()}
 tags{api.session.open(), rust.session.open()}
-tags{api.subscriber()}
-tags{api.subscriber.callback()}
-tags{api.subscriber.reliability()}
-tags{api.system.clock()}
-tags{api.system.clock.elapsed()}
-tags{api.system.clock.now()}
 tags{rust.buffers.has_reader(), api.buffers.read(), rust.buffers.reader(), rust.buffers.z_buf_reader()}
 tags{rust.buffers.has_reader.reader()}
 tags{rust.buffers.reader(), api.buffers.read(), rust.buffers.has_reader(), rust.buffers.z_buf_reader()}
@@ -180,7 +168,6 @@ tags{rust.encoding.encoding.z_e_n_o_h__f_l_o_a_t()}
 tags{rust.encoding.encoding.z_e_n_o_h__i_n_t()}
 tags{rust.encoding.encoding.z_e_n_o_h__s_t_r_i_n_g()}
 tags{rust.encoding.encoding.z_e_n_o_h__u_i_n_t()}
-tags{rust.encoding.encoding_mapping()}
 tags{rust.f_e_a_t_u_r_e_s()}
 tags{rust.handlers.callback()}
 tags{rust.handlers.callback_drop()}
@@ -352,7 +339,6 @@ tags{rust.publication.publisher.into_arc()}
 tags{rust.publication.publisher.key_expr()}
 tags{rust.publication.publisher.matching_listener()}
 tags{rust.publication.publisher.matching_status()}
-tags{rust.publication.publisher.publisher_declarations()}
 tags{rust.publication.publisher.publisher_declarations.main()}
 tags{rust.publication.publisher.publisher_declarations.matching_listener()}
 tags{rust.publication.publisher.put()}
@@ -579,7 +565,6 @@ tags{rust.session.session.hlc()}
 tags{rust.session.session.into_arc()}
 tags{rust.session.session.leak()}
 tags{rust.session.session.put()}
-tags{rust.session.session.session_declarations()}
 tags{rust.session.session.session_declarations.declare_publisher()}
 tags{rust.session.session.session_declarations.declare_queryable()}
 tags{rust.session.session.session_declarations.declare_subscriber()}
@@ -591,7 +576,6 @@ tags{rust.session.session.zid()}
 tags{rust.session.session_ref()}
 tags{rust.session.session_ref.borrow()}
 tags{rust.session.session_ref.shared()}
-tags{rust.session.undeclarable()}
 tags{rust.session.undeclarable.undeclare_inner()}
 tags{rust.shm.alloc_alignment()}
 tags{rust.shm.alloc_builder()}
