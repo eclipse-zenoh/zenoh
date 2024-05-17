@@ -23,34 +23,33 @@ tags{api.subscriber.callback()}
 tags{api.system.clock()}
 tags{api.system.clock.elapsed()}
 tags{api.system.clock.now()}
-tags{rust.buffers.has_reader()}
-tags{rust.buffers.reader()}
-tags{rust.buffers.split_buffer()}
-tags{rust.buffers.z_buf()}
-tags{rust.buffers.z_buf.clear()}
-tags{rust.buffers.z_buf.empty()}
-tags{rust.buffers.z_buf.push_zslice()}
-tags{rust.buffers.z_buf.rand()}
-tags{rust.buffers.z_buf.splice()}
-tags{rust.buffers.z_buf.to_zslice()}
-tags{rust.buffers.z_buf.zslices()}
-tags{rust.buffers.z_buf.zslices_mut()}
-tags{rust.buffers.z_buf_reader()}
-tags{rust.buffers.z_slice()}
-tags{rust.buffers.z_slice.as_slice()}
-tags{rust.buffers.z_slice.downcast_mut()}
-tags{rust.buffers.z_slice.downcast_ref()}
-tags{rust.buffers.z_slice.empty()}
-tags{rust.buffers.z_slice.is_empty()}
-tags{rust.buffers.z_slice.kind()}
-tags{rust.buffers.z_slice.len()}
-tags{rust.buffers.z_slice.make()}
-tags{rust.buffers.z_slice.new()}
-tags{rust.buffers.z_slice.new_unchecked()}
-tags{rust.buffers.z_slice.rand()}
-tags{rust.buffers.z_slice.range()}
-tags{rust.buffers.z_slice.subslice()}
-tags{rust.buffers.z_slice_buffer()}
+tags{rust.buffers.has_reader(), api.buffers.read}
+tags{rust.buffers.reader(), api.buffers.read}
+tags{rust.buffers.split_buffer(), api.buffers}
+tags{rust.buffers.z_buf(), api.buffers.zbuf}
+tags{rust.buffers.z_buf.clear(), api.buffers.zbuf.clear}
+tags{rust.buffers.z_buf.empty(), api.buffers.zbuf.new.empty}
+tags{rust.buffers.z_buf.push_zslice(), api.buffers.zbuf.push_slice}
+tags{rust.buffers.z_buf.splice(), api.buffers.zbuf.splice}
+tags{rust.buffers.z_buf.to_zslice(), api.buffers.zbuf.to_slice}
+tags{rust.buffers.z_buf.zslices(), api.buffers.zbuf.zslices}
+tags{rust.buffers.z_buf.zslices_mut(), api.buffers.zbuf.zslices}
+tags{rust.buffers.z_buf_reader(), api.buffers.read}
+tags{rust.buffers.z_slice(), api.buffers.zslice}
+tags{rust.buffers.z_slice.as_slice(), api.buffers.zslice}
+tags{rust.buffers.z_slice.downcast_mut(), api.buffers.zslice.data}
+tags{rust.buffers.z_slice.downcast_ref(), api.buffers.zslice.data}
+tags{rust.buffers.z_slice.empty(), api.buffers.zslice.new}
+tags{rust.buffers.z_slice.is_empty(), api.buffers.zslice.is_empty}
+tags{rust.buffers.z_slice.kind(), api.buffers.zslice.kind}
+tags{rust.buffers.z_slice.len(), api.buffers.zslice.len}
+tags{rust.buffers.z_slice.make(), api.buffers.zslice.new}
+tags{rust.buffers.z_slice.new(), api.buffers.zslice.new}
+tags{rust.buffers.z_slice.new_unchecked(), api.buffers.zslice.new}
+
+tags{rust.buffers.z_slice.range(), api.buffer.zslice.data}
+tags{rust.buffers.z_slice.subslice(), api.buffer.zslice.data}
+tags{rust.buffers.z_slice_buffer(), api.buffers.zslice.data}
 tags{rust.bytes.deserialize(), api.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
 tags{rust.bytes.option_z_bytes(), api.bytes(), rust.bytes.z_bytes()}
 tags{rust.bytes.serialize(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
@@ -287,6 +286,7 @@ tags{rust.publication.matching_listener.undeclare()}
 tags{rust.publication.matching_listener_builder()}
 tags{rust.publication.matching_listener_builder.callback()}
 tags{rust.publication.matching_listener_builder.callback_mut()}
+tags{rust.publication.matching_listener_builder.handler()}
 tags{rust.publication.matching_listener_builder.with()}
 tags{rust.publication.matching_listener_inner.undeclare()}
 tags{rust.publication.matching_listener_undeclaration()}

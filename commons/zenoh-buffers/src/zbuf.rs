@@ -738,6 +738,7 @@ impl<'a> io::Write for ZBufWriter<'a> {
 }
 
 #[cfg(feature = "test")]
+// tags{}
 impl ZBuf {
     pub fn rand(len: usize) -> Self {
         let mut zbuf = ZBuf::empty();
