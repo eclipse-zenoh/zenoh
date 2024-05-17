@@ -42,6 +42,7 @@ tags{rust.buffers.z_slice.downcast_mut()}
 tags{rust.buffers.z_slice.downcast_ref()}
 tags{rust.buffers.z_slice.empty()}
 tags{rust.buffers.z_slice.is_empty()}
+tags{rust.buffers.z_slice.kind()}
 tags{rust.buffers.z_slice.len()}
 tags{rust.buffers.z_slice.make()}
 tags{rust.buffers.z_slice.new()}
@@ -150,6 +151,8 @@ tags{rust.encoding.encoding_mapping()}
 tags{rust.f_e_a_t_u_r_e_s()}
 tags{rust.handlers.callback()}
 tags{rust.handlers.callback_drop()}
+tags{rust.handlers.callback_drop.callback()}
+tags{rust.handlers.callback_drop.drop()}
 tags{rust.handlers.default_handler()}
 tags{rust.handlers.fifo_channel()}
 tags{rust.handlers.fifo_channel.new()}
@@ -232,6 +235,9 @@ tags{rust.liveliness.liveliness_subscriber_builder.callback_mut()}
 tags{rust.liveliness.liveliness_subscriber_builder.with()}
 tags{rust.liveliness.liveliness_token()}
 tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder()}
+tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder.handler()}
+tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder.key_expr()}
+tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder.session()}
 tags{rust.liveliness.liveliness_token.undeclare()}
 tags{rust.liveliness.liveliness_token_builder()}
 tags{rust.liveliness.liveliness_token_undeclaration()}
@@ -239,7 +245,9 @@ tags{rust.open()}
 tags{rust.plugins.p_l_u_g_i_n__p_r_e_f_i_x()}
 tags{rust.plugins.plugins_manager()}
 tags{rust.plugins.response()}
+tags{rust.plugins.response.key()}
 tags{rust.plugins.response.new()}
+tags{rust.plugins.response.value()}
 tags{rust.plugins.running_plugin()}
 tags{rust.plugins.running_plugin_trait()}
 tags{rust.plugins.zenoh_plugin()}
@@ -435,19 +443,38 @@ tags{rust.sample.sample_builder_delete()}
 tags{rust.sample.sample_builder_put()}
 tags{rust.sample.sample_builder_trait()}
 tags{rust.sample.sample_fields()}
+tags{rust.sample.sample_fields.attachment()}
+tags{rust.sample.sample_fields.congestion_control()}
+tags{rust.sample.sample_fields.encoding()}
+tags{rust.sample.sample_fields.express()}
+tags{rust.sample.sample_fields.key_expr()}
+tags{rust.sample.sample_fields.kind()}
+tags{rust.sample.sample_fields.payload()}
+tags{rust.sample.sample_fields.priority()}
+tags{rust.sample.sample_fields.source_info()}
+tags{rust.sample.sample_fields.timestamp()}
 tags{rust.sample.sample_kind()}
 tags{rust.sample.sample_kind.delete()}
 tags{rust.sample.sample_kind.put()}
 tags{rust.sample.source_info()}
+tags{rust.sample.source_info.source_id()}
+tags{rust.sample.source_info.source_sn()}
 tags{rust.sample.source_sn()}
 tags{rust.sample.timestamp_builder_trait()}
 tags{rust.sample.value_builder_trait()}
 tags{rust.scout(), api.scouting.hello(), rust.scouting.hello()}
 tags{rust.scouting.hello(), api.scouting.hello(), rust.scout()}
+tags{rust.scouting.hello.locators()}
 tags{rust.scouting.hello.rand()}
+tags{rust.scouting.hello.version()}
+tags{rust.scouting.hello.whatami()}
+tags{rust.scouting.hello.zid()}
 tags{rust.scouting.scout(), api.scouting.scout(), rust.scouting.scout_builder()}
 tags{rust.scouting.scout.rand()}
 tags{rust.scouting.scout.stop(), api.scouting.stop()}
+tags{rust.scouting.scout.version()}
+tags{rust.scouting.scout.what()}
+tags{rust.scouting.scout.zid()}
 tags{rust.scouting.scout_builder(), api.scouting.scout(), rust.scouting.scout()}
 tags{rust.scouting.scout_builder.callback(), api.scouting.callback(), rust.scouting.scout_builder.callback_mut()}
 tags{rust.scouting.scout_builder.callback_mut(), api.scouting.callback(), rust.scouting.scout_builder.callback()}
@@ -572,8 +599,12 @@ tags{rust.subscriber.subscriber_builder.allowed_origin()}
 tags{rust.subscriber.subscriber_builder.best_effort()}
 tags{rust.subscriber.subscriber_builder.callback()}
 tags{rust.subscriber.subscriber_builder.callback_mut()}
+tags{rust.subscriber.subscriber_builder.handler()}
+tags{rust.subscriber.subscriber_builder.key_expr()}
+tags{rust.subscriber.subscriber_builder.origin()}
 tags{rust.subscriber.subscriber_builder.reliability()}
 tags{rust.subscriber.subscriber_builder.reliable()}
+tags{rust.subscriber.subscriber_builder.session()}
 tags{rust.subscriber.subscriber_builder.with()}
 tags{rust.subscriber.subscriber_inner.undeclare()}
 tags{rust.subscriber.subscriber_undeclaration()}
