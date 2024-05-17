@@ -50,7 +50,7 @@ async fn main() -> Result<(), ZError> {
 
     // Create allocation layout for series of similar allocations
     println!("Allocating Shared Memory Buffer...");
-    let layout = provider.alloc_layout().size(1024).res().unwrap();
+    let layout = provider.alloc(1024).into_layout().unwrap();
 
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
@@ -60,7 +60,6 @@ async fn main() -> Result<(), ZError> {
         let mut sbuf = layout
             .alloc()
             .with_policy::<BlockOn<GarbageCollect>>()
-            .res_async()
             .await
             .unwrap();
 

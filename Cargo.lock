@@ -5654,10 +5654,7 @@ dependencies = [
  "ron",
  "serde",
  "tokio",
- "tracing",
- "zenoh-collections",
  "zenoh-macros",
- "zenoh-protocol",
  "zenoh-result",
 ]
 

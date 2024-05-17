@@ -20,8 +20,8 @@ edition = { workspace = true }
 publish = false
 
 [features]
-default = ["no_mangle", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
-no_mangle = []
+default = ["dynamic_plugin", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
+dynamic_plugin = []
 
 [lib]
 # When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zenoh_plugin_example"

@@ -529,11 +529,6 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
         (self as &dyn Primitives).send_response_final(ctx.msg)
     }
 
-    #[inline]
-    fn send_close(&self) {
-        (self as &dyn Primitives).send_close()
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -789,6 +784,8 @@ fn plugins_data(context: &AdminContext, query: Query) {
 
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 fn plugins_status(context: &AdminContext, query: Query) {
+    use crate::bytes::{Serialize, ZSerde};
+
     let selector = query.selector();
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
@@ -803,11 +800,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
-                            .reply(
-                                key_expr,
-                                serde_json::to_string(plugin.path())
-                                    .unwrap_or_else(|_| String::from("{}")),
-                            )
+                            .reply(key_expr, ZSerde.serialize(plugin.path()))
                             .wait()
                         {
                             tracing::error!("Error sending AdminSpace reply: {:?}", e);

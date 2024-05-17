@@ -171,7 +171,6 @@ pub enum History {
     All,
 }
 
-///
 pub enum StorageInsertionResult {
     Outdated,
     Inserted,

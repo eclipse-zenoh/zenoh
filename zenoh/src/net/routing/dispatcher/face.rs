@@ -130,7 +130,7 @@ impl FaceState {
 
     pub(crate) fn get_next_local_id(&self) -> ExprId {
         let mut id = 1;
-        while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
+        while self.local_mappings.contains_key(&id) || self.remote_mappings.contains_key(&id) {
             id += 1;
         }
         id
@@ -348,6 +348,7 @@ impl Primitives for Face {
             &self.state,
             &msg.wire_expr,
             msg.ext_qos,
+            msg.ext_tstamp,
             msg.payload,
             msg.ext_nodeid.node_id,
         );
@@ -360,10 +361,10 @@ impl Primitives for Face {
                     &self.tables,
                     &self.state,
                     &msg.wire_expr,
-                    // parameters,
                     msg.id,
                     msg.ext_target,
-                    // consolidation,
+                    msg.ext_budget,
+                    msg.ext_timeout,
                     msg.payload,
                     msg.ext_nodeid.node_id,
                 );

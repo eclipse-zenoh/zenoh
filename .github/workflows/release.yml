@@ -160,33 +160,11 @@ jobs:
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-dockerhub.yml@main
     with:
       no-build: true
-      live-run: true
+      live-run: ${{ inputs.live-run || false }}
       version: ${{ needs.tag.outputs.version }}
       repo: ${{ github.repository }}
       branch: ${{ needs.tag.outputs.branch }}
-      tags: "eclipse/zenoh:${{ needs.tag.outputs.version }}"
-      binary: zenohd
-      files: |
-        zenohd
-        libzenoh_plugin_rest.so
-        libzenoh_plugin_storage_manager.so
-      platforms: |
-        linux/arm64
-        linux/amd64
-      licenses: EPL-2.0 OR Apache-2.0
-    secrets: inherit
-
-  ghcr:
-    name: Publish container image to GitHub Container Registry
-    needs: [tag, build-standalone]
-    uses: eclipse-zenoh/ci/.github/workflows/release-crates-ghcr.yml@main
-    with:
-      no-build: true
-      live-run: true
-      version: ${{ needs.tag.outputs.version }}
-      repo: ${{ github.repository }}
-      branch: ${{ needs.tag.outputs.branch }}
-      tags: "ghcr.io/${{ github.repository }}:${{ needs.tag.outputs.version }}"
+      image: "eclipse/zenoh"
       binary: zenohd
       files: |
         zenohd

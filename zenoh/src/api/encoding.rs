@@ -723,6 +723,7 @@ impl fmt::Display for Encoding {
     }
 }
 
+#[allow(dead_code)]
 // - Encoding trait
 pub trait EncodingMapping {
     const ENCODING: Encoding;

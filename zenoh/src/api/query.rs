@@ -429,17 +429,11 @@ pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
 pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 #[zenoh_macros::unstable]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ReplyKeyExpr {
     Any,
+    #[default]
     MatchingQuery,
-}
-
-#[zenoh_macros::unstable]
-impl Default for ReplyKeyExpr {
-    fn default() -> Self {
-        ReplyKeyExpr::MatchingQuery
-    }
 }
 
 impl<Handler> Resolvable for GetBuilder<'_, '_, Handler>

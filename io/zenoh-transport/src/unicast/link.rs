@@ -67,7 +67,9 @@ impl TransportLinkUnicast {
                     .batch
                     .is_compression
                     .then_some(BBuf::with_capacity(
-                        lz4_flex::block::get_maximum_output_size(self.config.batch.mtu as usize),
+                        lz4_flex::block::get_maximum_output_size(
+                            self.config.batch.max_buffer_size()
+                        ),
                     )),
                 None
             ),
@@ -287,7 +289,21 @@ impl MaybeOpenAck {
 
     pub(crate) async fn send_open_ack(mut self) -> ZResult<()> {
         if let Some(msg) = self.open_ack {
-            return self.link.send(&msg.into()).await.map(|_| {});
+            zcondfeat!(
+                "transport_compression",
+                {
+                    // !!! Workaround !!! as the state of the link is set with compression once the OpenSyn is received.
+                    // Here we are disabling the compression just to send the OpenAck (that is not supposed to be compressed).
+                    // Then then we re-enable it, in case it was enabled, after the OpenAck has been sent.
+                    let compression = self.link.inner.config.batch.is_compression;
+                    self.link.inner.config.batch.is_compression = false;
+                    self.link.send(&msg.into()).await?;
+                    self.link.inner.config.batch.is_compression = compression;
+                },
+                {
+                    self.link.send(&msg.into()).await?;
+                }
+            )
         }
         Ok(())
     }

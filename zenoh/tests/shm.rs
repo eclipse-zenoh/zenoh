@@ -122,17 +122,14 @@ mod tests {
             let shm_segment_size = shm01.available();
 
             // Prepare a layout for allocations
-            let layout = shm01.alloc_layout().size(size).res().unwrap();
+            let layout = shm01.alloc(size).into_layout().unwrap();
 
             // Put data
             println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
             for c in 0..msg_count {
                 // Allocate new message
-                let sbuf = ztimeout!(layout
-                    .alloc()
-                    .with_policy::<BlockOn<GarbageCollect>>()
-                    .res_async())
-                .unwrap();
+                let sbuf =
+                    ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
                 println!("{c} created");
 
                 // Publish this message
@@ -179,7 +176,7 @@ mod tests {
             // Initiate logging
             zenoh_util::try_init_log_from_env();
 
-            let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
+            let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:19447"]).await;
             test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
             close_session(peer01, peer02).await;
         });
@@ -193,7 +190,7 @@ mod tests {
             zenoh_util::try_init_log_from_env();
 
             let (peer01, peer02) =
-                open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
+                open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;
             test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
             close_session(peer01, peer02).await;
         });

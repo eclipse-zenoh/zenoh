@@ -53,13 +53,8 @@ async fn main() {
     // NOTE: For buf's API please check z_bytes_shm.rs example
     println!("Allocating Shared Memory Buffer...");
     let mut sbuf = provider
-        .alloc_layout()
-        .size(1024)
-        .res()
-        .unwrap()
-        .alloc()
+        .alloc(1024)
         .with_policy::<BlockOn<GarbageCollect>>()
-        .res_async()
         .await
         .unwrap();
 

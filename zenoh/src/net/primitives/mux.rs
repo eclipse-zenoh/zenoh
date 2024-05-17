@@ -346,10 +346,6 @@ impl EPrimitives for Mux {
         }
     }
 
-    fn send_close(&self) {
-        // self.handler.closing().await;
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -669,10 +665,6 @@ impl EPrimitives for McastMux {
         if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
-    }
-
-    fn send_close(&self) {
-        // self.handler.closing().await;
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

@@ -114,6 +114,9 @@ zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 
+[dev-dependencies]
+tokio = { workspace = true }
+
 [build-dependencies]
 rustc_version = { workspace = true }
 
@@ -124,6 +127,7 @@ name = "zenoh"
 # NOTE: if you change this, also change it in .github/workflows/release.yml in "doc" job.
 [package.metadata.docs.rs]
 features = ["unstable"]
+rustdoc-args = ["--cfg", "doc_auto_cfg"]
 
 [package.metadata.deb]
 name = "zenoh"

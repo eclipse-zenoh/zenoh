@@ -101,10 +101,13 @@ pub mod buffer {
             let mut slices = self.slices();
             match slices.len() {
                 0 => Cow::Borrowed(b""),
-                // SAFETY: it's safe to use unwrap_unchecked() beacuse we are explicitly checking the length is 1.
-                1 => Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() }),
-                _ => Cow::Owned(slices.fold(Vec::new(), |mut acc, it| {
-                    acc.extend(it);
+                1 => {
+                    // SAFETY: unwrap here is safe because we have explicitly checked
+                    //         the iterator has 1 element.
+                    Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() })
+                }
+                _ => Cow::Owned(slices.fold(Vec::with_capacity(self.len()), |mut acc, it| {
+                    acc.extend_from_slice(it);
                     acc
                 })),
             }

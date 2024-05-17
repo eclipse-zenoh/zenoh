@@ -99,7 +99,6 @@ zconfigurable! {
     pub(crate) static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
     pub(crate) static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
     pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub(crate) static ref API_OPEN_SESSION_DELAY: u64 = 500;
 }
 
 pub(crate) struct SessionState {
@@ -538,10 +537,11 @@ impl Session {
                 self.runtime.close().await?;
             }
             let mut state = zwrite!(self.state);
-            state.primitives.as_ref().unwrap().send_close();
             // clean up to break cyclic references from self.state to itself
-            state.primitives.take();
+            let primitives = state.primitives.take();
             state.queryables.clear();
+            drop(state);
+            primitives.as_ref().unwrap().send_close();
             self.alive = false;
             Ok(())
         })
@@ -865,8 +865,6 @@ impl Session {
             .await;
             session.owns_runtime = true;
             runtime.start().await?;
-            // Workaround for the declare_and_shoot problem
-            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
             Ok(session)
         })
     }
@@ -2672,11 +2670,6 @@ impl crate::net::primitives::EPrimitives for Session {
     #[inline]
     fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
         (self as &dyn Primitives).send_response_final(ctx.msg)
-    }
-
-    #[inline]
-    fn send_close(&self) {
-        (self as &dyn Primitives).send_close()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

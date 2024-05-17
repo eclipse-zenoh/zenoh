@@ -39,7 +39,7 @@ use crate::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
-        router::RoutesIndexes,
+        router::{update_data_routes_from, RoutesIndexes},
         RoutingContext, PREFIX_LIVELINESS,
     },
 };
@@ -358,6 +358,10 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             }
         }
     }
+    // recompute routes
+    // TODO: disable data routes and recompute them in parallel to avoid holding
+    // tables write lock for a long time on peer conenction.
+    update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 impl HatPubSubTrait for HatCode {
@@ -565,6 +569,21 @@ impl HatPubSubTrait for HatCode {
                 return Arc::new(route);
             }
         };
+
+        for face in tables.faces.values().filter(|f| {
+            f.whatami == WhatAmI::Peer
+                && !f
+                    .local_interests
+                    .get(&0)
+                    .map(|i| i.finalized)
+                    .unwrap_or(true)
+        }) {
+            route.entry(face.id).or_insert_with(|| {
+                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                (face.clone(), key_expr.to_owned(), NodeId::default())
+            });
+        }
+
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
             .as_ref()
