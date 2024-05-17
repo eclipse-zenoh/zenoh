@@ -1267,7 +1267,6 @@ impl Session {
                     });
                     #[cfg(feature = "unstable")]
                     {
-                        let state = zread!(self.state);
                         self.update_status_down(&state, &sub_state.key_expr)
                     }
                 }
