@@ -17,20 +17,21 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use async_std::stream::StreamExt;
 use ::serde::{Deserialize, Serialize};
 use async_std::net::TcpListener;
 use async_std::sync::RwLock;
 use async_std::task::{self, JoinHandle};
 use async_tungstenite::tungstenite::protocol::frame::coding::Control;
 use futures::prelude::*;
-use futures::StreamExt;
+// use futures::StreamExt;
 use futures::{channel::mpsc::unbounded, future, pin_mut};
 // use serde::Serialize;
 use async_tungstenite::tungstenite::{self, Message};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::net::SocketAddr;
-use std::os::unix::net::SocketAddr;
+// use std::os::unix::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 use uuid::{serde, Uuid};
@@ -161,7 +162,7 @@ pub async fn run_websocket_server() {
         let hm: HashMap<SocketAddr, RemoteState> = HashMap::new();
         let state_map = Arc::new(RwLock::new(hm));
         // let state_map
-        while let Some(res) = server.incoming().next().await {
+        while let Some(res) = futures::StreamExt::next(&mut server.incoming()).await {
             let raw_stream = res.unwrap();
             println!("raw_stream {:?}", raw_stream.peer_addr());
             let sock_adress;
@@ -193,31 +194,47 @@ pub async fn run_websocket_server() {
             let (ch_tx, ch_rx) = unbounded();
 
             let (ws_tx, ws_rx) = ws_stream.split();
-            let outgoing_ws = ch_rx.map(Ok).forward(ws_tx);
+            let outgoing_ws = futures::StreamExt::map(ch_rx, Ok).forward(ws_tx);
 
-            let sock_adress = sock_adress.clone();
+            let sock_adress_cl = sock_adress.clone();
             let state_map_cl = state_map.clone();
 
-            let incoming_ws = ws_rx
-                .try_filter(|msg| future::ready(!msg.is_close()))
-                .try_for_each(|msg| {
+            let incoming_ws = async_std::task::spawn(async move {
+                let non_close_messages = ws_rx.try_filter(|msg| future::ready(!msg.is_close()));
+                non_close_messages.try_for_each(|msg| async {
                     println!("Received a message from {}", msg.to_text().unwrap());
+                    // Sccess State
                     let state_map_ref = &state_map_cl;
-                    let sock_adress_ref = sock_adress.as_ref();
-                    if let Some(response) =
-                        handle_message(msg, sock_adress_ref, state_map_ref).await
+                    let sock_adress_ref = &sock_adress_cl;
+                    // If there is a response Send back a response
+                    if let Some(response) = handle_message(msg, sock_adress_ref, state_map_ref).await
                     {
                         ch_tx.unbounded_send(response).unwrap(); // TODO: Remove Unwrap
                     };
+                    Ok(())
+                }).await
 
-                    future::ok(())
-                });
+            });
+
+            // let incoming_ws = ws_rx
+            //     .try_filter(|msg| future::ready(!msg.is_close()))
+            //     .try_for_each(|msg| async {
+            //         println!("Received a message from {}", msg.to_text().unwrap());
+            //         let state_map_ref = &state_map_cl;
+            //         let sock_adress_ref = sock_adress.as_ref();
+            //         if let Some(response) =
+            //             handle_message(msg, sock_adress_ref, state_map_ref).await
+            //         {
+            //             ch_tx.unbounded_send(response).unwrap(); // TODO: Remove Unwrap
+            //         };
+            //         future::ok(())
+            //     });
 
             //
             pin_mut!(outgoing_ws, incoming_ws);
             future::select(outgoing_ws, incoming_ws).await;
 
-            state_map.write().await.remove(&*sock_adress);
+            state_map.write().await.remove((&sock_adress).as_ref());
             println!("disconnected");
         }
     });
