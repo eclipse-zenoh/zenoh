@@ -44,8 +44,18 @@ tags{api.system.clock()}
 tags{api.system.clock.elapsed()}
 tags{api.system.clock.now()}
 tags{rust.buffers.has_reader(), api.buffers.read(), rust.buffers.reader(), rust.buffers.z_buf_reader()}
+tags{rust.buffers.has_reader.reader()}
 tags{rust.buffers.reader(), api.buffers.read(), rust.buffers.has_reader(), rust.buffers.z_buf_reader()}
+tags{rust.buffers.reader.can_read()}
+tags{rust.buffers.reader.read()}
+tags{rust.buffers.reader.read_exact()}
+tags{rust.buffers.reader.read_u8()}
+tags{rust.buffers.reader.read_zslice()}
+tags{rust.buffers.reader.read_zslices()}
+tags{rust.buffers.reader.remaining()}
 tags{rust.buffers.split_buffer(), api.buffers()}
+tags{rust.buffers.split_buffer.contiguous()}
+tags{rust.buffers.split_buffer.slices()}
 tags{rust.buffers.z_buf(), api.buffers.zbuf()}
 tags{rust.buffers.z_buf.clear(), api.buffers.zbuf.clear()}
 tags{rust.buffers.z_buf.empty(), api.buffers.zbuf.new.empty()}
@@ -69,9 +79,14 @@ tags{rust.buffers.z_slice.new_unchecked(), api.buffers.zslice.new(), rust.buffer
 tags{rust.buffers.z_slice.range(), api.buffer.zslice.data(), rust.buffers.z_slice.subslice()}
 tags{rust.buffers.z_slice.subslice(), api.buffer.zslice.data(), rust.buffers.z_slice.range()}
 tags{rust.buffers.z_slice_buffer(), api.buffers.zslice.data(), rust.buffers.z_slice.downcast_mut(), rust.buffers.z_slice.downcast_ref()}
+tags{rust.buffers.z_slice_buffer.as_any()}
+tags{rust.buffers.z_slice_buffer.as_any_mut()}
+tags{rust.buffers.z_slice_buffer.as_slice()}
 tags{rust.bytes.deserialize(), api.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
+tags{rust.bytes.deserialize.deserialize()}
 tags{rust.bytes.option_z_bytes(), api.bytes(), rust.bytes.z_bytes()}
 tags{rust.bytes.serialize(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
+tags{rust.bytes.serialize.serialize()}
 tags{rust.bytes.string_or_base64(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
 tags{rust.bytes.string_or_base64.base64(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
 tags{rust.bytes.string_or_base64.into_string(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
@@ -175,6 +190,7 @@ tags{rust.handlers.default_handler()}
 tags{rust.handlers.fifo_channel()}
 tags{rust.handlers.fifo_channel.new()}
 tags{rust.handlers.into_handler()}
+tags{rust.handlers.into_handler.into_handler()}
 tags{rust.handlers.locked()}
 tags{rust.handlers.ring_channel()}
 tags{rust.handlers.ring_channel.new()}
@@ -268,6 +284,8 @@ tags{rust.plugins.response.new()}
 tags{rust.plugins.response.value()}
 tags{rust.plugins.running_plugin()}
 tags{rust.plugins.running_plugin_trait()}
+tags{rust.plugins.running_plugin_trait.adminspace_getter()}
+tags{rust.plugins.running_plugin_trait.config_checker()}
 tags{rust.plugins.zenoh_plugin()}
 tags{rust.prelude.async_resolve()}
 tags{rust.prelude.flat.resolvable()}
@@ -335,6 +353,8 @@ tags{rust.publication.publisher.key_expr()}
 tags{rust.publication.publisher.matching_listener()}
 tags{rust.publication.publisher.matching_status()}
 tags{rust.publication.publisher.publisher_declarations()}
+tags{rust.publication.publisher.publisher_declarations.main()}
+tags{rust.publication.publisher.publisher_declarations.matching_listener()}
 tags{rust.publication.publisher.put()}
 tags{rust.publication.publisher.set_allowed_destination()}
 tags{rust.publication.publisher.set_congestion_control()}
@@ -440,6 +460,9 @@ tags{rust.sample.qo_s.congestion_control()}
 tags{rust.sample.qo_s.express()}
 tags{rust.sample.qo_s.priority()}
 tags{rust.sample.qo_s_builder_trait()}
+tags{rust.sample.qo_s_builder_trait.congestion_control()}
+tags{rust.sample.qo_s_builder_trait.express()}
+tags{rust.sample.qo_s_builder_trait.priority()}
 tags{rust.sample.sample()}
 tags{rust.sample.sample.attachment()}
 tags{rust.sample.sample.attachment_mut()}
@@ -461,6 +484,8 @@ tags{rust.sample.sample_builder_any()}
 tags{rust.sample.sample_builder_delete()}
 tags{rust.sample.sample_builder_put()}
 tags{rust.sample.sample_builder_trait()}
+tags{rust.sample.sample_builder_trait.attachment()}
+tags{rust.sample.sample_builder_trait.source_info()}
 tags{rust.sample.sample_fields()}
 tags{rust.sample.sample_fields.attachment()}
 tags{rust.sample.sample_fields.congestion_control()}
@@ -480,7 +505,11 @@ tags{rust.sample.source_info.source_id()}
 tags{rust.sample.source_info.source_sn()}
 tags{rust.sample.source_sn()}
 tags{rust.sample.timestamp_builder_trait()}
+tags{rust.sample.timestamp_builder_trait.timestamp()}
 tags{rust.sample.value_builder_trait()}
+tags{rust.sample.value_builder_trait.encoding()}
+tags{rust.sample.value_builder_trait.payload()}
+tags{rust.sample.value_builder_trait.value()}
 tags{rust.scout(), api.scouting.hello(), rust.scouting.hello()}
 tags{rust.scouting.hello(), api.scouting.hello(), rust.scout()}
 tags{rust.scouting.hello.locators()}
@@ -551,12 +580,19 @@ tags{rust.session.session.into_arc()}
 tags{rust.session.session.leak()}
 tags{rust.session.session.put()}
 tags{rust.session.session.session_declarations()}
+tags{rust.session.session.session_declarations.declare_publisher()}
+tags{rust.session.session.session_declarations.declare_queryable()}
+tags{rust.session.session.session_declarations.declare_subscriber()}
+tags{rust.session.session.session_declarations.info()}
+tags{rust.session.session.session_declarations.liveliness()}
+tags{rust.session.session.session_declarations.main()}
 tags{rust.session.session.undeclare()}
 tags{rust.session.session.zid()}
 tags{rust.session.session_ref()}
 tags{rust.session.session_ref.borrow()}
 tags{rust.session.session_ref.shared()}
 tags{rust.session.undeclarable()}
+tags{rust.session.undeclarable.undeclare_inner()}
 tags{rust.shm.alloc_alignment()}
 tags{rust.shm.alloc_builder()}
 tags{rust.shm.alloc_layout()}
