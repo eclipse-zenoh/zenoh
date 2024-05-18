@@ -160,44 +160,44 @@ tags{rust.encoding.encoding.z_e_n_o_h__i_n_t(), api.encoding.const.zenoh_int}
 tags{rust.encoding.encoding.z_e_n_o_h__s_t_r_i_n_g(), api.encoding.const.zenoh_string}
 tags{rust.encoding.encoding.z_e_n_o_h__u_i_n_t(), api.encoding.const.zenoh_uint}
 tags{rust.f_e_a_t_u_r_e_s(), api.language_specific}
-tags{rust.handlers.callback()}
-tags{rust.handlers.callback_drop()}
-tags{rust.handlers.callback_drop.callback()}
-tags{rust.handlers.callback_drop.drop()}
-tags{rust.handlers.default_handler()}
-tags{rust.handlers.fifo_channel()}
-tags{rust.handlers.fifo_channel.new()}
-tags{rust.handlers.into_handler()}
-tags{rust.handlers.into_handler.into_handler()}
-tags{rust.handlers.locked()}
-tags{rust.handlers.ring_channel()}
-tags{rust.handlers.ring_channel.new()}
-tags{rust.handlers.ring_channel_handler()}
-tags{rust.handlers.ring_channel_handler.recv()}
-tags{rust.handlers.ring_channel_handler.recv_async()}
-tags{rust.handlers.ring_channel_handler.try_recv()}
-tags{rust.info.peers_zenoh_id_builder()}
-tags{rust.info.routers_zenoh_id_builder()}
-tags{rust.info.session_info()}
-tags{rust.info.session_info.peers_zid()}
-tags{rust.info.session_info.routers_zid()}
-tags{rust.info.session_info.zid()}
-tags{rust.info.zenoh_id_builder()}
-tags{rust.internal.bail()}
-tags{rust.internal.condition()}
-tags{rust.internal.lib_loader()}
-tags{rust.internal.resolve_future()}
-tags{rust.internal.task_controller()}
-tags{rust.internal.terminatable_task()}
-tags{rust.internal.timed()}
-tags{rust.internal.timed_event()}
-tags{rust.internal.timer()}
-tags{rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r()}
-tags{rust.internal.zasync_executor_init()}
-tags{rust.internal.zenoh_home()}
-tags{rust.internal.zerror()}
-tags{rust.internal.zlock()}
-tags{rust.internal.ztimeout()}
+tags{rust.handlers.callback(), api.handlers.callback}
+tags{rust.handlers.callback_drop(), api.handlers.callback}
+tags{rust.handlers.callback_drop.callback, api.handlers.callback}
+tags{rust.handlers.callback_drop.drop(), api.handlers.callback}
+tags{rust.handlers.default_handler(), api.handlers.channel}
+tags{rust.handlers.fifo_channel(), api.handlers.channel.fifo}
+tags{rust.handlers.fifo_channel.new(), api.handlers.channel.fifo}
+tags{rust.handlers.into_handler(), api.handlers.channel}
+tags{rust.handlers.into_handler.into_handler(), api.handlers.channel}
+tags{rust.handlers.locked(), api.handlers.callback}
+tags{rust.handlers.ring_channel(), api.handlers.channel.ring}
+tags{rust.handlers.ring_channel.new(), api.handlers.channel.ring}
+tags{rust.handlers.ring_channel_handler(), api.handlers.channel.ring}
+tags{rust.handlers.ring_channel_handler.recv(), api.handlers.channel.ring}
+tags{rust.handlers.ring_channel_handler.recv_async(), api.handlers.channel.ring}
+tags{rust.handlers.ring_channel_handler.try_recv(), api.handlers.channel.ring}
+tags{rust.info.peers_zenoh_id_builder(), api.info.peers_zid}
+tags{rust.info.routers_zenoh_id_builder(), api.info.routers_zid}
+tags{rust.info.session_info(), api.session.info}
+tags{rust.info.session_info.peers_zid, api.info.peers_zid}
+tags{rust.info.session_info.routers_zid(), api.info.routers_zid}
+tags{rust.info.session_info.zid(), api.info.zid}
+tags{rust.info.zenoh_id_builder(), api.info.zid}
+tags{rust.internal.bail(), api.language_specific}
+tags{rust.internal.condition(), api.language_specific}
+tags{rust.internal.lib_loader(), api.language_specific}
+tags{rust.internal.resolve_future(), api.language_specific}
+tags{rust.internal.task_controller(), api.language_specific}
+tags{rust.internal.terminatable_task(), api.language_specific}
+tags{rust.internal.timed(), api.language_specific}
+tags{rust.internal.timed_event(), api.language_specific}
+tags{rust.internal.timer(), api.language_specific}
+tags{rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), api.language_specific}
+tags{rust.internal.zasync_executor_init(), api.language_specific}
+tags{rust.internal.zenoh_home(), api.language_specific}
+tags{rust.internal.zerror(), api.language_specific}
+tags{rust.internal.zlock(), api.language_specific}
+tags{rust.internal.ztimeout(), api.language_specific}
 tags{rust.key_expr.kedefine()}
 tags{rust.key_expr.keformat()}
 tags{rust.key_expr.kewrite()}
