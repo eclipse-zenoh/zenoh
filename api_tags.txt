@@ -88,13 +88,21 @@ tags{api.info.peers_zid(), rust.info.peers_zenoh_id_builder(), rust.info.session
 tags{api.info.routers_zid(), rust.info.routers_zenoh_id_builder(), rust.info.session_info.routers_zid()}
 tags{api.info.zid(), rust.info.session_info.zid(), rust.info.zenoh_id_builder()}
 tags{api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
-tags{api.keyexpr.autocanonize(), rust.key_expr.key_expr.autocanonize()}
+tags{api.keyexpr.as_str(), rust.key_expr.keyexpr.as_str()}
+tags{api.keyexpr.autocanonize(), rust.key_expr.key_expr.autocanonize(), rust.key_expr.keyexpr.autocanonize()}
+tags{api.keyexpr.chunks(), rust.key_expr.keyexpr.chunks()}
 tags{api.keyexpr.concat(), rust.key_expr.key_expr.concat()}
 tags{api.keyexpr.format(), rust.key_expr.kedefine(), rust.key_expr.keformat(), rust.key_expr.kewrite()}
-tags{api.keyexpr.join(), rust.key_expr.key_expr.join()}
+tags{api.keyexpr.get_nonwild_prefix(), rust.key_expr.keyexpr.get_nonwild_prefix()}
+tags{api.keyexpr.includes(), rust.key_expr.keyexpr.includes()}
+tags{api.keyexpr.intersects(), rust.key_expr.keyexpr.intersects()}
+tags{api.keyexpr.is_wild(), rust.key_expr.keyexpr.is_wild()}
+tags{api.keyexpr.join(), rust.key_expr.key_expr.join(), rust.key_expr.keyexpr.join()}
 tags{api.keyexpr.new.checked(), rust.key_expr.key_expr.from_boxed_string_unchecked(), rust.key_expr.key_expr.from_str_unchecked()}
-tags{api.keyexpr.new.empty(), rust.key_expr.key_expr.new()}
-tags{api.keyexpr.new.unchecked(), rust.key_expr.key_expr.from_string_unchecked()}
+tags{api.keyexpr.new.empty(), rust.key_expr.key_expr.new(), rust.key_expr.keyexpr.new()}
+tags{api.keyexpr.new.unchecked(), rust.key_expr.key_expr.from_string_unchecked(), rust.key_expr.keyexpr.from_slice_unchecked()}
+tags{api.keyexpr.relation_to(), rust.key_expr.keyexpr.relation_to()}
+tags{api.keyexpr.strip_prefix(), rust.key_expr.keyexpr.strip_prefix()}
 tags{api.keyexpr.tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree_mut(), rust.key_expr.keyexpr_tree.i_keyexpr_tree(), rust.key_expr.keyexpr_tree.i_keyexpr_tree_mut(), rust.key_expr.keyexpr_tree.ke_box_tree(), rust.key_expr.keyexpr_tree.keyed_set_provider(), rust.key_expr.keyexpr_tree.non_wild(), rust.key_expr.keyexpr_tree.unknown_wildness()}
 tags{api.keyexpr.undeclare(), rust.key_expr.key_expr_undeclaration()}
 tags{api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.internal.bail(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout()}
@@ -288,20 +296,33 @@ tags{rust.key_expr.keformat(), api.keyexpr.format(), rust.key_expr.kedefine(), r
 tags{rust.key_expr.kewrite(), api.keyexpr.format(), rust.key_expr.kedefine(), rust.key_expr.keformat()}
 tags{rust.key_expr.key_expr(), api.keyexpr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
 tags{rust.key_expr.key_expr.as_keyexpr(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
-tags{rust.key_expr.key_expr.autocanonize(), api.keyexpr.autocanonize()}
+tags{rust.key_expr.key_expr.autocanonize(), api.keyexpr.autocanonize(), rust.key_expr.keyexpr.autocanonize()}
 tags{rust.key_expr.key_expr.borrowing_clone(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
 tags{rust.key_expr.key_expr.concat(), api.keyexpr.concat()}
 tags{rust.key_expr.key_expr.from_boxed_string_unchecked(), api.keyexpr.new.checked(), rust.key_expr.key_expr.from_str_unchecked()}
 tags{rust.key_expr.key_expr.from_str_unchecked(), api.keyexpr.new.checked(), rust.key_expr.key_expr.from_boxed_string_unchecked()}
-tags{rust.key_expr.key_expr.from_string_unchecked(), api.keyexpr.new.unchecked()}
+tags{rust.key_expr.key_expr.from_string_unchecked(), api.keyexpr.new.unchecked(), rust.key_expr.keyexpr.from_slice_unchecked()}
 tags{rust.key_expr.key_expr.into_owned(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
-tags{rust.key_expr.key_expr.join(), api.keyexpr.join()}
-tags{rust.key_expr.key_expr.new(), api.keyexpr.new.empty()}
+tags{rust.key_expr.key_expr.join(), api.keyexpr.join(), rust.key_expr.keyexpr.join()}
+tags{rust.key_expr.key_expr.new(), api.keyexpr.new.empty(), rust.key_expr.keyexpr.new()}
 tags{rust.key_expr.key_expr_undeclaration(), api.keyexpr.undeclare()}
 tags{rust.key_expr.keyexpr(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
 tags{rust.key_expr.keyexpr.as_keyexpr(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
+tags{rust.key_expr.keyexpr.as_str(), api.keyexpr.as_str()}
+tags{rust.key_expr.keyexpr.autocanonize(), api.keyexpr.autocanonize(), rust.key_expr.key_expr.autocanonize()}
 tags{rust.key_expr.keyexpr.borrowing_clone(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
+tags{rust.key_expr.keyexpr.chunks(), api.keyexpr.chunks()}
+tags{rust.key_expr.keyexpr.from_slice_unchecked(), api.keyexpr.new.unchecked(), rust.key_expr.key_expr.from_string_unchecked()}
+tags{rust.key_expr.keyexpr.get_nonwild_prefix(), api.keyexpr.get_nonwild_prefix()}
+tags{rust.key_expr.keyexpr.includes(), api.keyexpr.includes()}
+tags{rust.key_expr.keyexpr.intersects(), api.keyexpr.intersects()}
 tags{rust.key_expr.keyexpr.into_owned(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr()}
+tags{rust.key_expr.keyexpr.is_wild(), api.keyexpr.is_wild()}
+tags{rust.key_expr.keyexpr.join(), api.keyexpr.join(), rust.key_expr.key_expr.join()}
+tags{rust.key_expr.keyexpr.new(), api.keyexpr.new.empty(), rust.key_expr.key_expr.new()}
+tags{rust.key_expr.keyexpr.relation_to(), api.keyexpr.relation_to()}
+tags{rust.key_expr.keyexpr.strip_prefix(), api.keyexpr.strip_prefix()}
+tags{rust.key_expr.keyexpr.unsafe()}
 tags{rust.key_expr.keyexpr_tree.i_key_expr_tree(), api.keyexpr.tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree_mut(), rust.key_expr.keyexpr_tree.i_keyexpr_tree(), rust.key_expr.keyexpr_tree.i_keyexpr_tree_mut(), rust.key_expr.keyexpr_tree.ke_box_tree(), rust.key_expr.keyexpr_tree.keyed_set_provider(), rust.key_expr.keyexpr_tree.non_wild(), rust.key_expr.keyexpr_tree.unknown_wildness()}
 tags{rust.key_expr.keyexpr_tree.i_key_expr_tree_mut(), api.keyexpr.tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree(), rust.key_expr.keyexpr_tree.i_keyexpr_tree(), rust.key_expr.keyexpr_tree.i_keyexpr_tree_mut(), rust.key_expr.keyexpr_tree.ke_box_tree(), rust.key_expr.keyexpr_tree.keyed_set_provider(), rust.key_expr.keyexpr_tree.non_wild(), rust.key_expr.keyexpr_tree.unknown_wildness()}
 tags{rust.key_expr.keyexpr_tree.i_keyexpr_tree(), api.keyexpr.tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree_mut(), rust.key_expr.keyexpr_tree.i_keyexpr_tree_mut(), rust.key_expr.keyexpr_tree.ke_box_tree(), rust.key_expr.keyexpr_tree.keyed_set_provider(), rust.key_expr.keyexpr_tree.non_wild(), rust.key_expr.keyexpr_tree.unknown_wildness()}
@@ -311,8 +332,16 @@ tags{rust.key_expr.keyexpr_tree.keyed_set_provider(), api.keyexpr.tree(), rust.k
 tags{rust.key_expr.keyexpr_tree.non_wild(), api.keyexpr.tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree_mut(), rust.key_expr.keyexpr_tree.i_keyexpr_tree(), rust.key_expr.keyexpr_tree.i_keyexpr_tree_mut(), rust.key_expr.keyexpr_tree.ke_box_tree(), rust.key_expr.keyexpr_tree.keyed_set_provider(), rust.key_expr.keyexpr_tree.unknown_wildness()}
 tags{rust.key_expr.keyexpr_tree.unknown_wildness(), api.keyexpr.tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree(), rust.key_expr.keyexpr_tree.i_key_expr_tree_mut(), rust.key_expr.keyexpr_tree.i_keyexpr_tree(), rust.key_expr.keyexpr_tree.i_keyexpr_tree_mut(), rust.key_expr.keyexpr_tree.ke_box_tree(), rust.key_expr.keyexpr_tree.keyed_set_provider(), rust.key_expr.keyexpr_tree.non_wild()}
 tags{rust.key_expr.owned_key_expr(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_keyexpr()}
+tags{rust.key_expr.owned_key_expr.autocanonize()}
+tags{rust.key_expr.owned_key_expr.from_boxed_string_unchecked()}
+tags{rust.key_expr.owned_key_expr.from_string_unchecked()}
+tags{rust.key_expr.owned_key_expr.new()}
 tags{rust.key_expr.owned_keyexpr(), api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr()}
 tags{rust.key_expr.set_intersection_level()}
+tags{rust.key_expr.set_intersection_level.disjoint()}
+tags{rust.key_expr.set_intersection_level.equals()}
+tags{rust.key_expr.set_intersection_level.includes()}
+tags{rust.key_expr.set_intersection_level.intersects()}
 tags{rust.liveliness.liveliness()}
 tags{rust.liveliness.liveliness.declare_subscriber()}
 tags{rust.liveliness.liveliness.declare_token()}
