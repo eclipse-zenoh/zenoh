@@ -1,5 +1,4 @@
-tags{api.buffer.zslice.data(), rust.buffers.z_slice.range(), rust.buffers.z_slice.subslice()}
-tags{api.buffers(), rust.buffers.split_buffer()}
+ags{api.buffers.zslice.data(), rust.buffers.z_slice.range(), rust.buffers.z_slice.subslice()}
 tags{api.buffers.read(), rust.buffers.has_reader(), rust.buffers.reader(), rust.buffers.z_buf_reader()}
 tags{api.buffers.zbuf(), rust.buffers.z_buf()}
 tags{api.buffers.zbuf.clear(), rust.buffers.z_buf.clear()}
@@ -15,10 +14,10 @@ tags{api.buffers.zslice.kind(), rust.buffers.z_slice.kind()}
 tags{api.buffers.zslice.len(), rust.buffers.z_slice.len()}
 tags{api.buffers.zslice.new(), rust.buffers.z_slice.empty(), rust.buffers.z_slice.make(), rust.buffers.z_slice.new(), rust.buffers.z_slice.new_unchecked()}
 tags{api.bytes(), rust.bytes.option_z_bytes(), rust.bytes.z_bytes()}
-tags{api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
+tags{api.bytes.serde(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
 tags{api.bytes.new(), rust.bytes.z_bytes.empty(), rust.bytes.z_bytes.new()}
 tags{api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into(), rust.bytes.z_bytes.into_mut(), rust.bytes.z_bytes.is_empty(), rust.bytes.z_bytes.iter(), rust.bytes.z_bytes.len(), rust.bytes.z_bytes.reader(), rust.bytes.z_bytes_iterator(), rust.bytes.z_bytes_reader()}
-tags{api.bytes.serialize(), rust.bytes.z_bytes.serialize()}
+tags{api.bytes.serde(), rust.bytes.z_bytes.serialize()}
 tags{api.bytes.write(), rust.bytes.z_bytes.writer(), rust.bytes.z_bytes_writer()}
 tags{api.encoding(), rust.encoding.encoding()}
 tags{api.key_expr(), rust.key_expr.key_expr()}
@@ -31,19 +30,16 @@ tags{api.scouting.stop(), rust.scouting.scout.stop()}
 tags{api.scouting.whatami(), rust.scouting.what_am_i()}
 tags{api.session.close(), rust.session.session.close()}
 tags{api.session.open(), rust.session.open()}
-tags{rust.buffers.has_reader(), api.buffers.read(), rust.buffers.reader(), rust.buffers.z_buf_reader()}
-tags{rust.buffers.has_reader.reader()}
-tags{rust.buffers.reader(), api.buffers.read(), rust.buffers.has_reader(), rust.buffers.z_buf_reader()}
-tags{rust.buffers.reader.can_read()}
-tags{rust.buffers.reader.read()}
-tags{rust.buffers.reader.read_exact()}
-tags{rust.buffers.reader.read_u8()}
-tags{rust.buffers.reader.read_zslice()}
-tags{rust.buffers.reader.read_zslices()}
-tags{rust.buffers.reader.remaining()}
-tags{rust.buffers.split_buffer(), api.buffers()}
-tags{rust.buffers.split_buffer.contiguous()}
-tags{rust.buffers.split_buffer.slices()}
+tags{rust.buffers.has_reader.reader(), api.buffers.zbuf.read()}
+tags{rust.buffers.reader.can_read(), api.buffers.zbuf.read()}
+tags{rust.buffers.reader.read(), api.buffers.zbuf.read()}
+tags{rust.buffers.reader.read_exact(), api.buffers.zbuf.read()}
+tags{rust.buffers.reader.read_u8(), api.buffers.zbuf.read()}
+tags{rust.buffers.reader.read_zslices, api.buffers.zbuf.read}
+tags{rust.buffers.reader.read_zslice(), api.buffers.zbuf.read}
+tags{rust.buffers.reader.remaining(), api.buffers.zbuf.read}
+tags{rust.buffers.split_buffer.contiguous(), api.buffers.zbuf.contiguous}
+tags{rust.buffers.split_buffer.slices(), api.buffers.zbuf.slices}
 tags{rust.buffers.z_buf(), api.buffers.zbuf()}
 tags{rust.buffers.z_buf.clear(), api.buffers.zbuf.clear()}
 tags{rust.buffers.z_buf.empty(), api.buffers.zbuf.new.empty()}
@@ -64,24 +60,20 @@ tags{rust.buffers.z_slice.len(), api.buffers.zslice.len()}
 tags{rust.buffers.z_slice.make(), api.buffers.zslice.new(), rust.buffers.z_slice.empty(), rust.buffers.z_slice.new(), rust.buffers.z_slice.new_unchecked()}
 tags{rust.buffers.z_slice.new(), api.buffers.zslice.new(), rust.buffers.z_slice.empty(), rust.buffers.z_slice.make(), rust.buffers.z_slice.new_unchecked()}
 tags{rust.buffers.z_slice.new_unchecked(), api.buffers.zslice.new(), rust.buffers.z_slice.empty(), rust.buffers.z_slice.make(), rust.buffers.z_slice.new()}
-tags{rust.buffers.z_slice.range(), api.buffer.zslice.data(), rust.buffers.z_slice.subslice()}
-tags{rust.buffers.z_slice.subslice(), api.buffer.zslice.data(), rust.buffers.z_slice.range()}
-tags{rust.buffers.z_slice_buffer(), api.buffers.zslice.data(), rust.buffers.z_slice.downcast_mut(), rust.buffers.z_slice.downcast_ref()}
-tags{rust.buffers.z_slice_buffer.as_any()}
-tags{rust.buffers.z_slice_buffer.as_any_mut()}
-tags{rust.buffers.z_slice_buffer.as_slice()}
-tags{rust.bytes.deserialize(), api.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
-tags{rust.bytes.deserialize.deserialize()}
+tags{rust.buffers.z_slice_buffer.as_any(), api.buffers.zslice.data}
+tags{rust.buffers.z_slice_buffer.as_any_mut(), api.buffers.zslice.data}
+tags{rust.buffers.z_slice_buffer.as_slice(), api.buffers.zslice.data}
+tags{rust.bytes.deserialize(), api.bytes.serde}
+tags{rust.bytes.deserialize.deserialize(), api.bytes.serde}
 tags{rust.bytes.option_z_bytes(), api.bytes(), rust.bytes.z_bytes()}
-tags{rust.bytes.serialize(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
-tags{rust.bytes.serialize.serialize()}
-tags{rust.bytes.string_or_base64(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
-tags{rust.bytes.string_or_base64.base64(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
-tags{rust.bytes.string_or_base64.into_string(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
-tags{rust.bytes.string_or_base64.string(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
+tags{rust.bytes.serialize.serialize(), api.bytes.serde}
+tags{rust.bytes.string_or_base64(), api.bytes.serde}
+tags{rust.bytes.string_or_base64.base64(), api.bytes.serde}
+tags{rust.bytes.string_or_base64.into_string(), api.bytes.serde}
+tags{rust.bytes.string_or_base64.string(), api.bytes.serde}
 tags{rust.bytes.z_bytes(), api.bytes(), rust.bytes.option_z_bytes()}
-tags{rust.bytes.z_bytes.deserialize(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
-tags{rust.bytes.z_bytes.deserialize_mut(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_deserialize_error(), rust.bytes.z_serde()}
+tags{rust.bytes.z_bytes.deserialize(), api.bytes.serde}
+tags{rust.bytes.z_bytes.deserialize_mut(), api.bytes.serde}
 tags{rust.bytes.z_bytes.empty(), api.bytes.new(), rust.bytes.z_bytes.new()}
 tags{rust.bytes.z_bytes.from_reader(), api.bytes.read(), rust.bytes.z_bytes.into(), rust.bytes.z_bytes.into_mut(), rust.bytes.z_bytes.is_empty(), rust.bytes.z_bytes.iter(), rust.bytes.z_bytes.len(), rust.bytes.z_bytes.reader(), rust.bytes.z_bytes_iterator(), rust.bytes.z_bytes_reader()}
 tags{rust.bytes.z_bytes.into(), api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into_mut(), rust.bytes.z_bytes.is_empty(), rust.bytes.z_bytes.iter(), rust.bytes.z_bytes.len(), rust.bytes.z_bytes.reader(), rust.bytes.z_bytes_iterator(), rust.bytes.z_bytes_reader()}
@@ -91,84 +83,83 @@ tags{rust.bytes.z_bytes.iter(), api.bytes.read(), rust.bytes.z_bytes.from_reader
 tags{rust.bytes.z_bytes.len(), api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into(), rust.bytes.z_bytes.into_mut(), rust.bytes.z_bytes.is_empty(), rust.bytes.z_bytes.iter(), rust.bytes.z_bytes.reader(), rust.bytes.z_bytes_iterator(), rust.bytes.z_bytes_reader()}
 tags{rust.bytes.z_bytes.new(), api.bytes.new(), rust.bytes.z_bytes.empty()}
 tags{rust.bytes.z_bytes.reader(), api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into(), rust.bytes.z_bytes.into_mut(), rust.bytes.z_bytes.is_empty(), rust.bytes.z_bytes.iter(), rust.bytes.z_bytes.len(), rust.bytes.z_bytes_iterator(), rust.bytes.z_bytes_reader()}
-tags{rust.bytes.z_bytes.serialize(), api.bytes.serialize()}
 tags{rust.bytes.z_bytes.writer(), api.bytes.write(), rust.bytes.z_bytes_writer()}
 tags{rust.bytes.z_bytes_iterator(), api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into(), rust.bytes.z_bytes.into_mut(), rust.bytes.z_bytes.is_empty(), rust.bytes.z_bytes.iter(), rust.bytes.z_bytes.len(), rust.bytes.z_bytes.reader(), rust.bytes.z_bytes_reader()}
 tags{rust.bytes.z_bytes_reader(), api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into(), rust.bytes.z_bytes.into_mut(), rust.bytes.z_bytes.is_empty(), rust.bytes.z_bytes.iter(), rust.bytes.z_bytes.len(), rust.bytes.z_bytes.reader(), rust.bytes.z_bytes_iterator()}
 tags{rust.bytes.z_bytes_writer(), api.bytes.write(), rust.bytes.z_bytes.writer()}
-tags{rust.bytes.z_deserialize_error(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_serde()}
-tags{rust.bytes.z_serde(), api.bytes.deserialize(), rust.bytes.deserialize(), rust.bytes.serialize(), rust.bytes.string_or_base64(), rust.bytes.string_or_base64.base64(), rust.bytes.string_or_base64.into_string(), rust.bytes.string_or_base64.string(), rust.bytes.z_bytes.deserialize(), rust.bytes.z_bytes.deserialize_mut(), rust.bytes.z_deserialize_error()}
+tags{rust.bytes.z_deserialize_error(), api.bytes.serde}
+tags{rust.bytes.z_serde(), api.bytes.serde}
 tags{rust.config.//()}
-tags{rust.core.async_resolve()}
-tags{rust.core.err_no()}
-tags{rust.core.error()}
-tags{rust.core.resolvable()}
-tags{rust.core.resolve()}
-tags{rust.core.result()}
-tags{rust.core.sync_resolve()}
-tags{rust.core.try_init_log_from_env()}
-tags{rust.core.wait()}
+tags{rust.core.async_resolve(), api.language_specific}
+tags{rust.core.err_no(), api.language_specific}
+tags{rust.core.error(), api.language_specific}
+tags{rust.core.resolvable(), api.language_specific}
+tags{rust.core.resolve(), api.language_specific}
+tags{rust.core.result(), api.language_specific}
+tags{rust.core.sync_resolve(), api.language_specific}
+tags{rust.core.try_init_log_from_env(), api.log.try_init_log_from_env}
+tags{rust.core.wait(), api.language_specific}
 tags{rust.encoding.encoding(), api.encoding()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_b_o_r()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_d_r()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_o_a_p__p_a_y_l_o_a_d()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_a_v_a__s_e_r_i_a_l_i_z_e_d__o_b_j_e_c_t()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n__p_a_t_c_h__j_s_o_n()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n__s_e_q()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n_p_a_t_h()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_w_t()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__m_p4()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__o_c_t_e_t__s_t_r_e_a_m()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__o_p_e_n_m_e_t_r_i_c_s__t_e_x_t()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__p_r_o_t_o_b_u_f()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__p_y_t_h_o_n__s_e_r_i_a_l_i_z_e_d__o_b_j_e_c_t()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__s_o_a_p__x_m_l()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__s_q_l()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__x__w_w_w__f_o_r_m__u_r_l_e_n_c_o_d_e_d()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__x_m_l()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__y_a_m_l()}
-tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__y_a_n_g()}
-tags{rust.encoding.encoding.a_u_d_i_o__a_a_c()}
-tags{rust.encoding.encoding.a_u_d_i_o__f_l_a_c()}
-tags{rust.encoding.encoding.a_u_d_i_o__m_p4()}
-tags{rust.encoding.encoding.a_u_d_i_o__o_g_g()}
-tags{rust.encoding.encoding.a_u_d_i_o__v_o_r_b_i_s()}
-tags{rust.encoding.encoding.default()}
-tags{rust.encoding.encoding.i_m_a_g_e__b_m_p()}
-tags{rust.encoding.encoding.i_m_a_g_e__g_i_f()}
-tags{rust.encoding.encoding.i_m_a_g_e__j_p_e_g()}
-tags{rust.encoding.encoding.i_m_a_g_e__p_n_g()}
-tags{rust.encoding.encoding.i_m_a_g_e__w_e_b_p()}
-tags{rust.encoding.encoding.t_e_x_t__c_s_s()}
-tags{rust.encoding.encoding.t_e_x_t__c_s_v()}
-tags{rust.encoding.encoding.t_e_x_t__h_t_m_l()}
-tags{rust.encoding.encoding.t_e_x_t__j_a_v_a_s_c_r_i_p_t()}
-tags{rust.encoding.encoding.t_e_x_t__j_s_o_n()}
-tags{rust.encoding.encoding.t_e_x_t__j_s_o_n5()}
-tags{rust.encoding.encoding.t_e_x_t__m_a_r_k_d_o_w_n()}
-tags{rust.encoding.encoding.t_e_x_t__p_l_a_i_n()}
-tags{rust.encoding.encoding.t_e_x_t__x_m_l()}
-tags{rust.encoding.encoding.t_e_x_t__y_a_m_l()}
-tags{rust.encoding.encoding.v_i_d_e_o__h261()}
-tags{rust.encoding.encoding.v_i_d_e_o__h263()}
-tags{rust.encoding.encoding.v_i_d_e_o__h264()}
-tags{rust.encoding.encoding.v_i_d_e_o__h265()}
-tags{rust.encoding.encoding.v_i_d_e_o__h266()}
-tags{rust.encoding.encoding.v_i_d_e_o__m_p4()}
-tags{rust.encoding.encoding.v_i_d_e_o__o_g_g()}
-tags{rust.encoding.encoding.v_i_d_e_o__r_a_w()}
-tags{rust.encoding.encoding.v_i_d_e_o__v_p8()}
-tags{rust.encoding.encoding.v_i_d_e_o__v_p9()}
-tags{rust.encoding.encoding.with_schema()}
-tags{rust.encoding.encoding.z_e_n_o_h__b_o_o_l()}
-tags{rust.encoding.encoding.z_e_n_o_h__b_y_t_e_s()}
-tags{rust.encoding.encoding.z_e_n_o_h__e_r_r_o_r()}
-tags{rust.encoding.encoding.z_e_n_o_h__f_l_o_a_t()}
-tags{rust.encoding.encoding.z_e_n_o_h__i_n_t()}
-tags{rust.encoding.encoding.z_e_n_o_h__s_t_r_i_n_g()}
-tags{rust.encoding.encoding.z_e_n_o_h__u_i_n_t()}
-tags{rust.f_e_a_t_u_r_e_s()}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_b_o_r(), api.encoding.const.appication_cbor}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_d_r(), api.encoding.const.appication_cdr}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_o_a_p__p_a_y_l_o_a_d(), api.encoding.const.appication_coap_payload}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_a_v_a__s_e_r_i_a_l_i_z_e_d__o_b_j_e_c_t(), api.encoding.const.appication_java_serialized_object}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n(), api.encoding.const.appication_json}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n__p_a_t_c_h__j_s_o_n(), api.encoding.const.appication_json_patch_json}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n__s_e_q(), api.encoding.const.appication_json_seq}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n_p_a_t_h(), api.encoding.const.appication_jsonpath}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_w_t(), api.encoding.const.appication_jwt}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__m_p4(), api.encoding.const.appication_mp4}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__o_c_t_e_t__s_t_r_e_a_m(), api.encoding.const.appication_octet_stream}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__o_p_e_n_m_e_t_r_i_c_s__t_e_x_t(), api.encoding.const.appication_openmetrics_text}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__p_r_o_t_o_b_u_f(), api.encoding.const.appication_protobuf}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__p_y_t_h_o_n__s_e_r_i_a_l_i_z_e_d__o_b_j_e_c_t(), api.encoding.const.appication_python_serialized_object}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__s_o_a_p__x_m_l(), api.encoding.const.appication_soap_xml}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__s_q_l(), api.encoding.const.appication_sql}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__x__w_w_w__f_o_r_m__u_r_l_e_n_c_o_d_e_d(), api.encoding.const.appication_x_www_form_urlencoded}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__x_m_l(), api.encoding.const.appication_xml}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__y_a_m_l(), api.encoding.const.appication_yaml}
+tags{rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__y_a_n_g(), api.encoding.const.appication_yang}
+tags{rust.encoding.encoding.a_u_d_i_o__a_a_c(), api.encoding.const.audio_aac}
+tags{rust.encoding.encoding.a_u_d_i_o__f_l_a_c(), api.encoding.const.audio_flac}
+tags{rust.encoding.encoding.a_u_d_i_o__m_p4(), api.encoding.const.audio_mp4}
+tags{rust.encoding.encoding.a_u_d_i_o__o_g_g(), api.encoding.const.audio_ogg}
+tags{rust.encoding.encoding.a_u_d_i_o__v_o_r_b_i_s(), api.encoding.const.audio_vorbis}
+tags{rust.encoding.encoding.default(), api.encoding.const.new.default}
+tags{rust.encoding.encoding.i_m_a_g_e__b_m_p(), api.encoding.const.image_bmp}
+tags{rust.encoding.encoding.i_m_a_g_e__g_i_f(), api.encoding.const.image_gif}
+tags{rust.encoding.encoding.i_m_a_g_e__j_p_e_g(), api.encoding.const.image_jpeg}
+tags{rust.encoding.encoding.i_m_a_g_e__p_n_g(), api.encoding.const.image_png}
+tags{rust.encoding.encoding.i_m_a_g_e__w_e_b_p(), api.encoding.const.image_webp}
+tags{rust.encoding.encoding.t_e_x_t__c_s_s(), api.encoding.const.text_css}
+tags{rust.encoding.encoding.t_e_x_t__c_s_v(), api.encoding.const.text_csv}
+tags{rust.encoding.encoding.t_e_x_t__h_t_m_l(), api.encoding.const.text_html}
+tags{rust.encoding.encoding.t_e_x_t__j_a_v_a_s_c_r_i_p_t(), api.encoding.const.text_javascript}
+tags{rust.encoding.encoding.t_e_x_t__j_s_o_n(), api.encoding.const.text_json}
+tags{rust.encoding.encoding.t_e_x_t__j_s_o_n5(), api.encoding.const.text_json5}
+tags{rust.encoding.encoding.t_e_x_t__m_a_r_k_d_o_w_n(), api.encoding.const.text_markdown}
+tags{rust.encoding.encoding.t_e_x_t__p_l_a_i_n(), api.encoding.const.text_plain}
+tags{rust.encoding.encoding.t_e_x_t__x_m_l(), api.encoding.const.text_xml}
+tags{rust.encoding.encoding.t_e_x_t__y_a_m_l(), api.encoding.const.text_yaml}
+tags{rust.encoding.encoding.v_i_d_e_o__h261(), api.encoding.const.video_h261}
+tags{rust.encoding.encoding.v_i_d_e_o__h263(), api.encoding.const.video_h263}
+tags{rust.encoding.encoding.v_i_d_e_o__h264(), api.encoding.const.video_h264}
+tags{rust.encoding.encoding.v_i_d_e_o__h265(), api.encoding.const.video_h265}
+tags{rust.encoding.encoding.v_i_d_e_o__h266(), api.encoding.const.video_h266}
+tags{rust.encoding.encoding.v_i_d_e_o__m_p4(), api.encoding.const.video_mp4}
+tags{rust.encoding.encoding.v_i_d_e_o__o_g_g(), api.encoding.const.video_ogg}
+tags{rust.encoding.encoding.v_i_d_e_o__r_a_w(), api.encoding.const.video_raw}
+tags{rust.encoding.encoding.v_i_d_e_o__v_p8(), api.encoding.const.video_vp8}
+tags{rust.encoding.encoding.v_i_d_e_o__v_p9(), api.encoding.const.video_vp9}
+tags{rust.encoding.encoding.with_schema(), api.encoding.with_schema()}
+tags{rust.encoding.encoding.z_e_n_o_h__b_o_o_l(), api.encoding.const.zenoh_bool}
+tags{rust.encoding.encoding.z_e_n_o_h__b_y_t_e_s(), api.encoding.const.zenoh_bytes}
+tags{rust.encoding.encoding.z_e_n_o_h__e_r_r_o_r(), api.encoding.const.zenoh_error}
+tags{rust.encoding.encoding.z_e_n_o_h__f_l_o_a_t(), api.encoding.const.zenoh_float}
+tags{rust.encoding.encoding.z_e_n_o_h__i_n_t(), api.encoding.const.zenoh_int}
+tags{rust.encoding.encoding.z_e_n_o_h__s_t_r_i_n_g(), api.encoding.const.zenoh_string}
+tags{rust.encoding.encoding.z_e_n_o_h__u_i_n_t(), api.encoding.const.zenoh_uint}
+tags{rust.f_e_a_t_u_r_e_s(), api.language_specific}
 tags{rust.handlers.callback()}
 tags{rust.handlers.callback_drop()}
 tags{rust.handlers.callback_drop.callback()}
