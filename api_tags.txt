@@ -20,8 +20,8 @@ tags{api.bytes.read(), rust.bytes.z_bytes.from_reader(), rust.bytes.z_bytes.into
 tags{api.bytes.serde(), rust.bytes.z_bytes.serialize()}
 tags{api.bytes.write(), rust.bytes.z_bytes.writer(), rust.bytes.z_bytes_writer()}
 tags{api.encoding(), rust.encoding.encoding()}
-tags{api.key_expr(), rust.key_expr.key_expr()}
-tags{api.key_expr.autocanonize(), rust.key_expr.key_expr.autocanonize()}
+tags{api.keyexpr(), rust.keyexpr.keyexpr()}
+tags{api.keyexpr.autocanonize(), rust.keyexpr.keyexpr.autocanonize()}
 tags{api.scouting.callback(), rust.scouting.scout_builder.callback(), rust.scouting.scout_builder.callback_mut()}
 tags{api.scouting.channel(), rust.scouting.scout_builder.with()}
 tags{api.scouting.hello(), rust.scout(), rust.scouting.hello()}
@@ -198,40 +198,40 @@ tags{rust.internal.zenoh_home(), api.language_specific}
 tags{rust.internal.zerror(), api.language_specific}
 tags{rust.internal.zlock(), api.language_specific}
 tags{rust.internal.ztimeout(), api.language_specific}
-tags{rust.key_expr.kedefine()}
-tags{rust.key_expr.keformat()}
-tags{rust.key_expr.kewrite()}
-tags{rust.key_expr.key_expr(), api.key_expr()}
-tags{rust.key_expr.key_expr.as_keyexpr()}
-tags{rust.key_expr.key_expr.autocanonize(), api.key_expr.autocanonize()}
-tags{rust.key_expr.key_expr.borrowing_clone()}
-tags{rust.key_expr.key_expr.concat()}
-tags{rust.key_expr.key_expr.from_boxed_string_unchecked()}
-tags{rust.key_expr.key_expr.from_str_unchecked()}
-tags{rust.key_expr.key_expr.from_string_unchecked()}
-tags{rust.key_expr.key_expr.into_owned()}
-tags{rust.key_expr.key_expr.join()}
-tags{rust.key_expr.key_expr.new()}
-tags{rust.key_expr.key_expr_undeclaration()}
-tags{rust.key_expr.keyexpr()}
-tags{rust.key_expr.keyexpr_tree.i_key_expr_tree()}
-tags{rust.key_expr.keyexpr_tree.i_key_expr_tree_mut()}
-tags{rust.key_expr.keyexpr_tree.ke_box_tree()}
-tags{rust.key_expr.keyexpr_tree.keyed_set_provider()}
-tags{rust.key_expr.keyexpr_tree.non_wild()}
-tags{rust.key_expr.keyexpr_tree.unknown_wildness()}
-tags{rust.key_expr.owned_key_expr()}
-tags{rust.key_expr.session.init()}
-tags{rust.key_expr.session.init_builder()}
-tags{rust.key_expr.session.open()}
-tags{rust.key_expr.session.open_builder()}
-tags{rust.key_expr.session.session()}
-tags{rust.key_expr.session.session_declarations()}
-tags{rust.key_expr.session.session_delete_builder()}
-tags{rust.key_expr.session.session_put_builder()}
-tags{rust.key_expr.session.session_ref()}
-tags{rust.key_expr.session.undeclarable()}
-tags{rust.key_expr.set_intersection_level()}
+tags{rust.keyexpr.kedefine(), api.keyexpr.format}
+tags{rust.keyexpr.keformat(), api.keyexpr.format}
+tags{rust.keyexpr.kewrite(), api.keyexpr.format}
+tags{rust.keyexpr.keyexpr(), api.keyexpr}
+tags{rust.keyexpr.keyexpr.as_keyexpr(), api.keyexpr}
+tags{rust.keyexpr.keyexpr.autocanonize(), api.keyexpr.autocanonize()}
+tags{rust.keyexpr.keyexpr.borrowing_clone(), api.keyexpr}
+tags{rust.keyexpr.keyexpr.concat(), api.keyexpr.concat}
+tags{rust.keyexpr.keyexpr.from_boxed_string_unchecked, api.keyexpr.new.checked}
+tags{rust.keyexpr.keyexpr.from_str_unchecked(), api.keyexpr.new.checked}
+tags{rust.keyexpr.keyexpr.from_string_unchecked(), api.keyexpr.new.unchecked}
+tags{rust.keyexpr.keyexpr.into_owned(), api.keyexpr}
+tags{rust.keyexpr.keyexpr.join(), api.keyexpr.join}
+tags{rust.keyexpr.keyexpr.new(), api.keyexpr.new.empty}
+tags{rust.keyexpr.keyexpr_undeclaration(), api.keyexpr.undeclare}
+tags{rust.keyexpr.keyexpr(), api.keyexpr}
+tags{rust.keyexpr.keyexpr_tree.i_keyexpr_tree(), api.keyexpr.tree}
+tags{rust.keyexpr.keyexpr_tree.i_keyexpr_tree_mut(), api.keyexpr.tree}
+tags{rust.keyexpr.keyexpr_tree.ke_box_tree(), api.keyexpr.tree}
+tags{rust.keyexpr.keyexpr_tree.keyed_set_provider(), api.keyexpr.tree}
+tags{rust.keyexpr.keyexpr_tree.non_wild(), api.keyexpr.tree}
+tags{rust.keyexpr.keyexpr_tree.unknown_wildness(), api.keyexpr.tree}
+tags{rust.keyexpr.owned_keyexpr(), api.keyexpr}
+tags{rust.keyexpr.session.init(), }
+tags{rust.keyexpr.session.init_builder()}
+tags{rust.keyexpr.session.open()}
+tags{rust.keyexpr.session.open_builder()}
+tags{rust.keyexpr.session.session()}
+tags{rust.keyexpr.session.session_declarations()}
+tags{rust.keyexpr.session.session_delete_builder()}
+tags{rust.keyexpr.session.session_put_builder()}
+tags{rust.keyexpr.session.session_ref()}
+tags{rust.keyexpr.session.undeclarable()}
+tags{rust.keyexpr.set_intersection_level()}
 tags{rust.liveliness.liveliness()}
 tags{rust.liveliness.liveliness.declare_subscriber()}
 tags{rust.liveliness.liveliness.declare_token()}
@@ -248,7 +248,7 @@ tags{rust.liveliness.liveliness_subscriber_builder.with()}
 tags{rust.liveliness.liveliness_token()}
 tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder()}
 tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder.handler()}
-tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder.key_expr()}
+tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder.keyexpr()}
 tags{rust.liveliness.liveliness_token.liveliness_subscriber_builder.session()}
 tags{rust.liveliness.liveliness_token.undeclare()}
 tags{rust.liveliness.liveliness_token_builder()}
@@ -276,7 +276,7 @@ tags{rust.prelude.mods.config()}
 tags{rust.prelude.mods.core()}
 tags{rust.prelude.mods.encoding()}
 tags{rust.prelude.mods.handlers()}
-tags{rust.prelude.mods.key_expr()}
+tags{rust.prelude.mods.keyexpr()}
 tags{rust.prelude.mods.publication()}
 tags{rust.prelude.mods.query()}
 tags{rust.prelude.mods.queryable()}
@@ -327,7 +327,7 @@ tags{rust.publication.publisher()}
 tags{rust.publication.publisher.delete()}
 tags{rust.publication.publisher.id()}
 tags{rust.publication.publisher.into_arc()}
-tags{rust.publication.publisher.key_expr()}
+tags{rust.publication.publisher.keyexpr()}
 tags{rust.publication.publisher.matching_listener()}
 tags{rust.publication.publisher.matching_status()}
 tags{rust.publication.publisher.publisher_declarations.main()}
@@ -366,15 +366,15 @@ tags{rust.query.reply.into_result()}
 tags{rust.query.reply.replier_id()}
 tags{rust.query.reply.result()}
 tags{rust.query.reply.result_mut()}
-tags{rust.query.reply_key_expr()}
-tags{rust.query.reply_key_expr.any()}
-tags{rust.query.reply_key_expr.matching_query()}
+tags{rust.query.reply_keyexpr()}
+tags{rust.query.reply_keyexpr.any()}
+tags{rust.query.reply_keyexpr.matching_query()}
 tags{rust.queryable.query()}
 tags{rust.queryable.query.accepts_replies()}
 tags{rust.queryable.query.attachment()}
 tags{rust.queryable.query.attachment_mut()}
 tags{rust.queryable.query.encoding()}
-tags{rust.queryable.query.key_expr()}
+tags{rust.queryable.query.keyexpr()}
 tags{rust.queryable.query.parameters()}
 tags{rust.queryable.query.payload()}
 tags{rust.queryable.query.payload_mut()}
@@ -403,7 +403,7 @@ tags{rust.queryable.reply_builder_put()}
 tags{rust.queryable.reply_err_builder()}
 tags{rust.queryable.reply_sample()}
 tags{rust.runtime.admin_space()}
-tags{rust.runtime.admin_space.key_expr_to_string()}
+tags{rust.runtime.admin_space.keyexpr_to_string()}
 tags{rust.runtime.admin_space.start()}
 tags{rust.runtime.runtime()}
 tags{rust.runtime.runtime.bind_mcast_port()}
@@ -446,7 +446,7 @@ tags{rust.sample.sample.attachment_mut()}
 tags{rust.sample.sample.congestion_control()}
 tags{rust.sample.sample.encoding()}
 tags{rust.sample.sample.express()}
-tags{rust.sample.sample.key_expr()}
+tags{rust.sample.sample.keyexpr()}
 tags{rust.sample.sample.kind()}
 tags{rust.sample.sample.payload()}
 tags{rust.sample.sample.payload_mut()}
@@ -468,7 +468,7 @@ tags{rust.sample.sample_fields.attachment()}
 tags{rust.sample.sample_fields.congestion_control()}
 tags{rust.sample.sample_fields.encoding()}
 tags{rust.sample.sample_fields.express()}
-tags{rust.sample.sample_fields.key_expr()}
+tags{rust.sample.sample_fields.keyexpr()}
 tags{rust.sample.sample_fields.kind()}
 tags{rust.sample.sample_fields.payload()}
 tags{rust.sample.sample_fields.priority()}
@@ -529,7 +529,7 @@ tags{rust.selector.properties.remove()}
 tags{rust.selector.properties.values()}
 tags{rust.selector.selector()}
 tags{rust.selector.selector.into_owned()}
-tags{rust.selector.selector.key_expr()}
+tags{rust.selector.selector.keyexpr()}
 tags{rust.selector.selector.new()}
 tags{rust.selector.selector.parameters()}
 tags{rust.selector.selector.parameters_mut()}
@@ -622,7 +622,7 @@ tags{rust.subscriber.subscriber()}
 tags{rust.subscriber.subscriber.handler()}
 tags{rust.subscriber.subscriber.handler_mut()}
 tags{rust.subscriber.subscriber.id()}
-tags{rust.subscriber.subscriber.key_expr()}
+tags{rust.subscriber.subscriber.keyexpr()}
 tags{rust.subscriber.subscriber.undeclare()}
 tags{rust.subscriber.subscriber_builder()}
 tags{rust.subscriber.subscriber_builder.allowed_origin()}
@@ -630,7 +630,7 @@ tags{rust.subscriber.subscriber_builder.best_effort()}
 tags{rust.subscriber.subscriber_builder.callback()}
 tags{rust.subscriber.subscriber_builder.callback_mut()}
 tags{rust.subscriber.subscriber_builder.handler()}
-tags{rust.subscriber.subscriber_builder.key_expr()}
+tags{rust.subscriber.subscriber_builder.keyexpr()}
 tags{rust.subscriber.subscriber_builder.origin()}
 tags{rust.subscriber.subscriber_builder.reliability()}
 tags{rust.subscriber.subscriber_builder.reliable()}
