@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// filetag{rust.keyexpr}
+// filetag{rust.key_expr}
 
 use core::hash::Hasher;
 #[cfg(not(feature = "std"))]

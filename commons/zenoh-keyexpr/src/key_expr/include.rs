@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// filetag{rust.keyexpr}
+// filetag{rust.key_expr}
 use super::{intersect::MayHaveVerbatim, keyexpr, utils::Split, DELIMITER, DOUBLE_WILD, STAR_DSL};
 
 pub const DEFAULT_INCLUDER: LTRIncluder = LTRIncluder;

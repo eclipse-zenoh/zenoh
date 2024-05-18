@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// filetag{rust.keyexpr}
+// filetag{rust.key_expr}
 
 //! KeTrees are specialized data structures to work with sets of values addressed by key expressions.
 //!

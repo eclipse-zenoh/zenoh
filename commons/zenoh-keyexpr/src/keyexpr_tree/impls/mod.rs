@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// filetag{rust.keyexpr}
+// filetag{rust.key_expr}
 
 pub use hashmap_impl::HashMapProvider;
 pub use keyed_set_impl::KeyedSetProvider;

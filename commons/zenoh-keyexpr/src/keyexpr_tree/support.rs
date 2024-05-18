@@ -1,4 +1,4 @@
-// filetag{rust.keyexpr}
+// filetag{rust.key_expr}
 use alloc::boxed::Box;
 use core::ops::{Deref, DerefMut};
 
