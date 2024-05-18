@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.keyexpr}
 #[cold]
 fn star_dsl_intersect(mut it1: &[u8], mut it2: &[u8]) -> bool {
     fn next(s: &[u8]) -> (u8, &[u8]) {

@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.keyexpr}
 
 //! This module implements the Key Expression Language, as explained in details in [`keyexpr`]'s documentation.
 

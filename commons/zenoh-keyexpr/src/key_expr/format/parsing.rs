@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.keyexpr}
 
 use zenoh_result::{bail, ZResult};
 

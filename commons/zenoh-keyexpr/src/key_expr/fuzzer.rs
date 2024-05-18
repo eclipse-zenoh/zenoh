@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.keyexpr}
 use super::OwnedKeyExpr;
 
 fn random_chunk(rng: &'_ mut impl rand::Rng) -> impl Iterator<Item = u8> + '_ {

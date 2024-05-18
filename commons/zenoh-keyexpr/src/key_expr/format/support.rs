@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.keyexpr}
 
 use alloc::{boxed::Box, vec::Vec};
 use core::convert::{TryFrom, TryInto};

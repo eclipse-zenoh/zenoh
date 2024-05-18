@@ -46,7 +46,7 @@
 //!
 //! A good way to avoid ambiguities when working with formats that contain multiple `**` specs is to separate such specs using verbatim chunks
 //! (chunks that start with an `@`), as `**` is incapable of consuming these chunks.
-
+// filetag{rust.keyexpr}
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
