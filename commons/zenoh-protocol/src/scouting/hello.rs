@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// filetag{rust.scouting}
+// filetag{rust.internal.protocol}
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -119,6 +119,7 @@ impl fmt::Display for Hello {
 }
 
 impl Hello {
+    // tags{}
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;

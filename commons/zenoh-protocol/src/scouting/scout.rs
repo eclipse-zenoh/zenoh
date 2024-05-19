@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// filetag{rust.scouting}
+// filetag{rust.internal.protocol}
 use crate::core::{whatami::WhatAmIMatcher, ZenohId};
 
 /// # Scout message
