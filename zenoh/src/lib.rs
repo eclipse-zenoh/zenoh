@@ -211,6 +211,7 @@ pub mod info {
     pub use crate::api::info::{
         PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder,
     };
+    pub use zenoh_protocol::core::ZenohId;
 }
 
 /// Sample primitives

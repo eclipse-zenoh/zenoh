@@ -61,6 +61,7 @@ pub mod properties;
 pub use properties::*;
 
 /// The global unique id of a zenoh peer.
+// filetag{rust.info}
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct ZenohId(uhlc::ID);

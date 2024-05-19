@@ -86,9 +86,12 @@ tags{api.handlers.callback(), rust.handlers.callback(), rust.handlers.callback_d
 tags{api.handlers.channel(), rust.handlers.default_handler(), rust.handlers.into_handler(), rust.handlers.into_handler.into_handler()}
 tags{api.handlers.channel.fifo(), rust.handlers.fifo_channel(), rust.handlers.fifo_channel.new()}
 tags{api.handlers.channel.ring(), rust.handlers.ring_channel(), rust.handlers.ring_channel.new(), rust.handlers.ring_channel_handler(), rust.handlers.ring_channel_handler.recv(), rust.handlers.ring_channel_handler.recv_async(), rust.handlers.ring_channel_handler.try_recv()}
-tags{api.info.peers_zid(), rust.info.peers_zenoh_id_builder(), rust.info.session_info.peers_zid()}
-tags{api.info.routers_zid(), rust.info.routers_zenoh_id_builder(), rust.info.session_info.routers_zid()}
-tags{api.info.zid(), rust.info.session_info.zid(), rust.info.zenoh_id_builder()}
+tags{api.info.zid(), rust.info.zenoh_id(), rust.info.zenoh_id_builder()}
+tags{api.info.zid.into_keyexpr(), rust.info.zenoh_id.into_keyexpr()}
+tags{api.info.zid.max_size(), rust.info.zenoh_id.m_a_x__s_i_z_e()}
+tags{api.info.zid.rand(), rust.info.zenoh_id.rand()}
+tags{api.info.zid.size(), rust.info.zenoh_id.size()}
+tags{api.info.zid.to_le_bytes(), rust.info.zenoh_id.to_le_bytes()}
 tags{api.keyexpr(), rust.key_expr.key_expr(), rust.key_expr.key_expr.as_keyexpr(), rust.key_expr.key_expr.borrowing_clone(), rust.key_expr.key_expr.into_owned(), rust.key_expr.keyexpr(), rust.key_expr.keyexpr.as_keyexpr(), rust.key_expr.keyexpr.borrowing_clone(), rust.key_expr.keyexpr.into_owned(), rust.key_expr.owned_key_expr(), rust.key_expr.owned_keyexpr(), rust.prelude.mods.key_expr()}
 tags{api.keyexpr.as_str(), rust.key_expr.keyexpr.as_str()}
 tags{api.keyexpr.autocanonize(), rust.key_expr.key_expr.autocanonize(), rust.key_expr.keyexpr.autocanonize(), rust.key_expr.owned_key_expr.autocanonize()}
@@ -296,6 +299,9 @@ tags{api.session.delete(), rust.publication.session_delete_builder(), rust.sessi
 tags{api.session.get(), rust.session.session.get()}
 tags{api.session.hlc(), rust.session.session.hlc()}
 tags{api.session.info(), rust.info.session_info(), rust.session.session_declarations.info()}
+tags{api.session.info.peers_zid(), rust.info.peers_zenoh_id_builder(), rust.info.session_info.peers_zid()}
+tags{api.session.info.routers_zid(), rust.info.routers_zenoh_id_builder(), rust.info.session_info.routers_zid()}
+tags{api.session.info.zid(), rust.info.session_info.zid()}
 tags{api.session.open(), rust.open(), rust.session.open(), rust.session.open_builder()}
 tags{api.session.open.with_shm_clients(), rust.session.open_builder.with_shm_clients()}
 tags{api.session.put(), rust.publication.session_put_builder(), rust.session.session.put(), rust.session.session_put_builder()}
@@ -485,13 +491,19 @@ tags{rust.handlers.ring_channel_handler(), api.handlers.channel.ring(), rust.han
 tags{rust.handlers.ring_channel_handler.recv(), api.handlers.channel.ring(), rust.handlers.ring_channel(), rust.handlers.ring_channel.new(), rust.handlers.ring_channel_handler(), rust.handlers.ring_channel_handler.recv_async(), rust.handlers.ring_channel_handler.try_recv()}
 tags{rust.handlers.ring_channel_handler.recv_async(), api.handlers.channel.ring(), rust.handlers.ring_channel(), rust.handlers.ring_channel.new(), rust.handlers.ring_channel_handler(), rust.handlers.ring_channel_handler.recv(), rust.handlers.ring_channel_handler.try_recv()}
 tags{rust.handlers.ring_channel_handler.try_recv(), api.handlers.channel.ring(), rust.handlers.ring_channel(), rust.handlers.ring_channel.new(), rust.handlers.ring_channel_handler(), rust.handlers.ring_channel_handler.recv(), rust.handlers.ring_channel_handler.recv_async()}
-tags{rust.info.peers_zenoh_id_builder(), api.info.peers_zid(), rust.info.session_info.peers_zid()}
-tags{rust.info.routers_zenoh_id_builder(), api.info.routers_zid(), rust.info.session_info.routers_zid()}
+tags{rust.info.peers_zenoh_id_builder(), api.session.info.peers_zid(), rust.info.session_info.peers_zid()}
+tags{rust.info.routers_zenoh_id_builder(), api.session.info.routers_zid(), rust.info.session_info.routers_zid()}
 tags{rust.info.session_info(), api.session.info(), rust.session.session_declarations.info()}
-tags{rust.info.session_info.peers_zid(), api.info.peers_zid(), rust.info.peers_zenoh_id_builder()}
-tags{rust.info.session_info.routers_zid(), api.info.routers_zid(), rust.info.routers_zenoh_id_builder()}
-tags{rust.info.session_info.zid(), api.info.zid(), rust.info.zenoh_id_builder()}
-tags{rust.info.zenoh_id_builder(), api.info.zid(), rust.info.session_info.zid()}
+tags{rust.info.session_info.peers_zid(), api.session.info.peers_zid(), rust.info.peers_zenoh_id_builder()}
+tags{rust.info.session_info.routers_zid(), api.session.info.routers_zid(), rust.info.routers_zenoh_id_builder()}
+tags{rust.info.session_info.zid(), api.session.info.zid()}
+tags{rust.info.zenoh_id(), api.info.zid(), rust.info.zenoh_id_builder()}
+tags{rust.info.zenoh_id.into_keyexpr(), api.info.zid.into_keyexpr()}
+tags{rust.info.zenoh_id.m_a_x__s_i_z_e(), api.info.zid.max_size()}
+tags{rust.info.zenoh_id.rand(), api.info.zid.rand()}
+tags{rust.info.zenoh_id.size(), api.info.zid.size()}
+tags{rust.info.zenoh_id.to_le_bytes(), api.info.zid.to_le_bytes()}
+tags{rust.info.zenoh_id_builder(), api.info.zid(), rust.info.zenoh_id()}
 tags{rust.internal.bail(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.handlers.dyn(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref(), rust.publication.publisher_ref.borrow(), rust.publication.publisher_ref.shared(), rust.selector.parameters.into_owned(), rust.selector.properties.into_owned(), rust.selector.selector.into_owned(), rust.session.session.into_arc(), rust.session.session.leak(), rust.session.session_ref(), rust.session.session_ref.borrow(), rust.session.session_ref.shared(), rust.session.undeclarable(), rust.session.undeclarable.undeclare_inner(), rust.subscriber.subscriber_builder.session()}
 tags{rust.internal.condition(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.handlers.dyn(), rust.internal.bail(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref(), rust.publication.publisher_ref.borrow(), rust.publication.publisher_ref.shared(), rust.selector.parameters.into_owned(), rust.selector.properties.into_owned(), rust.selector.selector.into_owned(), rust.session.session.into_arc(), rust.session.session.leak(), rust.session.session_ref(), rust.session.session_ref.borrow(), rust.session.session_ref.shared(), rust.session.undeclarable(), rust.session.undeclarable.undeclare_inner(), rust.subscriber.subscriber_builder.session()}
 tags{rust.internal.lib_loader(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.handlers.dyn(), rust.internal.bail(), rust.internal.condition(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref(), rust.publication.publisher_ref.borrow(), rust.publication.publisher_ref.shared(), rust.selector.parameters.into_owned(), rust.selector.properties.into_owned(), rust.selector.selector.into_owned(), rust.session.session.into_arc(), rust.session.session.leak(), rust.session.session_ref(), rust.session.session_ref.borrow(), rust.session.session_ref.shared(), rust.session.undeclarable(), rust.session.undeclarable.undeclare_inner(), rust.subscriber.subscriber_builder.session()}
