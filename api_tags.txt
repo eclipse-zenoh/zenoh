@@ -168,6 +168,18 @@ tags{api.publication.publisher.undeclare(), rust.publication.publisher.undeclare
 tags{api.publication.put(), rust.publication.publication_builder_put()}
 tags{api.query(), rust.prelude.mods.query()}
 tags{api.query.consolidation_mode(), rust.query.consolidation_mode()}
+tags{api.query.consolidation_mode.auto(), rust.query.consolidation_mode.auto()}
+tags{api.query.consolidation_mode.latest(), rust.query.consolidation_mode.latest()}
+tags{api.query.consolidation_mode.monotonic(), rust.query.consolidation_mode.monotonic()}
+tags{api.query.consolidation_mode.none(), rust.query.consolidation_mode.none()}
+tags{api.query.get(), rust.query.get_builder()}
+tags{api.query.get.accept_replies(), rust.query.get_builder.accept_replies()}
+tags{api.query.get.allowed_destination(), rust.query.get_builder.allowed_destination()}
+tags{api.query.get.callback(), rust.query.get_builder.callback(), rust.query.get_builder.callback_mut()}
+tags{api.query.get.channel(), rust.query.get_builder.with()}
+tags{api.query.get.consolidation(), rust.query.get_builder.consolidation()}
+tags{api.query.get.target(), rust.query.get_builder.target()}
+tags{api.query.get.timeout(), rust.query.get_builder.timeout()}
 tags{api.queryable(), rust.prelude.mods.queryable()}
 tags{api.sample(), rust.prelude.mods.sample()}
 tags{api.scouting(), rust.prelude.mods.scouting()}
@@ -523,15 +535,19 @@ tags{rust.publication.publisher_ref.borrow(), api.language_specific(), rust.core
 tags{rust.publication.publisher_ref.shared(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.internal.bail(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref(), rust.publication.publisher_ref.borrow()}
 tags{rust.publication.publisher_undeclaration(), api.publication.publisher.undeclare(), rust.publication.publisher.undeclare()}
 tags{rust.query.consolidation_mode(), api.query.consolidation_mode()}
-tags{rust.query.get_builder()}
-tags{rust.query.get_builder.accept_replies()}
-tags{rust.query.get_builder.allowed_destination()}
-tags{rust.query.get_builder.callback()}
-tags{rust.query.get_builder.callback_mut()}
-tags{rust.query.get_builder.consolidation()}
-tags{rust.query.get_builder.target()}
-tags{rust.query.get_builder.timeout()}
-tags{rust.query.get_builder.with()}
+tags{rust.query.consolidation_mode.auto(), api.query.consolidation_mode.auto()}
+tags{rust.query.consolidation_mode.latest(), api.query.consolidation_mode.latest()}
+tags{rust.query.consolidation_mode.monotonic(), api.query.consolidation_mode.monotonic()}
+tags{rust.query.consolidation_mode.none(), api.query.consolidation_mode.none()}
+tags{rust.query.get_builder(), api.query.get()}
+tags{rust.query.get_builder.accept_replies(), api.query.get.accept_replies()}
+tags{rust.query.get_builder.allowed_destination(), api.query.get.allowed_destination()}
+tags{rust.query.get_builder.callback(), api.query.get.callback(), rust.query.get_builder.callback_mut()}
+tags{rust.query.get_builder.callback_mut(), api.query.get.callback(), rust.query.get_builder.callback()}
+tags{rust.query.get_builder.consolidation(), api.query.get.consolidation()}
+tags{rust.query.get_builder.target(), api.query.get.target()}
+tags{rust.query.get_builder.timeout(), api.query.get.timeout()}
+tags{rust.query.get_builder.with(), api.query.get.channel()}
 tags{rust.query.query_consolidation()}
 tags{rust.query.query_consolidation.a_u_t_o()}
 tags{rust.query.query_consolidation.d_e_f_a_u_l_t()}

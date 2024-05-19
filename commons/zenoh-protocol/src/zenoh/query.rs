@@ -17,6 +17,8 @@ use alloc::{string::String, vec::Vec};
 use crate::common::ZExtUnknown;
 
 /// The kind of consolidation.
+// filetag{rust.query}
+// grouptag{consolidation_mode}
 #[repr(u8)]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Copy)]
 pub enum Consolidation {
