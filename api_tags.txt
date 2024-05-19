@@ -167,8 +167,9 @@ tags{api.publication.publisher.put(), rust.publication.publisher.put()}
 tags{api.publication.publisher.undeclare(), rust.publication.publisher.undeclare(), rust.publication.publisher_undeclaration()}
 tags{api.publication.put(), rust.publication.publication_builder_put()}
 tags{api.query(), rust.prelude.mods.query()}
-tags{api.query.consolidation_mode(), rust.query.consolidation_mode()}
-tags{api.query.consolidation_mode.auto(), rust.query.consolidation_mode.auto()}
+tags{api.query.consolidation_mode(), rust.query.consolidation_mode(), rust.query.query_consolidation(), rust.query.query_consolidation.mode()}
+tags{api.query.consolidation_mode.auto(), rust.query.consolidation_mode.auto(), rust.query.query_consolidation.a_u_t_o()}
+tags{api.query.consolidation_mode.default(), rust.query.query_consolidation.d_e_f_a_u_l_t()}
 tags{api.query.consolidation_mode.latest(), rust.query.consolidation_mode.latest()}
 tags{api.query.consolidation_mode.monotonic(), rust.query.consolidation_mode.monotonic()}
 tags{api.query.consolidation_mode.none(), rust.query.consolidation_mode.none()}
@@ -180,6 +181,17 @@ tags{api.query.get.channel(), rust.query.get_builder.with()}
 tags{api.query.get.consolidation(), rust.query.get_builder.consolidation()}
 tags{api.query.get.target(), rust.query.get_builder.target()}
 tags{api.query.get.timeout(), rust.query.get_builder.timeout()}
+tags{api.query.query_target(), rust.query.query_target()}
+tags{api.query.query_target.all(), rust.query.query_target.all()}
+tags{api.query.query_target.all_complete(), rust.query.query_target.all_complete()}
+tags{api.query.query_target.best_matching(), rust.query.query_target.best_matching()}
+tags{api.query.reply(), rust.query.reply()}
+tags{api.query.reply.replier_id(), rust.query.reply.replier_id()}
+tags{api.query.reply.result(), rust.query.reply.into_result(), rust.query.reply.result(), rust.query.reply.result_mut()}
+tags{api.query.reply_key_expr(), rust.query.reply_key_expr()}
+tags{api.query.reply_key_expr.any(), rust.query.reply_key_expr.any()}
+tags{api.query.reply_key_expr.matching_query(), rust.query.reply_key_expr.matching_query()}
+tags{api.query.reply_key_expr_any_sel_param(), rust.query.r_e_p_l_y__k_e_y__e_x_p_r__a_n_y__s_e_l__p_a_r_a_m()}
 tags{api.queryable(), rust.prelude.mods.queryable()}
 tags{api.sample(), rust.prelude.mods.sample()}
 tags{api.scouting(), rust.prelude.mods.scouting()}
@@ -534,8 +546,8 @@ tags{rust.publication.publisher_ref(), api.language_specific(), rust.core.async_
 tags{rust.publication.publisher_ref.borrow(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.internal.bail(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref(), rust.publication.publisher_ref.shared()}
 tags{rust.publication.publisher_ref.shared(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.internal.bail(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref(), rust.publication.publisher_ref.borrow()}
 tags{rust.publication.publisher_undeclaration(), api.publication.publisher.undeclare(), rust.publication.publisher.undeclare()}
-tags{rust.query.consolidation_mode(), api.query.consolidation_mode()}
-tags{rust.query.consolidation_mode.auto(), api.query.consolidation_mode.auto()}
+tags{rust.query.consolidation_mode(), api.query.consolidation_mode(), rust.query.query_consolidation(), rust.query.query_consolidation.mode()}
+tags{rust.query.consolidation_mode.auto(), api.query.consolidation_mode.auto(), rust.query.query_consolidation.a_u_t_o()}
 tags{rust.query.consolidation_mode.latest(), api.query.consolidation_mode.latest()}
 tags{rust.query.consolidation_mode.monotonic(), api.query.consolidation_mode.monotonic()}
 tags{rust.query.consolidation_mode.none(), api.query.consolidation_mode.none()}
@@ -548,20 +560,23 @@ tags{rust.query.get_builder.consolidation(), api.query.get.consolidation()}
 tags{rust.query.get_builder.target(), api.query.get.target()}
 tags{rust.query.get_builder.timeout(), api.query.get.timeout()}
 tags{rust.query.get_builder.with(), api.query.get.channel()}
-tags{rust.query.query_consolidation()}
-tags{rust.query.query_consolidation.a_u_t_o()}
-tags{rust.query.query_consolidation.d_e_f_a_u_l_t()}
-tags{rust.query.query_consolidation.mode()}
-tags{rust.query.query_target()}
-tags{rust.query.r_e_p_l_y__k_e_y__e_x_p_r__a_n_y__s_e_l__p_a_r_a_m()}
-tags{rust.query.reply()}
-tags{rust.query.reply.into_result()}
-tags{rust.query.reply.replier_id()}
-tags{rust.query.reply.result()}
-tags{rust.query.reply.result_mut()}
-tags{rust.query.reply_key_expr()}
-tags{rust.query.reply_key_expr.any()}
-tags{rust.query.reply_key_expr.matching_query()}
+tags{rust.query.query_consolidation(), api.query.consolidation_mode(), rust.query.consolidation_mode(), rust.query.query_consolidation.mode()}
+tags{rust.query.query_consolidation.a_u_t_o(), api.query.consolidation_mode.auto(), rust.query.consolidation_mode.auto()}
+tags{rust.query.query_consolidation.d_e_f_a_u_l_t(), api.query.consolidation_mode.default()}
+tags{rust.query.query_consolidation.mode(), api.query.consolidation_mode(), rust.query.consolidation_mode(), rust.query.query_consolidation()}
+tags{rust.query.query_target(), api.query.query_target()}
+tags{rust.query.query_target.all(), api.query.query_target.all()}
+tags{rust.query.query_target.all_complete(), api.query.query_target.all_complete()}
+tags{rust.query.query_target.best_matching(), api.query.query_target.best_matching()}
+tags{rust.query.r_e_p_l_y__k_e_y__e_x_p_r__a_n_y__s_e_l__p_a_r_a_m(), api.query.reply_key_expr_any_sel_param()}
+tags{rust.query.reply(), api.query.reply()}
+tags{rust.query.reply.into_result(), api.query.reply.result(), rust.query.reply.result(), rust.query.reply.result_mut()}
+tags{rust.query.reply.replier_id(), api.query.reply.replier_id()}
+tags{rust.query.reply.result(), api.query.reply.result(), rust.query.reply.into_result(), rust.query.reply.result_mut()}
+tags{rust.query.reply.result_mut(), api.query.reply.result(), rust.query.reply.into_result(), rust.query.reply.result()}
+tags{rust.query.reply_key_expr(), api.query.reply_key_expr()}
+tags{rust.query.reply_key_expr.any(), api.query.reply_key_expr.any()}
+tags{rust.query.reply_key_expr.matching_query(), api.query.reply_key_expr.matching_query()}
 tags{rust.queryable.query()}
 tags{rust.queryable.query.accepts_replies()}
 tags{rust.queryable.query.attachment()}

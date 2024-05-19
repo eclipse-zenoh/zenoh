@@ -90,6 +90,8 @@ pub mod ext {
     /// +---------------+
     ///
     /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+    // filetag{rust.query}
+    // grouptag{query_target}
     #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
     pub enum TargetType {
         #[default]

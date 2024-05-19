@@ -46,7 +46,6 @@ pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
-// grouptag{consolidation_mode}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
     pub(crate) mode: ConsolidationMode,
