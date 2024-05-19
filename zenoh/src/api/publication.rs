@@ -966,7 +966,7 @@ pub(crate) struct MatchingListenerInner<'a> {
 #[zenoh_macros::unstable]
 impl<'a> MatchingListenerInner<'a> {
     #[inline]
-    pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
+    pub(crate) fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
         Undeclarable::undeclare_inner(self, ())
     }
 }

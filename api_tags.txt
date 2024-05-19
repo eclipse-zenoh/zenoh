@@ -347,76 +347,76 @@ tags{rust.key_expr.set_intersection_level.disjoint(), api.keyexpr.set_intersecti
 tags{rust.key_expr.set_intersection_level.equals(), api.keyexpr.set_intersection_level.equals()}
 tags{rust.key_expr.set_intersection_level.includes(), api.keyexpr.set_intersection_level.includes()}
 tags{rust.key_expr.set_intersection_level.intersects(), api.keyexpr.set_intersection_level.intersects()}
-tags{rust.liveliness.liveliness()}
-tags{rust.liveliness.liveliness.declare_subscriber()}
-tags{rust.liveliness.liveliness.declare_token()}
-tags{rust.liveliness.liveliness.get()}
-tags{rust.liveliness.liveliness_get_builder()}
-tags{rust.liveliness.liveliness_get_builder.callback()}
-tags{rust.liveliness.liveliness_get_builder.callback_mut()}
-tags{rust.liveliness.liveliness_get_builder.timeout()}
-tags{rust.liveliness.liveliness_get_builder.with()}
-tags{rust.liveliness.liveliness_subscriber_builder()}
-tags{rust.liveliness.liveliness_subscriber_builder.callback()}
-tags{rust.liveliness.liveliness_subscriber_builder.callback_mut()}
-tags{rust.liveliness.liveliness_subscriber_builder.handler()}
-tags{rust.liveliness.liveliness_subscriber_builder.key_expr()}
-tags{rust.liveliness.liveliness_subscriber_builder.session()}
-tags{rust.liveliness.liveliness_subscriber_builder.with()}
-tags{rust.liveliness.liveliness_token()}
-tags{rust.liveliness.liveliness_token.undeclare()}
-tags{rust.liveliness.liveliness_token_builder()}
-tags{rust.liveliness.liveliness_token_undeclaration()}
-tags{rust.open()}
-tags{rust.plugins.p_l_u_g_i_n__p_r_e_f_i_x()}
-tags{rust.plugins.plugins_manager()}
-tags{rust.plugins.response()}
-tags{rust.plugins.response.key()}
-tags{rust.plugins.response.new()}
-tags{rust.plugins.response.value()}
-tags{rust.plugins.running_plugin()}
-tags{rust.plugins.running_plugin_trait()}
-tags{rust.plugins.running_plugin_trait.adminspace_getter()}
-tags{rust.plugins.running_plugin_trait.config_checker()}
-tags{rust.plugins.zenoh_plugin()}
-tags{rust.prelude.async_resolve()}
-tags{rust.prelude.flat.resolvable()}
-tags{rust.prelude.flat.resolve()}
-tags{rust.prelude.flat.z_error()}
-tags{rust.prelude.flat.z_result()}
-tags{rust.prelude.mods.buffers()}
-tags{rust.prelude.mods.bytes()}
-tags{rust.prelude.mods.config()}
-tags{rust.prelude.mods.core()}
-tags{rust.prelude.mods.encoding()}
-tags{rust.prelude.mods.handlers()}
-tags{rust.prelude.mods.key_expr()}
-tags{rust.prelude.mods.publication()}
-tags{rust.prelude.mods.query()}
-tags{rust.prelude.mods.queryable()}
-tags{rust.prelude.mods.sample()}
-tags{rust.prelude.mods.scouting()}
-tags{rust.prelude.mods.selector()}
-tags{rust.prelude.mods.session()}
-tags{rust.prelude.mods.shm()}
-tags{rust.prelude.mods.subscriber()}
-tags{rust.prelude.mods.time()}
-tags{rust.prelude.mods.value()}
-tags{rust.prelude.r#async.async_resolve()}
-tags{rust.prelude.sync.sync_resolve()}
-tags{rust.prelude.sync_resolve()}
-tags{rust.prelude.wait()}
-tags{rust.publication.congestion_control()}
-tags{rust.publication.congestion_control.block()}
-tags{rust.publication.congestion_control.d_e_f_a_u_l_t()}
-tags{rust.publication.congestion_control.drop()}
-tags{rust.publication.matching_listener()}
-tags{rust.publication.matching_listener.undeclare()}
-tags{rust.publication.matching_listener_builder()}
-tags{rust.publication.matching_listener_builder.callback()}
-tags{rust.publication.matching_listener_builder.callback_mut()}
-tags{rust.publication.matching_listener_builder.handler()}
-tags{rust.publication.matching_listener_builder.with()}
+tags{rust.liveliness.liveliness(), api.liveliness}
+tags{rust.liveliness.liveliness.declare_subscriber(), api.liveliness.subscriber()}
+tags{rust.liveliness.liveliness.declare_token(), api.liveliness.declare_token()}
+tags{rust.liveliness.liveliness.get(), api.liveliness.get()}
+tags{rust.liveliness.liveliness_get_builder(), api.liveliness.get()}
+tags{rust.liveliness.liveliness_get_builder.callback(), api.liveliness.get.callback()}
+tags{rust.liveliness.liveliness_get_builder.callback_mut, api.liveliness.get.callback}
+tags{rust.liveliness.liveliness_get_builder.timeout, api.liveliness.get.timeout}
+tags{rust.liveliness.liveliness_get_builder.with, api.liveliness.get.channel}
+tags{rust.liveliness.liveliness_subscriber_builder(), api.liveliness.subscriber()}
+tags{rust.liveliness.liveliness_subscriber_builder.callback, api.liveliness.subscriber.callback}
+tags{rust.liveliness.liveliness_subscriber_builder.callback_mut, api.liveliness.subscriber.callback}
+tags{rust.liveliness.liveliness_subscriber_builder.handler, api.liveliness.subscriber.callback}
+tags{rust.liveliness.liveliness_subscriber_builder.key_expr(), api.liveliness.subscriber.key_expr}
+tags{rust.liveliness.liveliness_subscriber_builder.session, api.liveliness.subscriber.session}
+tags{rust.liveliness.liveliness_subscriber_builder.with, api.liveliness.subscriber.channel}
+tags{rust.liveliness.liveliness_token, api.liveliness.token}
+tags{rust.liveliness.liveliness_token.undeclare, api.liveliness.token.undeclare}
+tags{rust.liveliness.liveliness_token_builder, api.liveliness.token}
+tags{rust.liveliness.liveliness_token_undeclaration, api.liveliness.token.undeclare}
+tags{rust.open(), api.session.open()}
+tags{rust.plugins.p_l_u_g_i_n__p_r_e_f_i_x(), api.plugins}
+tags{rust.plugins.plugins_manager(), api.plugins}
+tags{rust.plugins.response(), api.plugins}
+tags{rust.plugins.response.key(), api.plugins}
+tags{rust.plugins.response.new(), api.plugins}
+tags{rust.plugins.response.value(), api.plugins}
+tags{rust.plugins.running_plugin(), api.plugins}
+tags{rust.plugins.running_plugin_trait(), api.plugins}
+tags{rust.plugins.running_plugin_trait.adminspace_getter(), api.plugins}
+tags{rust.plugins.running_plugin_trait.config_checker(), api.plugins}
+tags{rust.plugins.zenoh_plugin(), api.plugins}
+tags{rust.prelude.async_resolve(), api.language_specific}
+tags{rust.prelude.flat.resolvable(), api.language_specific}
+tags{rust.prelude.flat.resolve(), api.language_specific}
+tags{rust.prelude.flat.z_error(), api.language_specific}
+tags{rust.prelude.flat.z_result(), api.language_specific}
+tags{rust.prelude.mods.buffers(), api.language_specific}
+tags{rust.prelude.mods.bytes(), api.bytes}
+tags{rust.prelude.mods.config(), api.config}
+tags{rust.prelude.mods.core(), api.language_specific}
+tags{rust.prelude.mods.encoding(), api.encoding}
+tags{rust.prelude.mods.handlers(), api.handlers}
+tags{rust.prelude.mods.key_expr(), api.keyexpr
+tags{rust.prelude.mods.publication(), api.publication}
+tags{rust.prelude.mods.query(), api.query}
+tags{rust.prelude.mods.queryable(), api.queryable}
+tags{rust.prelude.mods.sample(), api.sample}
+tags{rust.prelude.mods.scouting(), api.scouting}
+tags{rust.prelude.mods.selector(), api.selector}
+tags{rust.prelude.mods.session(), api.session}
+tags{rust.prelude.mods.shm(), api.shm}
+tags{rust.prelude.mods.subscriber(), api.subscriber}
+tags{rust.prelude.mods.time(), api.time}
+tags{rust.prelude.mods.value(), api.value}
+tags{rust.prelude.r#async.async_resolve(), api.language_specific}
+tags{rust.prelude.sync.sync_resolve(), api.language_specific}
+tags{rust.prelude.sync_resolve(), api.language_specific}
+tags{rust.prelude.wait(), api.language_specific}
+tags{rust.publication.congestion_control(), api.publication.congestion_control}
+tags{rust.publication.congestion_control.block(), api.publication.congestion_control.block}
+tags{rust.publication.congestion_control.d_e_f_a_u_l_t(), api.publication.congestion_control.default}
+tags{rust.publication.congestion_control.drop(), api.publication.congestion_control.drop}
+tags{rust.publication.matching_listener(), api.publication.matching_listener}
+tags{rust.publication.matching_listener.undeclare(), api.publication.matching_listener.undeclare}
+tags{rust.publication.matching_listener_builder(), api.publication.matching_listener}
+tags{rust.publication.matching_listener_builder.callback(), api.publication.matching_listener.callback}
+tags{rust.publication.matching_listener_builder.callback_mut(), api.publication.matching_listener.callback}
+tags{rust.publication.matching_listener_builder.handler(), api.publication.matching_listener.callback}
+tags{rust.publication.matching_listener_builder.with(), api.publication.matching_listener.channel}
 tags{rust.publication.matching_listener_inner.undeclare()}
 tags{rust.publication.matching_listener_undeclaration()}
 tags{rust.publication.matching_status()}
