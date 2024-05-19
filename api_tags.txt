@@ -390,7 +390,7 @@ tags{rust.prelude.mods.config(), api.config}
 tags{rust.prelude.mods.core(), api.language_specific}
 tags{rust.prelude.mods.encoding(), api.encoding}
 tags{rust.prelude.mods.handlers(), api.handlers}
-tags{rust.prelude.mods.key_expr(), api.keyexpr
+tags{rust.prelude.mods.key_expr(), api.keyexpr}
 tags{rust.prelude.mods.publication(), api.publication}
 tags{rust.prelude.mods.query(), api.query}
 tags{rust.prelude.mods.queryable(), api.queryable}
