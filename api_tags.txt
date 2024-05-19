@@ -163,7 +163,7 @@ tags{api.publication.publisher.key_expr(), rust.publication.publisher.key_expr()
 tags{api.publication.publisher.matching_listener(), rust.publication.publisher.matching_listener(), rust.publication.publisher_declarations.matching_listener()}
 tags{api.publication.publisher.matching_status(), rust.publication.publisher.matching_status()}
 tags{api.publication.publisher.priority(), rust.publication.publisher.set_priority()}
-tags{api.publication.publisher.put(), rust.publication.publisher.put()}
+tags{api.publication.publisher.put(), rust.publication.publisher.put(), rust.publication.publisher_put_builder()}
 tags{api.publication.publisher.undeclare(), rust.publication.publisher.undeclare(), rust.publication.publisher_undeclaration()}
 tags{api.publication.put(), rust.publication.publication_builder_put()}
 tags{api.query(), rust.prelude.mods.query()}
@@ -259,8 +259,10 @@ tags{api.scouting.whatami(), rust.scouting.what_am_i()}
 tags{api.selector(), rust.prelude.mods.selector()}
 tags{api.session(), rust.prelude.mods.session()}
 tags{api.session.close(), rust.session.session.close()}
+tags{api.session.delete(), rust.publication.session_delete_builder()}
 tags{api.session.info(), rust.info.session_info()}
 tags{api.session.open(), rust.open(), rust.session.open()}
+tags{api.session.put(), rust.publication.session_put_builder()}
 tags{api.shm(), rust.prelude.mods.shm()}
 tags{api.subscriber(), rust.prelude.mods.subscriber()}
 tags{api.time(), rust.prelude.mods.time()}
@@ -407,6 +409,7 @@ tags{rust.handlers.callback_drop(), api.handlers.callback(), rust.handlers.callb
 tags{rust.handlers.callback_drop.callback(), api.handlers.callback(), rust.handlers.callback(), rust.handlers.callback_drop(), rust.handlers.callback_drop.drop(), rust.handlers.locked()}
 tags{rust.handlers.callback_drop.drop(), api.handlers.callback(), rust.handlers.callback(), rust.handlers.callback_drop(), rust.handlers.callback_drop.callback(), rust.handlers.locked()}
 tags{rust.handlers.default_handler(), api.handlers.channel(), rust.handlers.into_handler(), rust.handlers.into_handler.into_handler()}
+tags{rust.handlers.dyn(), api.language_specific}
 tags{rust.handlers.fifo_channel(), api.handlers.channel.fifo(), rust.handlers.fifo_channel.new()}
 tags{rust.handlers.fifo_channel.new(), api.handlers.channel.fifo(), rust.handlers.fifo_channel()}
 tags{rust.handlers.into_handler(), api.handlers.channel(), rust.handlers.default_handler(), rust.handlers.into_handler.into_handler()}
@@ -587,7 +590,7 @@ tags{rust.publication.publisher.into_arc(), api.language_specific(), rust.core.a
 tags{rust.publication.publisher.key_expr(), api.publication.publisher.key_expr()}
 tags{rust.publication.publisher.matching_listener(), api.publication.publisher.matching_listener(), rust.publication.publisher_declarations.matching_listener()}
 tags{rust.publication.publisher.matching_status(), api.publication.publisher.matching_status()}
-tags{rust.publication.publisher.put(), api.publication.publisher.put()}
+tags{rust.publication.publisher.put(), api.publication.publisher.put(), rust.publication.publisher_put_builder()}
 tags{rust.publication.publisher.set_allowed_destination(), api.publication.publisher.allowed_destination(), rust.publication.publisher_builder.allowed_destination()}
 tags{rust.publication.publisher.set_congestion_control(), api.publication.publisher.congestion_control()}
 tags{rust.publication.publisher.set_priority(), api.publication.publisher.priority()}
@@ -597,10 +600,13 @@ tags{rust.publication.publisher_builder.allowed_destination(), api.publication.p
 tags{rust.publication.publisher_declarations(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.internal.bail(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_ref(), rust.publication.publisher_ref.borrow(), rust.publication.publisher_ref.shared()}
 tags{rust.publication.publisher_declarations.matching_listener(), api.publication.publisher.matching_listener(), rust.publication.publisher.matching_listener()}
 tags{rust.publication.publisher_delete_builder(), api.publication.publisher.delete(), rust.publication.publisher.delete()}
+tags{rust.publication.publisher_put_builder(), api.publication.publisher.put(), rust.publication.publisher.put()}
 tags{rust.publication.publisher_ref(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.internal.bail(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref.borrow(), rust.publication.publisher_ref.shared()}
 tags{rust.publication.publisher_ref.borrow(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.internal.bail(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref(), rust.publication.publisher_ref.shared()}
 tags{rust.publication.publisher_ref.shared(), api.language_specific(), rust.core.async_resolve(), rust.core.err_no(), rust.core.error(), rust.core.resolvable(), rust.core.resolve(), rust.core.result(), rust.core.sync_resolve(), rust.core.wait(), rust.f_e_a_t_u_r_e_s(), rust.internal.bail(), rust.internal.condition(), rust.internal.lib_loader(), rust.internal.resolve_future(), rust.internal.task_controller(), rust.internal.terminatable_task(), rust.internal.timed(), rust.internal.timed_event(), rust.internal.timer(), rust.internal.z_e_n_o_h__h_o_m_e__e_n_v__v_a_r(), rust.internal.zasync_executor_init(), rust.internal.zenoh_home(), rust.internal.zerror(), rust.internal.zlock(), rust.internal.ztimeout(), rust.prelude.async_resolve(), rust.prelude.flat.resolvable(), rust.prelude.flat.resolve(), rust.prelude.flat.z_error(), rust.prelude.flat.z_result(), rust.prelude.mods.buffers(), rust.prelude.mods.core(), rust.prelude.r#async.async_resolve(), rust.prelude.sync.sync_resolve(), rust.prelude.sync_resolve(), rust.prelude.wait(), rust.publication.publisher.into_arc(), rust.publication.publisher_declarations(), rust.publication.publisher_ref(), rust.publication.publisher_ref.borrow()}
 tags{rust.publication.publisher_undeclaration(), api.publication.publisher.undeclare(), rust.publication.publisher.undeclare()}
+tags{rust.publication.session_delete_builder(), api.session.delete()}
+tags{rust.publication.session_put_builder(), api.session.put()}
 tags{rust.query.consolidation_mode(), api.query.consolidation_mode(), rust.query.query_consolidation(), rust.query.query_consolidation.mode()}
 tags{rust.query.consolidation_mode.auto(), api.query.consolidation_mode.auto(), rust.query.query_consolidation.a_u_t_o()}
 tags{rust.query.consolidation_mode.latest(), api.query.consolidation_mode.latest()}
