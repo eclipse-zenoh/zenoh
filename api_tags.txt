@@ -330,6 +330,7 @@ tags{api.value.value.encoding(), rust.value.value.encoding()}
 tags{api.value.value.is_empty(), rust.value.value.is_empty()}
 tags{api.value.value.new(), rust.value.value.new()}
 tags{api.value.value.new.empty(), rust.value.value.empty()}
+tags{api.value.value.payload(), rust.value.value.payload()}
 tags{rust.buffers.has_reader(), api.buffers.read(), rust.buffers.reader(), rust.buffers.z_buf_reader()}
 tags{rust.buffers.has_reader.reader(), api.buffers.zbuf.read(), rust.buffers.reader.can_read(), rust.buffers.reader.read(), rust.buffers.reader.read_exact(), rust.buffers.reader.read_u8(), rust.buffers.reader.read_zslice(), rust.buffers.reader.read_zslices(), rust.buffers.reader.remaining()}
 tags{rust.buffers.reader(), api.buffers.read(), rust.buffers.has_reader(), rust.buffers.z_buf_reader()}
@@ -973,4 +974,4 @@ tags{rust.value.value.empty(), api.value.value.new.empty()}
 tags{rust.value.value.encoding(), api.value.value.encoding()}
 tags{rust.value.value.is_empty(), api.value.value.is_empty()}
 tags{rust.value.value.new(), api.value.value.new()}
-tags{rust.value.value.payload()}
+tags{rust.value.value.payload(), api.value.value.payload()}
