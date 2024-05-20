@@ -1400,13 +1400,13 @@ tags{
 	rust.runtime.weak_runtime(),
 	rust.runtime.weak_runtime.upgrade(),
 	rust.runtime.z_runtime(),
+	rust.session.init(),
 	rust.session.init_builder(),
 	rust.session.init_builder.aggregated_publishers(),
 	rust.session.init_builder.aggregated_subscribers(),
 }
 tags{
 	api.runtine(),
-	rust.session.init(),
 }
 tags{
 	api.sample(),
