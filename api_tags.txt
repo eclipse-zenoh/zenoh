@@ -1,7 +1,4 @@
 tags{
-	api.buffers.bytes.serde(),
-}
-tags{
 	api.buffers.read(),
 	rust.buffers.has_reader(),
 	rust.buffers.reader(),
@@ -18,12 +15,6 @@ tags{
 tags{
 	api.buffers.zbuf.contiguous(),
 	rust.buffers.split_buffer.contiguous(),
-}
-tags{
-	api.buffers.zbuf.eq(),
-}
-tags{
-	api.buffers.zbuf.len(),
 }
 tags{
 	api.buffers.zbuf.new.empty(),
@@ -90,9 +81,6 @@ tags{
 	rust.buffers.z_slice_buffer.as_slice(),
 }
 tags{
-	api.buffers.zslice.eq(),
-}
-tags{
 	api.buffers.zslice.is_empty(),
 	rust.buffers.z_slice.is_empty(),
 }
@@ -123,9 +111,6 @@ tags{
 	rust.bytes.option_z_bytes(),
 	rust.bytes.z_bytes(),
 	rust.prelude.mods.bytes(),
-}
-tags{
-	api.bytes.deserialize(),
 }
 tags{
 	api.bytes.new(),
@@ -161,9 +146,6 @@ tags{
 	rust.bytes.z_serde(),
 }
 tags{
-	api.bytes.serialize(),
-}
-tags{
 	api.bytes.write(),
 	rust.bytes.z_bytes.writer(),
 	rust.bytes.z_bytes_writer(),
@@ -173,254 +155,75 @@ tags{
 	rust.prelude.mods.config(),
 }
 tags{
-	api.config.peer(),
-}
-tags{
 	api.encoding(),
 	rust.encoding.encoding(),
 	rust.prelude.mods.encoding(),
 }
 tags{
-	api.encoding.const.appication_cbor(),
+	api.encoding.const
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_b_o_r(),
-}
-tags{
-	api.encoding.const.appication_cdr(),
+	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_b_o_r(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_d_r(),
-}
-tags{
-	api.encoding.const.appication_coap_payload(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_o_a_p__p_a_y_l_o_a_d(),
-}
-tags{
-	api.encoding.const.appication_java_serialized_object(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_a_v_a__s_e_r_i_a_l_i_z_e_d__o_b_j_e_c_t(),
-}
-tags{
-	api.encoding.const.appication_json(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n(),
-}
-tags{
-	api.encoding.const.appication_json_patch_json(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n__p_a_t_c_h__j_s_o_n(),
-}
-tags{
-	api.encoding.const.appication_json_seq(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n__s_e_q(),
-}
-tags{
-	api.encoding.const.appication_jsonpath(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_s_o_n_p_a_t_h(),
-}
-tags{
-	api.encoding.const.appication_jwt(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__j_w_t(),
-}
-tags{
-	api.encoding.const.appication_mp4(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__m_p4(),
-}
-tags{
-	api.encoding.const.appication_octet_stream(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__o_c_t_e_t__s_t_r_e_a_m(),
-}
-tags{
-	api.encoding.const.appication_openmetrics_text(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__o_p_e_n_m_e_t_r_i_c_s__t_e_x_t(),
-}
-tags{
-	api.encoding.const.appication_protobuf(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__p_r_o_t_o_b_u_f(),
-}
-tags{
-	api.encoding.const.appication_python_serialized_object(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__p_y_t_h_o_n__s_e_r_i_a_l_i_z_e_d__o_b_j_e_c_t(),
-}
-tags{
-	api.encoding.const.appication_soap_xml(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__s_o_a_p__x_m_l(),
-}
-tags{
-	api.encoding.const.appication_sql(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__s_q_l(),
-}
-tags{
-	api.encoding.const.appication_x_www_form_urlencoded(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__x__w_w_w__f_o_r_m__u_r_l_e_n_c_o_d_e_d(),
-}
-tags{
-	api.encoding.const.appication_xml(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__x_m_l(),
-}
-tags{
-	api.encoding.const.appication_yaml(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__y_a_m_l(),
-}
-tags{
-	api.encoding.const.appication_yang(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__y_a_n_g(),
-}
-tags{
-	api.encoding.const.audio_aac(),
 	rust.encoding.encoding.a_u_d_i_o__a_a_c(),
-}
-tags{
-	api.encoding.const.audio_flac(),
 	rust.encoding.encoding.a_u_d_i_o__f_l_a_c(),
-}
-tags{
-	api.encoding.const.audio_mp4(),
 	rust.encoding.encoding.a_u_d_i_o__m_p4(),
-}
-tags{
-	api.encoding.const.audio_ogg(),
 	rust.encoding.encoding.a_u_d_i_o__o_g_g(),
-}
-tags{
-	api.encoding.const.audio_vorbis(),
 	rust.encoding.encoding.a_u_d_i_o__v_o_r_b_i_s(),
-}
-tags{
-	api.encoding.const.image_bmp(),
-	rust.encoding.encoding.i_m_a_g_e__b_m_p(),
-}
-tags{
-	api.encoding.const.image_gif(),
-	rust.encoding.encoding.i_m_a_g_e__g_i_f(),
-}
-tags{
-	api.encoding.const.image_jpeg(),
-	rust.encoding.encoding.i_m_a_g_e__j_p_e_g(),
-}
-tags{
-	api.encoding.const.image_png(),
-	rust.encoding.encoding.i_m_a_g_e__p_n_g(),
-}
-tags{
-	api.encoding.const.image_webp(),
-	rust.encoding.encoding.i_m_a_g_e__w_e_b_p(),
-}
-tags{
-	api.encoding.const.new.default(),
 	rust.encoding.encoding.default(),
-}
-tags{
-	api.encoding.const.text_css(),
+	rust.encoding.encoding.i_m_a_g_e__b_m_p(),
+	rust.encoding.encoding.i_m_a_g_e__g_i_f(),
+	rust.encoding.encoding.i_m_a_g_e__j_p_e_g(),
+	rust.encoding.encoding.i_m_a_g_e__p_n_g(),
+	rust.encoding.encoding.i_m_a_g_e__w_e_b_p(),
 	rust.encoding.encoding.t_e_x_t__c_s_s(),
-}
-tags{
-	api.encoding.const.text_csv(),
 	rust.encoding.encoding.t_e_x_t__c_s_v(),
-}
-tags{
-	api.encoding.const.text_html(),
 	rust.encoding.encoding.t_e_x_t__h_t_m_l(),
-}
-tags{
-	api.encoding.const.text_javascript(),
 	rust.encoding.encoding.t_e_x_t__j_a_v_a_s_c_r_i_p_t(),
-}
-tags{
-	api.encoding.const.text_json(),
 	rust.encoding.encoding.t_e_x_t__j_s_o_n(),
-}
-tags{
-	api.encoding.const.text_json5(),
 	rust.encoding.encoding.t_e_x_t__j_s_o_n5(),
-}
-tags{
-	api.encoding.const.text_markdown(),
 	rust.encoding.encoding.t_e_x_t__m_a_r_k_d_o_w_n(),
-}
-tags{
-	api.encoding.const.text_plain(),
 	rust.encoding.encoding.t_e_x_t__p_l_a_i_n(),
-}
-tags{
-	api.encoding.const.text_xml(),
 	rust.encoding.encoding.t_e_x_t__x_m_l(),
-}
-tags{
-	api.encoding.const.text_yaml(),
 	rust.encoding.encoding.t_e_x_t__y_a_m_l(),
-}
-tags{
-	api.encoding.const.video_h261(),
 	rust.encoding.encoding.v_i_d_e_o__h261(),
-}
-tags{
-	api.encoding.const.video_h263(),
 	rust.encoding.encoding.v_i_d_e_o__h263(),
-}
-tags{
-	api.encoding.const.video_h264(),
 	rust.encoding.encoding.v_i_d_e_o__h264(),
-}
-tags{
-	api.encoding.const.video_h265(),
 	rust.encoding.encoding.v_i_d_e_o__h265(),
-}
-tags{
-	api.encoding.const.video_h266(),
 	rust.encoding.encoding.v_i_d_e_o__h266(),
-}
-tags{
-	api.encoding.const.video_mp4(),
 	rust.encoding.encoding.v_i_d_e_o__m_p4(),
-}
-tags{
-	api.encoding.const.video_ogg(),
 	rust.encoding.encoding.v_i_d_e_o__o_g_g(),
-}
-tags{
-	api.encoding.const.video_raw(),
 	rust.encoding.encoding.v_i_d_e_o__r_a_w(),
-}
-tags{
-	api.encoding.const.video_vp8(),
 	rust.encoding.encoding.v_i_d_e_o__v_p8(),
-}
-tags{
-	api.encoding.const.video_vp9(),
 	rust.encoding.encoding.v_i_d_e_o__v_p9(),
-}
-tags{
-	api.encoding.const.zenoh_bool(),
 	rust.encoding.encoding.z_e_n_o_h__b_o_o_l(),
-}
-tags{
-	api.encoding.const.zenoh_bytes(),
 	rust.encoding.encoding.z_e_n_o_h__b_y_t_e_s(),
-}
-tags{
-	api.encoding.const.zenoh_error(),
 	rust.encoding.encoding.z_e_n_o_h__e_r_r_o_r(),
-}
-tags{
-	api.encoding.const.zenoh_float(),
 	rust.encoding.encoding.z_e_n_o_h__f_l_o_a_t(),
-}
-tags{
-	api.encoding.const.zenoh_int(),
 	rust.encoding.encoding.z_e_n_o_h__i_n_t(),
-}
-tags{
-	api.encoding.const.zenoh_string(),
 	rust.encoding.encoding.z_e_n_o_h__s_t_r_i_n_g(),
-}
-tags{
-	api.encoding.const.zenoh_uint(),
 	rust.encoding.encoding.z_e_n_o_h__u_i_n_t(),
-}
-tags{
-	api.encoding.new(),
 }
 tags{
 	api.encoding.with_schema(),
 	rust.encoding.encoding.with_schema(),
-}
-tags{
-	api.get.callback(),
 }
 tags{
 	api.handlers(),
@@ -453,9 +256,6 @@ tags{
 	rust.handlers.ring_channel_handler.recv(),
 	rust.handlers.ring_channel_handler.recv_async(),
 	rust.handlers.ring_channel_handler.try_recv(),
-}
-tags{
-	api.info(),
 }
 tags{
 	api.info.zid(),
@@ -515,9 +315,6 @@ tags{
 	rust.key_expr.key_expr.concat(),
 }
 tags{
-	api.keyexpr.equals(),
-}
-tags{
 	api.keyexpr.format(),
 	rust.key_expr.kedefine(),
 	rust.key_expr.keformat(),
@@ -534,9 +331,6 @@ tags{
 tags{
 	api.keyexpr.intersects(),
 	rust.key_expr.keyexpr.intersects(),
-}
-tags{
-	api.keyexpr.is_canon(),
 }
 tags{
 	api.keyexpr.is_wild(),
@@ -962,9 +756,6 @@ tags{
 	rust.publication.congestion_control.drop(),
 }
 tags{
-	api.publication.declare_publisher(),
-}
-tags{
 	api.publication.delete(),
 	rust.publication.publication_builder_delete(),
 }
@@ -1103,39 +894,12 @@ tags{
 	rust.publication.publication_builder_put(),
 }
 tags{
-	api.publication_cache.history(),
-}
-tags{
-	api.publication_cache.new(),
-}
-tags{
-	api.publication_cache.queryable_complete(),
-}
-tags{
-	api.publication_cache.queryable_origin(),
-}
-tags{
-	api.publication_cache.queryable_prefix(),
-}
-tags{
-	api.publication_cache.resources_limit(),
-}
-tags{
-	api.publication_cache.undeclare(),
-}
-tags{
 	api.publisher.new(),
 	rust.session.session_declarations.declare_publisher(),
 }
 tags{
-	api.publisher.undeclare(),
-}
-tags{
 	api.query(),
 	rust.prelude.mods.query(),
-}
-tags{
-	api.query.callback(),
 }
 tags{
 	api.query.consolidation_mode(),
@@ -1163,9 +927,6 @@ tags{
 tags{
 	api.query.consolidation_mode.none(),
 	rust.query.consolidation_mode.none(),
-}
-tags{
-	api.query.declare_queryable(),
 }
 tags{
 	api.query.get(),
@@ -1360,18 +1121,6 @@ tags{
 	rust.queryable.reply_sample(),
 }
 tags{
-	api.queryable.undeclare(),
-}
-tags{
-	api.querying_subscriber(),
-}
-tags{
-	api.querying_subscriber.get(),
-}
-tags{
-	api.querying_subscriber.new(),
-}
-tags{
 	api.runtime(),
 	rust.runtime.admin_space(),
 	rust.runtime.admin_space.key_expr_to_string(),
@@ -1406,9 +1155,6 @@ tags{
 	rust.session.init_builder.aggregated_subscribers(),
 }
 tags{
-	api.runtine(),
-}
-tags{
 	api.sample(),
 	rust.prelude.mods.sample(),
 }
@@ -1427,9 +1173,6 @@ tags{
 tags{
 	api.sample.locality.session_local(),
 	rust.sample.locality.session_local(),
-}
-tags{
-	api.sample.qos(),
 }
 tags{
 	api.sample.qos.congestion_control(),
@@ -1570,12 +1313,6 @@ tags{
 	api.scouting.hello(),
 	rust.scout(),
 	rust.scouting.hello(),
-}
-tags{
-	api.scouting.hello.locators(),
-}
-tags{
-	api.scouting.hello.zid(),
 }
 tags{
 	api.scouting.scout(),
@@ -1730,32 +1467,8 @@ tags{
 	rust.session.session_delete_builder(),
 }
 tags{
-	api.session.delete.congestion_control(),
-}
-tags{
-	api.session.delete.priority(),
-}
-tags{
 	api.session.get(),
 	rust.session.session.get(),
-}
-tags{
-	api.session.get.attachment(),
-}
-tags{
-	api.session.get.consolidation(),
-}
-tags{
-	api.session.get.encoding(),
-}
-tags{
-	api.session.get.payload(),
-}
-tags{
-	api.session.get.target(),
-}
-tags{
-	api.session.get.timeout(),
 }
 tags{
 	api.session.hlc(),
@@ -1857,14 +1570,8 @@ tags{
 	rust.prelude.mods.subscriber(),
 }
 tags{
-	api.subscriber.callback(),
-}
-tags{
 	api.subscriber.channel(),
 	rust.subscriber.flume_subscriber(),
-}
-tags{
-	api.subscriber.declare_subscriber(),
 }
 tags{
 	api.subscriber.new(),
@@ -1938,18 +1645,6 @@ tags{
 	rust.subscriber.subscriber.undeclare(),
 	rust.subscriber.subscriber_inner.undeclare(),
 	rust.subscriber.subscriber_undeclaration(),
-}
-tags{
-	api.subscriber.undeclare(),
-}
-tags{
-	api.system.clock(),
-}
-tags{
-	api.system.clock.elapsed(),
-}
-tags{
-	api.system.clock.now(),
 }
 tags{
 	api.time.new_reception_timestamp(),
