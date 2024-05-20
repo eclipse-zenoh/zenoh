@@ -812,10 +812,6 @@ tags{
 	rust.publication.priority.real_time(),
 }
 tags{
-	api.publication.publication_builder(),
-	rust.publication.publication_builder(),
-}
-tags{
 	api.publication.publisher(),
 	rust.publication.publisher(),
 	rust.publication.publisher_builder(),
@@ -872,6 +868,7 @@ tags{
 }
 tags{
 	api.publication.put(),
+	rust.publication.publication_builder(),
 	rust.publication.publication_builder_put(),
 }
 tags{
