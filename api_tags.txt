@@ -1825,63 +1825,83 @@ tags{
 	rust.value.value.payload(),
 }
 tags{
+	api.language_specific,
 	rust.buffers.split_buffer(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.attachment_type.from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.bool.try_from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.cow.from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.cow.try_from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.option.from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.option_z_bytes.from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.properties.try_from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.serde_cbor.try_from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.serde_json.try_from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.serde_pickle.try_from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.serde_yaml.try_from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.string.try_from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.string_or_base64.deref(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.string_or_base64.fmt(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.string_or_base64.from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.vec.from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.z_buf.from(),
 }
 tags{
+	api.language_specific,
 	rust.bytes.z_bytes.from(),
 }
 tags{
+	api.buffers.bytes.serde,
 	rust.bytes.z_bytes.from_iter(),
 }
 tags{
