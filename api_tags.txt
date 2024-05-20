@@ -1828,9 +1828,6 @@ tags{
 	rust.buffers.split_buffer(),
 }
 tags{
-	rust.bytes.[u8.try_from(),
-}
-tags{
 	rust.bytes.attachment_type.from(),
 }
 tags{
