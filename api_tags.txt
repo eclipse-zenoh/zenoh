@@ -103,16 +103,6 @@ tags{
 	rust.bytes.z_bytes(),
 	rust.prelude.mods.bytes(),
 }
-tags {
-	api.bytes.reader,
-	rust.bytes.z_bytes.reader(),
-	rust.bytes.z_bytes_reader(),
-}
-tags {
-	api.bytes.writer,
-	rust.bytes.z_bytes.writer(),
-	rust.bytes.z_bytes_writer(),
-}
 tags{
 	api.bytes.data(),
 	rust.bytes.z_bytes.into(),
@@ -137,6 +127,11 @@ tags{
 	rust.bytes.z_bytes.new(),
 }
 tags{
+	api.bytes.reader(),
+	rust.bytes.z_bytes.reader(),
+	rust.bytes.z_bytes_reader(),
+}
+tags{
 	api.bytes.serialize(),
 	rust.bytes.serialize(),
 	rust.bytes.serialize.serialize(),
@@ -148,6 +143,11 @@ tags{
 	rust.bytes.string_or_base64.base64(),
 	rust.bytes.string_or_base64.into_string(),
 	rust.bytes.string_or_base64.string(),
+}
+tags{
+	api.bytes.writer(),
+	rust.bytes.z_bytes.writer(),
+	rust.bytes.z_bytes_writer(),
 }
 tags{
 	api.config(),
