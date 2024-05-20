@@ -1828,12 +1828,6 @@ tags{
 	rust.buffers.split_buffer(),
 }
 tags{
-	rust.bytes.$t.try_from(),
-}
-tags{
-	rust.bytes.&'a.try_from(),
-}
-tags{
 	rust.bytes.[u8.try_from(),
 }
 tags{
@@ -1997,9 +1991,6 @@ tags{
 }
 tags{
 	rust.info.zenoh_id_builder.wait(),
-}
-tags{
-	rust.key_expr.&_key_expr.div(),
 }
 tags{
 	rust.key_expr.key_expr.as_ref(),
