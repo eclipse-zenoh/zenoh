@@ -1,8 +1,4 @@
 tags{
-	api.buffers.read(),
-	rust.buffers.has_reader(),
-	rust.buffers.reader(),
-	rust.buffers.z_buf_reader(),
 }
 tags{
 	api.buffers.zbuf(),
@@ -100,7 +96,7 @@ tags{
 	rust.buffers.z_slice.new_unchecked(),
 }
 tags{
-	api.buffers.zslice.read(),
+	api.buffers.zslice.data(),
 	rust.buffers.z_slice.index(),
 	rust.buffers.z_slice.range(),
 	rust.buffers.z_slice.slices(),
@@ -117,39 +113,48 @@ tags{
 	rust.bytes.z_bytes.empty(),
 	rust.bytes.z_bytes.new(),
 }
-tags{
-	api.bytes.read(),
+tags {
+	api.bytes.reader,
+	rust.bytes.z_bytes.reader(),
+	rust.bytes.z_bytes_reader(),
 	rust.bytes.z_bytes.from_reader(),
+}
+tags {
+	api.bytes.writer,
+	rust.bytes.z_bytes.writer(),
+	rust.bytes.z_bytes_writer(),
+}
+tags{
+	api.bytes.data(),
 	rust.bytes.z_bytes.into(),
 	rust.bytes.z_bytes.into_mut(),
 	rust.bytes.z_bytes.is_empty(),
 	rust.bytes.z_bytes.iter(),
 	rust.bytes.z_bytes.len(),
-	rust.bytes.z_bytes.reader(),
 	rust.bytes.z_bytes_iterator(),
-	rust.bytes.z_bytes_reader(),
 }
-tags{
-	api.bytes.serde(),
-	rust.bytes.deserialize(),
-	rust.bytes.deserialize.deserialize(),
-	rust.bytes.serialize(),
-	rust.bytes.serialize.serialize(),
+tags {
+	api.bytes.string_or_base64,
 	rust.bytes.string_or_base64(),
 	rust.bytes.string_or_base64.base64(),
 	rust.bytes.string_or_base64.into_string(),
 	rust.bytes.string_or_base64.string(),
-	rust.bytes.z_bytes.deserialize(),
-	rust.bytes.z_bytes.deserialize_mut(),
-	rust.bytes.z_bytes.serialize(),
-	rust.bytes.z_deserialize_error(),
-	rust.bytes.z_serde(),
 }
 tags{
-	api.bytes.write(),
-	rust.bytes.z_bytes.writer(),
-	rust.bytes.z_bytes_writer(),
+	api.bytes.serialize(),
+	rust.bytes.serialize(),
+	rust.bytes.serialize.serialize(),
+	rust.bytes.z_bytes.serialize(),
 }
+tags{
+	api.bytes.deserialize(),
+	rust.bytes.deserialize(),
+	rust.bytes.deserialize.deserialize(),
+	rust.bytes.z_bytes.deserialize(),
+	rust.bytes.z_bytes.deserialize_mut(),
+	rust.bytes.z_deserialize_error(),
+}
+
 tags{
 	api.config(),
 	rust.prelude.mods.config(),
@@ -405,6 +410,10 @@ tags{
 }
 tags{
 	api.language_specific(),
+	rust.bytes.z_serde(),
+	rust.buffers.has_reader(),
+	rust.buffers.reader(),
+	rust.buffers.z_buf_reader(),
 	rust.admin.handler.as_any(),
 	rust.admin.handler.closed(),
 	rust.admin.handler.closing(),
