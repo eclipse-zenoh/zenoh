@@ -840,12 +840,12 @@ tags{
 	rust.publication.publisher.key_expr(),
 }
 tags{
-	api.publication.publisher.matching_listener(),
+	api.publisher.matching_listener(),
 	rust.publication.publisher.matching_listener(),
 	rust.publication.publisher_declarations.matching_listener(),
 }
 tags{
-	api.publication.publisher.matching_status(),
+	api.publication.matching_status(),
 	rust.publication.publisher.matching_status(),
 }
 tags{
