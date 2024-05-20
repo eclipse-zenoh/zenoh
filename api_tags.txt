@@ -17,6 +17,14 @@ tags{
 	rust.buffers.split_buffer.contiguous(),
 }
 tags{
+	api.buffers.zbuf.eq(),
+	rust.buffers.z_buf.eq(),
+}
+tags{
+	api.buffers.zbuf.len(),
+	rust.buffers.z_buf.len(),
+}
+tags{
 	api.buffers.zbuf.new.empty(),
 	rust.buffers.z_buf.empty(),
 }
@@ -34,10 +42,24 @@ tags{
 	rust.buffers.reader.read_zslice(),
 	rust.buffers.reader.read_zslices(),
 	rust.buffers.reader.remaining(),
+	rust.buffers.z_buf_reader.backtrack(),
+	rust.buffers.z_buf_reader.can_read(),
+	rust.buffers.z_buf_reader.mark(),
+	rust.buffers.z_buf_reader.read(),
+	rust.buffers.z_buf_reader.read_exact(),
+	rust.buffers.z_buf_reader.read_u8(),
+	rust.buffers.z_buf_reader.read_zslice(),
+	rust.buffers.z_buf_reader.read_zslices(),
+	rust.buffers.z_buf_reader.remaining(),
+	rust.buffers.z_buf_reader.rewind(),
+	rust.buffers.z_buf_reader.seek(),
+	rust.buffers.z_buf_reader.siphon(),
+	rust.buffers.z_buf_reader.skip(),
 }
 tags{
 	api.buffers.zbuf.slices(),
 	rust.buffers.split_buffer.slices(),
+	rust.buffers.z_buf.slices(),
 }
 tags{
 	api.buffers.zbuf.splice(),
@@ -67,6 +89,10 @@ tags{
 	rust.buffers.z_slice_buffer.as_slice(),
 }
 tags{
+	api.buffers.zslice.eq(),
+	rust.buffers.z_slice.eq(),
+}
+tags{
 	api.buffers.zslice.is_empty(),
 	rust.buffers.z_slice.is_empty(),
 }
@@ -84,6 +110,13 @@ tags{
 	rust.buffers.z_slice.make(),
 	rust.buffers.z_slice.new(),
 	rust.buffers.z_slice.new_unchecked(),
+}
+tags{
+	api.buffers.zslice.read(),
+	rust.buffers.z_slice.index(),
+	rust.buffers.z_slice.range(),
+	rust.buffers.z_slice.slices(),
+	rust.buffers.z_slice.subslice(),
 }
 tags{
 	api.bytes(),
@@ -578,6 +611,23 @@ tags{
 }
 tags{
 	api.language_specific(),
+	rust.admin.handler.as_any(),
+	rust.admin.handler.closed(),
+	rust.admin.handler.closing(),
+	rust.admin.handler.new_multicast(),
+	rust.admin.handler.new_peer(),
+	rust.admin.handler.new_unicast(),
+	rust.admin.peer_handler.as_any(),
+	rust.admin.peer_handler.closed(),
+	rust.admin.peer_handler.closing(),
+	rust.admin.peer_handler.del_link(),
+	rust.admin.peer_handler.handle_message(),
+	rust.admin.peer_handler.new_link(),
+	rust.buffers.z_buf.from(),
+	rust.buffers.z_slice.as_ref(),
+	rust.buffers.z_slice.deref(),
+	rust.buffers.z_slice.fmt(),
+	rust.buffers.z_slice.from(),
 	rust.core.async_resolve(),
 	rust.core.err_no(),
 	rust.core.error(),
@@ -1778,16 +1828,730 @@ tags{
 	rust.buffers.split_buffer(),
 }
 tags{
-	rust.buffers.z_slice.range(),
+	rust.bytes.$t.try_from(),
 }
 tags{
-	rust.buffers.z_slice.subslice(),
+	rust.bytes.&'a.try_from(),
+}
+tags{
+	rust.bytes.[u8.try_from(),
+}
+tags{
+	rust.bytes.attachment_type.from(),
+}
+tags{
+	rust.bytes.bool.try_from(),
+}
+tags{
+	rust.bytes.cow.from(),
+}
+tags{
+	rust.bytes.cow.try_from(),
+}
+tags{
+	rust.bytes.option.from(),
+}
+tags{
+	rust.bytes.option_z_bytes.from(),
+}
+tags{
+	rust.bytes.properties.try_from(),
+}
+tags{
+	rust.bytes.serde_cbor.try_from(),
+}
+tags{
+	rust.bytes.serde_json.try_from(),
+}
+tags{
+	rust.bytes.serde_pickle.try_from(),
+}
+tags{
+	rust.bytes.serde_yaml.try_from(),
+}
+tags{
+	rust.bytes.string.try_from(),
+}
+tags{
+	rust.bytes.string_or_base64.deref(),
+}
+tags{
+	rust.bytes.string_or_base64.fmt(),
+}
+tags{
+	rust.bytes.string_or_base64.from(),
+}
+tags{
+	rust.bytes.vec.from(),
+}
+tags{
+	rust.bytes.z_buf.from(),
+}
+tags{
+	rust.bytes.z_bytes.from(),
+}
+tags{
+	rust.bytes.z_bytes.from_iter(),
+}
+tags{
+	rust.bytes.z_bytes.try_from(),
+}
+tags{
+	rust.bytes.z_bytes_iterator.next(),
+}
+tags{
+	rust.bytes.z_bytes_reader.read(),
+}
+tags{
+	rust.bytes.z_bytes_reader.seek(),
+}
+tags{
+	rust.bytes.z_bytes_writer.flush(),
+}
+tags{
+	rust.bytes.z_bytes_writer.write(),
+}
+tags{
+	rust.bytes.z_serde.deserialize(),
+}
+tags{
+	rust.bytes.z_serde.serialize(),
+}
+tags{
+	rust.bytes.z_slice.from(),
+}
+tags{
+	rust.encoding.cow.from(),
+}
+tags{
+	rust.encoding.cow.su8_to_str(),
+}
+tags{
+	rust.encoding.encoding.fmt(),
+}
+tags{
+	rust.encoding.encoding.from(),
+}
+tags{
+	rust.encoding.encoding.from_str(),
+}
+tags{
+	rust.encoding.string.from(),
+}
+tags{
+	rust.encoding.zenoh_protocol.from(),
+}
+tags{
+	rust.handlers.callback_drop.into_handler(),
+}
+tags{
+	rust.handlers.default_handler.into_handler(),
+}
+tags{
+	rust.handlers.f.into_handler(),
+}
+tags{
+	rust.handlers.fifo_channel.default(),
+}
+tags{
+	rust.handlers.fifo_channel.into_handler(),
+}
+tags{
+	rust.handlers.ring_channel.default(),
+}
+tags{
+	rust.handlers.ring_channel.into_handler(),
+}
+tags{
+	rust.info.peers_zenoh_id_builder.into_future(),
+}
+tags{
+	rust.info.peers_zenoh_id_builder.wait(),
+}
+tags{
+	rust.info.routers_zenoh_id_builder.into_future(),
+}
+tags{
+	rust.info.routers_zenoh_id_builder.wait(),
+}
+tags{
+	rust.info.zenoh_id.default(),
+}
+tags{
+	rust.info.zenoh_id.deserialize(),
+}
+tags{
+	rust.info.zenoh_id.fmt(),
+}
+tags{
+	rust.info.zenoh_id.from_str(),
+}
+tags{
+	rust.info.zenoh_id.serialize(),
+}
+tags{
+	rust.info.zenoh_id.try_from(),
+}
+tags{
+	rust.info.zenoh_id_builder.into_future(),
+}
+tags{
+	rust.info.zenoh_id_builder.wait(),
+}
+tags{
+	rust.key_expr.&_key_expr.div(),
+}
+tags{
+	rust.key_expr.key_expr.as_ref(),
+}
+tags{
+	rust.key_expr.key_expr.deref(),
+}
+tags{
+	rust.key_expr.key_expr.div(),
+}
+tags{
+	rust.key_expr.key_expr.eq(),
+}
+tags{
+	rust.key_expr.key_expr.fmt(),
+}
+tags{
+	rust.key_expr.key_expr.from(),
+}
+tags{
+	rust.key_expr.key_expr.from_str(),
+}
+tags{
+	rust.key_expr.key_expr.hash(),
+}
+tags{
+	rust.key_expr.key_expr.try_from(),
+}
+tags{
+	rust.key_expr.key_expr.undeclare_inner(),
+}
+tags{
+	rust.key_expr.key_expr_undeclaration.into_future(),
+}
+tags{
+	rust.key_expr.key_expr_undeclaration.wait(),
+}
+tags{
+	rust.key_expr.keyexpr.as_ref(),
+}
+tags{
+	rust.key_expr.keyexpr.deref(),
+}
+tags{
+	rust.key_expr.keyexpr.eq(),
+}
+tags{
+	rust.key_expr.keyexpr.fmt(),
+}
+tags{
+	rust.key_expr.keyexpr.match_complexity(),
+}
+tags{
+	rust.key_expr.keyexpr.to_owned(),
+}
+tags{
+	rust.key_expr.owned_key_expr.as_ref(),
+}
+tags{
+	rust.key_expr.owned_key_expr.borrow(),
+}
+tags{
+	rust.key_expr.owned_key_expr.deref(),
+}
+tags{
+	rust.key_expr.owned_key_expr.div(),
+}
+tags{
+	rust.key_expr.owned_key_expr.fmt(),
+}
+tags{
+	rust.key_expr.owned_key_expr.from(),
+}
+tags{
+	rust.key_expr.owned_key_expr.from_str(),
+}
+tags{
+	rust.key_expr.owned_key_expr.serialize(),
+}
+tags{
+	rust.key_expr.owned_key_expr.try_from(),
+}
+tags{
+	rust.key_expr.string.from(),
+}
+tags{
+	rust.liveliness.liveliness_get_builder.into_future(),
+}
+tags{
+	rust.liveliness.liveliness_get_builder.wait(),
+}
+tags{
+	rust.liveliness.liveliness_subscriber_builder.into_future(),
+}
+tags{
+	rust.liveliness.liveliness_subscriber_builder.wait(),
+}
+tags{
+	rust.liveliness.liveliness_token.drop(),
+}
+tags{
+	rust.liveliness.liveliness_token.undeclare_inner(),
+}
+tags{
+	rust.liveliness.liveliness_token_builder.into_future(),
+}
+tags{
+	rust.liveliness.liveliness_token_builder.wait(),
+}
+tags{
+	rust.liveliness.liveliness_token_undeclaration.into_future(),
+}
+tags{
+	rust.liveliness.liveliness_token_undeclaration.wait(),
+}
+tags{
+	rust.plugins.running_plugin.plugins_status(),
+}
+tags{
+	rust.plugins.running_plugin.report(),
+}
+tags{
+	rust.plugins.running_plugin.struct_features(),
+}
+tags{
+	rust.plugins.running_plugin.struct_version(),
 }
 tags{
 	rust.prelude.mods.time(),
 }
 tags{
+	rust.publication.matching_listener.deref(),
+}
+tags{
+	rust.publication.matching_listener.deref_mut(),
+}
+tags{
+	rust.publication.matching_listener.undeclare_inner(),
+}
+tags{
+	rust.publication.matching_listener_builder.into_future(),
+}
+tags{
+	rust.publication.matching_listener_builder.wait(),
+}
+tags{
+	rust.publication.matching_listener_inner.drop(),
+}
+tags{
+	rust.publication.matching_listener_inner.undeclare_inner(),
+}
+tags{
+	rust.publication.matching_listener_state.fmt(),
+}
+tags{
+	rust.publication.matching_listener_undeclaration.into_future(),
+}
+tags{
+	rust.publication.matching_listener_undeclaration.wait(),
+}
+tags{
+	rust.publication.priority.try_from(),
+}
+tags{
+	rust.publication.protocol_priority.from(),
+}
+tags{
+	rust.publication.publication_builder.attachment(),
+}
+tags{
+	rust.publication.publication_builder.congestion_control(),
+}
+tags{
+	rust.publication.publication_builder.express(),
+}
+tags{
+	rust.publication.publication_builder.into_future(),
+}
+tags{
+	rust.publication.publication_builder.priority(),
+}
+tags{
+	rust.publication.publication_builder.source_info(),
+}
+tags{
+	rust.publication.publication_builder.timestamp(),
+}
+tags{
+	rust.publication.publication_builder.wait(),
+}
+tags{
+	rust.publication.publisher.drop(),
+}
+tags{
+	rust.publication.publisher.poll_close(),
+}
+tags{
+	rust.publication.publisher.poll_flush(),
+}
+tags{
+	rust.publication.publisher.poll_ready(),
+}
+tags{
+	rust.publication.publisher.put.encoding(),
+}
+tags{
+	rust.publication.publisher.put.payload(),
+}
+tags{
+	rust.publication.publisher.put.value(),
+}
+tags{
+	rust.publication.publisher.start_send(),
+}
+tags{
+	rust.publication.publisher.undeclare_inner(),
+}
+tags{
+	rust.publication.publisher_builder.clone(),
+}
+tags{
+	rust.publication.publisher_builder.congestion_control(),
+}
+tags{
+	rust.publication.publisher_builder.express(),
+}
+tags{
+	rust.publication.publisher_builder.into_future(),
+}
+tags{
+	rust.publication.publisher_builder.priority(),
+}
+tags{
+	rust.publication.publisher_builder.wait(),
+}
+tags{
+	rust.publication.publisher_ref.deref(),
+}
+tags{
+	rust.publication.publisher_ref.fmt(),
+}
+tags{
+	rust.publication.publisher_state.fmt(),
+}
+tags{
+	rust.publication.publisher_undeclaration.into_future(),
+}
+tags{
+	rust.publication.publisher_undeclaration.wait(),
+}
+tags{
+	rust.publication.std.matching_listener(),
+}
+tags{
+	rust.query.get_builder.attachment(),
+}
+tags{
+	rust.query.get_builder.congestion_control(),
+}
+tags{
+	rust.query.get_builder.encoding(),
+}
+tags{
+	rust.query.get_builder.express(),
+}
+tags{
+	rust.query.get_builder.into_future(),
+}
+tags{
+	rust.query.get_builder.payload(),
+}
+tags{
+	rust.query.get_builder.priority(),
+}
+tags{
+	rust.query.get_builder.source_info(),
+}
+tags{
+	rust.query.get_builder.value(),
+}
+tags{
+	rust.query.get_builder.wait(),
+}
+tags{
+	rust.query.query_consolidation.default(),
+}
+tags{
+	rust.query.query_consolidation.from(),
+}
+tags{
+	rust.query.reply_key_expr.default(),
+}
+tags{
+	rust.query.result.from(),
+}
+tags{
+	rust.queryable.callback_queryable.drop(),
+}
+tags{
+	rust.queryable.callback_queryable.undeclare_inner(),
+}
+tags{
+	rust.queryable.query.fmt(),
+}
+tags{
+	rust.queryable.query_inner.drop(),
+}
+tags{
+	rust.queryable.queryable.deref(),
+}
+tags{
+	rust.queryable.queryable.deref_mut(),
+}
+tags{
+	rust.queryable.queryable.undeclare_inner(),
+}
+tags{
+	rust.queryable.queryable_builder.into_future(),
+}
+tags{
+	rust.queryable.queryable_builder.wait(),
+}
+tags{
+	rust.queryable.queryable_state.fmt(),
+}
+tags{
+	rust.queryable.queryable_undeclaration.into_future(),
+}
+tags{
+	rust.queryable.queryable_undeclaration.wait(),
+}
+tags{
+	rust.queryable.reply_builder.attachment(),
+}
+tags{
+	rust.queryable.reply_builder.congestion_control(),
+}
+tags{
+	rust.queryable.reply_builder.encoding(),
+}
+tags{
+	rust.queryable.reply_builder.express(),
+}
+tags{
+	rust.queryable.reply_builder.into_future(),
+}
+tags{
+	rust.queryable.reply_builder.payload(),
+}
+tags{
+	rust.queryable.reply_builder.priority(),
+}
+tags{
+	rust.queryable.reply_builder.source_info(),
+}
+tags{
+	rust.queryable.reply_builder.timestamp(),
+}
+tags{
+	rust.queryable.reply_builder.value(),
+}
+tags{
+	rust.queryable.reply_builder.wait(),
+}
+tags{
+	rust.queryable.reply_err_builder.encoding(),
+}
+tags{
+	rust.queryable.reply_err_builder.into_future(),
+}
+tags{
+	rust.queryable.reply_err_builder.payload(),
+}
+tags{
+	rust.queryable.reply_err_builder.value(),
+}
+tags{
+	rust.queryable.reply_err_builder.wait(),
+}
+tags{
+	rust.queryable.reply_sample.into_future(),
+}
+tags{
+	rust.queryable.reply_sample.wait(),
+}
+tags{
+	rust.runtime.admin_space.as_any(),
+}
+tags{
+	rust.runtime.admin_space.check_config(),
+}
+tags{
+	rust.runtime.admin_space.send_close(),
+}
+tags{
+	rust.runtime.admin_space.send_declare(),
+}
+tags{
+	rust.runtime.admin_space.send_interest(),
+}
+tags{
+	rust.runtime.admin_space.send_push(),
+}
+tags{
+	rust.runtime.admin_space.send_request(),
+}
+tags{
+	rust.runtime.admin_space.send_response(),
+}
+tags{
+	rust.runtime.admin_space.send_response_final(),
+}
+tags{
+	rust.runtime.runtime.struct_features(),
+}
+tags{
+	rust.runtime.runtime.struct_version(),
+}
+tags{
+	rust.runtime.runtime_muticast_group.as_any(),
+}
+tags{
+	rust.runtime.runtime_muticast_group.closed(),
+}
+tags{
+	rust.runtime.runtime_muticast_group.closing(),
+}
+tags{
+	rust.runtime.runtime_muticast_group.new_peer(),
+}
+tags{
+	rust.runtime.runtime_muticast_session.as_any(),
+}
+tags{
+	rust.runtime.runtime_muticast_session.closed(),
+}
+tags{
+	rust.runtime.runtime_muticast_session.closing(),
+}
+tags{
+	rust.runtime.runtime_muticast_session.del_link(),
+}
+tags{
+	rust.runtime.runtime_muticast_session.handle_message(),
+}
+tags{
+	rust.runtime.runtime_muticast_session.new_link(),
+}
+tags{
+	rust.runtime.runtime_session.as_any(),
+}
+tags{
+	rust.runtime.runtime_session.closed(),
+}
+tags{
+	rust.runtime.runtime_session.closing(),
+}
+tags{
+	rust.runtime.runtime_session.del_link(),
+}
+tags{
+	rust.runtime.runtime_session.handle_message(),
+}
+tags{
+	rust.runtime.runtime_session.new_link(),
+}
+tags{
+	rust.runtime.runtime_transport_event_handler.new_multicast(),
+}
+tags{
+	rust.runtime.runtime_transport_event_handler.new_unicast(),
+}
+tags{
+	rust.sample.data_info.into_sample(),
+}
+tags{
+	rust.sample.option.from(),
+}
+tags{
+	rust.sample.option.into_sample(),
+}
+tags{
+	rust.sample.qo_s.from(),
+}
+tags{
+	rust.sample.qo_s_builder.congestion_control(),
+}
+tags{
+	rust.sample.qo_s_builder.express(),
+}
+tags{
+	rust.sample.qo_s_builder.from(),
+}
+tags{
+	rust.sample.qo_s_builder.priority(),
+}
+tags{
+	rust.sample.qo_s_type.from(),
+}
+tags{
+	rust.sample.sample.from(),
+}
+tags{
+	rust.sample.sample_builder.attachment(),
+}
+tags{
+	rust.sample.sample_builder.congestion_control(),
+}
+tags{
+	rust.sample.sample_builder.encoding(),
+}
+tags{
+	rust.sample.sample_builder.express(),
+}
+tags{
+	rust.sample.sample_builder.from(),
+}
+tags{
+	rust.sample.sample_builder.payload(),
+}
+tags{
+	rust.sample.sample_builder.priority(),
+}
+tags{
+	rust.sample.sample_builder.source_info(),
+}
+tags{
+	rust.sample.sample_builder.timestamp(),
+}
+tags{
+	rust.sample.sample_builder.try_from(),
+}
+tags{
+	rust.sample.sample_builder.value(),
+}
+tags{
+	rust.sample.sample_fields.from(),
+}
+tags{
+	rust.sample.sample_kind.fmt(),
+}
+tags{
+	rust.sample.sample_kind.try_from(),
+}
+tags{
+	rust.sample.source_info.from(),
+}
+tags{
 	rust.sample.timestamp_builder_trait.timestamp(),
+}
+tags{
+	rust.sample.value.from(),
 }
 tags{
 	rust.sample.value_builder_trait.payload(),
@@ -1796,5 +2560,209 @@ tags{
 	rust.sample.value_builder_trait.value(),
 }
 tags{
+	rust.scouting.scout.deref(),
+}
+tags{
+	rust.scouting.scout_builder.into_future(),
+}
+tags{
+	rust.scouting.scout_builder.wait(),
+}
+tags{
+	rust.scouting.scout_inner.drop(),
+}
+tags{
+	rust.scouting.scout_inner.fmt(),
+}
+tags{
+	rust.scouting.what_am_i.bitor(),
+}
+tags{
+	rust.scouting.what_am_i.deserialize(),
+}
+tags{
+	rust.scouting.what_am_i.fmt(),
+}
+tags{
+	rust.scouting.what_am_i.from_str(),
+}
+tags{
+	rust.scouting.what_am_i.serialize(),
+}
+tags{
+	rust.scouting.what_am_i.try_from(),
+}
+tags{
+	rust.selector.hash_map.from(),
+}
+tags{
+	rust.selector.parameters.deref(),
+}
+tags{
+	rust.selector.parameters.deref_mut(),
+}
+tags{
+	rust.selector.parameters.fmt(),
+}
+tags{
+	rust.selector.parameters.from(),
+}
+tags{
+	rust.selector.properties.fmt(),
+}
+tags{
+	rust.selector.properties.from(),
+}
+tags{
+	rust.selector.properties.from_iter(),
+}
+tags{
+	rust.selector.selector.fmt(),
+}
+tags{
+	rust.selector.selector.from(),
+}
+tags{
+	rust.selector.selector.from_str(),
+}
+tags{
+	rust.selector.selector.try_from(),
+}
+tags{
+	rust.session.arc.declare_publisher(),
+}
+tags{
+	rust.session.arc.declare_queryable(),
+}
+tags{
+	rust.session.arc.declare_subscriber(),
+}
+tags{
+	rust.session.arc.info(),
+}
+tags{
+	rust.session.arc.liveliness(),
+}
+tags{
+	rust.session.g.undeclare_inner(),
+}
+tags{
+	rust.session.init_builder.into_future(),
+}
+tags{
+	rust.session.init_builder.wait(),
+}
+tags{
+	rust.session.open_builder.into_future(),
+}
+tags{
+	rust.session.open_builder.wait(),
+}
+tags{
+	rust.session.session.as_any(),
+}
+tags{
+	rust.session.session.declare_publisher(),
+}
+tags{
+	rust.session.session.declare_queryable(),
+}
+tags{
+	rust.session.session.declare_subscriber(),
+}
+tags{
+	rust.session.session.drop(),
+}
+tags{
+	rust.session.session.fmt(),
+}
+tags{
+	rust.session.session.info(),
+}
+tags{
+	rust.session.session.liveliness(),
+}
+tags{
+	rust.session.session.send_close(),
+}
+tags{
+	rust.session.session.send_declare(),
+}
+tags{
+	rust.session.session.send_interest(),
+}
+tags{
+	rust.session.session.send_push(),
+}
+tags{
+	rust.session.session.send_request(),
+}
+tags{
+	rust.session.session.send_response(),
+}
+tags{
+	rust.session.session.send_response_final(),
+}
+tags{
 	rust.session.session_declarations(),
+}
+tags{
+	rust.session.session_ref.declare_publisher(),
+}
+tags{
+	rust.session.session_ref.declare_queryable(),
+}
+tags{
+	rust.session.session_ref.declare_subscriber(),
+}
+tags{
+	rust.session.session_ref.deref(),
+}
+tags{
+	rust.session.session_ref.fmt(),
+}
+tags{
+	rust.session.session_ref.info(),
+}
+tags{
+	rust.session.session_ref.liveliness(),
+}
+tags{
+	rust.session.session_state.fmt(),
+}
+tags{
+	rust.subscriber.subscriber.deref(),
+}
+tags{
+	rust.subscriber.subscriber.deref_mut(),
+}
+tags{
+	rust.subscriber.subscriber.undeclare_inner(),
+}
+tags{
+	rust.subscriber.subscriber_builder.into_future(),
+}
+tags{
+	rust.subscriber.subscriber_builder.wait(),
+}
+tags{
+	rust.subscriber.subscriber_inner.drop(),
+}
+tags{
+	rust.subscriber.subscriber_inner.undeclare_inner(),
+}
+tags{
+	rust.subscriber.subscriber_state.fmt(),
+}
+tags{
+	rust.subscriber.subscriber_undeclaration.into_future(),
+}
+tags{
+	rust.subscriber.subscriber_undeclaration.wait(),
+}
+tags{
+	rust.value.value.default(),
+}
+tags{
+	rust.value.value.from(),
 }
