@@ -716,10 +716,6 @@ tags{
 	rust.prelude.mods.publication(),
 }
 tags{
-	api.publication.publisher.allowed_destination(),
-	rust.publication.publication_builder.allowed_destination(),
-}
-tags{
 	api.publication.congestion_control(),
 	rust.publication.congestion_control(),
 }
@@ -826,6 +822,7 @@ tags{
 }
 tags{
 	api.publication.publisher.allowed_destination(),
+	rust.publication.publication_builder.allowed_destination(),
 	rust.publication.publisher.set_allowed_destination(),
 	rust.publication.publisher_builder.allowed_destination(),
 }
@@ -856,6 +853,10 @@ tags{
 	rust.publication.publisher.matching_status(),
 }
 tags{
+	api.publication.publisher.new(),
+	rust.session.session_declarations.declare_publisher(),
+}
+tags{
 	api.publication.publisher.priority(),
 	rust.publication.publisher.set_priority(),
 }
@@ -872,10 +873,6 @@ tags{
 tags{
 	api.publication.put(),
 	rust.publication.publication_builder_put(),
-}
-tags{
-	api.publication.publisher.new(),
-	rust.session.session_declarations.declare_publisher(),
 }
 tags{
 	api.query(),
