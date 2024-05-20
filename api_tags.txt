@@ -619,6 +619,10 @@ tags{
 	rust.publication.publisher_ref(),
 	rust.publication.publisher_ref.borrow(),
 	rust.publication.publisher_ref.shared(),
+	rust.sample.qo_s_builder_trait(),
+	rust.sample.timestamp_builder_trait(),
+	rust.sample.value_builder_trait(),
+	rust.sample.value_builder_trait.encoding(),
 	rust.selector.parameters.into_owned(),
 	rust.selector.properties.into_owned(),
 	rust.selector.selector.into_owned(),
@@ -903,6 +907,9 @@ tags{
 	rust.session.session_declarations.declare_publisher(),
 }
 tags{
+	api.publisher.undeclare(),
+}
+tags{
 	api.query(),
 	rust.prelude.mods.query(),
 }
@@ -1132,6 +1139,9 @@ tags{
 	rust.queryable.reply_sample(),
 }
 tags{
+	api.queryable.undeclare(),
+}
+tags{
 	api.querying_subscriber(),
 }
 tags{
@@ -1199,7 +1209,6 @@ tags{
 }
 tags{
 	api.sample.qos(),
-	rust.sample.qo_s_builder_trait(),
 }
 tags{
 	api.sample.qos.congestion_control(),
@@ -1710,6 +1719,9 @@ tags{
 	rust.subscriber.subscriber_undeclaration(),
 }
 tags{
+	api.subscriber.undeclare(),
+}
+tags{
 	api.system.clock(),
 }
 tags{
@@ -1775,16 +1787,7 @@ tags{
 	rust.prelude.mods.time(),
 }
 tags{
-	rust.sample.timestamp_builder_trait(),
-}
-tags{
 	rust.sample.timestamp_builder_trait.timestamp(),
-}
-tags{
-	rust.sample.value_builder_trait(),
-}
-tags{
-	rust.sample.value_builder_trait.encoding(),
 }
 tags{
 	rust.sample.value_builder_trait.payload(),
