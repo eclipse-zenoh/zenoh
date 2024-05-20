@@ -878,6 +878,27 @@ tags{
 	rust.publication.publication_builder_put(),
 }
 tags{
+	api.publication_cache.history(),
+}
+tags{
+	api.publication_cache.new(),
+}
+tags{
+	api.publication_cache.queryable_complete(),
+}
+tags{
+	api.publication_cache.queryable_origin(),
+}
+tags{
+	api.publication_cache.queryable_prefix(),
+}
+tags{
+	api.publication_cache.resources_limit(),
+}
+tags{
+	api.publication_cache.undeclare(),
+}
+tags{
 	api.publisher.new(),
 	rust.session.session_declarations.declare_publisher(),
 }
@@ -1109,6 +1130,15 @@ tags{
 tags{
 	api.queryable.reply_sample(),
 	rust.queryable.reply_sample(),
+}
+tags{
+	api.querying_subscriber(),
+}
+tags{
+	api.querying_subscriber.get(),
+}
+tags{
+	api.querying_subscriber.new(),
 }
 tags{
 	api.runtime(),
