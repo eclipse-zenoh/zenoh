@@ -716,7 +716,7 @@ tags{
 	rust.prelude.mods.publication(),
 }
 tags{
-	api.publication.allowed_destination(),
+	api.publication.publisher.allowed_destination(),
 	rust.publication.publication_builder.allowed_destination(),
 }
 tags{
@@ -874,7 +874,7 @@ tags{
 	rust.publication.publication_builder_put(),
 }
 tags{
-	api.publisher.new(),
+	api.publication.publisher.new(),
 	rust.session.session_declarations.declare_publisher(),
 }
 tags{
