@@ -289,6 +289,10 @@ tags{
 	rust.key_expr.key_expr.concat(),
 }
 tags{
+	api.keyexpr.equals(),
+	rust.key_expr.key_expr.trait.partial_eq.eq(),
+}
+tags{
 	api.keyexpr.format(),
 	rust.key_expr.kedefine(),
 	rust.key_expr.keformat(),
@@ -316,18 +320,15 @@ tags{
 	rust.key_expr.keyexpr.join(),
 }
 tags{
-	api.keyexpr.new(),
+	api.keyexpr.new.checked(),
 	rust.key_expr.key_expr.new(),
 	rust.key_expr.keyexpr.new(),
 	rust.key_expr.owned_key_expr.new(),
 }
 tags{
-	api.keyexpr.new.checked(),
+	api.keyexpr.new.unchecked(),
 	rust.key_expr.key_expr.from_boxed_string_unchecked(),
 	rust.key_expr.key_expr.from_str_unchecked(),
-}
-tags{
-	api.keyexpr.new.unchecked(),
 	rust.key_expr.key_expr.from_string_unchecked(),
 	rust.key_expr.keyexpr.from_slice_unchecked(),
 	rust.key_expr.keyexpr.from_str_unchecked(),
@@ -631,6 +632,7 @@ tags{
 tags{
 	api.liveliness(),
 	rust.liveliness.liveliness(),
+	rust.prelude.mods.liveliness(),
 }
 tags{
 	api.liveliness.declare_token(),
@@ -1724,9 +1726,6 @@ tags{
 }
 tags{
 	rust.key_expr.key_expr.trait.from_str.from_str(),
-}
-tags{
-	rust.key_expr.key_expr.trait.partial_eq.eq(),
 }
 tags{
 	rust.key_expr.key_expr.trait.undeclarable.undeclare_inner(),
