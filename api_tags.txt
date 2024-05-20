@@ -92,6 +92,9 @@ tags{
 	rust.prelude.mods.bytes(),
 }
 tags{
+	api.bytes.deserialize(),
+}
+tags{
 	api.bytes.new(),
 	rust.bytes.z_bytes.empty(),
 	rust.bytes.z_bytes.new(),
@@ -125,6 +128,9 @@ tags{
 	rust.bytes.z_serde(),
 }
 tags{
+	api.bytes.serialize(),
+}
+tags{
 	api.bytes.write(),
 	rust.bytes.z_bytes.writer(),
 	rust.bytes.z_bytes_writer(),
@@ -132,6 +138,9 @@ tags{
 tags{
 	api.config(),
 	rust.prelude.mods.config(),
+}
+tags{
+	api.config.peer(),
 }
 tags{
 	api.encoding(),
@@ -371,8 +380,14 @@ tags{
 	rust.encoding.encoding.z_e_n_o_h__u_i_n_t(),
 }
 tags{
+	api.encoding.new(),
+}
+tags{
 	api.encoding.with_schema(),
 	rust.encoding.encoding.with_schema(),
+}
+tags{
+	api.get.callback(),
 }
 tags{
 	api.handlers(),
@@ -405,6 +420,9 @@ tags{
 	rust.handlers.ring_channel_handler.recv(),
 	rust.handlers.ring_channel_handler.recv_async(),
 	rust.handlers.ring_channel_handler.try_recv(),
+}
+tags{
+	api.info(),
 }
 tags{
 	api.info.zid(),
@@ -464,6 +482,9 @@ tags{
 	rust.key_expr.key_expr.concat(),
 }
 tags{
+	api.keyexpr.equals(),
+}
+tags{
 	api.keyexpr.format(),
 	rust.key_expr.kedefine(),
 	rust.key_expr.keformat(),
@@ -480,6 +501,9 @@ tags{
 tags{
 	api.keyexpr.intersects(),
 	rust.key_expr.keyexpr.intersects(),
+}
+tags{
+	api.keyexpr.is_canon(),
 }
 tags{
 	api.keyexpr.is_wild(),
@@ -713,6 +737,9 @@ tags{
 	rust.publication.congestion_control.drop(),
 }
 tags{
+	api.publication.declare_publisher(),
+}
+tags{
 	api.publication.delete(),
 	rust.publication.publication_builder_delete(),
 }
@@ -859,6 +886,9 @@ tags{
 	rust.prelude.mods.query(),
 }
 tags{
+	api.query.callback(),
+}
+tags{
 	api.query.consolidation_mode(),
 	rust.query.consolidation_mode(),
 	rust.query.query_consolidation(),
@@ -884,6 +914,9 @@ tags{
 tags{
 	api.query.consolidation_mode.none(),
 	rust.query.consolidation_mode.none(),
+}
+tags{
+	api.query.declare_queryable(),
 }
 tags{
 	api.query.get(),
@@ -1279,6 +1312,12 @@ tags{
 	rust.scouting.hello(),
 }
 tags{
+	api.scouting.hello.locators(),
+}
+tags{
+	api.scouting.hello.zid(),
+}
+tags{
 	api.scouting.scout(),
 	rust.scouting.scout(),
 	rust.scouting.scout_builder(),
@@ -1431,8 +1470,32 @@ tags{
 	rust.session.session_delete_builder(),
 }
 tags{
+	api.session.delete.congestion_control(),
+}
+tags{
+	api.session.delete.priority(),
+}
+tags{
 	api.session.get(),
 	rust.session.session.get(),
+}
+tags{
+	api.session.get.attachment(),
+}
+tags{
+	api.session.get.consolidation(),
+}
+tags{
+	api.session.get.encoding(),
+}
+tags{
+	api.session.get.payload(),
+}
+tags{
+	api.session.get.target(),
+}
+tags{
+	api.session.get.timeout(),
 }
 tags{
 	api.session.hlc(),
@@ -1534,8 +1597,14 @@ tags{
 	rust.prelude.mods.subscriber(),
 }
 tags{
+	api.subscriber.callback(),
+}
+tags{
 	api.subscriber.channel(),
 	rust.subscriber.flume_subscriber(),
+}
+tags{
+	api.subscriber.declare_subscriber(),
 }
 tags{
 	api.subscriber.new(),
@@ -1609,6 +1678,15 @@ tags{
 	rust.subscriber.subscriber.undeclare(),
 	rust.subscriber.subscriber_inner.undeclare(),
 	rust.subscriber.subscriber_undeclaration(),
+}
+tags{
+	api.system.clock(),
+}
+tags{
+	api.system.clock.elapsed(),
+}
+tags{
+	api.system.clock.now(),
 }
 tags{
 	api.time.new_reception_timestamp(),
