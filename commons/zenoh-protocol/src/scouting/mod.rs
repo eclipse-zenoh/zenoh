@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// filetag{rust.scouting}
+// filetag{rust.internal.protocol}
 pub mod hello;
 pub mod scout;
 
