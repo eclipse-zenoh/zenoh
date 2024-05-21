@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.ext}
 pub mod group;
 mod publication_cache;
 mod querying_subscriber;

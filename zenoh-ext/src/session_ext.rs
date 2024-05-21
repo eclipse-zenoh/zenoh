@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// filetag{rust.ext}
 use std::{convert::TryInto, sync::Arc};
 
 use zenoh::{

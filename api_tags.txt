@@ -841,6 +841,11 @@ tags{
 	rust.publication.publisher.key_expr(),
 }
 tags{
+	api.publication.publisher.matching_listener(),
+	rust.publication.publisher.matching_listener(),
+	rust.publication.publisher_declarations.matching_listener(),
+}
+tags{
 	api.publication.publisher.new(),
 	rust.session.session_declarations.declare_publisher(),
 }
@@ -880,9 +885,37 @@ tags{
 	rust.publication.publication_builder.trait.qo_s_builder_trait.priority(),
 }
 tags{
-	api.publisher.matching_listener(),
-	rust.publication.publisher.matching_listener(),
-	rust.publication.publisher_declarations.matching_listener(),
+	api.publication_cache(),
+	api.publication_cache.new(),
+	rust.ext.publication_cache_builder(),
+}
+tags{
+	api.publication_cache.history(),
+	rust.ext.publication_cache_builder.history(),
+}
+tags{
+	api.publication_cache.keyexpr(),
+	rust.ext.publication_cache.key_expr(),
+}
+tags{
+	api.publication_cache.queryable_complete(),
+	rust.ext.publication_cache_builder.queryable_complete(),
+}
+tags{
+	api.publication_cache.queryable_origin(),
+	rust.ext.publication_cache_builder.queryable_allowed_origin(),
+}
+tags{
+	api.publication_cache.queryable_prefix(),
+	rust.ext.publication_cache_builder.queryable_prefix(),
+}
+tags{
+	api.publication_cache.resources_limit(),
+	rust.ext.publication_cache_builder.resources_limit(),
+}
+tags{
+	api.publication_cache.undeclare(),
+	rust.ext.publication_cache.close(),
 }
 tags{
 	api.query(),
@@ -1679,6 +1712,294 @@ tags{
 }
 tags{
 	rust.encoding.encoding.trait.fmt.fmt(),
+}
+tags{
+	rust.ext.arc.trait.session_ext.declare_publication_cache(),
+}
+tags{
+	rust.ext.extract_sample.extract(),
+}
+tags{
+	rust.ext.fetch_builder(),
+}
+tags{
+	rust.ext.fetch_builder.trait.z_result.into_future(),
+}
+tags{
+	rust.ext.fetch_builder.trait.z_result.wait(),
+}
+tags{
+	rust.ext.fetching_subscriber(),
+}
+tags{
+	rust.ext.fetching_subscriber.close(),
+}
+tags{
+	rust.ext.fetching_subscriber.fetch(),
+}
+tags{
+	rust.ext.fetching_subscriber.key_expr(),
+}
+tags{
+	rust.ext.fetching_subscriber.trait.std.deref(),
+}
+tags{
+	rust.ext.fetching_subscriber.trait.std.deref_mut(),
+}
+tags{
+	rust.ext.fetching_subscriber_builder(),
+}
+tags{
+	rust.ext.fetching_subscriber_builder.trait.z_result.into_future(),
+}
+tags{
+	rust.ext.fetching_subscriber_builder.trait.z_result.wait(),
+}
+tags{
+	rust.ext.group(),
+}
+tags{
+	rust.ext.group.group_id(),
+}
+tags{
+	rust.ext.group.join(),
+}
+tags{
+	rust.ext.group.leader(),
+}
+tags{
+	rust.ext.group.local_member_id(),
+}
+tags{
+	rust.ext.group.size(),
+}
+tags{
+	rust.ext.group.subscribe(),
+}
+tags{
+	rust.ext.group.trait.drop.drop(),
+}
+tags{
+	rust.ext.group.view(),
+}
+tags{
+	rust.ext.group.wait_for_view_size(),
+}
+tags{
+	rust.ext.group_event(),
+}
+tags{
+	rust.ext.group_event.join(),
+}
+tags{
+	rust.ext.group_event.lease_expired(),
+}
+tags{
+	rust.ext.group_event.leave(),
+}
+tags{
+	rust.ext.group_event.new_leader(),
+}
+tags{
+	rust.ext.join_event(),
+}
+tags{
+	rust.ext.join_event.member(),
+}
+tags{
+	rust.ext.key_space(),
+}
+tags{
+	rust.ext.key_space.liveliness(),
+}
+tags{
+	rust.ext.key_space.trait.from.from(),
+}
+tags{
+	rust.ext.key_space.user(),
+}
+tags{
+	rust.ext.lease_expired_event(),
+}
+tags{
+	rust.ext.lease_expired_event.mid(),
+}
+tags{
+	rust.ext.leave_event(),
+}
+tags{
+	rust.ext.leave_event.mid(),
+}
+tags{
+	rust.ext.liveliness_space(),
+}
+tags{
+	rust.ext.liveliness_subscriber_builder.trait.subscriber_builder_ext.fetching(),
+}
+tags{
+	rust.ext.liveliness_subscriber_builder.trait.subscriber_builder_ext.querying(),
+}
+tags{
+	rust.ext.member(),
+}
+tags{
+	rust.ext.member.id(),
+}
+tags{
+	rust.ext.member.info(),
+}
+tags{
+	rust.ext.member.lease(),
+}
+tags{
+	rust.ext.member.liveliness(),
+}
+tags{
+	rust.ext.member.new(),
+}
+tags{
+	rust.ext.member.priority(),
+}
+tags{
+	rust.ext.member.refresh_ratio(),
+}
+tags{
+	rust.ext.member_liveliness(),
+}
+tags{
+	rust.ext.member_liveliness.auto(),
+}
+tags{
+	rust.ext.member_liveliness.manual(),
+}
+tags{
+	rust.ext.merge_queue_values.trait.iterator.next(),
+}
+tags{
+	rust.ext.new_leader_event(),
+}
+tags{
+	rust.ext.new_leader_event.mid(),
+}
+tags{
+	rust.ext.publication_cache(),
+}
+tags{
+	rust.ext.publication_cache_builder.trait.into_future.into_future(),
+}
+tags{
+	rust.ext.publication_cache_builder.trait.wait.wait(),
+}
+tags{
+	rust.ext.querying_subscriber_builder(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.allowed_origin(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.best_effort(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.callback(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.callback_mut(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.query_accept_replies(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.query_consolidation(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.query_selector(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.query_target(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.query_timeout(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.reliability(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.reliable(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.trait.into_future.into_future(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.trait.wait.wait(),
+}
+tags{
+	rust.ext.querying_subscriber_builder.with(),
+}
+tags{
+	rust.ext.replies_handler.trait.drop.drop(),
+}
+tags{
+	rust.ext.reply.trait.extract_sample.extract(),
+}
+tags{
+	rust.ext.session.trait.session_ext.declare_publication_cache(),
+}
+tags{
+	rust.ext.session_ext(),
+}
+tags{
+	rust.ext.session_ext.declare_publication_cache(),
+}
+tags{
+	rust.ext.session_ref.trait.session_ext.declare_publication_cache(),
+}
+tags{
+	rust.ext.subscriber.trait.subscriber_forward.forward(),
+}
+tags{
+	rust.ext.subscriber_builder.trait.subscriber_builder_ext.fetching(),
+}
+tags{
+	rust.ext.subscriber_builder.trait.subscriber_builder_ext.querying(),
+}
+tags{
+	rust.ext.subscriber_builder_ext(),
+}
+tags{
+	rust.ext.subscriber_builder_ext.fetching(),
+}
+tags{
+	rust.ext.subscriber_builder_ext.querying(),
+}
+tags{
+	rust.ext.subscriber_forward(),
+}
+tags{
+	rust.ext.subscriber_forward.forward(),
+}
+tags{
+	rust.ext.user_space(),
+}
+tags{
+	rust.ext.z_result.allowed_origin(),
+}
+tags{
+	rust.ext.z_result.best_effort(),
+}
+tags{
+	rust.ext.z_result.callback(),
+}
+tags{
+	rust.ext.z_result.callback_mut(),
+}
+tags{
+	rust.ext.z_result.reliability(),
+}
+tags{
+	rust.ext.z_result.reliable(),
+}
+tags{
+	rust.ext.z_result.with(),
 }
 tags{
 	rust.handlers.callback(),
