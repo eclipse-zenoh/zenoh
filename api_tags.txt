@@ -557,6 +557,7 @@ tags{
 	rust.publication.publisher_ref.shared(),
 	rust.publication.publisher_ref.trait.std.deref(),
 	rust.publication.publisher_ref.trait.std.fmt(),
+	rust.publication.publisher_state.trait.fmt.fmt(),
 	rust.publication.publisher_undeclaration.trait.into_future.into_future(),
 	rust.publication.publisher_undeclaration.trait.wait.wait(),
 	rust.query.get_builder.trait.into_future.into_future(),
@@ -566,10 +567,14 @@ tags{
 	rust.query.reply_key_expr.trait.default.default(),
 	rust.query.result.trait.from.from(),
 	rust.queryable.callback_queryable.trait.drop.drop(),
+	rust.queryable.callback_queryable.trait.undeclarable.undeclare_inner(),
+	rust.queryable.query.trait.fmt.fmt(),
 	rust.queryable.query_inner.trait.drop.drop(),
 	rust.queryable.queryable.trait.deref.deref(),
+	rust.queryable.queryable.trait.deref_mut.deref_mut(),
 	rust.queryable.queryable_builder.trait.into_future.into_future(),
 	rust.queryable.queryable_builder.trait.wait.wait(),
+	rust.queryable.queryable_state.trait.fmt.fmt(),
 	rust.queryable.queryable_undeclaration.trait.into_future.into_future(),
 	rust.queryable.queryable_undeclaration.trait.wait.wait(),
 	rust.queryable.reply_builder.trait.into_future.into_future(),
@@ -578,6 +583,8 @@ tags{
 	rust.queryable.reply_err_builder.trait.wait.wait(),
 	rust.queryable.reply_sample.trait.into_future.into_future(),
 	rust.queryable.reply_sample.trait.wait.wait(),
+	rust.sample.data_info.trait.data_info_into_sample.into_sample(),
+	rust.sample.option.trait.data_info_into_sample.into_sample(),
 	rust.sample.option.trait.from.from(),
 	rust.sample.qo_s.trait.from.from(),
 	rust.sample.qo_s_builder.trait.from.from(),
@@ -587,6 +594,7 @@ tags{
 	rust.sample.sample_builder.trait.from.from(),
 	rust.sample.sample_builder.trait.try_from.try_from(),
 	rust.sample.sample_fields.trait.from.from(),
+	rust.sample.sample_kind.trait.fmt.fmt(),
 	rust.sample.sample_kind.trait.try_from.try_from(),
 	rust.sample.source_info.trait.from.from(),
 	rust.sample.timestamp_builder_trait(),
@@ -597,16 +605,20 @@ tags{
 	rust.scouting.scout_builder.trait.into_future.into_future(),
 	rust.scouting.scout_builder.trait.wait.wait(),
 	rust.scouting.scout_inner.trait.drop.drop(),
+	rust.scouting.scout_inner.trait.fmt.fmt(),
 	rust.selector.hash_map.trait.from.from(),
 	rust.selector.parameters.into_owned(),
 	rust.selector.parameters.trait.deref.deref(),
+	rust.selector.parameters.trait.deref_mut.deref_mut(),
 	rust.selector.parameters.trait.from.from(),
 	rust.selector.parameters.trait.std.fmt(),
 	rust.selector.properties.into_owned(),
 	rust.selector.selector.into_owned(),
 	rust.selector.selector.trait.from.from(),
+	rust.selector.selector.trait.from_str.from_str(),
 	rust.selector.selector.trait.std.fmt(),
 	rust.selector.selector.trait.try_from.try_from(),
+	rust.session.g.trait.undeclarable.undeclare_inner(),
 	rust.session.init_builder.trait.into_future.into_future(),
 	rust.session.init_builder.trait.wait.wait(),
 	rust.session.open_builder.trait.into_future.into_future(),
@@ -690,6 +702,7 @@ tags{
 }
 tags{
 	api.liveliness.token.undeclare(),
+	rust.liveliness.liveliness_token.trait.undeclarable.undeclare_inner(),
 	rust.liveliness.liveliness_token.undeclare(),
 	rust.liveliness.liveliness_token_undeclaration(),
 }
@@ -847,6 +860,7 @@ tags{
 }
 tags{
 	api.publication.publisher.new(),
+	rust.session.arc.trait.session_declarations.declare_publisher(),
 	rust.session.session_declarations.declare_publisher(),
 }
 tags{
@@ -961,6 +975,10 @@ tags{
 	rust.query.get_builder.allowed_destination(),
 }
 tags{
+	api.query.get.attachment(),
+	rust.query.get_builder.trait.sample_builder_trait.attachment(),
+}
+tags{
 	api.query.get.callback(),
 	rust.query.get_builder.callback(),
 	rust.query.get_builder.callback_mut(),
@@ -970,8 +988,32 @@ tags{
 	rust.query.get_builder.with(),
 }
 tags{
+	api.query.get.congestion_control(),
+	rust.query.get_builder.trait.qo_s_builder_trait.congestion_control(),
+}
+tags{
 	api.query.get.consolidation(),
 	rust.query.get_builder.consolidation(),
+}
+tags{
+	api.query.get.encoding(),
+	rust.query.get_builder.trait.value_builder_trait.encoding(),
+}
+tags{
+	api.query.get.express(),
+	rust.query.get_builder.trait.qo_s_builder_trait.express(),
+}
+tags{
+	api.query.get.payload(),
+	rust.query.get_builder.trait.value_builder_trait.payload(),
+}
+tags{
+	api.query.get.priority(),
+	rust.query.get_builder.trait.qo_s_builder_trait.priority(),
+}
+tags{
+	api.query.get.source_info(),
+	rust.query.get_builder.trait.sample_builder_trait.source_info(),
 }
 tags{
 	api.query.get.target(),
@@ -980,6 +1022,10 @@ tags{
 tags{
 	api.query.get.timeout(),
 	rust.query.get_builder.timeout(),
+}
+tags{
+	api.query.get.value(),
+	rust.query.get_builder.trait.value_builder_trait.value(),
 }
 tags{
 	api.query.query_target(),
@@ -1033,6 +1079,7 @@ tags{
 }
 tags{
 	api.queryable.new(),
+	rust.session.arc.trait.session_declarations.declare_queryable(),
 	rust.session.session_declarations.declare_queryable(),
 }
 tags{
@@ -1129,6 +1176,42 @@ tags{
 	rust.queryable.reply_builder_put(),
 }
 tags{
+	api.queryable.reply.attachment(),
+	rust.queryable.reply_builder.trait.sample_builder_trait.attachment(),
+}
+tags{
+	api.queryable.reply.congestion_control(),
+	rust.queryable.reply_builder.trait.qo_s_builder_trait.congestion_control(),
+}
+tags{
+	api.queryable.reply.encoding(),
+	rust.queryable.reply_builder.trait.value_builder_trait.encoding(),
+}
+tags{
+	api.queryable.reply.express(),
+	rust.queryable.reply_builder.trait.qo_s_builder_trait.express(),
+}
+tags{
+	api.queryable.reply.payload(),
+	rust.queryable.reply_builder.trait.value_builder_trait.payload(),
+}
+tags{
+	api.queryable.reply.priority(),
+	rust.queryable.reply_builder.trait.qo_s_builder_trait.priority(),
+}
+tags{
+	api.queryable.reply.source_info(),
+	rust.queryable.reply_builder.trait.sample_builder_trait.source_info(),
+}
+tags{
+	api.queryable.reply.timestamp(),
+	rust.queryable.reply_builder.trait.timestamp_builder_trait.timestamp(),
+}
+tags{
+	api.queryable.reply.value(),
+	rust.queryable.reply_builder.trait.value_builder_trait.value(),
+}
+tags{
 	api.queryable.reply_del(),
 	rust.queryable.reply_builder_delete(),
 }
@@ -1137,14 +1220,46 @@ tags{
 	rust.queryable.reply_err_builder(),
 }
 tags{
+	api.queryable.reply_err.encoding(),
+	rust.queryable.reply_err_builder.trait.value_builder_trait.encoding(),
+}
+tags{
+	api.queryable.reply_err.payload(),
+	rust.queryable.reply_err_builder.trait.value_builder_trait.payload(),
+}
+tags{
+	api.queryable.reply_err.value(),
+	rust.queryable.reply_err_builder.trait.value_builder_trait.value(),
+}
+tags{
 	api.queryable.reply_sample(),
 	rust.queryable.reply_sample(),
+}
+tags{
+	api.queryable.undeclare(),
+	rust.queryable.queryable.trait.undeclarable.undeclare_inner(),
 }
 tags{
 	api.runtime(),
 	rust.runtime.admin_space(),
 	rust.runtime.admin_space.key_expr_to_string(),
 	rust.runtime.admin_space.start(),
+	rust.runtime.admin_space.trait.config_validator.check_config(),
+	rust.runtime.admin_space.trait.crate.as_any(),
+	rust.runtime.admin_space.trait.crate.send_close(),
+	rust.runtime.admin_space.trait.crate.send_declare(),
+	rust.runtime.admin_space.trait.crate.send_interest(),
+	rust.runtime.admin_space.trait.crate.send_push(),
+	rust.runtime.admin_space.trait.crate.send_request(),
+	rust.runtime.admin_space.trait.crate.send_response(),
+	rust.runtime.admin_space.trait.crate.send_response_final(),
+	rust.runtime.admin_space.trait.primitives.send_close(),
+	rust.runtime.admin_space.trait.primitives.send_declare(),
+	rust.runtime.admin_space.trait.primitives.send_interest(),
+	rust.runtime.admin_space.trait.primitives.send_push(),
+	rust.runtime.admin_space.trait.primitives.send_request(),
+	rust.runtime.admin_space.trait.primitives.send_response(),
+	rust.runtime.admin_space.trait.primitives.send_response_final(),
 	rust.runtime.runtime(),
 	rust.runtime.runtime.bind_mcast_port(),
 	rust.runtime.runtime.bind_ucast_port(),
@@ -1159,6 +1274,8 @@ tags{
 	rust.runtime.runtime.new_timestamp(),
 	rust.runtime.runtime.next_id(),
 	rust.runtime.runtime.start(),
+	rust.runtime.runtime.trait.struct_version.struct_features(),
+	rust.runtime.runtime.trait.struct_version.struct_version(),
 	rust.runtime.runtime.whatami(),
 	rust.runtime.runtime.zid(),
 	rust.runtime.runtime_builder(),
@@ -1166,6 +1283,24 @@ tags{
 	rust.runtime.runtime_builder.new(),
 	rust.runtime.runtime_builder.plugins_manager(),
 	rust.runtime.runtime_builder.shm_clients(),
+	rust.runtime.runtime_muticast_group.trait.transport_multicast_event_handler.as_any(),
+	rust.runtime.runtime_muticast_group.trait.transport_multicast_event_handler.closed(),
+	rust.runtime.runtime_muticast_group.trait.transport_multicast_event_handler.closing(),
+	rust.runtime.runtime_muticast_group.trait.transport_multicast_event_handler.new_peer(),
+	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.as_any(),
+	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.closed(),
+	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.closing(),
+	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.del_link(),
+	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.handle_message(),
+	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.new_link(),
+	rust.runtime.runtime_session.trait.transport_peer_event_handler.as_any(),
+	rust.runtime.runtime_session.trait.transport_peer_event_handler.closed(),
+	rust.runtime.runtime_session.trait.transport_peer_event_handler.closing(),
+	rust.runtime.runtime_session.trait.transport_peer_event_handler.del_link(),
+	rust.runtime.runtime_session.trait.transport_peer_event_handler.handle_message(),
+	rust.runtime.runtime_session.trait.transport_peer_event_handler.new_link(),
+	rust.runtime.runtime_transport_event_handler.trait.transport_event_handler.new_multicast(),
+	rust.runtime.runtime_transport_event_handler.trait.transport_event_handler.new_unicast(),
 	rust.runtime.weak_runtime(),
 	rust.runtime.weak_runtime.upgrade(),
 	rust.runtime.z_runtime(),
@@ -1177,6 +1312,24 @@ tags{
 tags{
 	api.sample(),
 	rust.prelude.mods.sample(),
+}
+tags{
+	api.sample.attachment(),
+	rust.sample.sample_builder.trait.sample_builder_trait.attachment(),
+}
+tags{
+	api.sample.congestion_control(),
+	rust.sample.qo_s_builder.trait.qo_s_builder_trait.congestion_control(),
+	rust.sample.sample_builder.trait.qo_s_builder_trait.congestion_control(),
+}
+tags{
+	api.sample.encoding(),
+	rust.sample.sample_builder.trait.value_builder_trait.encoding(),
+}
+tags{
+	api.sample.express(),
+	rust.sample.qo_s_builder.trait.qo_s_builder_trait.express(),
+	rust.sample.sample_builder.trait.qo_s_builder_trait.express(),
 }
 tags{
 	api.sample.locality(),
@@ -1193,6 +1346,16 @@ tags{
 tags{
 	api.sample.locality.session_local(),
 	rust.sample.locality.session_local(),
+}
+tags{
+	api.sample.payload(),
+	rust.sample.sample_builder.trait.value_builder_trait.payload(),
+	rust.sample.value_builder_trait.payload(),
+}
+tags{
+	api.sample.priority(),
+	rust.sample.qo_s_builder.trait.qo_s_builder_trait.priority(),
+	rust.sample.sample_builder.trait.qo_s_builder_trait.priority(),
 }
 tags{
 	api.sample.qos.congestion_control(),
@@ -1302,6 +1465,7 @@ tags{
 }
 tags{
 	api.sample.source_info(),
+	rust.sample.sample_builder.trait.sample_builder_trait.source_info(),
 	rust.sample.source_info(),
 }
 tags{
@@ -1315,6 +1479,16 @@ tags{
 tags{
 	api.sample.source_sn(),
 	rust.sample.source_sn(),
+}
+tags{
+	api.sample.timestamp(),
+	rust.sample.sample_builder.trait.timestamp_builder_trait.timestamp(),
+	rust.sample.timestamp_builder_trait.timestamp(),
+}
+tags{
+	api.sample.value(),
+	rust.sample.sample_builder.trait.value_builder_trait.value(),
+	rust.sample.value_builder_trait.value(),
 }
 tags{
 	api.scouting(),
@@ -1497,6 +1671,7 @@ tags{
 tags{
 	api.session.info(),
 	rust.info.session_info(),
+	rust.session.arc.trait.session_declarations.info(),
 	rust.session.session_declarations.info(),
 }
 tags{
@@ -1512,6 +1687,10 @@ tags{
 tags{
 	api.session.info.zid(),
 	rust.info.session_info.zid(),
+}
+tags{
+	api.session.liveliness.new(),
+	rust.session.arc.trait.session_declarations.liveliness(),
 }
 tags{
 	api.session.open(),
@@ -1665,6 +1844,10 @@ tags{
 	rust.subscriber.subscriber.undeclare(),
 	rust.subscriber.subscriber_inner.undeclare(),
 	rust.subscriber.subscriber_undeclaration(),
+}
+tags{
+	api.subscription.subscriber.new(),
+	rust.session.arc.trait.session_declarations.declare_subscriber(),
 }
 tags{
 	api.time.new_reception_timestamp(),
@@ -2059,10 +2242,6 @@ tags{
 	rust.key_expr.key_expr.trait.undeclarable.undeclare_inner(),
 }
 tags{
-	api.liveliness.token.undeclare,
-	rust.liveliness.liveliness_token.trait.undeclarable.undeclare_inner(),
-}
-tags{
 	rust.plugins.running_plugin.trait.plugin_control.plugins_status(),
 }
 tags{
@@ -2129,363 +2308,7 @@ tags{
 	rust.publication.publisher_builder.trait.qo_s_builder_trait.priority(),
 }
 tags{
-	api.language_specific,
-	rust.publication.publisher_state.trait.fmt.fmt(),
-}
-tags{
 	rust.publication.std.trait.publisher_declarations.matching_listener(),
-}
-tags{
-	api.query.get.congestion_control,
-	rust.query.get_builder.trait.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.query.get.express,
-	rust.query.get_builder.trait.qo_s_builder_trait.express(),
-}
-tags{
-	api.query.get.priority,
-	rust.query.get_builder.trait.qo_s_builder_trait.priority(),
-}
-tags{
-	api.query.get.attachment,
-	rust.query.get_builder.trait.sample_builder_trait.attachment(),
-}
-tags{
-	api.query.get.source_info,
-	rust.query.get_builder.trait.sample_builder_trait.source_info(),
-}
-tags{
-	api.query.get.encoding,
-	rust.query.get_builder.trait.value_builder_trait.encoding(),
-}
-tags{
-	api.query.get.payload,
-	rust.query.get_builder.trait.value_builder_trait.payload(),
-}
-tags{
-	api.query.get.value,
-	rust.query.get_builder.trait.value_builder_trait.value(),
-}
-tags{
-	api.language_specific,
-	rust.queryable.callback_queryable.trait.undeclarable.undeclare_inner(),
-}
-tags{
-	api.language_specific,
-	rust.queryable.query.trait.fmt.fmt(),
-}
-tags{
-	api.language_specific,
-	rust.queryable.queryable.trait.deref_mut.deref_mut(),
-}
-tags{
-	api.queryable.undeclare,
-	rust.queryable.queryable.trait.undeclarable.undeclare_inner(),
-}
-tags{
-	api.language_specific,
-	rust.queryable.queryable_state.trait.fmt.fmt(),
-}
-tags{
-	api.queryable.reply.congestion_control,
-	rust.queryable.reply_builder.trait.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.queryable.reply.express,
-	rust.queryable.reply_builder.trait.qo_s_builder_trait.express(),
-}
-tags{
-	api.queryable.reply.priority,
-	rust.queryable.reply_builder.trait.qo_s_builder_trait.priority(),
-}
-tags{
-	api.queryable.reply.attachment,
-	rust.queryable.reply_builder.trait.sample_builder_trait.attachment(),
-}
-tags{
-	api.queryable.reply.source_info,
-	rust.queryable.reply_builder.trait.sample_builder_trait.source_info(),
-}
-tags{
-	api.queryable.reply.timestamp,
-	rust.queryable.reply_builder.trait.timestamp_builder_trait.timestamp(),
-}
-tags{
-	api.queryable.reply.encoding,
-	rust.queryable.reply_builder.trait.value_builder_trait.encoding(),
-}
-tags{
-	api.queryable.reply.payload,
-	rust.queryable.reply_builder.trait.value_builder_trait.payload(),
-}
-tags{
-	api.queryable.reply.value,
-	rust.queryable.reply_builder.trait.value_builder_trait.value(),
-}
-tags{
-	api.queryable.reply_err.encoding,
-	rust.queryable.reply_err_builder.trait.value_builder_trait.encoding(),
-}
-tags{
-	api.queryable.reply_err.payload,
-	rust.queryable.reply_err_builder.trait.value_builder_trait.payload(),
-}
-tags{
-	api.queryable.reply_err.value,
-	rust.queryable.reply_err_builder.trait.value_builder_trait.value(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.config_validator.check_config(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.crate.as_any(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.crate.send_close(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.crate.send_declare(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.crate.send_interest(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.crate.send_push(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.crate.send_request(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.crate.send_response(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.crate.send_response_final(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.primitives.send_close(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.primitives.send_declare(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.primitives.send_interest(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.primitives.send_push(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.primitives.send_request(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.primitives.send_response(),
-}
-tags{
-	api.runtime,
-	rust.runtime.admin_space.trait.primitives.send_response_final(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime.trait.struct_version.struct_features(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime.trait.struct_version.struct_version(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_group.trait.transport_multicast_event_handler.as_any(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_group.trait.transport_multicast_event_handler.closed(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_group.trait.transport_multicast_event_handler.closing(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_group.trait.transport_multicast_event_handler.new_peer(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.as_any(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.closed(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.closing(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.del_link(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.handle_message(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_muticast_session.trait.transport_peer_event_handler.new_link(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_session.trait.transport_peer_event_handler.as_any(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_session.trait.transport_peer_event_handler.closed(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_session.trait.transport_peer_event_handler.closing(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_session.trait.transport_peer_event_handler.del_link(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_session.trait.transport_peer_event_handler.handle_message(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_session.trait.transport_peer_event_handler.new_link(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_transport_event_handler.trait.transport_event_handler.new_multicast(),
-}
-tags{
-	api.runtime,
-	rust.runtime.runtime_transport_event_handler.trait.transport_event_handler.new_unicast(),
-}
-tags{
-	api.language_specific,
-	rust.sample.data_info.trait.data_info_into_sample.into_sample(),
-}
-tags{
-	api.language_specific,
-	rust.sample.option.trait.data_info_into_sample.into_sample(),
-}
-tags{
-	api.sample.congestion_control,
-	rust.sample.qo_s_builder.trait.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.sample.express,
-	rust.sample.qo_s_builder.trait.qo_s_builder_trait.express(),
-}
-tags{
-	api.sample.priority,
-	rust.sample.qo_s_builder.trait.qo_s_builder_trait.priority(),
-}
-tags{
-	api.sample.congestion_control,
-	rust.sample.sample_builder.trait.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.sample.express,
-	rust.sample.sample_builder.trait.qo_s_builder_trait.express(),
-}
-tags{
-	api.sample.priority,
-	rust.sample.sample_builder.trait.qo_s_builder_trait.priority(),
-}
-tags{
-	api.sample.attachment,
-	rust.sample.sample_builder.trait.sample_builder_trait.attachment(),
-}
-tags{
-	api.sample.source_info,
-	rust.sample.sample_builder.trait.sample_builder_trait.source_info(),
-}
-tags{
-	api.sample.timestamp,
-	rust.sample.sample_builder.trait.timestamp_builder_trait.timestamp(),
-}
-tags{
-	api.sample.encoding,
-	rust.sample.sample_builder.trait.value_builder_trait.encoding(),
-}
-tags{
-	api.sample.payload,
-	rust.sample.sample_builder.trait.value_builder_trait.payload(),
-}
-tags{
-	api.sample.value,
-	rust.sample.sample_builder.trait.value_builder_trait.value(),
-}
-tags{
-	api.language_specific,
-	rust.sample.sample_kind.trait.fmt.fmt(),
-}
-tags{
-	api.sample.timestamp,
-	rust.sample.timestamp_builder_trait.timestamp(),
-}
-tags{
-	api.sample.payload,
-	rust.sample.value_builder_trait.payload(),
-}
-tags{
-	api.sample.value,
-	rust.sample.value_builder_trait.value(),
-}
-tags{
-	api.language_specific,
-	rust.scouting.scout_inner.trait.fmt.fmt(),
-}
-tags{
-	api.language_specific,
-	rust.selector.parameters.trait.deref_mut.deref_mut(),
-}
-tags{
-	api.language_specific,
-	rust.selector.selector.trait.from_str.from_str(),
-}
-tags{
-	api.publication.publisher.new,
-	rust.session.arc.trait.session_declarations.declare_publisher(),
-}
-tags{
-	api.queryable.new,
-	rust.session.arc.trait.session_declarations.declare_queryable(),
-}
-tags{
-	api.subscription.subscriber.new,
-	rust.session.arc.trait.session_declarations.declare_subscriber(),
-}
-tags{
-	api.session.info,
-	rust.session.arc.trait.session_declarations.info(),
-}
-tags{
-	api.session.liveliness.new,
-	rust.session.arc.trait.session_declarations.liveliness(),
-}
-tags{
-	api.language_specific,
-	rust.session.g.trait.undeclarable.undeclare_inner(),
 }
 tags{
 	rust.session.session.trait.crate.as_any(),
