@@ -1509,6 +1509,8 @@ tags{
 tags{
 	api.queryable.query.reply(),
 	rust.queryable.query.reply(),
+	rust.queryable.reply_builder(),
+	rust.queryable.reply_builder_put(),
 }
 tags{
 	api.queryable.query.reply_del(),
@@ -1554,11 +1556,6 @@ tags{
 tags{
 	api.queryable.queryable.id(),
 	rust.queryable.queryable.id(),
-}
-tags{
-	api.queryable.query.reply(),
-	rust.queryable.reply_builder(),
-	rust.queryable.reply_builder_put(),
 }
 tags{
 	api.queryable.queryable.reply.attachment(),
@@ -1693,24 +1690,6 @@ tags{
 	rust.session.init_builder.aggregated_subscribers(),
 }
 tags{
-	api.sample.sample.attachment(),
-	rust.sample.sample_builder.trait.sample_builder_trait.attachment(),
-}
-tags{
-	api.sample.sample.congestion_control(),
-	rust.sample.qo_s_builder.trait.qo_s_builder_trait.congestion_control(),
-	rust.sample.sample_builder.trait.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.sample.sample.encoding(),
-	rust.sample.sample_builder.trait.value_builder_trait.encoding(),
-}
-tags{
-	api.sample.sample.express(),
-	rust.sample.qo_s_builder.trait.qo_s_builder_trait.express(),
-	rust.sample.sample_builder.trait.qo_s_builder_trait.express(),
-}
-tags{
 	api.sample.locality(),
 	rust.sample.locality(),
 }
@@ -1727,31 +1706,6 @@ tags{
 	rust.sample.locality.session_local(),
 }
 tags{
-	api.sample.sample.payload(),
-	rust.sample.sample_builder.trait.value_builder_trait.payload(),
-	rust.sample.value_builder_trait.payload(),
-}
-tags{
-	api.sample.sample.priority(),
-	rust.sample.qo_s_builder.trait.qo_s_builder_trait.priority(),
-	rust.sample.sample_builder.trait.qo_s_builder_trait.priority(),
-}
-tags{
-	api.sample.sample.congestion_control(),
-	rust.sample.qo_s.congestion_control(),
-	rust.sample.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.sample.sample.express(),
-	rust.sample.qo_s.express(),
-	rust.sample.qo_s_builder_trait.express(),
-}
-tags{
-	api.sample.sample.priority(),
-	rust.sample.qo_s.priority(),
-	rust.sample.qo_s_builder_trait.priority(),
-}
-tags{
 	api.sample.sample(),
 	rust.sample.sample(),
 	rust.sample.sample_fields(),
@@ -1760,22 +1714,32 @@ tags{
 	api.sample.sample.attachment(),
 	rust.sample.sample.attachment(),
 	rust.sample.sample.attachment_mut(),
+	rust.sample.sample_builder.trait.sample_builder_trait.attachment(),
 	rust.sample.sample_builder_trait.attachment(),
 	rust.sample.sample_fields.attachment(),
 }
 tags{
 	api.sample.sample.congestion_control(),
+	rust.sample.qo_s.congestion_control(),
+	rust.sample.qo_s_builder.trait.qo_s_builder_trait.congestion_control(),
+	rust.sample.qo_s_builder_trait.congestion_control(),
 	rust.sample.sample.congestion_control(),
+	rust.sample.sample_builder.trait.qo_s_builder_trait.congestion_control(),
 	rust.sample.sample_fields.congestion_control(),
 }
 tags{
 	api.sample.sample.encoding(),
 	rust.sample.sample.encoding(),
+	rust.sample.sample_builder.trait.value_builder_trait.encoding(),
 	rust.sample.sample_fields.encoding(),
 }
 tags{
 	api.sample.sample.express(),
+	rust.sample.qo_s.express(),
+	rust.sample.qo_s_builder.trait.qo_s_builder_trait.express(),
+	rust.sample.qo_s_builder_trait.express(),
 	rust.sample.sample.express(),
+	rust.sample.sample_builder.trait.qo_s_builder_trait.express(),
 	rust.sample.sample_fields.express(),
 }
 tags{
@@ -1812,16 +1776,23 @@ tags{
 	api.sample.sample.payload(),
 	rust.sample.sample.payload(),
 	rust.sample.sample.payload_mut(),
+	rust.sample.sample_builder.trait.value_builder_trait.payload(),
 	rust.sample.sample_fields.payload(),
+	rust.sample.value_builder_trait.payload(),
 }
 tags{
 	api.sample.sample.priority(),
+	rust.sample.qo_s.priority(),
+	rust.sample.qo_s_builder.trait.qo_s_builder_trait.priority(),
+	rust.sample.qo_s_builder_trait.priority(),
 	rust.sample.sample.priority(),
+	rust.sample.sample_builder.trait.qo_s_builder_trait.priority(),
 	rust.sample.sample_fields.priority(),
 }
 tags{
 	api.sample.sample.source_info(),
 	rust.sample.sample.source_info(),
+	rust.sample.sample_builder.trait.sample_builder_trait.source_info(),
 	rust.sample.sample_builder_trait.source_info(),
 	rust.sample.sample_fields.source_info(),
 }
@@ -1841,10 +1812,6 @@ tags{
 tags{
 	api.sample.sample_kind.put(),
 	rust.sample.sample_kind.put(),
-}
-tags{
-	api.sample.sample.source_info(),
-	rust.sample.sample_builder.trait.sample_builder_trait.source_info(),
 }
 tags{
 	api.sample.source_info(),
@@ -1883,10 +1850,10 @@ tags{
 }
 tags{
 	api.scouting.hello(),
-	rust.scout(),
 	rust.scouting.hello(),
 }
 tags{
+	rust.scout(),
 	api.scouting.scout(),
 	rust.scouting.scout(),
 	rust.scouting.scout_builder(),
@@ -2012,63 +1979,63 @@ tags{
 	rust.selector.t_i_m_e__r_a_n_g_e__k_e_y(),
 }
 tags{
-	api.session.close(),
+	api.session.session.close(),
 	rust.session.session.close(),
 }
 tags{
-	api.session.config(),
+	api.session.session.config(),
 	rust.session.session.config(),
 }
 tags{
-	api.session.declare_keyexpr(),
+	api.session.session.declare_keyexpr(),
 	rust.session.session.declare_keyexpr(),
 }
 tags{
-	api.session.delete(),
+	api.session.session.delete(),
 	rust.publication.session_delete_builder(),
 	rust.session.session.delete(),
 	rust.session.session_delete_builder(),
 }
 tags{
-	api.session.get(),
+	api.session.session.get(),
 	rust.session.session.get(),
 }
 tags{
-	api.session.hlc(),
+	api.session.session.hlc(),
 	rust.session.session.hlc(),
 }
 tags{
-	api.session.liveliness.new(),
+	api.session.session.liveliness.new(),
 	rust.session.arc.trait.session_declarations.liveliness(),
 	rust.session.session.trait.session_declarations.liveliness(),
 	rust.session.session_ref.trait.session_declarations.liveliness(),
 }
 tags{
-	api.session.open(),
+	api.session.session.open(),
 	rust.open(),
 	rust.session.open(),
 	rust.session.open_builder(),
 }
 tags{
-	api.session.open.with_shm_clients(),
+	api.session.session.open.with_shm_clients(),
 	rust.session.open_builder.with_shm_clients(),
 }
 tags{
-	api.session.put(),
+	api.session.session.put(),
 	rust.publication.session_put_builder(),
 	rust.session.session.put(),
 	rust.session.session_put_builder(),
 }
 tags{
-	api.session.session(),
+	api.session.session.session(),
 	rust.session.session(),
 }
 tags{
-	api.session.undeclare(),
+	api.language_specific,
 	rust.session.session.undeclare(),
 }
 tags{
-	api.session.zid(),
+	api.session.session.zid(),
 	rust.session.session.zid(),
 }
 tags{
