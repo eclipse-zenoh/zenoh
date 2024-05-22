@@ -159,11 +159,11 @@ tags{
 	rust.bytes.z_bytes_writer(),
 }
 tags{
-	api.config(),
+	api.config.config(),
 	rust.prelude.mods.config(),
 }
 tags{
-	api.encoding(),
+	api.encoding.encoding(),
 	rust.encoding.encoding(),
 	rust.prelude.mods.encoding(),
 }
@@ -229,11 +229,11 @@ tags{
 	rust.encoding.encoding.z_e_n_o_h__u_i_n_t(),
 }
 tags{
-	api.encoding.new(),
+	api.encoding.encoding.new(),
 	rust.encoding.encoding.trait.from_str.from_str(),
 }
 tags{
-	api.encoding.with_schema(),
+	api.encoding.encoding.with_schema(),
 	rust.encoding.encoding.with_schema(),
 }
 tags{
@@ -2074,7 +2074,7 @@ tags{
 	rust.session.session.hlc(),
 }
 tags{
-	api.session.info(),
+	api.info.session_info(),
 	rust.info.session_info(),
 	rust.session.arc.trait.session_declarations.info(),
 	rust.session.session.trait.session_declarations.info(),
@@ -2082,17 +2082,17 @@ tags{
 	rust.session.session_ref.trait.session_declarations.info(),
 }
 tags{
-	api.session.info.peers_zid(),
+	api.info.session_info.peers_zid(),
 	rust.info.peers_zenoh_id_builder(),
 	rust.info.session_info.peers_zid(),
 }
 tags{
-	api.session.info.routers_zid(),
+	api.info.session_info.routers_zid(),
 	rust.info.routers_zenoh_id_builder(),
 	rust.info.session_info.routers_zid(),
 }
 tags{
-	api.session.info.zid(),
+	api.info.session_info.zid(),
 	rust.info.session_info.zid(),
 }
 tags{
