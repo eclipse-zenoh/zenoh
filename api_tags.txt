@@ -1160,14 +1160,6 @@ tags{
 	rust.publication.congestion_control.drop(),
 }
 tags{
-	api.publication.publication_delete(),
-	rust.publication.publication_builder_delete(),
-}
-tags{
-	api.publication.publication.express(),
-	rust.publication.publication_builder.trait.qo_s_builder_trait.express(),
-}
-tags{
 	api.publication.matching_listener(),
 	rust.publication.matching_listener(),
 	rust.publication.matching_listener_builder(),
@@ -1187,14 +1179,6 @@ tags{
 	rust.publication.matching_listener.trait.undeclarable.undeclare_inner(),
 	rust.publication.matching_listener.undeclare(),
 	rust.publication.matching_listener_undeclaration(),
-}
-tags{
-	api.publication.publication.matching_status(),
-	rust.publication.matching_status(),
-}
-tags{
-	api.publication.publisher.matching_status(),
-	rust.publication.publisher.matching_status(),
 }
 tags{
 	api.publication.matching_status.matching_subscribers(),
@@ -1249,6 +1233,46 @@ tags{
 	rust.publication.priority.real_time(),
 }
 tags{
+	api.publication.publication.attachment(),
+	rust.publication.publication_builder.trait.sample_builder_trait.attachment(),
+}
+tags{
+	api.publication.publication.congestion_control(),
+	rust.publication.publication_builder.trait.qo_s_builder_trait.congestion_control(),
+}
+tags{
+	api.publication.publication.encoding(),
+	rust.publication.publisher.put.encoding(),
+}
+tags{
+	api.publication.publication.express(),
+	rust.publication.publication_builder.trait.qo_s_builder_trait.express(),
+}
+tags{
+	api.publication.publication.matching_status(),
+	rust.publication.matching_status(),
+}
+tags{
+	api.publication.publication.priority(),
+	rust.publication.publication_builder.trait.qo_s_builder_trait.priority(),
+}
+tags{
+	api.publication.publication.source_info(),
+	rust.publication.publication_builder.trait.sample_builder_trait.source_info(),
+}
+tags{
+	api.publication.publication.timestamp(),
+	rust.publication.publication_builder.trait.timestamp_builder_trait.timestamp(),
+}
+tags{
+	api.publication.publication_delete(),
+	rust.publication.publication_builder_delete(),
+}
+tags{
+	api.publication.publication_put(),
+	rust.publication.publication_builder_put(),
+}
+tags{
 	api.publication.publisher(),
 	rust.publication.publisher(),
 	rust.publication.publisher_builder(),
@@ -1288,6 +1312,10 @@ tags{
 	rust.publication.std.trait.publisher_declarations.matching_listener(),
 }
 tags{
+	api.publication.publisher.matching_status(),
+	rust.publication.publisher.matching_status(),
+}
+tags{
 	api.publication.publisher.new(),
 	rust.session.arc.trait.session_declarations.declare_publisher(),
 	rust.session.session.trait.session_declarations.declare_publisher(),
@@ -1317,39 +1345,6 @@ tags{
 tags{
 	api.publication.publisher.value(),
 	rust.publication.publisher.put.value(),
-}
-tags {
-	api.publication.publication(),
-	rust.publication.publication_builder(),
-}
-tags{
-	api.publication.publication_put(),
-	rust.publication.publication_builder_put(),
-}
-tags{
-	api.publication.publication.attachment(),
-	api.publication.publication.attachment(),
-	rust.publication.publication_builder.trait.sample_builder_trait.attachment(),
-}
-tags{
-	api.publication.publication.congestion_control(),
-	rust.publication.publication_builder.trait.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.publication.publication.encoding(),
-	rust.publication.publisher.put.encoding(),
-}
-tags{
-	api.publication.publication.priority(),
-	rust.publication.publication_builder.trait.qo_s_builder_trait.priority(),
-}
-tags{
-	api.publication.publication.source_info(),
-	rust.publication.publication_builder.trait.sample_builder_trait.source_info(),
-}
-tags{
-	api.publication.publication.timestamp(),
-	rust.publication.publication_builder.trait.timestamp_builder_trait.timestamp(),
 }
 tags{
 	api.query.consolidation_mode(),
@@ -2265,6 +2260,9 @@ tags{
 tags{
 	api.value.value.payload(),
 	rust.value.value.payload(),
+}
+tags{
+	rust.publication.publication_builder(),
 }
 tags{
 	rust.value.value.trait.from.from(),
