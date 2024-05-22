@@ -19,6 +19,12 @@ tags{
 	rust.buffers.z_buf.push_zslice(),
 }
 tags{
+	api.query.get.express(TODO),
+}
+tags{
+	api.query.reply.replier_id(TODO),
+}
+tags{
 	api.buffers.zbuf.read(),
 	rust.buffers.has_reader.reader(),
 	rust.buffers.reader.can_read(),
@@ -1405,7 +1411,7 @@ tags{
 }
 tags{
 	api.query.get.payload(),
-	rust.query.get_builder.trait.value_builder_trait.payload(),
+	rust.query.get_builder.trai.t.value_builder_trait.payload(),
 }
 tags{
 	api.query.get.priority(),
@@ -1452,7 +1458,7 @@ tags{
 	rust.query.reply.replier_id(),
 }
 tags{
-	api.query.reply.result(),
+	api.language_specific,
 	rust.query.reply.into_result(),
 	rust.query.reply.result(),
 	rust.query.reply.result_mut(),
