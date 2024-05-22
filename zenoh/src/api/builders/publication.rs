@@ -119,7 +119,6 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
-// grouptag{publisher.put}
 impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {

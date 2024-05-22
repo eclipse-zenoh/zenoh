@@ -1181,6 +1181,10 @@ tags{
 	rust.publication.matching_listener_undeclaration(),
 }
 tags{
+	api.publication.matching_status(),
+	rust.publication.matching_status(),
+}
+tags{
 	api.publication.matching_status.matching_subscribers(),
 	rust.publication.matching_status.matching_subscribers(),
 }
@@ -1247,10 +1251,6 @@ tags{
 tags{
 	api.publication.publication.express(),
 	rust.publication.publication_builder.trait.qo_s_builder_trait.express(),
-}
-tags{
-	api.publication.publication.matching_status(),
-	rust.publication.matching_status(),
 }
 tags{
 	api.publication.publication.priority(),
