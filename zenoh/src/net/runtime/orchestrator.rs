@@ -614,6 +614,10 @@ impl Runtime {
         socket.set_nonblocking(true)?;
         socket.set_multicast_ttl_v4(multicast_ttl)?;
 
+        if sockaddr.is_ipv6() && multicast_ttl > 1 {
+            tracing::warn!("UDP Multicast TTL has been set to a value greater than 1 on a socket bound to an IPv6 address. This might not have the desired effect");
+        }
+
         // UdpSocket::from_std requires a runtime even though it's a sync function
         let udp_socket = zenoh_runtime::ZRuntime::Net
             .block_in_place(async { UdpSocket::from_std(socket.into()) })?;

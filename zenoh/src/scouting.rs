@@ -312,7 +312,12 @@ fn scout(
     tracing::trace!("scout({}, {})", what, &config);
     let default_addr = SocketAddr::from(zenoh_config::defaults::scouting::multicast::address);
     let addr = config.scouting.multicast.address().unwrap_or(default_addr);
-    let multicast_ttl = config.scouting.multicast.ttl.unwrap_or(1);
+    let default_multicast_ttl = zenoh_config::defaults::scouting::multicast::ttl;
+    let multicast_ttl = config
+        .scouting
+        .multicast
+        .ttl
+        .unwrap_or(default_multicast_ttl);
     let ifaces = config.scouting.multicast.interface().as_ref().map_or(
         zenoh_config::defaults::scouting::multicast::interface,
         |s| s.as_ref(),
