@@ -10,6 +10,18 @@ tags{
 	api.buffers.zbuf.contiguous(),
 	rust.buffers.split_buffer.contiguous(),
 }
+tags {
+	api.publication.priority.default(TODO)
+}
+tags {
+	api.publication.publisher.express(TODO)
+}
+tags {
+	api.publication.publisher.matching_status(TODO)
+}
+tags {
+	api.publication.publisher.priority(TODO)
+}
 tags{
 	api.buffers.zbuf.new.empty(),
 	rust.buffers.z_buf.empty(),
@@ -1245,10 +1257,6 @@ tags{
 	rust.publication.publication_builder.trait.qo_s_builder_trait.congestion_control(),
 }
 tags{
-	api.publication.publication.encoding(),
-	rust.publication.publisher.put.encoding(),
-}
-tags{
 	api.publication.publication.express(),
 	rust.publication.publication_builder.trait.qo_s_builder_trait.express(),
 }
@@ -1323,10 +1331,6 @@ tags{
 	rust.session.session_ref.trait.session_declarations.declare_publisher(),
 }
 tags{
-	api.publication.publisher.payload(),
-	rust.publication.publisher.put.payload(),
-}
-tags{
 	api.publication.publisher.priority(),
 	rust.publication.publisher.set_priority(),
 	rust.publication.publisher_builder.trait.qo_s_builder_trait.priority(),
@@ -1341,10 +1345,6 @@ tags{
 	rust.publication.publisher.trait.undeclarable.undeclare_inner(),
 	rust.publication.publisher.undeclare(),
 	rust.publication.publisher_undeclaration(),
-}
-tags{
-	api.publication.publisher.value(),
-	rust.publication.publisher.put.value(),
 }
 tags{
 	api.query.consolidation_mode(),
@@ -2263,6 +2263,15 @@ tags{
 }
 tags{
 	rust.publication.publication_builder(),
+}
+tags{
+	rust.publication.publication_builder.trait.value_builder_trait.encoding(),
+}
+tags{
+	rust.publication.publication_builder.trait.value_builder_trait.payload(),
+}
+tags{
+	rust.publication.publication_builder.trait.value_builder_trait.value(),
 }
 tags{
 	rust.value.value.trait.from.from(),
