@@ -98,14 +98,14 @@ tags{
 	rust.buffers.z_slice.new_unchecked(),
 }
 tags{
-	api.bytes(),
+	api.bytes.bytes(),
 	rust.bytes.option_z_bytes(),
 	rust.bytes.z_bytes(),
 	rust.prelude.mods.bytes(),
 }
 tags{api.bytes.deserialize(Is it really needed?)}
 tags{
-	api.bytes.deserialize(),
+	api.bytes.bytes.deserialize(),
 	rust.bytes.deserialize(),
 	rust.bytes.deserialize.deserialize(),
 	rust.bytes.z_bytes.deserialize(),
@@ -142,7 +142,7 @@ tags{
 	rust.bytes.z_bytes.serialize(),
 }
 tags{
-	api.bytes.string_or_base64(),
+	api.language_specific,
 	rust.bytes.string_or_base64(),
 	rust.bytes.string_or_base64.base64(),
 	rust.bytes.string_or_base64.into_string(),
