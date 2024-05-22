@@ -99,8 +99,11 @@ tags{
 }
 tags{
 	api.bytes.bytes(),
-	rust.bytes.option_z_bytes(),
 	rust.bytes.z_bytes(),
+	rust.bytes.option_z_bytes(),
+}
+tags{
+	api.language_specific,
 	rust.prelude.mods.bytes(),
 }
 tags{
@@ -146,7 +149,7 @@ tags{
 	rust.bytes.z_bytes_writer(),
 }
 tags{
-	api.config.config(),
+	api.language_specific,
 	rust.prelude.mods.config(),
 }
 tags{
@@ -213,6 +216,9 @@ tags{
 tags{
 	api.encoding.encoding(),
 	rust.encoding.encoding(),
+}
+tags {
+	api.language_specific,
 	rust.prelude.mods.encoding(),
 }
 tags{
@@ -538,7 +544,7 @@ tags{
 	rust.ext.user_space(),
 }
 tags{
-	api.fetching_subscriber.new(),
+	api.ext.fetching_subscriber.new(),
 	rust.ext.fetching_subscriber_builder(),
 }
 tags{
@@ -606,6 +612,9 @@ tags{
 	rust.key_expr.keyexpr.into_owned(),
 	rust.key_expr.owned_key_expr(),
 	rust.key_expr.owned_keyexpr(),
+}
+tags {
+	api.language_specific,
 	rust.prelude.mods.key_expr(),
 }
 tags{
@@ -1052,9 +1061,12 @@ tags{
 	rust.value.value.trait.default.default(),
 }
 tags{
-	api.liveliness(),
-	rust.liveliness.liveliness(),
+	api.language_specific,
 	rust.prelude.mods.liveliness(),
+}
+tags {
+	api.liveliness.liveliness,
+	rust.liveliness.liveliness(),
 }
 tags{
 	api.liveliness.declare_token(),
@@ -1139,7 +1151,7 @@ tags{
 	rust.plugins.zenoh_plugin(),
 }
 tags{
-	api.publication(),
+	api.language_specific,
 	rust.prelude.mods.publication(),
 }
 tags{
@@ -1344,7 +1356,7 @@ tags{
 	rust.publication.publication_builder.trait.timestamp_builder_trait.timestamp(),
 }
 tags{
-	api.query(),
+	api.language_specific,
 	rust.prelude.mods.query(),
 }
 tags{
@@ -1486,7 +1498,7 @@ tags{
 	rust.query.r_e_p_l_y__k_e_y__e_x_p_r__a_n_y__s_e_l__p_a_r_a_m(),
 }
 tags{
-	api.queryable(),
+	api.language_specific,
 	rust.prelude.mods.queryable(),
 }
 tags{
@@ -1724,7 +1736,7 @@ tags{
 	rust.session.init_builder.aggregated_subscribers(),
 }
 tags{
-	api.sample(),
+	api.language_specific,
 	rust.prelude.mods.sample(),
 }
 tags{
@@ -1905,7 +1917,7 @@ tags{
 	rust.sample.value_builder_trait.value(),
 }
 tags{
-	api.scouting(),
+	api.language_specific,
 	rust.prelude.mods.scouting(),
 }
 tags{
@@ -1956,7 +1968,7 @@ tags{
 	rust.scouting.what_am_i.to_str(),
 }
 tags{
-	api.selector(),
+	api.language_specific,
 	rust.prelude.mods.selector(),
 }
 tags{
@@ -2052,8 +2064,11 @@ tags{
 	rust.selector.t_i_m_e__r_a_n_g_e__k_e_y(),
 }
 tags{
-	api.session(),
+	api.language_specific,
 	rust.prelude.mods.session(),
+}
+tags {
+	api.session.session,
 	rust.session.session(),
 }
 tags{
@@ -2256,7 +2271,7 @@ tags{
 	rust.time.timestamp_id(),
 }
 tags{
-	api.value(),
+	api.language_specific,
 	rust.prelude.mods.value(),
 }
 tags{
