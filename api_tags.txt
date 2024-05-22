@@ -163,11 +163,6 @@ tags{
 	rust.prelude.mods.config(),
 }
 tags{
-	api.encoding.encoding(),
-	rust.encoding.encoding(),
-	rust.prelude.mods.encoding(),
-}
-tags{
 	api.encoding.const(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_b_o_r(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_d_r(),
@@ -227,6 +222,11 @@ tags{
 	rust.encoding.encoding.z_e_n_o_h__i_n_t(),
 	rust.encoding.encoding.z_e_n_o_h__s_t_r_i_n_g(),
 	rust.encoding.encoding.z_e_n_o_h__u_i_n_t(),
+}
+tags{
+	api.encoding.encoding(),
+	rust.encoding.encoding(),
+	rust.prelude.mods.encoding(),
 }
 tags{
 	api.encoding.encoding.new(),
@@ -553,6 +553,28 @@ tags{
 tags{
 	api.fetching_subscriber.new(),
 	rust.ext.fetching_subscriber_builder(),
+}
+tags{
+	api.info.session_info(),
+	rust.info.session_info(),
+	rust.session.arc.trait.session_declarations.info(),
+	rust.session.session.trait.session_declarations.info(),
+	rust.session.session_declarations.info(),
+	rust.session.session_ref.trait.session_declarations.info(),
+}
+tags{
+	api.info.session_info.peers_zid(),
+	rust.info.peers_zenoh_id_builder(),
+	rust.info.session_info.peers_zid(),
+}
+tags{
+	api.info.session_info.routers_zid(),
+	rust.info.routers_zenoh_id_builder(),
+	rust.info.session_info.routers_zid(),
+}
+tags{
+	api.info.session_info.zid(),
+	rust.info.session_info.zid(),
 }
 tags{
 	api.info.zid(),
@@ -2072,28 +2094,6 @@ tags{
 tags{
 	api.session.hlc(),
 	rust.session.session.hlc(),
-}
-tags{
-	api.info.session_info(),
-	rust.info.session_info(),
-	rust.session.arc.trait.session_declarations.info(),
-	rust.session.session.trait.session_declarations.info(),
-	rust.session.session_declarations.info(),
-	rust.session.session_ref.trait.session_declarations.info(),
-}
-tags{
-	api.info.session_info.peers_zid(),
-	rust.info.peers_zenoh_id_builder(),
-	rust.info.session_info.peers_zid(),
-}
-tags{
-	api.info.session_info.routers_zid(),
-	rust.info.routers_zenoh_id_builder(),
-	rust.info.session_info.routers_zid(),
-}
-tags{
-	api.info.session_info.zid(),
-	rust.info.session_info.zid(),
 }
 tags{
 	api.session.liveliness.new(),
