@@ -279,8 +279,8 @@ pub mod publication {
     pub use crate::api::publication::PublisherRef;
     pub use crate::api::{
         builders::publication::{
-            PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
-            PublisherDeleteBuilder,
+            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+            PublisherDeleteBuilder, PublisherPutBuilder,
         },
         publication::{Priority, Publisher, PublisherUndeclaration},
     };
