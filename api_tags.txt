@@ -1556,12 +1556,7 @@ tags{
 	rust.queryable.queryable.id(),
 }
 tags{
-	api.queryable.queryable.undeclare(),
-	rust.queryable.queryable.undeclare(),
-	rust.queryable.queryable_undeclaration(),
-}
-tags{
-	api.queryable.queryable.reply(),
+	api.queryable.query.reply(),
 	rust.queryable.reply_builder(),
 	rust.queryable.reply_builder_put(),
 }
@@ -1610,10 +1605,6 @@ tags{
 	rust.queryable.reply_err_builder(),
 }
 tags{
-	api.queryable.queryable.reply_err.encoding(),
-	rust.queryable.queryable.reply_err_builder.trait.value_builder_trait.encoding(),
-}
-tags{
 	api.queryable.queryable.reply_err.payload(),
 	rust.queryable.reply_err_builder.trait.value_builder_trait.payload(),
 }
@@ -1622,12 +1613,14 @@ tags{
 	rust.queryable.reply_err_builder.trait.value_builder_trait.value(),
 }
 tags{
-	api.queryable.reply_sample(),
-	rust.queryable.reply_sample(),
-}
-tags{
 	api.queryable.queryable.undeclare(),
 	rust.queryable.queryable.trait.undeclarable.undeclare_inner(),
+	rust.queryable.queryable.undeclare(),
+	rust.queryable.queryable_undeclaration(),
+}
+tags{
+	api.queryable.reply_sample(),
+	rust.queryable.reply_sample(),
 }
 tags{
 	api.runtime(),
@@ -1700,20 +1693,20 @@ tags{
 	rust.session.init_builder.aggregated_subscribers(),
 }
 tags{
-	api.sample.attachment(),
+	api.sample.sample.attachment(),
 	rust.sample.sample_builder.trait.sample_builder_trait.attachment(),
 }
 tags{
-	api.sample.congestion_control(),
+	api.sample.sample.congestion_control(),
 	rust.sample.qo_s_builder.trait.qo_s_builder_trait.congestion_control(),
 	rust.sample.sample_builder.trait.qo_s_builder_trait.congestion_control(),
 }
 tags{
-	api.sample.encoding(),
+	api.sample.sample.encoding(),
 	rust.sample.sample_builder.trait.value_builder_trait.encoding(),
 }
 tags{
-	api.sample.express(),
+	api.sample.sample.express(),
 	rust.sample.qo_s_builder.trait.qo_s_builder_trait.express(),
 	rust.sample.sample_builder.trait.qo_s_builder_trait.express(),
 }
@@ -1734,27 +1727,27 @@ tags{
 	rust.sample.locality.session_local(),
 }
 tags{
-	api.sample.payload(),
+	api.sample.sample.payload(),
 	rust.sample.sample_builder.trait.value_builder_trait.payload(),
 	rust.sample.value_builder_trait.payload(),
 }
 tags{
-	api.sample.priority(),
+	api.sample.sample.priority(),
 	rust.sample.qo_s_builder.trait.qo_s_builder_trait.priority(),
 	rust.sample.sample_builder.trait.qo_s_builder_trait.priority(),
 }
 tags{
-	api.sample.qos.congestion_control(),
+	api.sample.sample.congestion_control(),
 	rust.sample.qo_s.congestion_control(),
 	rust.sample.qo_s_builder_trait.congestion_control(),
 }
 tags{
-	api.sample.qos.express(),
+	api.sample.sample.express(),
 	rust.sample.qo_s.express(),
 	rust.sample.qo_s_builder_trait.express(),
 }
 tags{
-	api.sample.qos.priority(),
+	api.sample.sample.priority(),
 	rust.sample.qo_s.priority(),
 	rust.sample.qo_s_builder_trait.priority(),
 }
@@ -1850,8 +1843,11 @@ tags{
 	rust.sample.sample_kind.put(),
 }
 tags{
-	api.sample.source_info(),
+	api.sample.sample.source_info(),
 	rust.sample.sample_builder.trait.sample_builder_trait.source_info(),
+}
+tags{
+	api.sample.source_info(),
 	rust.sample.source_info(),
 }
 tags{
@@ -2265,6 +2261,9 @@ tags{
 }
 tags{
 	rust.query.reply.result_mut(),
+}
+tags{
+	rust.queryable.reply_err_builder.trait.value_builder_trait.encoding(),
 }
 tags{
 	rust.value.value.trait.from.from(),
