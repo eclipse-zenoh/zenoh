@@ -117,27 +117,14 @@ tags{
 }
 tags{
 	api.bytes.bytes.is_empty(),
-}
-tags{
-	api.bytes.bytes.len(),
-}
-tags{
-	api.bytes.bytes.new(),
-}
-tags{api.bytes.deserialize(Is it really needed?)}
-tags{
-	api.bytes.deserialize(),
-}
-tags{
-	api.bytes.is_empty(),
 	rust.bytes.z_bytes.is_empty(),
 }
 tags{
-	api.bytes.len(),
+	api.bytes.bytes.len(),
 	rust.bytes.z_bytes.len(),
 }
 tags{
-	api.bytes.new(),
+	api.bytes.bytes.new(),
 	rust.bytes.z_bytes.empty(),
 	rust.bytes.z_bytes.new(),
 }
@@ -148,7 +135,7 @@ tags{
 	rust.bytes.z_bytes_reader(),
 }
 tags{
-	api.bytes.serialize(),
+	api.bytes.bytes.serialize(),
 	rust.bytes.serialize(),
 	rust.bytes.serialize.serialize(),
 	rust.bytes.z_bytes.serialize(),
