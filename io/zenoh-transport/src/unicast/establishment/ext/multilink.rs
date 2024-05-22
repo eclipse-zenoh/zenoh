@@ -77,7 +77,7 @@ impl MultiLink {
             fsm: self
                 .pubkey
                 .is_some()
-                .then(|| AuthPubKeyFsm::new(&self.pubkey.as_ref().unwrap(), prng)),
+                .then(|| AuthPubKeyFsm::new(self.pubkey.as_ref().unwrap(), prng)),
         }
     }
 }
