@@ -906,7 +906,9 @@ tags{
 	rust.prelude.mods.bytes(),
 	rust.prelude.mods.config(),
 	rust.prelude.mods.core(),
+	rust.prelude.mods.encoding(),
 	rust.prelude.mods.handlers(),
+	rust.prelude.mods.key_expr(),
 	rust.prelude.mods.liveliness(),
 	rust.prelude.mods.publication(),
 	rust.prelude.mods.query(),
@@ -2079,6 +2081,10 @@ tags{
 	rust.session.session_put_builder(),
 }
 tags{
+	api.session.session(),
+	rust.session.session(),
+}
+tags{
 	api.session.undeclare(),
 	rust.session.session.undeclare(),
 }
@@ -2252,15 +2258,6 @@ tags{
 tags{
 	api.value.value.payload(),
 	rust.value.value.payload(),
-}
-tags{
-	rust.prelude.mods.encoding(),
-}
-tags{
-	rust.prelude.mods.key_expr(),
-}
-tags{
-	rust.session.session(),
 }
 tags{
 	rust.value.value.trait.from.from(),
