@@ -874,6 +874,7 @@ tags{
 	rust.prelude.mods.buffers(),
 	rust.prelude.mods.core(),
 	rust.prelude.mods.handlers(),
+	rust.prelude.mods.subscriber(),
 	rust.prelude.mods.time(),
 	rust.prelude.r#async.async_resolve(),
 	rust.prelude.sync.sync_resolve(),
@@ -894,6 +895,11 @@ tags{
 	rust.publication.publication_builder.trait.wait.wait(),
 	rust.publication.publisher.into_arc(),
 	rust.publication.publisher.trait.drop.drop(),
+	rust.publication.publisher.trait.sink.poll_close(),
+	rust.publication.publisher.trait.sink.poll_flush(),
+	rust.publication.publisher.trait.sink.poll_ready(),
+	rust.publication.publisher.trait.sink.start_send(),
+	rust.publication.publisher_builder.trait.clone.clone(),
 	rust.publication.publisher_builder.trait.into_future.into_future(),
 	rust.publication.publisher_builder.trait.wait.wait(),
 	rust.publication.publisher_declarations(),
@@ -970,18 +976,39 @@ tags{
 	rust.session.open_builder.trait.wait.wait(),
 	rust.session.session.into_arc(),
 	rust.session.session.leak(),
+	rust.session.session.trait.crate.as_any(),
+	rust.session.session.trait.crate.send_close(),
+	rust.session.session.trait.crate.send_declare(),
+	rust.session.session.trait.crate.send_interest(),
+	rust.session.session.trait.crate.send_push(),
+	rust.session.session.trait.crate.send_request(),
+	rust.session.session.trait.crate.send_response(),
+	rust.session.session.trait.crate.send_response_final(),
 	rust.session.session.trait.drop.drop(),
+	rust.session.session.trait.fmt.fmt(),
+	rust.session.session.trait.primitives.send_close(),
+	rust.session.session.trait.primitives.send_declare(),
+	rust.session.session.trait.primitives.send_interest(),
+	rust.session.session.trait.primitives.send_push(),
+	rust.session.session.trait.primitives.send_request(),
+	rust.session.session.trait.primitives.send_response(),
+	rust.session.session.trait.primitives.send_response_final(),
+	rust.session.session_declarations(),
 	rust.session.session_ref(),
 	rust.session.session_ref.borrow(),
 	rust.session.session_ref.shared(),
 	rust.session.session_ref.trait.deref.deref(),
+	rust.session.session_ref.trait.fmt.fmt(),
+	rust.session.session_state.trait.fmt.fmt(),
 	rust.session.undeclarable(),
 	rust.session.undeclarable.undeclare_inner(),
 	rust.subscriber.subscriber.trait.deref.deref(),
+	rust.subscriber.subscriber.trait.deref_mut.deref_mut(),
 	rust.subscriber.subscriber_builder.session(),
 	rust.subscriber.subscriber_builder.trait.into_future.into_future(),
 	rust.subscriber.subscriber_builder.trait.wait.wait(),
 	rust.subscriber.subscriber_inner.trait.drop.drop(),
+	rust.subscriber.subscriber_state.trait.fmt.fmt(),
 	rust.subscriber.subscriber_undeclaration.trait.into_future.into_future(),
 	rust.subscriber.subscriber_undeclaration.trait.wait.wait(),
 	rust.value.value.trait.default.default(),
@@ -1193,6 +1220,7 @@ tags{
 tags{
 	api.publication.publisher.congestion_control(),
 	rust.publication.publisher.set_congestion_control(),
+	rust.publication.publisher_builder.trait.qo_s_builder_trait.congestion_control(),
 }
 tags{
 	api.publication.publisher.delete(),
@@ -1211,11 +1239,14 @@ tags{
 	api.publication.publisher.matching_listener(),
 	rust.publication.publisher.matching_listener(),
 	rust.publication.publisher_declarations.matching_listener(),
+	rust.publication.std.trait.publisher_declarations.matching_listener(),
 }
 tags{
 	api.publication.publisher.new(),
 	rust.session.arc.trait.session_declarations.declare_publisher(),
+	rust.session.session.trait.session_declarations.declare_publisher(),
 	rust.session.session_declarations.declare_publisher(),
+	rust.session.session_ref.trait.session_declarations.declare_publisher(),
 }
 tags{
 	api.publication.publisher.payload(),
@@ -1224,6 +1255,7 @@ tags{
 tags{
 	api.publication.publisher.priority(),
 	rust.publication.publisher.set_priority(),
+	rust.publication.publisher_builder.trait.qo_s_builder_trait.priority(),
 }
 tags{
 	api.publication.publisher.put(),
@@ -1232,6 +1264,7 @@ tags{
 }
 tags{
 	api.publication.publisher.undeclare(),
+	rust.publication.publisher.trait.undeclarable.undeclare_inner(),
 	rust.publication.publisher.undeclare(),
 	rust.publication.publisher_undeclaration(),
 }
@@ -1417,7 +1450,9 @@ tags{
 tags{
 	api.queryable.new(),
 	rust.session.arc.trait.session_declarations.declare_queryable(),
+	rust.session.session.trait.session_declarations.declare_queryable(),
 	rust.session.session_declarations.declare_queryable(),
+	rust.session.session_ref.trait.session_declarations.declare_queryable(),
 }
 tags{
 	api.queryable.query(),
@@ -2009,7 +2044,9 @@ tags{
 	api.session.info(),
 	rust.info.session_info(),
 	rust.session.arc.trait.session_declarations.info(),
+	rust.session.session.trait.session_declarations.info(),
 	rust.session.session_declarations.info(),
+	rust.session.session_ref.trait.session_declarations.info(),
 }
 tags{
 	api.session.info.peers_zid(),
@@ -2028,6 +2065,8 @@ tags{
 tags{
 	api.session.liveliness.new(),
 	rust.session.arc.trait.session_declarations.liveliness(),
+	rust.session.session.trait.session_declarations.liveliness(),
+	rust.session.session_ref.trait.session_declarations.liveliness(),
 }
 tags{
 	api.session.open(),
@@ -2102,18 +2141,6 @@ tags{
 	rust.shm.zshmmut(),
 }
 tags{
-	api.language_specific,
-	rust.prelude.mods.subscriber(),
-}
-tags{
-	api.subscriber.subscriber.channel(),
-	rust.subscriber.flume_subscriber(),
-}
-tags{
-	api.subscriber.subscriber.new(),
-	rust.session.session_declarations.declare_subscriber(),
-}
-tags{
 	api.subscriber.reliability(),
 	rust.subscriber.reliability(),
 }
@@ -2151,6 +2178,7 @@ tags{
 }
 tags{
 	api.subscriber.subscriber.channel(),
+	rust.subscriber.flume_subscriber(),
 	rust.subscriber.subscriber_builder.with(),
 }
 tags{
@@ -2164,6 +2192,9 @@ tags{
 }
 tags{
 	api.subscriber.subscriber.new(),
+	rust.session.session.trait.session_declarations.declare_subscriber(),
+	rust.session.session_declarations.declare_subscriber(),
+	rust.session.session_ref.trait.session_declarations.declare_subscriber(),
 	rust.subscriber.subscriber_builder(),
 }
 tags{
@@ -2178,7 +2209,9 @@ tags{
 }
 tags{
 	api.subscriber.subscriber.undeclare(),
+	rust.subscriber.subscriber.trait.undeclarable.undeclare_inner(),
 	rust.subscriber.subscriber.undeclare(),
+	rust.subscriber.subscriber_inner.trait.undeclarable.undeclare_inner(),
 	rust.subscriber.subscriber_inner.undeclare(),
 	rust.subscriber.subscriber_undeclaration(),
 }
@@ -2255,178 +2288,8 @@ tags{
 	rust.ext.fetching_subscriber_builder.reliable(),
 }
 tags{
-	api.language_specific,
-	rust.publication.publisher.trait.sink.poll_close(),
-}
-tags{
-	api.language_specific,
-	rust.publication.publisher.trait.sink.poll_flush(),
-}
-tags{
-	api.language_specific,
-	rust.publication.publisher.trait.sink.poll_ready(),
-}
-tags{
-	api.language_specific,
-	rust.publication.publisher.trait.sink.start_send(),
-}
-tags{
-	api.publication.publisher.undeclare,
-	rust.publication.publisher.trait.undeclarable.undeclare_inner(),
-}
-tags{
-	api.language_specific,
-	rust.publication.publisher_builder.trait.clone.clone(),
-}
-tags{
-	api.publication.publisher.congestion_control,
-	rust.publication.publisher_builder.trait.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.publication.publisher.express.
 	rust.publication.publisher_builder.trait.qo_s_builder_trait.express(),
 }
 tags{
-	api.publication.publisher.priority,
-	rust.publication.publisher_builder.trait.qo_s_builder_trait.priority(),
-}
-tags{
-	api.publication.publisher.matching_listener,
-	rust.publication.std.trait.publisher_declarations.matching_listener(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.crate.as_any(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.crate.send_close(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.crate.send_declare(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.crate.send_interest(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.crate.send_push(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.crate.send_request(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.crate.send_response(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.crate.send_response_final(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.fmt.fmt(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.primitives.send_close(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.primitives.send_declare(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.primitives.send_interest(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.primitives.send_push(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.primitives.send_request(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.primitives.send_response(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.trait.primitives.send_response_final(),
-}
-tags{
-	api.publication.publisher.new,
-	rust.session.session.trait.session_declarations.declare_publisher(),
-}
-tags{
-	api.queryable.new,
-	rust.session.session.trait.session_declarations.declare_queryable(),
-}
-tags{
-	api.subscriber.subscriber.new,
-	rust.session.session.trait.session_declarations.declare_subscriber(),
-}
-tags{
-	api.session.info,
-	rust.session.session.trait.session_declarations.info(),
-}
-tags{
-	api.session.liveliness.new,
-	rust.session.session.trait.session_declarations.liveliness(),
-}
-tags{
-	api.language_specific,
-	rust.session.session_declarations(),
-}
-tags{
-	api.language_specific,
-	rust.session.session_ref.trait.fmt.fmt(),
-}
-tags{
-	api.publication.publisher.new,
-	rust.session.session_ref.trait.session_declarations.declare_publisher(),
-}
-tags{
-	api.queryable.new,
-	rust.session.session_ref.trait.session_declarations.declare_queryable(),
-}
-tags{
-	api.subscriber.subscriber.new,
-	rust.session.session_ref.trait.session_declarations.declare_subscriber(),
-}
-tags{
-	api.session.info,
-	rust.session.session_ref.trait.session_declarations.info(),
-}
-tags{
-	api.session.liveliness.new,
-	rust.session.session_ref.trait.session_declarations.liveliness(),
-}
-tags{
-	api.language_specific,
-	rust.session.session_state.trait.fmt.fmt(),
-}
-tags{
-	api.language_specific,
-	rust.subscriber.subscriber.trait.deref_mut.deref_mut(),
-}
-tags{
-	api.subscriber.subscriber.undeclare,
-	rust.subscriber.subscriber.trait.undeclarable.undeclare_inner(),
-}
-tags{
-	api.subscriber.subscriber.undeclare,
-	rust.subscriber.subscriber_inner.trait.undeclarable.undeclare_inner(),
-}
-tags{
-	api.language_specific,
-	rust.subscriber.subscriber_state.trait.fmt.fmt(),
-}
-tags{
-	api.language_specific,
 	rust.value.value.trait.from.from(),
 }
