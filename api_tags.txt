@@ -1562,55 +1562,55 @@ tags{
 	rust.queryable.queryable.id(),
 }
 tags{
-	api.queryable.queryable.reply.attachment(),
+	api.queryable.query.reply.attachment(),
 	rust.queryable.reply_builder.trait.sample_builder_trait.attachment(),
 }
 tags{
-	api.queryable.queryable.reply.congestion_control(),
+	api.queryable.query.reply.congestion_control(),
 	rust.queryable.reply_builder.trait.qo_s_builder_trait.congestion_control(),
 }
 tags{
-	api.queryable.queryable.reply.encoding(),
+	api.queryable.query.reply.encoding(),
 	rust.queryable.reply_builder.trait.value_builder_trait.encoding(),
 }
 tags{
-	api.queryable.queryable.reply.express(),
+	api.queryable.query.reply.express(),
 	rust.queryable.reply_builder.trait.qo_s_builder_trait.express(),
 }
 tags{
-	api.queryable.queryable.reply.payload(),
+	api.queryable.query.reply.payload(),
 	rust.queryable.reply_builder.trait.value_builder_trait.payload(),
 }
 tags{
-	api.queryable.queryable.reply.priority(),
+	api.queryable.query.reply.priority(),
 	rust.queryable.reply_builder.trait.qo_s_builder_trait.priority(),
 }
 tags{
-	api.queryable.queryable.reply.source_info(),
+	api.queryable.query.reply.source_info(),
 	rust.queryable.reply_builder.trait.sample_builder_trait.source_info(),
 }
 tags{
-	api.queryable.queryable.reply.timestamp(),
+	api.queryable.query.reply.timestamp(),
 	rust.queryable.reply_builder.trait.timestamp_builder_trait.timestamp(),
 }
 tags{
-	api.queryable.queryable.reply.value(),
+	api.queryable.query.reply.value(),
 	rust.queryable.reply_builder.trait.value_builder_trait.value(),
 }
 tags{
-	api.queryable.queryable.reply_del(),
+	api.queryable.query.reply_del(),
 	rust.queryable.reply_builder_delete(),
 }
 tags{
-	api.queryable.queryable.reply_err(),
+	api.queryable.query.reply_err(),
 	rust.queryable.reply_err_builder(),
 }
 tags{
-	api.queryable.queryable.reply_err.payload(),
+	api.queryable.query.reply_err.payload(),
 	rust.queryable.reply_err_builder.trait.value_builder_trait.payload(),
 }
 tags{
-	api.queryable.queryable.reply_err.value(),
+	api.queryable.query.reply_err.value(),
 	rust.queryable.reply_err_builder.trait.value_builder_trait.value(),
 }
 tags{
