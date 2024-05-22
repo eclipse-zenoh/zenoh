@@ -1056,9 +1056,6 @@ tags{
 	rust.value.value.trait.default.default(),
 }
 tags{
-	api.liveliness(),
-}
-tags{
 	api.liveliness.declare_token(),
 	rust.liveliness.liveliness.declare_token(),
 }
@@ -1079,6 +1076,10 @@ tags{
 tags{
 	api.liveliness.get.timeout(),
 	rust.liveliness.liveliness_get_builder.timeout(),
+}
+tags{
+	api.liveliness.liveliness(),
+	rust.liveliness.liveliness(),
 }
 tags{
 	api.liveliness.new(),
@@ -2251,9 +2252,6 @@ tags{
 tags{
 	api.value.value.payload(),
 	rust.value.value.payload(),
-}
-tags{
-	rust.liveliness.liveliness(),
 }
 tags{
 	rust.prelude.mods.encoding(),
