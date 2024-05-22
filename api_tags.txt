@@ -1841,12 +1841,12 @@ tags{
 	rust.sample.value_builder_trait.value(),
 }
 tags{
-	api.scouting.callback(),
+	api.scouting.scout.callback(),
 	rust.scouting.scout_builder.callback(),
 	rust.scouting.scout_builder.callback_mut(),
 }
 tags{
-	api.scouting.channel(),
+	api.scouting.scout.channel(),
 	rust.scouting.scout_builder.with(),
 }
 tags{
