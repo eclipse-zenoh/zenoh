@@ -145,6 +145,9 @@ tags{
 	rust.bytes.z_bytes_writer(),
 }
 tags{
+	api.config.config(),
+}
+tags{
 	api.encoding.const(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_b_o_r(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_d_r(),
@@ -1041,6 +1044,7 @@ tags{
 	rust.session.session.trait.primitives.send_request(),
 	rust.session.session.trait.primitives.send_response(),
 	rust.session.session.trait.primitives.send_response_final(),
+	rust.session.session.undeclare(),
 	rust.session.session_declarations(),
 	rust.session.session_ref(),
 	rust.session.session_ref.borrow(),
@@ -1853,8 +1857,8 @@ tags{
 	rust.scouting.hello(),
 }
 tags{
-	rust.scout(),
 	api.scouting.scout(),
+	rust.scout(),
 	rust.scouting.scout(),
 	rust.scouting.scout_builder(),
 }
@@ -1979,6 +1983,9 @@ tags{
 	rust.selector.t_i_m_e__r_a_n_g_e__k_e_y(),
 }
 tags{
+	api.session.session(),
+}
+tags{
 	api.session.session.close(),
 	rust.session.session.close(),
 }
@@ -2029,10 +2036,6 @@ tags{
 tags{
 	api.session.session.session(),
 	rust.session.session(),
-}
-tags{
-	api.language_specific,
-	rust.session.session.undeclare(),
 }
 tags{
 	api.session.session.zid(),
