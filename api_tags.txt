@@ -10,18 +10,6 @@ tags{
 	api.buffers.zbuf.contiguous(),
 	rust.buffers.split_buffer.contiguous(),
 }
-tags {
-	api.publication.priority.default(TODO)
-}
-tags {
-	api.publication.publisher.express(TODO)
-}
-tags {
-	api.publication.publisher.matching_status(TODO)
-}
-tags {
-	api.publication.publisher.priority(TODO)
-}
 tags{
 	api.buffers.zbuf.new.empty(),
 	rust.buffers.z_buf.empty(),
@@ -1220,6 +1208,7 @@ tags{
 	api.publication.priority.data_low(),
 	rust.publication.priority.data_low(),
 }
+tags{api.publication.priority.default(TODO)}
 tags{
 	api.publication.priority.default(),
 	rust.publication.priority.d_e_f_a_u_l_t(),
@@ -1301,6 +1290,7 @@ tags{
 	rust.publication.publisher.delete(),
 	rust.publication.publisher_delete_builder(),
 }
+tags{api.publication.publisher.express(TODO)}
 tags{
 	api.publication.publisher.express(),
 	rust.publication.publisher_builder.trait.qo_s_builder_trait.express(),
@@ -1319,6 +1309,7 @@ tags{
 	rust.publication.publisher_declarations.matching_listener(),
 	rust.publication.std.trait.publisher_declarations.matching_listener(),
 }
+tags{api.publication.publisher.matching_status(TODO)}
 tags{
 	api.publication.publisher.matching_status(),
 	rust.publication.publisher.matching_status(),
@@ -1330,6 +1321,7 @@ tags{
 	rust.session.session_declarations.declare_publisher(),
 	rust.session.session_ref.trait.session_declarations.declare_publisher(),
 }
+tags{api.publication.publisher.priority(TODO)}
 tags{
 	api.publication.publisher.priority(),
 	rust.publication.publisher.set_priority(),
