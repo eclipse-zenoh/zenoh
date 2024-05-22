@@ -145,9 +145,6 @@ tags{
 	rust.bytes.z_bytes_writer(),
 }
 tags{
-	api.config.config(),
-}
-tags{
 	api.encoding.const(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_b_o_r(),
 	rust.encoding.encoding.a_p_p_l_i_c_a_t_i_o_n__c_d_r(),
@@ -1245,12 +1242,18 @@ tags{
 	rust.publication.priority.real_time(),
 }
 tags{
+	api.publication.publication(),
+}
+tags{
 	api.publication.publication.attachment(),
 	rust.publication.publication_builder.trait.sample_builder_trait.attachment(),
 }
 tags{
 	api.publication.publication.congestion_control(),
 	rust.publication.publication_builder.trait.qo_s_builder_trait.congestion_control(),
+}
+tags{
+	api.publication.publication.encoding(),
 }
 tags{
 	api.publication.publication.express(),
@@ -1517,51 +1520,6 @@ tags{
 	rust.queryable.reply_builder_put(),
 }
 tags{
-	api.queryable.query.reply_del(),
-	rust.queryable.query.reply_del(),
-}
-tags{
-	api.queryable.query.reply_err(),
-	rust.queryable.query.reply_err(),
-}
-tags{
-	api.queryable.query.selector(),
-	rust.queryable.query.selector(),
-}
-tags{
-	api.queryable.query.value(),
-	rust.queryable.query.value(),
-	rust.queryable.query.value_mut(),
-}
-tags{
-	api.queryable.queryable(),
-	rust.queryable.queryable(),
-	rust.queryable.queryable_builder(),
-}
-tags{
-	api.queryable.queryable.allowed_origin(),
-	rust.queryable.queryable_builder.allowed_origin(),
-}
-tags{
-	api.queryable.queryable.callback(),
-	rust.queryable.queryable.handler(),
-	rust.queryable.queryable.handler_mut(),
-	rust.queryable.queryable_builder.callback(),
-	rust.queryable.queryable_builder.callback_mut(),
-}
-tags{
-	api.queryable.queryable.channel(),
-	rust.queryable.queryable_builder.with(),
-}
-tags{
-	api.queryable.queryable.complete(),
-	rust.queryable.queryable_builder.complete(),
-}
-tags{
-	api.queryable.queryable.id(),
-	rust.queryable.queryable.id(),
-}
-tags{
 	api.queryable.query.reply.attachment(),
 	rust.queryable.reply_builder.trait.sample_builder_trait.attachment(),
 }
@@ -1599,10 +1557,12 @@ tags{
 }
 tags{
 	api.queryable.query.reply_del(),
+	rust.queryable.query.reply_del(),
 	rust.queryable.reply_builder_delete(),
 }
 tags{
 	api.queryable.query.reply_err(),
+	rust.queryable.query.reply_err(),
 	rust.queryable.reply_err_builder(),
 }
 tags{
@@ -1612,6 +1572,43 @@ tags{
 tags{
 	api.queryable.query.reply_err.value(),
 	rust.queryable.reply_err_builder.trait.value_builder_trait.value(),
+}
+tags{
+	api.queryable.query.selector(),
+	rust.queryable.query.selector(),
+}
+tags{
+	api.queryable.query.value(),
+	rust.queryable.query.value(),
+	rust.queryable.query.value_mut(),
+}
+tags{
+	api.queryable.queryable(),
+	rust.queryable.queryable(),
+	rust.queryable.queryable_builder(),
+}
+tags{
+	api.queryable.queryable.allowed_origin(),
+	rust.queryable.queryable_builder.allowed_origin(),
+}
+tags{
+	api.queryable.queryable.callback(),
+	rust.queryable.queryable.handler(),
+	rust.queryable.queryable.handler_mut(),
+	rust.queryable.queryable_builder.callback(),
+	rust.queryable.queryable_builder.callback_mut(),
+}
+tags{
+	api.queryable.queryable.channel(),
+	rust.queryable.queryable_builder.with(),
+}
+tags{
+	api.queryable.queryable.complete(),
+	rust.queryable.queryable_builder.complete(),
+}
+tags{
+	api.queryable.queryable.id(),
+	rust.queryable.queryable.id(),
 }
 tags{
 	api.queryable.queryable.undeclare(),
@@ -2163,6 +2160,9 @@ tags{
 	rust.subscriber.subscriber_inner.trait.undeclarable.undeclare_inner(),
 	rust.subscriber.subscriber_inner.undeclare(),
 	rust.subscriber.subscriber_undeclaration(),
+}
+tags{
+	api.subscription.subscriber(),
 }
 tags{
 	api.subscription.subscriber.new(),
