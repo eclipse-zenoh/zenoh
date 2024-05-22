@@ -19,12 +19,6 @@ tags{
 	rust.buffers.z_buf.push_zslice(),
 }
 tags{
-	api.query.get.express(TODO),
-}
-tags{
-	api.query.reply.replier_id(TODO),
-}
-tags{
 	api.buffers.zbuf.read(),
 	rust.buffers.has_reader.reader(),
 	rust.buffers.reader.can_read(),
@@ -1063,6 +1057,12 @@ tags{
 	rust.subscriber.subscriber_undeclaration.trait.wait.wait(),
 	rust.value.value.trait.default.default(),
 }
+tags {
+	api.query.reply.result,
+	rust.query.reply.into_result(),
+	rust.query.reply.result(),
+	rust.query.reply.result_mut(),
+}
 tags{
 	api.liveliness.declare_token(),
 	rust.liveliness.liveliness.declare_token(),
@@ -1405,13 +1405,10 @@ tags{
 	api.query.get.encoding(),
 	rust.query.get_builder.trait.value_builder_trait.encoding(),
 }
+tags{api.query.get.express(TODO)}
 tags{
 	api.query.get.express(),
 	rust.query.get_builder.trait.qo_s_builder_trait.express(),
-}
-tags{
-	api.query.get.payload(),
-	rust.query.get_builder.trai.t.value_builder_trait.payload(),
 }
 tags{
 	api.query.get.priority(),
@@ -1453,15 +1450,10 @@ tags{
 	api.query.reply(),
 	rust.query.reply(),
 }
+tags{api.query.reply.replier_id(TODO)}
 tags{
 	api.query.reply.replier_id(),
 	rust.query.reply.replier_id(),
-}
-tags{
-	api.language_specific,
-	rust.query.reply.into_result(),
-	rust.query.reply.result(),
-	rust.query.reply.result_mut(),
 }
 tags{
 	api.query.reply_key_expr(),
@@ -1500,6 +1492,9 @@ tags{
 	rust.queryable.query.attachment_mut(),
 }
 tags{
+	api.queryable.query.clone(),
+}
+tags{
 	api.queryable.query.encoding(),
 	rust.queryable.query.encoding(),
 }
@@ -1529,7 +1524,7 @@ tags{
 	rust.queryable.query.reply_err(),
 }
 tags{
-	api.queryable.query.reply_sample(),
+	api.internal,
 	rust.queryable.query.reply_sample(),
 }
 tags{
@@ -2267,6 +2262,9 @@ tags{
 }
 tags{
 	rust.publication.publication_builder.trait.value_builder_trait.value(),
+}
+tags{
+	rust.query.get_builder.trait.value_builder_trait.payload(),
 }
 tags{
 	rust.value.value.trait.from.from(),
