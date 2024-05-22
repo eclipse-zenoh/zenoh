@@ -244,6 +244,19 @@ tags{
 	rust.ext.fetching_subscriber(),
 }
 tags{
+	api.ext.fetching_subscriber.allowed_origin(),
+	rust.ext.fetching_subscriber_builder.allowed_origin(),
+}
+tags{
+	api.ext.fetching_subscriber.best_effort(),
+	rust.ext.fetching_subscriber_builder.best_effort(),
+}
+tags{
+	api.ext.fetching_subscriber.callback(),
+	rust.ext.fetching_subscriber_builder.callback(),
+	rust.ext.fetching_subscriber_builder.callback_mut(),
+}
+tags{
 	api.ext.fetching_subscriber.close(),
 	rust.ext.fetching_subscriber.close(),
 }
@@ -254,6 +267,14 @@ tags{
 tags{
 	api.ext.fetching_subscriber.key_expr(),
 	rust.ext.fetching_subscriber.key_expr(),
+}
+tags{
+	api.ext.fetching_subscriber.reliability(),
+	rust.ext.fetching_subscriber_builder.reliability(),
+}
+tags{
+	api.ext.fetching_subscriber.reliable(),
+	rust.ext.fetching_subscriber_builder.reliable(),
 }
 tags{
 	api.ext.group(),
@@ -554,15 +575,15 @@ tags{
 	rust.info.zenoh_id.to_le_bytes(),
 }
 tags{
-	api.key_expr.new(),
+	api.keyexpr.keyexpr.new(),
 	rust.key_expr.key_expr.trait.from_str.from_str(),
 }
 tags{
-	api.key_expr.undeclare(),
+	api.keyexpr.keyexpr.undeclare(),
 	rust.key_expr.key_expr.trait.undeclarable.undeclare_inner(),
 }
 tags{
-	api.keyexpr(),
+	api.keyexpr.keyexpr(),
 	rust.key_expr.key_expr(),
 	rust.key_expr.key_expr.as_keyexpr(),
 	rust.key_expr.key_expr.borrowing_clone(),
@@ -576,25 +597,25 @@ tags{
 	rust.prelude.mods.key_expr(),
 }
 tags{
-	api.keyexpr.as_str(),
+	api.keyexpr.keyexpr.as_str(),
 	rust.key_expr.keyexpr.as_str(),
 }
 tags{
-	api.keyexpr.autocanonize(),
+	api.keyexpr.keyexpr.autocanonize(),
 	rust.key_expr.key_expr.autocanonize(),
 	rust.key_expr.keyexpr.autocanonize(),
 	rust.key_expr.owned_key_expr.autocanonize(),
 }
 tags{
-	api.keyexpr.chunks(),
+	api.keyexpr.keyexpr.chunks(),
 	rust.key_expr.keyexpr.chunks(),
 }
 tags{
-	api.keyexpr.concat(),
+	api.keyexpr.keyexpr.concat(),
 	rust.key_expr.key_expr.concat(),
 }
 tags{
-	api.keyexpr.equals(),
+	api.keyexpr.keyexpr.equals(),
 	rust.key_expr.key_expr.trait.partial_eq.eq(),
 }
 tags{
@@ -604,34 +625,34 @@ tags{
 	rust.key_expr.kewrite(),
 }
 tags{
-	api.keyexpr.get_nonwild_prefix(),
+	api.keyexpr.keyexpr.get_nonwild_prefix(),
 	rust.key_expr.keyexpr.get_nonwild_prefix(),
 }
 tags{
-	api.keyexpr.includes(),
+	api.keyexpr.keyexpr.includes(),
 	rust.key_expr.keyexpr.includes(),
 }
 tags{
-	api.keyexpr.intersects(),
+	api.keyexpr.keyexpr.intersects(),
 	rust.key_expr.keyexpr.intersects(),
 }
 tags{
-	api.keyexpr.is_wild(),
+	api.keyexpr.keyexpr.is_wild(),
 	rust.key_expr.keyexpr.is_wild(),
 }
 tags{
-	api.keyexpr.join(),
+	api.keyexpr.keyexpr.join(),
 	rust.key_expr.key_expr.join(),
 	rust.key_expr.keyexpr.join(),
 }
 tags{
-	api.keyexpr.new.checked(),
+	api.keyexpr.keyexpr.new.checked(),
 	rust.key_expr.key_expr.new(),
 	rust.key_expr.keyexpr.new(),
 	rust.key_expr.owned_key_expr.new(),
 }
 tags{
-	api.keyexpr.new.unchecked(),
+	api.keyexpr.keyexpr.new.unchecked(),
 	rust.key_expr.key_expr.from_boxed_string_unchecked(),
 	rust.key_expr.key_expr.from_str_unchecked(),
 	rust.key_expr.key_expr.from_string_unchecked(),
@@ -641,7 +662,7 @@ tags{
 	rust.key_expr.owned_key_expr.from_string_unchecked(),
 }
 tags{
-	api.keyexpr.relation_to(),
+	api.keyexpr.keyexpr.relation_to(),
 	rust.key_expr.keyexpr.relation_to(),
 }
 tags{
@@ -665,7 +686,7 @@ tags{
 	rust.key_expr.set_intersection_level.intersects(),
 }
 tags{
-	api.keyexpr.strip_prefix(),
+	api.keyexpr.keyexpr.strip_prefix(),
 	rust.key_expr.keyexpr.strip_prefix(),
 }
 tags{
@@ -680,7 +701,7 @@ tags{
 	rust.key_expr.keyexpr_tree.unknown_wildness(),
 }
 tags{
-	api.keyexpr.undeclare(),
+	api.keyexpr.keyexpr.undeclare(),
 	rust.key_expr.key_expr_undeclaration(),
 }
 tags{
@@ -780,6 +801,8 @@ tags{
 	rust.encoding.encoding.trait.from.from(),
 	rust.encoding.string.trait.from.from(),
 	rust.encoding.zenoh_protocol.trait.from.from(),
+	rust.ext.fetch_builder.trait.into_future.into_future(),
+	rust.ext.fetch_builder.trait.wait.wait(),
 	rust.ext.fetch_builder.trait.z_result.into_future(),
 	rust.ext.fetch_builder.trait.z_result.wait(),
 	rust.ext.fetching_subscriber.trait.std.deref(),
@@ -1226,6 +1249,10 @@ tags{
 	api.publication.publisher.delete(),
 	rust.publication.publisher.delete(),
 	rust.publication.publisher_delete_builder(),
+}
+tags{
+	api.publication.publisher.express(),
+	rust.publication.publisher_builder.trait.qo_s_builder_trait.express(),
 }
 tags{
 	api.publication.publisher.id(),
@@ -2262,33 +2289,6 @@ tags{
 tags{
 	api.value.value.payload(),
 	rust.value.value.payload(),
-}
-tags{
-	rust.ext.fetch_builder.trait.into_future.into_future(),
-}
-tags{
-	rust.ext.fetch_builder.trait.wait.wait(),
-}
-tags{
-	rust.ext.fetching_subscriber_builder.allowed_origin(),
-}
-tags{
-	rust.ext.fetching_subscriber_builder.best_effort(),
-}
-tags{
-	rust.ext.fetching_subscriber_builder.callback(),
-}
-tags{
-	rust.ext.fetching_subscriber_builder.callback_mut(),
-}
-tags{
-	rust.ext.fetching_subscriber_builder.reliability(),
-}
-tags{
-	rust.ext.fetching_subscriber_builder.reliable(),
-}
-tags{
-	rust.publication.publisher_builder.trait.qo_s_builder_trait.express(),
 }
 tags{
 	rust.value.value.trait.from.from(),
