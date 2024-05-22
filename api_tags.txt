@@ -1160,11 +1160,11 @@ tags{
 	rust.publication.congestion_control.drop(),
 }
 tags{
-	api.publication.delete(),
+	api.publication.publication_delete(),
 	rust.publication.publication_builder_delete(),
 }
 tags{
-	api.publication.express(),
+	api.publication.publication.express(),
 	rust.publication.publication_builder.trait.qo_s_builder_trait.express(),
 }
 tags{
@@ -1189,8 +1189,11 @@ tags{
 	rust.publication.matching_listener_undeclaration(),
 }
 tags{
-	api.publication.matching_status(),
+	api.publication.publication.matching_status(),
 	rust.publication.matching_status(),
+}
+tags{
+	api.publication.publisher.matching_status(),
 	rust.publication.publisher.matching_status(),
 }
 tags{
@@ -1315,33 +1318,37 @@ tags{
 	api.publication.publisher.value(),
 	rust.publication.publisher.put.value(),
 }
-tags{
-	api.publication.put(),
+tags {
+	api.publication.publication(),
 	rust.publication.publication_builder(),
+}
+tags{
+	api.publication.publication_put(),
 	rust.publication.publication_builder_put(),
 }
 tags{
-	api.publication.put.attachment(),
+	api.publication.publication.attachment(),
+	api.publication.publication.attachment(),
 	rust.publication.publication_builder.trait.sample_builder_trait.attachment(),
 }
 tags{
-	api.publication.put.congestion_control(),
+	api.publication.publication.congestion_control(),
 	rust.publication.publication_builder.trait.qo_s_builder_trait.congestion_control(),
 }
 tags{
-	api.publication.put.encoding(),
+	api.publication.publication.encoding(),
 	rust.publication.publisher.put.encoding(),
 }
 tags{
-	api.publication.put.priority(),
+	api.publication.publication.priority(),
 	rust.publication.publication_builder.trait.qo_s_builder_trait.priority(),
 }
 tags{
-	api.publication.source_info(),
+	api.publication.publication.source_info(),
 	rust.publication.publication_builder.trait.sample_builder_trait.source_info(),
 }
 tags{
-	api.publication.timestamp(),
+	api.publication.publication.timestamp(),
 	rust.publication.publication_builder.trait.timestamp_builder_trait.timestamp(),
 }
 tags{
