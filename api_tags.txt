@@ -103,7 +103,6 @@ tags{
 	rust.bytes.z_bytes(),
 	rust.prelude.mods.bytes(),
 }
-tags{api.bytes.deserialize(Is it really needed?)}
 tags{
 	api.bytes.bytes.deserialize(),
 	rust.bytes.deserialize(),
@@ -115,6 +114,19 @@ tags{
 	rust.bytes.z_bytes.into_mut(),
 	rust.bytes.z_bytes_iterator(),
 	rust.bytes.z_deserialize_error(),
+}
+tags{
+	api.bytes.bytes.is_empty(),
+}
+tags{
+	api.bytes.bytes.len(),
+}
+tags{
+	api.bytes.bytes.new(),
+}
+tags{api.bytes.deserialize(Is it really needed?)}
+tags{
+	api.bytes.deserialize(),
 }
 tags{
 	api.bytes.is_empty(),
@@ -140,13 +152,6 @@ tags{
 	rust.bytes.serialize(),
 	rust.bytes.serialize.serialize(),
 	rust.bytes.z_bytes.serialize(),
-}
-tags{
-	api.language_specific,
-	rust.bytes.string_or_base64(),
-	rust.bytes.string_or_base64.base64(),
-	rust.bytes.string_or_base64.into_string(),
-	rust.bytes.string_or_base64.string(),
 }
 tags{
 	api.bytes.writer(),
@@ -575,12 +580,10 @@ tags{
 	rust.info.zenoh_id.to_le_bytes(),
 }
 tags{
-	api.keyexpr.keyexpr.new(),
-	rust.key_expr.key_expr.trait.from_str.from_str(),
-}
-tags{
-	api.keyexpr.keyexpr.undeclare(),
-	rust.key_expr.key_expr.trait.undeclarable.undeclare_inner(),
+	api.keyexpr.format(),
+	rust.key_expr.kedefine(),
+	rust.key_expr.keformat(),
+	rust.key_expr.kewrite(),
 }
 tags{
 	api.keyexpr.keyexpr(),
@@ -619,12 +622,6 @@ tags{
 	rust.key_expr.key_expr.trait.partial_eq.eq(),
 }
 tags{
-	api.keyexpr.format(),
-	rust.key_expr.kedefine(),
-	rust.key_expr.keformat(),
-	rust.key_expr.kewrite(),
-}
-tags{
 	api.keyexpr.keyexpr.get_nonwild_prefix(),
 	rust.key_expr.keyexpr.get_nonwild_prefix(),
 }
@@ -644,6 +641,10 @@ tags{
 	api.keyexpr.keyexpr.join(),
 	rust.key_expr.key_expr.join(),
 	rust.key_expr.keyexpr.join(),
+}
+tags{
+	api.keyexpr.keyexpr.new(),
+	rust.key_expr.key_expr.trait.from_str.from_str(),
 }
 tags{
 	api.keyexpr.keyexpr.new.checked(),
@@ -666,6 +667,15 @@ tags{
 	rust.key_expr.keyexpr.relation_to(),
 }
 tags{
+	api.keyexpr.keyexpr.strip_prefix(),
+	rust.key_expr.keyexpr.strip_prefix(),
+}
+tags{
+	api.keyexpr.keyexpr.undeclare(),
+	rust.key_expr.key_expr.trait.undeclarable.undeclare_inner(),
+	rust.key_expr.key_expr_undeclaration(),
+}
+tags{
 	api.keyexpr.set_intersection_level(),
 	rust.key_expr.set_intersection_level(),
 }
@@ -686,10 +696,6 @@ tags{
 	rust.key_expr.set_intersection_level.intersects(),
 }
 tags{
-	api.keyexpr.keyexpr.strip_prefix(),
-	rust.key_expr.keyexpr.strip_prefix(),
-}
-tags{
 	api.keyexpr.tree(),
 	rust.key_expr.keyexpr_tree.i_key_expr_tree(),
 	rust.key_expr.keyexpr_tree.i_key_expr_tree_mut(),
@@ -699,10 +705,6 @@ tags{
 	rust.key_expr.keyexpr_tree.keyed_set_provider(),
 	rust.key_expr.keyexpr_tree.non_wild(),
 	rust.key_expr.keyexpr_tree.unknown_wildness(),
-}
-tags{
-	api.keyexpr.keyexpr.undeclare(),
-	rust.key_expr.key_expr_undeclaration(),
 }
 tags{
 	api.language_specific(),
@@ -763,9 +765,13 @@ tags{
 	rust.bytes.serde_yaml.try_from(),
 	rust.bytes.string.trait.try_from.try_from(),
 	rust.bytes.string.try_from(),
+	rust.bytes.string_or_base64(),
+	rust.bytes.string_or_base64.base64(),
 	rust.bytes.string_or_base64.deref(),
 	rust.bytes.string_or_base64.fmt(),
 	rust.bytes.string_or_base64.from(),
+	rust.bytes.string_or_base64.into_string(),
+	rust.bytes.string_or_base64.string(),
 	rust.bytes.string_or_base64.trait.deref.deref(),
 	rust.bytes.string_or_base64.trait.from.from(),
 	rust.bytes.string_or_base64.trait.std.fmt(),
