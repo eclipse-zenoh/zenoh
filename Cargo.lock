@@ -5385,6 +5385,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uhlc",
  "uuid",
  "zenoh",
  "zenoh-plugin-trait",
