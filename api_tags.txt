@@ -1797,15 +1797,15 @@ tags{
 	rust.sample.sample_fields.timestamp(),
 }
 tags{
-	api.sample.sample_kind(),
+	api.sample_kind(),
 	rust.sample.sample_kind(),
 }
 tags{
-	api.sample.sample_kind.delete(),
+	api.sample_kind.delete(),
 	rust.sample.sample_kind.delete(),
 }
 tags{
-	api.sample.sample_kind.put(),
+	api.sample_kind.put(),
 	rust.sample.sample_kind.put(),
 }
 tags{
