@@ -1797,18 +1797,6 @@ tags{
 	rust.sample.sample_fields.timestamp(),
 }
 tags{
-	api.sample_kind(),
-	rust.sample.sample_kind(),
-}
-tags{
-	api.sample_kind.delete(),
-	rust.sample.sample_kind.delete(),
-}
-tags{
-	api.sample_kind.put(),
-	rust.sample.sample_kind.put(),
-}
-tags{
 	api.sample.source_info(),
 	rust.sample.source_info(),
 }
@@ -1833,6 +1821,18 @@ tags{
 	api.sample.value(),
 	rust.sample.sample_builder.trait.value_builder_trait.value(),
 	rust.sample.value_builder_trait.value(),
+}
+tags{
+	api.sample_kind(),
+	rust.sample.sample_kind(),
+}
+tags{
+	api.sample_kind.delete(),
+	rust.sample.sample_kind.delete(),
+}
+tags{
+	api.sample_kind.put(),
+	rust.sample.sample_kind.put(),
 }
 tags{
 	api.scouting.hello(),
@@ -2222,6 +2222,18 @@ tags{
 }
 tags{
 	rust.queryable.reply_err_builder.trait.value_builder_trait.encoding(),
+}
+tags{
+	rust.scouting.hello.locators(),
+}
+tags{
+	rust.scouting.hello.version(),
+}
+tags{
+	rust.scouting.hello.whatami(),
+}
+tags{
+	rust.scouting.hello.zid(),
 }
 tags{
 	rust.value.value.trait.from.from(),
