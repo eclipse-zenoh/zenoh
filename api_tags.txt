@@ -1242,18 +1242,12 @@ tags{
 	rust.publication.priority.real_time(),
 }
 tags{
-	api.publication.publication(),
-}
-tags{
 	api.publication.publication.attachment(),
 	rust.publication.publication_builder.trait.sample_builder_trait.attachment(),
 }
 tags{
 	api.publication.publication.congestion_control(),
 	rust.publication.publication_builder.trait.qo_s_builder_trait.congestion_control(),
-}
-tags{
-	api.publication.publication.encoding(),
 }
 tags{
 	api.publication.publication.express(),
@@ -1841,15 +1835,6 @@ tags{
 	rust.sample.value_builder_trait.value(),
 }
 tags{
-	api.scouting.scout.callback(),
-	rust.scouting.scout_builder.callback(),
-	rust.scouting.scout_builder.callback_mut(),
-}
-tags{
-	api.scouting.scout.channel(),
-	rust.scouting.scout_builder.with(),
-}
-tags{
 	api.scouting.hello(),
 	rust.scouting.hello(),
 }
@@ -1858,6 +1843,15 @@ tags{
 	rust.scout(),
 	rust.scouting.scout(),
 	rust.scouting.scout_builder(),
+}
+tags{
+	api.scouting.scout.callback(),
+	rust.scouting.scout_builder.callback(),
+	rust.scouting.scout_builder.callback_mut(),
+}
+tags{
+	api.scouting.scout.channel(),
+	rust.scouting.scout_builder.with(),
 }
 tags{
 	api.scouting.stop(),
@@ -1978,9 +1972,6 @@ tags{
 tags{
 	api.selector.time_range_key(),
 	rust.selector.t_i_m_e__r_a_n_g_e__k_e_y(),
-}
-tags{
-	api.session.session(),
 }
 tags{
 	api.session.session.close(),
@@ -2160,9 +2151,6 @@ tags{
 	rust.subscriber.subscriber_inner.trait.undeclarable.undeclare_inner(),
 	rust.subscriber.subscriber_inner.undeclare(),
 	rust.subscriber.subscriber_undeclaration(),
-}
-tags{
-	api.subscription.subscriber(),
 }
 tags{
 	api.subscription.subscriber.new(),
