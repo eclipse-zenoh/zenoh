@@ -376,6 +376,8 @@ pub mod internal {
     pub use zenoh_util::{
         core::ResolveFuture, zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR,
     };
+
+    pub use crate::api::encoding::EncodingInternals;
 }
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
