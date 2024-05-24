@@ -2351,7 +2351,7 @@ impl Primitives for Session {
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
-                    if state.remote_tokens.remove(&m.id).is_some() {
+                    if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         // NOTE(fuzzypixelz): I didn't put
                         // self.update_status_down() here because it doesn't
                         // make sense. An application which declares a
@@ -2368,7 +2368,7 @@ impl Primitives for Session {
 
                         self.execute_subscriber_callbacks(
                             false,
-                            &m.ext_wire_expr.wire_expr,
+                            &key_expr.to_wire(self),
                             Some(data_info),
                             ZBuf::default(),
                             SubscriberKind::LivelinessSubscriber,
