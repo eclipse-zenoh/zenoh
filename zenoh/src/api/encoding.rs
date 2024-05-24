@@ -840,6 +840,8 @@ pub trait EncodingInternals {
     fn id(&self) -> u16;
 
     fn schema(&self) -> Option<&ZSlice>;
+
+    fn new(id: u16, schema: Option<ZSlice>) -> Self;
 }
 
 impl EncodingInternals for Encoding {
@@ -849,6 +851,10 @@ impl EncodingInternals for Encoding {
 
     fn schema(&self) -> Option<&ZSlice> {
         self.0.schema.as_ref()
+    }
+
+    fn new(id: u16, schema: Option<ZSlice>) -> Self {
+        Encoding(zenoh_protocol::core::Encoding { id, schema })
     }
 }
 
