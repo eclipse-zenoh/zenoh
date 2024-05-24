@@ -2295,15 +2295,15 @@ impl Primitives for Session {
                         .wireexpr_to_keyexpr(&m.wire_expr, false)
                         .map(|e| e.into_owned())
                     {
-                        Ok(expr) => {
-                            state.remote_tokens.insert(m.id, expr.clone());
+                        Ok(key_expr) => {
+                            state.remote_tokens.insert(m.id, key_expr.clone());
 
                             if let Some(interest_id) = msg.interest_id {
                                 if let Some(query) = state.liveliness_queries.get(&interest_id) {
                                     // NOTE(fuzzypixelz): This was shamlessly copied from `zenoh::net::routing::dispatcher::queries::route_query`
                                     let reply = Reply {
                                         result: Ok(Sample {
-                                            key_expr: query.key_expr.clone(),
+                                            key_expr,
                                             payload: ZBytes::empty(),
                                             kind: SampleKind::Put,
                                             encoding: Encoding::default(),
