@@ -1949,13 +1949,9 @@ impl Session {
 
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();
-        state.liveliness_queries.insert(
-            id,
-            LivelinessQueryState {
-                callback,
-                key_expr: key_expr.clone().into_owned(),
-            },
-        );
+        state
+            .liveliness_queries
+            .insert(id, LivelinessQueryState { callback });
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);

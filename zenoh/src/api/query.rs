@@ -116,7 +116,6 @@ impl From<Reply> for Result<Sample, Value> {
 }
 
 pub(crate) struct LivelinessQueryState {
-    pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) callback: Callback<'static, Reply>,
 }
 
