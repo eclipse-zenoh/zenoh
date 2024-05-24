@@ -20,7 +20,7 @@ use zenoh_protocol::network::{
     declare::{common::ext::WireExprType, TokenId},
     ext,
     interest::{InterestId, InterestMode},
-    Declare, DeclareBody, DeclareToken, UndeclareToken,
+    Declare, DeclareBody, DeclareFinal, DeclareToken, UndeclareToken,
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -833,6 +833,17 @@ impl HatTokenTrait for HatCode {
                     }
                 }
             }
+
+            face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    interest_id,
+                    ext_qos: ext::QoSType::default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::DeclareFinal(DeclareFinal),
+                },
+                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+            ));
         }
         if mode.future() {
             face_hat_mut!(face)
