@@ -260,7 +260,7 @@ impl Primitives for Face {
                     msg.options.aggregate(),
                 );
             }
-            if msg.mode != InterestMode::Future {
+            if msg.mode != InterestMode::Future && !msg.options.tokens() {
                 self.state.primitives.send_declare(RoutingContext::new_out(
                     Declare {
                         interest_id: Some(msg.id),
