@@ -1,4 +1,10 @@
 tags{
+	api.scouting.scout.timeout(SEE rust.scouting.scout.stop instead)
+}
+tags{
+	api.scouting.scout.what(SEE rust.scout.scout),
+}
+tags{
 	api.buffers.zbuf(),
 	rust.buffers.z_buf(),
 }
@@ -1858,15 +1864,15 @@ tags{
 	rust.sample.value_builder_trait.value(),
 }
 tags{
-	api.sample_kind(),
+	api.sample.sample_kind(),
 	rust.sample.sample_kind(),
 }
 tags{
-	api.sample_kind.delete(),
+	api.ssample.ample_kind.delete(),
 	rust.sample.sample_kind.delete(),
 }
 tags{
-	api.sample_kind.put(),
+	api.ssample.ample_kind.put(),
 	rust.sample.sample_kind.put(),
 }
 tags{
@@ -2051,7 +2057,7 @@ tags{
 	rust.session.session.hlc(),
 }
 tags{
-	api.session.session.liveliness.new(),
+	api.liveliness.new(),
 	rust.session.arc.trait.session_declarations.liveliness(),
 	rust.session.session.trait.session_declarations.liveliness(),
 	rust.session.session_ref.trait.session_declarations.liveliness(),
