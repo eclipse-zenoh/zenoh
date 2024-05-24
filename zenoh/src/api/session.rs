@@ -1966,7 +1966,7 @@ impl Session {
             mode: InterestMode::Current,
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(wexpr.clone()),
-            ext_qos: request::ext::QoSType::REQUEST,
+            ext_qos: request::ext::QoSType::DEFAULT,
             ext_tstamp: None,
             ext_nodeid: request::ext::NodeIdType::DEFAULT,
         });
