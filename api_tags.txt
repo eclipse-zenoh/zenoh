@@ -563,6 +563,7 @@ tags{
 }
 tags{
 	api.info.session_info.zid(),
+	rust.session.session.zid(),
 	rust.info.session_info.zid(),
 }
 tags{
@@ -726,6 +727,7 @@ tags{
 }
 tags{
 	api.language_specific(),
+	rust.subscriber.reliability.rand(),
 	rust.admin.handler.as_any(),
 	rust.admin.handler.closed(),
 	rust.admin.handler.closing(),
@@ -2042,7 +2044,7 @@ tags{
 	rust.session.session.config(),
 }
 tags{
-	api.session.session.declare_keyexpr(),
+	api.keyexpr.keyexpr.declare,
 	rust.session.session.declare_keyexpr(),
 }
 tags{
@@ -2066,7 +2068,7 @@ tags{
 	rust.session.open_builder(),
 }
 tags{
-	api.session.session.open.with_shm_clients(),
+	api.shm,
 	rust.session.open_builder.with_shm_clients(),
 }
 tags{
@@ -2076,12 +2078,10 @@ tags{
 	rust.session.session_put_builder(),
 }
 tags{
-	api.session.session.session(),
+	api.session.session(),
 	rust.session.session(),
 }
 tags{
-	api.session.session.zid(),
-	rust.session.session.zid(),
 }
 tags{
 	api.shm(),
@@ -2132,11 +2132,11 @@ tags{
 	rust.shm.zshmmut(),
 }
 tags{
-	api.ssample.ample_kind.delete(),
+	api.sample.ample_kind.delete(),
 	rust.sample.sample_kind.delete(),
 }
 tags{
-	api.ssample.ample_kind.put(),
+	api.sample.ample_kind.put(),
 	rust.sample.sample_kind.put(),
 }
 tags{
@@ -2152,8 +2152,6 @@ tags{
 	rust.subscriber.reliability.d_e_f_a_u_l_t(),
 }
 tags{
-	api.subscriber.reliability.rand(),
-	rust.subscriber.reliability.rand(),
 }
 tags{
 	api.subscriber.reliability.reliable(),
@@ -2190,11 +2188,12 @@ tags{
 	rust.subscriber.subscriber_builder.key_expr(),
 }
 tags{
-	api.subscriber.subscriber.new(),
+	api.subscriber.subscriber.declare(),
 	rust.session.session.trait.session_declarations.declare_subscriber(),
 	rust.session.session_declarations.declare_subscriber(),
 	rust.session.session_ref.trait.session_declarations.declare_subscriber(),
 	rust.subscriber.subscriber_builder(),
+	rust.session.arc.trait.session_declarations.declare_subscriber(),
 }
 tags{
 	api.subscriber.subscriber.origin(),
@@ -2215,8 +2214,6 @@ tags{
 	rust.subscriber.subscriber_undeclaration(),
 }
 tags{
-	api.subscription.subscriber.new(),
-	rust.session.arc.trait.session_declarations.declare_subscriber(),
 }
 tags{
 	api.time.new_reception_timestamp(),
