@@ -593,6 +593,7 @@ tags{
 tags{
 	api.internal(),
 	rust.queryable.query.reply_sample(),
+	rust.queryable.reply_sample(),
 }
 tags{
 	api.keyexpr.format(),
@@ -1589,12 +1590,13 @@ tags{
 	rust.queryable.reply_builder_delete(),
 }
 tags{
-	api.queryable.query.reply_err.encoding(TAGGER ERROR?),
-}
-tags{
 	api.queryable.query.reply_err(),
 	rust.queryable.query.reply_err(),
 	rust.queryable.reply_err_builder(),
+}
+tags{api.queryable.query.reply_err.encoding(TAGGER ERROR?)}
+tags{
+	api.queryable.query.reply_err.encoding(),
 }
 tags{
 	api.queryable.query.reply_err.payload(),
@@ -1646,10 +1648,6 @@ tags{
 	rust.queryable.queryable.trait.undeclarable.undeclare_inner(),
 	rust.queryable.queryable.undeclare(),
 	rust.queryable.queryable_undeclaration(),
-}
-tags{
-	api.internal,
-	rust.queryable.reply_sample(),
 }
 tags{
 	api.runtime(),
