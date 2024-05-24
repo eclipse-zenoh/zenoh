@@ -19,8 +19,8 @@
 
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
-  /// For TCP/UDP on Linux, it is possible additionally specify the interface to be connected to: 
-  /// E.g. tcp/192.168.0.1:7447#iface=eth0, for connect only if the IP address is reachable via the interface eth0 
+  /// For TCP/UDP on Linux, it is possible additionally specify the interface to be connected to:
+  /// E.g. tcp/192.168.0.1:7447#iface=eth0, for connect only if the IP address is reachable via the interface eth0
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value or different values for router, peer and client.
@@ -30,16 +30,16 @@
       // "<proto>/<address>"
     ],
 
-    /// Global connect configuration, 
+    /// Global connect configuration,
     /// Accepts a single value or different values for router, peer and client.
     /// The configuration can also be specified for the separate endpoint
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#retry_period_init_ms=20000;retry_period_max_ms=10000"
-     
+
     /// exit from application, if timeout exceed
     exit_on_failure: { router: false, peer: false, client: true },
-    /// connect establishing retry configuration 
-    retry: { 
+    /// connect establishing retry configuration
+    retry: {
       /// intial wait timeout until next connect try
       period_init_ms: 1000,
       /// maximum wait timeout until next connect try
@@ -52,7 +52,7 @@
   /// Which endpoints to listen on. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
   /// peers, or client can use to establish a zenoh session.
-  /// For TCP/UDP on Linux, it is possible additionally specify the interface to be listened to: 
+  /// For TCP/UDP on Linux, it is possible additionally specify the interface to be listened to:
   /// E.g. tcp/0.0.0.0:7447#iface=eth0, for listen connection only on eth0
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
@@ -63,16 +63,16 @@
       // "<proto>/<address>"
     ],
 
-    /// Global listen configuration, 
+    /// Global listen configuration,
     /// Accepts a single value or different values for router, peer and client.
     /// The configuration can also be specified for the separate endpoint
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#exit_on_failure=false;retry_period_max_ms=1000"
-    
+
     /// exit from application, if timeout exceed
     exit_on_failure: true,
-    /// listen retry configuration 
-    retry: { 
+    /// listen retry configuration
+    retry: {
       /// intial wait timeout until next try
       period_init_ms: 1000,
       /// maximum wait timeout until next try
@@ -171,19 +171,19 @@
   //      flow: "egress",
   //      /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
   //      rules: [
-  //        { key_expr: "demo/example/zenoh-rs-pub", freq: 0.1 }, 
+  //        { key_expr: "demo/example/zenoh-rs-pub", freq: 0.1 },
   //      ],
   //    },
   //  ],
 
-  //  /// configure access control (ACL) rules 
+  //  /// configure access control (ACL) rules
   //  access_control: {
   //   ///[true/false] acl will be activated only if this is set to true
   //   "enabled": false,
   //   ///[deny/allow] default permission is deny (even if this is left empty or not specified)
   //   "default_permission": "deny",
   //   ///rule set for permissions allowing or denying access to key-expressions
-  //   "rules": 
+  //   "rules":
   //   [
   //     {
   //       "actions": [
@@ -216,7 +216,7 @@
       /// This option does not make LowLatency transport mandatory, the actual implementation of transport
       /// used will depend on Establish procedure and other party's settings
       ///
-      /// NOTE: Currently, the LowLatency transport doesn't preserve QoS prioritization. 
+      /// NOTE: Currently, the LowLatency transport doesn't preserve QoS prioritization.
       /// NOTE: Due to the note above, 'lowlatency' is incompatible with 'qos' option, so in order to
       ///       enable 'lowlatency' you need to explicitly disable 'qos'.
       lowlatency: false,
@@ -225,19 +225,19 @@
         enabled: true,
       },
       /// Enables compression on unicast communications.
-      /// Compression capabilities are negotiated during session establishment. 
+      /// Compression capabilities are negotiated during session establishment.
       /// If both Zenoh nodes support compression, then compression is activated.
       compression: {
         enabled: false,
       },
-    },    
+    },
     multicast: {
-      /// Enables QoS on multicast communication. 
+      /// Enables QoS on multicast communication.
       /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
       qos: {
         enabled: false,
       },
-      /// Enables compression on multicast communication. 
+      /// Enables compression on multicast communication.
       /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
       compression: {
         enabled: false,
@@ -261,7 +261,7 @@
         /// messages will be sent at the configured time interval.
         /// NOTE: In order to consider eventual packet loss and transmission latency and jitter,
         ///       set the actual keep_alive interval to one fourth of the lease time: i.e. send
-        ///       4 keep_alive messages in a lease period. Changing the lease time will have the 
+        ///       4 keep_alive messages in a lease period. Changing the lease time will have the
         ///       keep_alive messages sent more or less often.
         ///       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
         ///       check which considers a link as failed when no messages are received in 3.5 times the
@@ -299,9 +299,6 @@
           /// Higher values lead to a more aggressive batching but it will introduce additional latency.
           backoff: 100,
         },
-        // Number of threads dedicated to transmission
-        // By default, the number of threads is calculated as follows: 1 + ((#cores - 1) / 4)
-        // threads: 4,
       },
       /// Configure the zenoh RX parameters of a link
       rx: {
@@ -378,7 +375,7 @@
   ///
   /// Plugins configurations
   ///
-  //  
+  //
   //  plugins_loading: {
   //    // Enable plugins loading.
   //    enabled: false,

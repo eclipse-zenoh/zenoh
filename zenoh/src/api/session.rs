@@ -47,8 +47,9 @@ use zenoh_protocol::{
             UndeclareSubscriber, UndeclareToken,
         },
         interest::{InterestId, InterestMode, InterestOptions},
-        request::{self, ext::TargetType, Request},
-        AtomicRequestId, DeclareFinal, Interest, Mapping, Push, RequestId, Response, ResponseFinal,
+        request::{self, ext::TargetType},
+        AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId, Response,
+        ResponseFinal,
     },
     zenoh::{
         query::{self, ext::QueryBodyType, Consolidation},
@@ -103,7 +104,6 @@ zconfigurable! {
     pub(crate) static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
     pub(crate) static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
     pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub(crate) static ref API_OPEN_SESSION_DELAY: u64 = 500;
 }
 
 pub(crate) struct SessionState {
@@ -598,10 +598,11 @@ impl Session {
                 self.runtime.close().await?;
             }
             let mut state = zwrite!(self.state);
-            state.primitives.as_ref().unwrap().send_close();
             // clean up to break cyclic references from self.state to itself
-            state.primitives.take();
+            let primitives = state.primitives.take();
             state.queryables.clear();
+            drop(state);
+            primitives.as_ref().unwrap().send_close();
             self.alive = false;
             Ok(())
         })
@@ -925,8 +926,6 @@ impl Session {
             .await;
             session.owns_runtime = true;
             runtime.start().await?;
-            // Workaround for the declare_and_shoot problem
-            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
             Ok(session)
         })
     }
@@ -2287,7 +2286,6 @@ impl Primitives for Session {
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 trace!("recv UndeclareQueryable {:?}", m.id);
             }
-
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 trace!("recv DeclareToken {:?}", m.id);
                 #[cfg(feature = "unstable")]
@@ -2914,11 +2912,6 @@ impl crate::net::primitives::EPrimitives for Session {
     #[inline]
     fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
         (self as &dyn Primitives).send_response_final(ctx.msg)
-    }
-
-    #[inline]
-    fn send_close(&self) {
-        (self as &dyn Primitives).send_close()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

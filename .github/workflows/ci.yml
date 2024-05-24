@@ -24,6 +24,7 @@ on:
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_PROFILE_DEV_DEBUG: false
+  RUSTUP_WINDOWS_PATH_ADD_BIN: 1
 
 jobs:
   check:
@@ -38,13 +39,14 @@ jobs:
       - name: Clone this repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        run: |
-          rustup show
-          rustup component add rustfmt clippy
-
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Update Stable Rust toolchain
+        run: rustup update stable
+
+      - name: Install latest cargo-deny
+        uses: taiki-e/install-action@cargo-deny
 
       - name: Code format check
         run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
@@ -71,6 +73,9 @@ jobs:
 
       - name: Run doctests
         run: cargo test --doc
+
+      - name: Check licenses
+        run: cargo deny check licenses
 
   test:
     name: Unit tests on ${{ matrix.os }}

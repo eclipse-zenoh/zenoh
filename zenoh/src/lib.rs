@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#![cfg_attr(doc_auto_cfg, feature(doc_auto_cfg))]
+
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
 //! rest and computations. It elegantly blends traditional pub/sub with geo distributed
 //! storage, queries and computations, while retaining a level of time and space efficiency
@@ -277,8 +279,8 @@ pub mod publication {
     pub use crate::api::publication::PublisherRef;
     pub use crate::api::{
         builders::publication::{
-            PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
-            PublisherDeleteBuilder,
+            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+            PublisherDeleteBuilder, PublisherPutBuilder,
         },
         publication::{Priority, Publisher, PublisherUndeclaration},
     };
@@ -374,6 +376,8 @@ pub mod internal {
     pub use zenoh_util::{
         core::ResolveFuture, zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR,
     };
+
+    pub use crate::api::encoding::EncodingInternals;
 }
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
@@ -397,16 +401,20 @@ pub mod shm {
             protocol_id::POSIX_PROTOCOL_ID,
         },
         provider::{
+            chunk::{AllocatedChunk, ChunkDescriptor},
             shared_memory_provider::{
-                AllocBuilder, AllocLayout, AllocLayoutAlignedBuilder, AllocLayoutBuilder,
-                AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
-                DeallocOptimal, DeallocYoungest, Deallocate, Defragment, DynamicProtocolID,
-                ForceDeallocPolicy, GarbageCollect, JustAlloc, ProtocolIDSource,
-                SharedMemoryProvider, SharedMemoryProviderBuilder,
+                AllocBuilder, AllocBuilder2, AllocLayout, AllocLayoutSizedBuilder, AllocPolicy,
+                AsyncAllocPolicy, BlockOn, DeallocEldest, DeallocOptimal, DeallocYoungest,
+                Deallocate, Defragment, DynamicProtocolID, ForceDeallocPolicy, GarbageCollect,
+                JustAlloc, ProtocolIDSource, SharedMemoryProvider, SharedMemoryProviderBuilder,
                 SharedMemoryProviderBuilderBackendID, SharedMemoryProviderBuilderID,
                 StaticProtocolID,
             },
-            types::{AllocAlignment, BufAllocResult, ChunkAllocResult, MemoryLayout, ZAllocError},
+            shared_memory_provider_backend::SharedMemoryProviderBackend,
+            types::{
+                AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
+                MemoryLayout, ZAllocError, ZLayoutAllocError, ZLayoutError,
+            },
         },
     };
 }

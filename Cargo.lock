@@ -3733,9 +3733,9 @@ dependencies = [
 
 [[package]]
 name = "stabby"
-version = "4.0.5"
+version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ec04c5825384722310b6a1fd83023bee0bfdc838f7aa3069f0a59e10203836b"
+checksum = "c7708f5b0e8bddba162d20fa10c8d17c31a2ec6bba369f7904bb18a8bde49ba2"
 dependencies = [
  "lazy_static",
  "rustversion",
@@ -3744,9 +3744,9 @@ dependencies = [
 
 [[package]]
 name = "stabby-abi"
-version = "4.0.5"
+version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "976322da1deb6cc64a8406fd24378b840b1962acaac1978a993131c3838d81b3"
+checksum = "1a6e7a8b2ff2c116bfab6afcce0adec14509eb38fd3f231bb97826d01de4021e"
 dependencies = [
  "libc",
  "rustversion",
@@ -3756,9 +3756,9 @@ dependencies = [
 
 [[package]]
 name = "stabby-macros"
-version = "4.0.5"
+version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "736712a13ab37b1fa6e073831efca751bbcb31033af4d7308bd5d9d605939183"
+checksum = "db97bd3101fab9929a08fa0138d30d46c7a80b9d32bc8a3a00706ba00358a275"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -4436,7 +4436,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 
@@ -5654,10 +5654,7 @@ dependencies = [
  "ron",
  "serde",
  "tokio",
- "tracing",
- "zenoh-collections",
  "zenoh-macros",
- "zenoh-protocol",
  "zenoh-result",
 ]
 

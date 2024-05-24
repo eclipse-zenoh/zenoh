@@ -121,6 +121,11 @@ impl HatBaseTrait for HatCode {
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
+
+        face_hat_mut!(face).remote_sub_interests.clear();
+        face_hat_mut!(face).local_subs.clear();
+        face_hat_mut!(face).local_qabls.clear();
+
         let face = get_mut_unchecked(face);
         for res in face.remote_mappings.values_mut() {
             get_mut_unchecked(res).session_ctxs.remove(&face.id);
@@ -246,10 +251,6 @@ impl HatBaseTrait for HatCode {
         _transport: &TransportUnicast,
     ) -> ZResult<()> {
         Ok(())
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 
     #[inline]

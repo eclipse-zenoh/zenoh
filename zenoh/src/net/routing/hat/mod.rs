@@ -76,8 +76,6 @@ pub(crate) trait HatTrait:
 }
 
 pub(crate) trait HatBaseTrait {
-    fn as_any(&self) -> &dyn Any;
-
     fn init(&self, tables: &mut Tables, runtime: Runtime);
 
     fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync>;

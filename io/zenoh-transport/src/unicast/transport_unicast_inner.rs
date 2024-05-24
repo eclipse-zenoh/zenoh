@@ -81,7 +81,6 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*            TERMINATION            */
     /*************************************/
-    async fn close_link(&self, link: Link, reason: u8) -> ZResult<()>;
     async fn close(&self, reason: u8) -> ZResult<()>;
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(

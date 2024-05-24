@@ -56,7 +56,7 @@ members = [
 exclude = ["ci/nostd-check", "ci/valgrind-check"]
 
 [workspace.package]
-rust-version = "1.66.1"
+rust-version = "1.72.0"
 version = "0.11.0-dev" # Zenoh version
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -91,7 +91,7 @@ crc = "3.0.1"
 criterion = "0.5"
 derive_more = "0.99.17"
 derive-new = "0.6.0"
-tracing-subscriber = {version = "0.3", features = ["json", "env-filter"]}
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-loki = "0.2"
 event-listener = "4.0.0"
 flume = "0.11"
@@ -149,7 +149,7 @@ serde_cbor = "0.11.2"
 serde_json = "1.0.114"
 serde-pickle = "1.1.1"
 serde_yaml = "0.9.19"
-stabby = "4.0.5"
+stabby = "5.0.1"
 sha3 = "0.10.6"
 shared_memory = "0.12.4"
 shellexpand = "3.0.0"

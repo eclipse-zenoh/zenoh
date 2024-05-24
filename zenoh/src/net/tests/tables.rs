@@ -559,8 +559,6 @@ impl EPrimitives for ClientPrimitives {
 
     fn send_response_final(&self, _ctx: RoutingContext<zenoh_protocol::network::ResponseFinal>) {}
 
-    fn send_close(&self) {}
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -722,6 +720,7 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         &"test/client/z1_wr1".into(),
         ext::QoSType::DEFAULT,
+        None,
         PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::empty(),
@@ -755,6 +754,7 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/z1_wr2"),
         ext::QoSType::DEFAULT,
+        None,
         PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::empty(),
@@ -788,6 +788,7 @@ fn client_test() {
         &face1.upgrade().unwrap(),
         &"test/client/**".into(),
         ext::QoSType::DEFAULT,
+        None,
         PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::empty(),
@@ -821,6 +822,7 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         &12.into(),
         ext::QoSType::DEFAULT,
+        None,
         PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::empty(),
@@ -854,6 +856,7 @@ fn client_test() {
         &face1.upgrade().unwrap(),
         &22.into(),
         ext::QoSType::DEFAULT,
+        None,
         PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::empty(),

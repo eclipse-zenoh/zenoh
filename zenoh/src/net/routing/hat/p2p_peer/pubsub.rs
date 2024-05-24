@@ -39,7 +39,7 @@ use crate::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
-        router::RoutesIndexes,
+        router::{update_data_routes_from, RoutesIndexes},
         RoutingContext,
     },
 };
@@ -355,6 +355,10 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             }
         }
     }
+    // recompute routes
+    // TODO: disable data routes and recompute them in parallel to avoid holding
+    // tables write lock for a long time on peer conenction.
+    update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 impl HatPubSubTrait for HatCode {
@@ -368,7 +372,7 @@ impl HatPubSubTrait for HatCode {
         aggregate: bool,
     ) {
         if mode.current() && face.whatami == WhatAmI::Client {
-            let interest_id = mode.future().then_some(id);
+            let interest_id = (!mode.future()).then_some(id);
             let sub_info = SubscriberInfo {
                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
             };
@@ -562,6 +566,21 @@ impl HatPubSubTrait for HatCode {
                 return Arc::new(route);
             }
         };
+
+        for face in tables.faces.values().filter(|f| {
+            f.whatami == WhatAmI::Peer
+                && !f
+                    .local_interests
+                    .get(&0)
+                    .map(|i| i.finalized)
+                    .unwrap_or(true)
+        }) {
+            route.entry(face.id).or_insert_with(|| {
+                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                (face.clone(), key_expr.to_owned(), NodeId::default())
+            });
+        }
+
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
             .as_ref()

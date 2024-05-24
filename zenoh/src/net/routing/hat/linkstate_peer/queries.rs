@@ -695,7 +695,7 @@ impl HatQueriesTrait for HatCode {
         aggregate: bool,
     ) {
         if mode.current() && face.whatami == WhatAmI::Client {
-            let interest_id = mode.future().then_some(id);
+            let interest_id = (!mode.future()).then_some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
                     if hat!(tables).peer_qabls.iter().any(|qabl| {

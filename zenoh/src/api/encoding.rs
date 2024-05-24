@@ -723,6 +723,7 @@ impl fmt::Display for Encoding {
     }
 }
 
+#[allow(dead_code)]
 // - Encoding trait
 pub trait EncodingMapping {
     const ENCODING: Encoding;
@@ -833,6 +834,22 @@ impl EncodingMapping for serde_cbor::Value {
 
 impl EncodingMapping for serde_pickle::Value {
     const ENCODING: Encoding = Encoding::APPLICATION_PYTHON_SERIALIZED_OBJECT;
+}
+
+pub trait EncodingInternals {
+    fn id(&self) -> u16;
+
+    fn schema(&self) -> Option<&ZSlice>;
+}
+
+impl EncodingInternals for Encoding {
+    fn id(&self) -> u16 {
+        self.0.id
+    }
+
+    fn schema(&self) -> Option<&ZSlice> {
+        self.0.schema.as_ref()
+    }
 }
 
 // - Zenoh SHM
