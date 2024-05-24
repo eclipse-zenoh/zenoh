@@ -685,41 +685,7 @@ fn forget_client_subscription(
 }
 
 pub(super) fn pubsub_new_face(_tables: &mut Tables, _face: &mut Arc<FaceState>) {
-    // let sub_info = SubscriberInfo {
-    //     reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-    // };
-
-    // if face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
-    //     for sub in &hat!(tables).router_subs {
-    //         if sub.context.is_some()
-    //             && (res_hat!(sub).router_subs.iter().any(|r| *r != tables.zid)
-    //                 || sub.session_ctxs.values().any(|s| {
-    //                     s.subs.is_some()
-    //                         && (s.face.whatami == WhatAmI::Client
-    //                             || (s.face.whatami == WhatAmI::Peer
-    //                                 && hat!(tables).failover_brokering(s.face.zid, face.zid)))
-    //                 }))
-    //         {
-    //             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-    //             face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-    //             let key_expr = Resource::decl_key(sub, face);
-    //             face.primitives.send_declare(RoutingContext::with_expr(
-    //                 Declare {
-    //                     interest_id: None,
-    //                     ext_qos: ext::QoSType::DECLARE,
-    //                     ext_tstamp: None,
-    //                     ext_nodeid: ext::NodeIdType::DEFAULT,
-    //                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-    //                         id,
-    //                         wire_expr: key_expr,
-    //                         ext_info: sub_info,
-    //                     }),
-    //                 },
-    //                 sub.expr(),
-    //             ));
-    //         }
-    //     }
-    // }
+    // Nothing to do
 }
 
 pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
