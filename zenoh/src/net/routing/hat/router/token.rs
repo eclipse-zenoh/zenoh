@@ -24,16 +24,15 @@ use zenoh_protocol::network::{
 };
 use zenoh_sync::get_mut_unchecked;
 
+use super::{
+    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, network::Network, res_hat,
+    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+};
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
     hat::{CurrentFutureTrait, HatTokenTrait},
     router::{NodeId, Resource, SessionContext},
     RoutingContext,
-};
-
-use super::{
-    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, network::Network, res_hat,
-    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
 
 #[inline]

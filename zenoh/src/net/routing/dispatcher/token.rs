@@ -24,14 +24,13 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use crate::net::routing::{
-    hat::HatTrait,
-    router::{compute_matches_data_routes, disable_matches_data_routes, Resource},
-};
-
 use super::{
     face::FaceState,
     tables::{NodeId, TablesLock},
+};
+use crate::net::routing::{
+    hat::HatTrait,
+    router::{compute_matches_data_routes, disable_matches_data_routes, Resource},
 };
 
 pub(crate) fn declare_token(

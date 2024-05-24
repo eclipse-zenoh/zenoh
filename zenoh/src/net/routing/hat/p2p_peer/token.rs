@@ -23,14 +23,13 @@ use zenoh_protocol::network::{
 };
 use zenoh_sync::get_mut_unchecked;
 
+use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
     hat::{CurrentFutureTrait, HatTokenTrait},
     router::{NodeId, Resource, SessionContext},
     RoutingContext,
 };
-
-use super::{face_hat, face_hat_mut, HatCode, HatFace};
 
 #[inline]
 fn propagate_simple_token_to(
