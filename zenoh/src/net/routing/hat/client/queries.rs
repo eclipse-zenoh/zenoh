@@ -387,25 +387,12 @@ impl HatQueriesTrait for HatCode {
     #[inline]
     fn compute_local_replies(
         &self,
-        tables: &Tables,
-        prefix: &Arc<Resource>,
-        suffix: &str,
-        face: &Arc<FaceState>,
+        _tables: &Tables,
+        _prefix: &Arc<Resource>,
+        _suffix: &str,
+        _face: &Arc<FaceState>,
     ) -> Vec<(WireExpr<'static>, ZBuf)> {
-        let mut result = vec![];
-        // Only the first routing point in the query route
-        // should return the liveliness tokens
-        if face.whatami == WhatAmI::Client {
-            let key_expr = prefix.expr() + suffix;
-            let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-                Ok(ke) => ke,
-                Err(e) => {
-                    tracing::warn!("Invalid KE reached the system: {}", e);
-                    return result;
-                }
-            };
-        }
-        result
+        vec![]
     }
 
     fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {

@@ -21,7 +21,6 @@ use std::{
 
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
-use zenoh_keyexpr::keyexpr;
 
 use super::{
     handlers::{locked, DefaultHandler, IntoHandler},

@@ -85,7 +85,7 @@ fn propagate_simple_token_to(
     _tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    src_face: &mut Arc<FaceState>,
+    _src_face: &mut Arc<FaceState>,
 ) {
     if !face_hat!(dst_face).local_tokens.contains_key(res) && dst_face.whatami == WhatAmI::Client {
         if dst_face.whatami != WhatAmI::Client {
