@@ -1,10 +1,4 @@
 tags{
-	api.scouting.scout.timeout(SEE rust.scouting.scout.stop instead)
-}
-tags{
-	api.scouting.scout.what(SEE rust.scout.scout),
-}
-tags{
 	api.buffers.zbuf(),
 	rust.buffers.z_buf(),
 }
@@ -639,6 +633,9 @@ tags{
 	rust.key_expr.key_expr.concat(),
 }
 tags{
+	api.keyexpr.keyexpr.declare(),
+}
+tags{
 	api.keyexpr.keyexpr.equals(),
 	rust.key_expr.key_expr.trait.partial_eq.eq(),
 }
@@ -1105,7 +1102,10 @@ tags{
 }
 tags{
 	api.liveliness.new(),
+	rust.session.arc.trait.session_declarations.liveliness(),
+	rust.session.session.trait.session_declarations.liveliness(),
 	rust.session.session_declarations.liveliness(),
+	rust.session.session_ref.trait.session_declarations.liveliness(),
 }
 tags{
 	api.liveliness.subscriber(),
@@ -1838,6 +1838,10 @@ tags{
 	rust.sample.sample_fields.timestamp(),
 }
 tags{
+	api.sample.sample_kind(),
+	rust.sample.sample_kind(),
+}
+tags{
 	api.sample.source_info(),
 	rust.sample.source_info(),
 }
@@ -1862,18 +1866,6 @@ tags{
 	api.sample.value(),
 	rust.sample.sample_builder.trait.value_builder_trait.value(),
 	rust.sample.value_builder_trait.value(),
-}
-tags{
-	api.sample.sample_kind(),
-	rust.sample.sample_kind(),
-}
-tags{
-	api.ssample.ample_kind.delete(),
-	rust.sample.sample_kind.delete(),
-}
-tags{
-	api.ssample.ample_kind.put(),
-	rust.sample.sample_kind.put(),
 }
 tags{
 	api.scouting.hello(),
@@ -1910,6 +1902,14 @@ tags{
 	api.scouting.scout.channel(),
 	rust.scouting.scout_builder.with(),
 }
+tags{api.scouting.scout.timeout(SEE rust.scouting.scout.stop instead)}
+tags{
+	api.scouting.scout.timeout(),
+}
+tags{api.scouting.scout.what(SEE rust.scout.scout)}
+tags{
+	api.scouting.scout.what(),
+}
 tags{
 	api.scouting.stop(),
 	rust.scouting.scout.stop(),
@@ -1937,6 +1937,9 @@ tags{
 tags{
 	api.scouting.whatami.to_str(),
 	rust.scouting.what_am_i.to_str(),
+}
+tags{
+	api.selector(),
 }
 tags{
 	api.selector.parameters(),
@@ -2057,12 +2060,6 @@ tags{
 	rust.session.session.hlc(),
 }
 tags{
-	api.liveliness.new(),
-	rust.session.arc.trait.session_declarations.liveliness(),
-	rust.session.session.trait.session_declarations.liveliness(),
-	rust.session.session_ref.trait.session_declarations.liveliness(),
-}
-tags{
 	api.session.session.open(),
 	rust.open(),
 	rust.session.open(),
@@ -2133,6 +2130,14 @@ tags{
 	rust.shm.z_shm_mut(),
 	rust.shm.zshm(),
 	rust.shm.zshmmut(),
+}
+tags{
+	api.ssample.ample_kind.delete(),
+	rust.sample.sample_kind.delete(),
+}
+tags{
+	api.ssample.ample_kind.put(),
+	rust.sample.sample_kind.put(),
 }
 tags{
 	api.subscriber.reliability(),
