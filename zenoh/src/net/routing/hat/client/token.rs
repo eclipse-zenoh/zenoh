@@ -298,7 +298,7 @@ impl HatTokenTrait for HatCode {
                     mode,
                     options,
                     wire_expr,
-                    ext_qos: ext::QoSType::DECLARE,
+                    ext_qos: ext::QoSType::DEFAULT,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                 },
