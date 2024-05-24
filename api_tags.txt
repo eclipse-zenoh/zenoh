@@ -1,4 +1,10 @@
 tags{
+	api.config.config(TODO - expose from config crate explicitly)
+}
+tags{
+	api.info.session_info.callback(NOT NEEDED - works with the async iterator),
+}
+tags{
 	api.buffers.zbuf(),
 	rust.buffers.z_buf(),
 }
@@ -2197,42 +2203,49 @@ tags{
 	rust.value.value.payload(),
 }
 tags{
+	api.publication.publication,
 	rust.publication.publication_builder(),
 }
 tags{
+	api.publication.publication.encoding,
 	rust.publication.publication_builder.trait.value_builder_trait.encoding(),
 }
 tags{
+	api.publication.publication.payload,
 	rust.publication.publication_builder.trait.value_builder_trait.payload(),
 }
 tags{
+	api.publication.publication.value,
 	rust.publication.publication_builder.trait.value_builder_trait.value(),
 }
 tags{
+	api.query.get.payload,
 	rust.query.get_builder.trait.value_builder_trait.payload(),
 }
 tags{
+	api.query.reply.result,
 	rust.query.reply.into_result(),
-}
-tags{
 	rust.query.reply.result(),
-}
-tags{
 	rust.query.reply.result_mut(),
 }
 tags{
+	api.queryable.query.reply.encoding,
 	rust.queryable.reply_err_builder.trait.value_builder_trait.encoding(),
 }
 tags{
+	api.scouting.hello.locators,
 	rust.scouting.hello.locators(),
 }
 tags{
+	api.scouting.hello.version,
 	rust.scouting.hello.version(),
 }
 tags{
+	api.scouting.hello.whatami,
 	rust.scouting.hello.whatami(),
 }
 tags{
+	api.scouting.hello.zid,
 	rust.scouting.hello.zid(),
 }
 tags{
