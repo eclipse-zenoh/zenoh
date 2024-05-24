@@ -1,10 +1,4 @@
 tags{
-	api.config.config(TODO - expose from config crate explicitly)
-}
-tags{
-	api.info.session_info.callback(NOT NEEDED - works with the async iterator),
-}
-tags{
 	api.buffers.zbuf(),
 	rust.buffers.z_buf(),
 }
@@ -149,6 +143,10 @@ tags{
 	api.bytes.writer(),
 	rust.bytes.z_bytes.writer(),
 	rust.bytes.z_bytes_writer(),
+}
+tags{api.config.config(TODO - expose from config crate explicitly)}
+tags{
+	api.config.config(),
 }
 tags{
 	api.encoding.const(),
@@ -548,6 +546,10 @@ tags{
 	rust.session.session.trait.session_declarations.info(),
 	rust.session.session_declarations.info(),
 	rust.session.session_ref.trait.session_declarations.info(),
+}
+tags{api.info.session_info.callback(NOT NEEDED - works with the async iterator)}
+tags{
+	api.info.session_info.callback(),
 }
 tags{
 	api.info.session_info.peers_zid(),
@@ -1248,6 +1250,10 @@ tags{
 	rust.publication.priority.real_time(),
 }
 tags{
+	api.publication.publication(),
+	rust.publication.publication_builder(),
+}
+tags{
 	api.publication.publication.attachment(),
 	rust.publication.publication_builder.trait.sample_builder_trait.attachment(),
 }
@@ -1256,8 +1262,16 @@ tags{
 	rust.publication.publication_builder.trait.qo_s_builder_trait.congestion_control(),
 }
 tags{
+	api.publication.publication.encoding(),
+	rust.publication.publication_builder.trait.value_builder_trait.encoding(),
+}
+tags{
 	api.publication.publication.express(),
 	rust.publication.publication_builder.trait.qo_s_builder_trait.express(),
+}
+tags{
+	api.publication.publication.payload(),
+	rust.publication.publication_builder.trait.value_builder_trait.payload(),
 }
 tags{
 	api.publication.publication.priority(),
@@ -1270,6 +1284,10 @@ tags{
 tags{
 	api.publication.publication.timestamp(),
 	rust.publication.publication_builder.trait.timestamp_builder_trait.timestamp(),
+}
+tags{
+	api.publication.publication.value(),
+	rust.publication.publication_builder.trait.value_builder_trait.value(),
 }
 tags{
 	api.publication.publication_delete(),
@@ -1410,10 +1428,13 @@ tags{
 	api.query.get.encoding(),
 	rust.query.get_builder.trait.value_builder_trait.encoding(),
 }
-tags{api.query.get.express(TODO)}
 tags{
 	api.query.get.express(),
 	rust.query.get_builder.trait.qo_s_builder_trait.express(),
+}
+tags{
+	api.query.get.payload(),
+	rust.query.get_builder.trait.value_builder_trait.payload(),
 }
 tags{
 	api.query.get.priority(),
@@ -1459,6 +1480,12 @@ tags{api.query.reply.replier_id(TODO)}
 tags{
 	api.query.reply.replier_id(),
 	rust.query.reply.replier_id(),
+}
+tags{
+	api.query.reply.result(),
+	rust.query.reply.into_result(),
+	rust.query.reply.result(),
+	rust.query.reply.result_mut(),
 }
 tags{
 	api.query.reply_key_expr(),
@@ -1530,6 +1557,7 @@ tags{
 tags{
 	api.queryable.query.reply.encoding(),
 	rust.queryable.reply_builder.trait.value_builder_trait.encoding(),
+	rust.queryable.reply_err_builder.trait.value_builder_trait.encoding(),
 }
 tags{
 	api.queryable.query.reply.express(),
@@ -1559,6 +1587,9 @@ tags{
 	api.queryable.query.reply_del(),
 	rust.queryable.query.reply_del(),
 	rust.queryable.reply_builder_delete(),
+}
+tags{
+	api.queryable.query.reply_err.encoding(TAGGER ERROR?),
 }
 tags{
 	api.queryable.query.reply_err(),
@@ -1617,7 +1648,7 @@ tags{
 	rust.queryable.queryable_undeclaration(),
 }
 tags{
-	api.queryable.reply_sample(),
+	api.internal,
 	rust.queryable.reply_sample(),
 }
 tags{
@@ -1843,6 +1874,22 @@ tags{
 tags{
 	api.scouting.hello(),
 	rust.scouting.hello(),
+}
+tags{
+	api.scouting.hello.locators(),
+	rust.scouting.hello.locators(),
+}
+tags{
+	api.scouting.hello.version(),
+	rust.scouting.hello.version(),
+}
+tags{
+	api.scouting.hello.whatami(),
+	rust.scouting.hello.whatami(),
+}
+tags{
+	api.scouting.hello.zid(),
+	rust.scouting.hello.zid(),
 }
 tags{
 	api.scouting.scout(),
@@ -2201,52 +2248,6 @@ tags{
 tags{
 	api.value.value.payload(),
 	rust.value.value.payload(),
-}
-tags{
-	api.publication.publication,
-	rust.publication.publication_builder(),
-}
-tags{
-	api.publication.publication.encoding,
-	rust.publication.publication_builder.trait.value_builder_trait.encoding(),
-}
-tags{
-	api.publication.publication.payload,
-	rust.publication.publication_builder.trait.value_builder_trait.payload(),
-}
-tags{
-	api.publication.publication.value,
-	rust.publication.publication_builder.trait.value_builder_trait.value(),
-}
-tags{
-	api.query.get.payload,
-	rust.query.get_builder.trait.value_builder_trait.payload(),
-}
-tags{
-	api.query.reply.result,
-	rust.query.reply.into_result(),
-	rust.query.reply.result(),
-	rust.query.reply.result_mut(),
-}
-tags{
-	api.queryable.query.reply.encoding,
-	rust.queryable.reply_err_builder.trait.value_builder_trait.encoding(),
-}
-tags{
-	api.scouting.hello.locators,
-	rust.scouting.hello.locators(),
-}
-tags{
-	api.scouting.hello.version,
-	rust.scouting.hello.version(),
-}
-tags{
-	api.scouting.hello.whatami,
-	rust.scouting.hello.whatami(),
-}
-tags{
-	api.scouting.hello.zid,
-	rust.scouting.hello.zid(),
 }
 tags{
 	rust.value.value.trait.from.from(),
