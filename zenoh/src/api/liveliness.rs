@@ -33,14 +33,6 @@ use super::{
     Id,
 };
 
-#[zenoh_macros::unstable]
-pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;
-
-#[zenoh_macros::unstable]
-lazy_static::lazy_static!(
-    pub(crate) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
-);
-
 /// A structure with functions to declare a
 /// [`LivelinessToken`](LivelinessToken), query
 /// existing [`LivelinessTokens`](LivelinessToken)

@@ -30,7 +30,7 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatTokenTrait},
     router::{NodeId, Resource, SessionContext, TokenQuery},
-    RoutingContext, PREFIX_LIVELINESS,
+    RoutingContext,
 };
 
 use super::{face_hat, face_hat_mut, HatCode, HatFace};
@@ -42,8 +42,7 @@ fn propagate_simple_token_to(
     res: &Arc<Resource>,
     src_face: &mut Arc<FaceState>,
 ) {
-    if (src_face.id != dst_face.id
-        || (dst_face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)))
+    if (src_face.id != dst_face.id || dst_face.whatami == WhatAmI::Client)
         && !face_hat!(dst_face).local_tokens.contains_key(res)
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
     {
@@ -189,7 +188,7 @@ pub(super) fn undeclare_client_token(
         }
         if client_tokens.len() == 1 {
             let face = &mut client_tokens[0];
-            if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
+            if face.whatami != WhatAmI::Client {
                 if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {

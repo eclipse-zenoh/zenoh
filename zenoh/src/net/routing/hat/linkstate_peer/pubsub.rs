@@ -45,7 +45,7 @@ use crate::{
         },
         hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
         router::RoutesIndexes,
-        RoutingContext, PREFIX_LIVELINESS,
+        RoutingContext,
     },
 };
 
@@ -98,7 +98,7 @@ fn propagate_simple_subscription_to(
     sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
 ) {
-    if (src_face.id != dst_face.id || res.expr().starts_with(PREFIX_LIVELINESS))
+    if (src_face.id != dst_face.id)
         && !face_hat!(dst_face).local_subs.contains_key(res)
         && dst_face.whatami == WhatAmI::Client
     {
@@ -491,7 +491,7 @@ pub(super) fn undeclare_client_subscription(
 
         if client_subs.len() == 1 && !peer_subs {
             let mut face = &mut client_subs[0];
-            if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
+            if face.whatami != WhatAmI::Client {
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {

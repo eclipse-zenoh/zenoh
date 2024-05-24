@@ -1370,8 +1370,6 @@ impl Session {
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
-        // TODO(fuzzypixelz): Remove `KE_PREFIX_LIVELINESS` once
-        // liveliness().get() doesn't need it anymore
         let tok_state = Arc::new(LivelinessTokenState {
             id,
             key_expr: key_expr.clone().into_owned(),

@@ -46,7 +46,7 @@ use crate::net::routing::{
     },
     hat::{HatQueriesTrait, Sources},
     router::RoutesIndexes,
-    RoutingContext, PREFIX_LIVELINESS,
+    RoutingContext,
 };
 
 #[inline]
@@ -404,20 +404,6 @@ impl HatQueriesTrait for HatCode {
                     return result;
                 }
             };
-            if key_expr.starts_with(PREFIX_LIVELINESS) {
-                let res = Resource::get_resource(prefix, suffix);
-                let matches = res
-                    .as_ref()
-                    .and_then(|res| res.context.as_ref())
-                    .map(|ctx| Cow::from(&ctx.matches))
-                    .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-                for mres in matches.iter() {
-                    let mres = mres.upgrade().unwrap();
-                    if mres.session_ctxs.values().any(|ctx| ctx.token) {
-                        result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
-                    }
-                }
-            }
         }
         result
     }
