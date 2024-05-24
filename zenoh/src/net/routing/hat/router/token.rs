@@ -760,7 +760,9 @@ impl HatTokenTrait for HatCode {
         aggregate: bool,
     ) {
         if mode.current() && face.whatami == WhatAmI::Client {
-            let interest_id = mode.future().then_some(id);
+            // NOTE(fuzzypixelz): The pub/sub routing logic only sets the interest_id to Some(..)
+            // if mode.future(). For token queries (i.e. if mode.current()) an id is needed.
+            let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
                     if hat!(tables).router_tokens.iter().any(|token| {
