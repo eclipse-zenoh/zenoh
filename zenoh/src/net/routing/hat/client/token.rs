@@ -260,26 +260,27 @@ impl HatTokenTrait for HatCode {
             .remote_token_interests
             .insert(src_id, res.as_ref().map(|res| (*res).clone()));
 
+        let query = Arc::new(TokenQuery {
+            src_face: face.clone(),
+            src_interest_id: src_id,
+        });
+
         let mut should_send_declare_final = true;
         for dst_face in tables
             .faces
             .values_mut()
-            .filter(|f| f.whatami == WhatAmI::Client)
+            .filter(|f| f.whatami != WhatAmI::Client)
         {
             let dst_id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
 
             if mode.current() {
                 should_send_declare_final = false;
-                let query = Arc::new(TokenQuery {
-                    src_face: face.clone(),
-                    src_interest_id: src_id,
-                });
                 let dst_face_mut = get_mut_unchecked(dst_face);
                 let cancellation_token = dst_face_mut.task_controller.get_cancellation_token();
 
                 dst_face_mut
                     .pending_token_queries
-                    .insert(dst_id, (query, cancellation_token));
+                    .insert(dst_id, (query.clone(), cancellation_token));
             }
 
             let options = InterestOptions::KEYEXPRS + InterestOptions::TOKENS;
