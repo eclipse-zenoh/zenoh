@@ -242,5 +242,3 @@ async fn test_liveliness_query_brokered() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 }
-
-// TODO(fuzzypixelz): Add `test_liveliness_querying_subscriber_clique` and `test_liveliness_querying_subscriber_brokered`
