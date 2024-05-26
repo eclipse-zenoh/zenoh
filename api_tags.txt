@@ -563,8 +563,8 @@ tags{
 }
 tags{
 	api.info.session_info.zid(),
-	rust.session.session.zid(),
 	rust.info.session_info.zid(),
+	rust.session.session.zid(),
 }
 tags{
 	api.info.zid(),
@@ -635,6 +635,7 @@ tags{
 }
 tags{
 	api.keyexpr.keyexpr.declare(),
+	rust.session.session.declare_keyexpr(),
 }
 tags{
 	api.keyexpr.keyexpr.equals(),
@@ -727,7 +728,7 @@ tags{
 }
 tags{
 	api.language_specific(),
-	rust.subscriber.reliability.rand(),
+	api.subscriber.reliability.rand(),
 	rust.admin.handler.as_any(),
 	rust.admin.handler.closed(),
 	rust.admin.handler.closing(),
@@ -1065,6 +1066,7 @@ tags{
 	rust.session.session_state.trait.fmt.fmt(),
 	rust.session.undeclarable(),
 	rust.session.undeclarable.undeclare_inner(),
+	rust.subscriber.reliability.rand(),
 	rust.subscriber.subscriber.trait.deref.deref(),
 	rust.subscriber.subscriber.trait.deref_mut.deref_mut(),
 	rust.subscriber.subscriber_builder.session(),
@@ -1728,6 +1730,14 @@ tags{
 	rust.session.init_builder.aggregated_subscribers(),
 }
 tags{
+	api.sample.ample_kind.delete(),
+	rust.sample.sample_kind.delete(),
+}
+tags{
+	api.sample.ample_kind.put(),
+	rust.sample.sample_kind.put(),
+}
+tags{
 	api.sample.locality(),
 	rust.sample.locality(),
 }
@@ -2036,16 +2046,16 @@ tags{
 	rust.selector.t_i_m_e__r_a_n_g_e__k_e_y(),
 }
 tags{
+	api.session.session(),
+	rust.session.session(),
+}
+tags{
 	api.session.session.close(),
 	rust.session.session.close(),
 }
 tags{
 	api.session.session.config(),
 	rust.session.session.config(),
-}
-tags{
-	api.keyexpr.keyexpr.declare,
-	rust.session.session.declare_keyexpr(),
 }
 tags{
 	api.session.session.delete(),
@@ -2068,24 +2078,15 @@ tags{
 	rust.session.open_builder(),
 }
 tags{
-	api.shm,
-	rust.session.open_builder.with_shm_clients(),
-}
-tags{
 	api.session.session.put(),
 	rust.publication.session_put_builder(),
 	rust.session.session.put(),
 	rust.session.session_put_builder(),
 }
 tags{
-	api.session.session(),
-	rust.session.session(),
-}
-tags{
-}
-tags{
 	api.shm(),
 	rust.prelude.mods.shm(),
+	rust.session.open_builder.with_shm_clients(),
 	rust.shm.alloc_alignment(),
 	rust.shm.alloc_builder(),
 	rust.shm.alloc_layout(),
@@ -2132,14 +2133,6 @@ tags{
 	rust.shm.zshmmut(),
 }
 tags{
-	api.sample.ample_kind.delete(),
-	rust.sample.sample_kind.delete(),
-}
-tags{
-	api.sample.ample_kind.put(),
-	rust.sample.sample_kind.put(),
-}
-tags{
 	api.subscriber.reliability(),
 	rust.subscriber.reliability(),
 }
@@ -2150,8 +2143,6 @@ tags{
 tags{
 	api.subscriber.reliability.default(),
 	rust.subscriber.reliability.d_e_f_a_u_l_t(),
-}
-tags{
 }
 tags{
 	api.subscriber.reliability.reliable(),
@@ -2179,6 +2170,14 @@ tags{
 	rust.subscriber.subscriber_builder.with(),
 }
 tags{
+	api.subscriber.subscriber.declare(),
+	rust.session.arc.trait.session_declarations.declare_subscriber(),
+	rust.session.session.trait.session_declarations.declare_subscriber(),
+	rust.session.session_declarations.declare_subscriber(),
+	rust.session.session_ref.trait.session_declarations.declare_subscriber(),
+	rust.subscriber.subscriber_builder(),
+}
+tags{
 	api.subscriber.subscriber.id(),
 	rust.subscriber.subscriber.id(),
 }
@@ -2186,14 +2185,6 @@ tags{
 	api.subscriber.subscriber.key_expr(),
 	rust.subscriber.subscriber.key_expr(),
 	rust.subscriber.subscriber_builder.key_expr(),
-}
-tags{
-	api.subscriber.subscriber.declare(),
-	rust.session.session.trait.session_declarations.declare_subscriber(),
-	rust.session.session_declarations.declare_subscriber(),
-	rust.session.session_ref.trait.session_declarations.declare_subscriber(),
-	rust.subscriber.subscriber_builder(),
-	rust.session.arc.trait.session_declarations.declare_subscriber(),
 }
 tags{
 	api.subscriber.subscriber.origin(),
@@ -2214,8 +2205,6 @@ tags{
 	rust.subscriber.subscriber_undeclaration(),
 }
 tags{
-}
-tags{
 	api.time.new_reception_timestamp(),
 	rust.time.new_reception_timestamp(),
 }
@@ -2230,6 +2219,9 @@ tags{
 tags{
 	api.time.timestamp_id(),
 	rust.time.timestamp_id(),
+}
+tags{
+	api.value(),
 }
 tags{
 	api.value.value(),
