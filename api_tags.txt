@@ -728,6 +728,7 @@ tags{
 }
 tags{
 	api.language_specific(),
+	api.session.session.hlc(),
 	api.subscriber.reliability.rand(),
 	rust.admin.handler.as_any(),
 	rust.admin.handler.closed(),
@@ -2066,10 +2067,6 @@ tags{
 	rust.session.session.get(),
 }
 tags{
-	api.session.session.hlc(),
-	rust.session.session.hlc(),
-}
-tags{
 	api.session.session.open(),
 	rust.open(),
 	rust.session.open(),
@@ -2244,6 +2241,9 @@ tags{
 tags{
 	api.value.value.payload(),
 	rust.value.value.payload(),
+}
+tags{
+	rust.session.session.hlc(),
 }
 tags{
 	rust.value.value.trait.from.from(),
