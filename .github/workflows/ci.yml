@@ -48,11 +48,6 @@ jobs:
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny
 
-      - name: Check MSRV
-        uses: ZettaScaleLabs/ci/check-msrv@develop
-        with:
-          repo: ${{ github.repository }}
-
       - name: Code format check
         run: cargo fmt --check
 
@@ -142,11 +137,22 @@ jobs:
     name: Typos Check
     runs-on: ubuntu-latest
     steps:
-      - name: Clone this repository 
+      - name: Clone this repository
         uses: actions/checkout@v4
 
       - name: Check spelling
         uses: crate-ci/typos@master
+
+  msrvs:
+    name: Check crate MSRVs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - uses: ZettaScaleLabs/ci/check-msrv@develop
+        with:
+          repo: ${{ github.repository }}
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
