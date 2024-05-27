@@ -166,7 +166,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
                     });
                 }
                 "err" => {
-                    let rep = Value::from(vec![0u8; size]);
+                    let rep = vec![0u8; size];
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current()
                             .block_on(async { ztimeout!(query.reply_err(rep)).unwrap() })
