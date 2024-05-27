@@ -155,7 +155,7 @@ jobs:
           repo: ${{ github.repository }}
           # NOTE: As of commit 25f06bd, the minimum MSRV found in the workspace is 1.68.
           # This value should be as low as possible to avoid needlessly checking older versions.
-          min: 1.68
+          min: 1.68.0
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
