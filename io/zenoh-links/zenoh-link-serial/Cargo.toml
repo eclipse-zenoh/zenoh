@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
+rust-version = "1.66.1"
 name = "zenoh-link-serial"
 version = { workspace = true }
 repository = { workspace = true }
