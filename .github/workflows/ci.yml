@@ -144,7 +144,7 @@ jobs:
         uses: crate-ci/typos@master
 
   msrvs:
-    name: Check crate MSRVs
+    name: MSRV checks
     runs-on: ubuntu-latest
     steps:
       - name: Clone this repository
