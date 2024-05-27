@@ -91,7 +91,7 @@ crc = "3.0.1"
 criterion = "0.5"
 derive_more = "0.99.17"
 derive-new = "0.6.0"
-tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tracing-subscriber = {version = "0.3", features = ["json", "env-filter"]}
 tracing-loki = "0.2"
 event-listener = "4.0.0"
 flume = "0.11"
