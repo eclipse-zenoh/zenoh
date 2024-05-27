@@ -1329,7 +1329,6 @@ tags{
 	rust.publication.publisher.delete(),
 	rust.publication.publisher_delete_builder(),
 }
-tags{api.publication.publisher.express(TODO)}
 tags{
 	api.publication.publisher.express(),
 	rust.publication.publisher_builder.trait.qo_s_builder_trait.express(),
@@ -1487,7 +1486,6 @@ tags{
 	api.query.reply(),
 	rust.query.reply(),
 }
-tags{api.query.reply.replier_id(TODO)}
 tags{
 	api.query.reply.replier_id(),
 	rust.query.reply.replier_id(),
