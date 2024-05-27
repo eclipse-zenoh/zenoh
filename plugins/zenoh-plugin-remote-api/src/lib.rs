@@ -306,14 +306,9 @@ async fn handle_message(
         tungstenite::Message::Text(text) => match serde_json::from_str::<RemoteAPIMsg>(&text) {
             Ok(msg) => match msg {
                 RemoteAPIMsg::Control(ctrl_msg) => {
-                    if let Some(control_message) =
-                        handle_control_message(ctrl_msg, sock_addr, state_map).await
-                    {
-                        let json: String = serde_json::to_string(&control_message).unwrap();
-                        Some(Message::Text(json))
-                    } else {
-                        None
-                    }
+                    handle_control_message(ctrl_msg, sock_addr, state_map)
+                        .await
+                        .and_then(|x| Some(Message::Text(serde_json::to_string(&x).unwrap())))
                 }
                 RemoteAPIMsg::Data(data_msg) => handle_data_message(data_msg),
             },
@@ -366,7 +361,7 @@ async fn handle_control_message(
             println!("Create Subscriber called");
             let mut state_writer = state_map.write().await;
 
-            if let Some(mut remote_state) = state_writer.get_mut(&sock_addr) {
+            if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
                 let key_expr = KeyExpr::new(key_expr_str).unwrap();
                 let receiver;
 
@@ -378,24 +373,48 @@ async fn handle_control_message(
                     .unwrap();
 
                 receiver = subscriber.receiver.clone();
-                // TODO: figure out how to store keep reference to Subscriber so that i can undeclare subscriber
-
-                // let join_handle2 = task::spawn(async move{
-                //     subscriber;
-                // });
                 // let arc_subscriber = Arc::new(subscriber);
                 let sub_id = Uuid::new_v4();
                 // remote_state.subscribers.insert(sub_id, arc_subscriber);
-
                 let mut channel_tx = remote_state.channel_tx.clone();
+
+                let mut stop = false;
+                while !stop {
+                    match receiver.recv_async().await {
+                        Ok(sample) => {
+                            println!("Fwd Sample to Websocket");
+                            let sample_ws = serde_json::to_string(&SampleWS::from(sample)).unwrap();
+                            channel_tx.send(Message::text(sample_ws)).await.unwrap();
+                            // println!("Sample {}", sample);
+                        }
+                        Err(err) => {
+                            println!("stop ERR : {} ---", err);
+                            stop = true;
+                        }
+                    }
+                }
+                // TODO: figure out how to store keep reference to Subscriber so that i can undeclare subscriber
+
                 // TODO: Do i want to keep this Join handle
                 let join_handle = task::spawn(async move {
                     // subscriber;
-                    while let Ok(sample) = receiver.recv_async().await {
-                        println!("Fwd Sample to Websocket");
-                        let sample_ws = serde_json::to_string(&SampleWS::from(sample)).unwrap();
-                        channel_tx.send(Message::text(sample_ws)).await.unwrap();
+                    println!("Spawn subscriber async ");
+                    let mut stop = false;
+                    while !stop {
+                        match receiver.recv_async().await {
+                            Ok(sample) => {
+                                println!("Fwd Sample to Websocket");
+                                let sample_ws =
+                                    serde_json::to_string(&SampleWS::from(sample)).unwrap();
+                                channel_tx.send(Message::text(sample_ws)).await.unwrap();
+                            }
+                            Err(err) => {
+                                println!("stop ERR : {} ---", err);
+                                stop = true;
+                            }
+                        }
                     }
+                    println!("End subscriber async ");
                 });
 
                 Some(ControlMsg::Subscriber(sub_id))
