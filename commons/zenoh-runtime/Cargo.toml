@@ -1,6 +1,6 @@
 [package]
 name = "zenoh-runtime"
-rust-version = "1.66.1"
+rust-version = "1.70.0"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
