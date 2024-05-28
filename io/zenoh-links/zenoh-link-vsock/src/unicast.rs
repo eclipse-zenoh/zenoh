@@ -27,9 +27,8 @@ use tokio_vsock::{
     VMADDR_CID_LOCAL,
 };
 use zenoh_core::{zasyncread, zasyncwrite};
-use zenoh_link_commons::LinkAuthId;
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{endpoint::Address, EndPoint, Locator},

@@ -17,15 +17,16 @@ use core::{
     hash::{Hash, Hasher},
     ops::Deref,
 };
-use serde::Serialize;
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
+use serde::Serialize;
 use zenoh_protocol::{
     core::{EndPoint, Locator},
     transport::BatchSize,
 };
 use zenoh_result::ZResult;
+
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
 pub trait LinkManagerUnicastTrait: Send + Sync {

@@ -1,6 +1,7 @@
+use zenoh_link::{LinkAuthId, LinkAuthType};
+
 #[cfg(feature = "auth_usrpwd")]
 use super::establishment::ext::auth::UsrPwdId;
-use zenoh_link::{LinkAuthId, LinkAuthType};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AuthId {
@@ -8,6 +9,7 @@ pub enum AuthId {
     Username(String),
     None,
 }
+
 impl From<LinkAuthId> for AuthId {
     fn from(lid: LinkAuthId) -> Self {
         match (lid.get_type(), lid.get_value()) {
@@ -18,6 +20,7 @@ impl From<LinkAuthId> for AuthId {
         }
     }
 }
+
 #[cfg(feature = "auth_usrpwd")]
 impl From<UsrPwdId> for AuthId {
     fn from(user_password_id: UsrPwdId) -> Self {

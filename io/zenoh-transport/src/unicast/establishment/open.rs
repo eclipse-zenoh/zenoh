@@ -1,5 +1,3 @@
-#[cfg(feature = "auth_usrpwd")]
-use crate::unicast::establishment::ext::auth::UsrPwdId;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -34,6 +32,8 @@ use zenoh_result::ZResult;
 use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::establishment::ext::auth::UsrPwdId;
 use crate::{
     common::batch::BatchConfig,
     unicast::{

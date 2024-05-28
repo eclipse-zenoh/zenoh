@@ -12,14 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod test {
-    use std::sync::{Arc, Mutex};
-    use std::time::Duration;
+    use std::{
+        fs,
+        path::Path,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
+
     use tokio::runtime::Handle;
     use zenoh::prelude::*;
     use zenoh_core::{zlock, ztimeout};
-
-    use std::fs;
-    use std::path::Path;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);

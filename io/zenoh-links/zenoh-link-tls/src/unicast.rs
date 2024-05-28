@@ -24,8 +24,6 @@ use tokio_util::sync::CancellationToken;
 //use webpki::anchor_from_trusted_cert;
 use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
-//use zenoh_link_commons::tls::WebPkiVerifierAnyServerName;
-
 use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkAuthIdBuilder, LinkAuthType, LinkManagerUnicastTrait,
     LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,

@@ -25,10 +25,11 @@ use zenoh_protocol::{
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
     zenoh::{PushBody, RequestBody},
 };
-use zenoh_transport::unicast::authentication::AuthId;
-
 use zenoh_result::ZResult;
-use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
+use zenoh_transport::{
+    multicast::TransportMulticast,
+    unicast::{authentication::AuthId, TransportUnicast},
+};
 
 use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,

@@ -26,10 +26,6 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use self::authentication::AuthId;
-#[cfg(feature = "auth_usrpwd")]
-use self::establishment::ext::auth::UsrPwdId;
-
 #[cfg(feature = "transport_multilink")]
 use establishment::ext::auth::ZPublicKey;
 pub use manager::*;
@@ -46,6 +42,9 @@ use self::transport_unicast_inner::TransportUnicastTrait;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
+use crate::unicast::authentication::AuthId;
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::establishment::ext::auth::UsrPwdId;
 
 /*************************************/
 /*        TRANSPORT UNICAST          */

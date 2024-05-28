@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::authentication::AuthId;
 use std::{
     sync::{Arc, RwLock as SyncRwLock},
     time::Duration,
@@ -33,6 +32,7 @@ use zenoh_result::{zerror, ZResult};
 use crate::stats::TransportStats;
 use crate::{
     unicast::{
+        authentication::AuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicast},
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         TransportConfigUnicast,

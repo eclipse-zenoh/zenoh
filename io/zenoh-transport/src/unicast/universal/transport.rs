@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::authentication::AuthId;
 use std::{
     fmt::DebugStruct,
     sync::{Arc, RwLock},
@@ -29,6 +28,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 
+use super::super::authentication::AuthId;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{

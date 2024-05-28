@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "auth_usrpwd")]
-use super::ext::auth::UsrPwdId;
 use std::time::Duration;
+
 use async_trait::async_trait;
 use rand::Rng;
 use tokio::sync::Mutex;
@@ -32,6 +31,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
+#[cfg(feature = "auth_usrpwd")]
+use super::ext::auth::UsrPwdId;
 #[cfg(feature = "shared-memory")]
 use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
