@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use humantime::{format_rfc3339, parse_rfc3339_weak};
 use std::{
     convert::{TryFrom, TryInto},
     fmt::Display,
@@ -20,6 +19,8 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime},
 };
+
+use humantime::{format_rfc3339, parse_rfc3339_weak};
 use zenoh_result::{bail, zerror, ZError};
 
 const U_TO_SECS: f64 = 0.000001;
@@ -51,6 +52,7 @@ const W_TO_SECS: f64 = D_TO_SECS * 7.0;
 /// iteratively getting values for `[t0..t1[`, `[t1..t2[`, `[t2..t3[`...
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct TimeRange<T = TimeExpr>(pub TimeBound<T>, pub TimeBound<T>);
+
 impl TimeRange<TimeExpr> {
     /// Resolves the offset bounds in the range using `now` as reference.
     pub fn resolve_at(self, now: SystemTime) -> TimeRange<SystemTime> {
@@ -81,6 +83,7 @@ impl TimeRange<TimeExpr> {
         }
     }
 }
+
 impl TimeRange<SystemTime> {
     /// Returns `true` if the provided `instant` belongs to `self`.
     pub fn contains(&self, instant: SystemTime) -> bool {
@@ -96,17 +99,20 @@ impl TimeRange<SystemTime> {
         }
     }
 }
+
 impl From<TimeRange<SystemTime>> for TimeRange<TimeExpr> {
     fn from(value: TimeRange<SystemTime>) -> Self {
         TimeRange(value.0.into(), value.1.into())
     }
 }
+
 impl TryFrom<TimeRange<TimeExpr>> for TimeRange<SystemTime> {
     type Error = ();
     fn try_from(value: TimeRange<TimeExpr>) -> Result<Self, Self::Error> {
         Ok(TimeRange(value.0.try_into()?, value.1.try_into()?))
     }
 }
+
 impl Display for TimeRange<TimeExpr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
@@ -121,6 +127,7 @@ impl Display for TimeRange<TimeExpr> {
         }
     }
 }
+
 impl Display for TimeRange<SystemTime> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
@@ -195,6 +202,7 @@ pub enum TimeBound<T> {
     Exclusive(T),
     Unbounded,
 }
+
 impl From<TimeBound<SystemTime>> for TimeBound<TimeExpr> {
     fn from(value: TimeBound<SystemTime>) -> Self {
         match value {
@@ -204,6 +212,7 @@ impl From<TimeBound<SystemTime>> for TimeBound<TimeExpr> {
         }
     }
 }
+
 impl TryFrom<TimeBound<TimeExpr>> for TimeBound<SystemTime> {
     type Error = ();
     fn try_from(value: TimeBound<TimeExpr>) -> Result<Self, Self::Error> {
@@ -214,6 +223,7 @@ impl TryFrom<TimeBound<TimeExpr>> for TimeBound<SystemTime> {
         })
     }
 }
+
 impl TimeBound<TimeExpr> {
     /// Resolves `self` into a [`TimeBound<SystemTime>`], using `now` as a reference for offset expressions.
     /// If `self` is time boundary that cannot be represented as `SystemTime` (which means it’s not inside
@@ -238,11 +248,13 @@ pub enum TimeExpr {
     Fixed(SystemTime),
     Now { offset_secs: f64 },
 }
+
 impl From<SystemTime> for TimeExpr {
     fn from(t: SystemTime) -> Self {
         Self::Fixed(t)
     }
 }
+
 impl TryFrom<TimeExpr> for SystemTime {
     type Error = ();
     fn try_from(value: TimeExpr) -> Result<Self, Self::Error> {
@@ -252,6 +264,7 @@ impl TryFrom<TimeExpr> for SystemTime {
         }
     }
 }
+
 impl TimeExpr {
     /// Resolves `self` into a [`SystemTime`], using `now` as a reference for offset expressions.
     ///
@@ -295,6 +308,7 @@ impl TimeExpr {
         }
     }
 }
+
 impl Display for TimeExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

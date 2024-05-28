@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::ZExtUnknown, core::Encoding};
 use alloc::vec::Vec;
+
 use uhlc::Timestamp;
 use zenoh_buffers::ZBuf;
+
+use crate::{common::ZExtUnknown, core::Encoding};
 
 /// # Put message
 ///
@@ -80,8 +82,9 @@ pub mod ext {
 impl Put {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::{common::iext, core::ZenohId};
         use rand::Rng;
+
+        use crate::{common::iext, core::ZenohId};
         let mut rng = rand::thread_rng();
 
         let timestamp = rng.gen_bool(0.5).then_some({

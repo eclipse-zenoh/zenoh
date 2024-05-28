@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use clap::Parser;
 use std::convert::TryInto;
-use zenoh::prelude::sync::*;
-use zenoh::publication::CongestionControl;
+
+use clap::Parser;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 fn main() {
@@ -23,32 +23,33 @@ fn main() {
     zenoh_util::try_init_log_from_env();
     let args = Args::parse();
 
-    let mut prio = Priority::default();
+    let mut prio = Priority::DEFAULT;
     if let Some(p) = args.priority {
         prio = p.try_into().unwrap();
     }
 
     let payload_size = args.payload_size;
 
-    let data: Value = (0..payload_size)
+    let data: ZBytes = (0..payload_size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();
 
-    let session = zenoh::open(args.common).res().unwrap();
+    let session = zenoh::open(args.common).wait().unwrap();
 
     let publisher = session
         .declare_publisher("test/thr")
         .congestion_control(CongestionControl::Block)
         .priority(prio)
-        .res()
+        .express(args.express)
+        .wait()
         .unwrap();
 
     println!("Press CTRL-C to quit...");
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
     loop {
-        publisher.put(data.clone()).res().unwrap();
+        publisher.put(data.clone()).wait().unwrap();
 
         if args.print {
             if count < args.number {
@@ -65,6 +66,9 @@ fn main() {
 
 #[derive(Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct Args {
+    /// express for sending data
+    #[arg(long, default_value = "false")]
+    express: bool,
     /// Priority for sending data
     #[arg(short, long)]
     priority: Option<u8>,

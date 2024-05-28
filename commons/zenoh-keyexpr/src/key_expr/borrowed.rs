@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 use alloc::{
     borrow::{Borrow, ToOwned},
     format,
@@ -24,7 +23,10 @@ use core::{
     fmt,
     ops::{Deref, Div},
 };
+
 use zenoh_result::{bail, Error as ZError, ZResult};
+
+use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///

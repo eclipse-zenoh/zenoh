@@ -48,6 +48,12 @@ pub trait LCodec<Message> {
 #[derive(Clone, Copy)]
 pub struct Zenoh080;
 
+impl Default for Zenoh080 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Zenoh080 {
     pub const fn new() -> Self {
         Self
@@ -117,6 +123,12 @@ impl Zenoh080Reliability {
 #[derive(Clone, Copy)]
 pub struct Zenoh080Bounded<T> {
     _t: PhantomData<T>,
+}
+
+impl<T> Default for Zenoh080Bounded<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T> Zenoh080Bounded<T> {

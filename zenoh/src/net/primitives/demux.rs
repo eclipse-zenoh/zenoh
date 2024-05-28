@@ -11,18 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{any::Any, sync::Arc};
+
+use zenoh_link::Link;
+use zenoh_protocol::network::{NetworkBody, NetworkMessage};
+use zenoh_result::ZResult;
+use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
+
 use super::Primitives;
 use crate::net::routing::{
     dispatcher::face::Face,
     interceptor::{InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
-use std::{any::Any, sync::Arc};
-use zenoh_link::Link;
-use zenoh_protocol::network::{NetworkBody, NetworkMessage};
-use zenoh_result::ZResult;
-use zenoh_transport::unicast::TransportUnicast;
-use zenoh_transport::TransportPeerEventHandler;
 
 pub struct DeMux {
     face: Face,
@@ -67,6 +68,7 @@ impl TransportPeerEventHandler for DeMux {
         match msg.body {
             NetworkBody::Push(m) => self.face.send_push(m),
             NetworkBody::Declare(m) => self.face.send_declare(m),
+            NetworkBody::Interest(m) => self.face.send_interest(m),
             NetworkBody::Request(m) => self.face.send_request(m),
             NetworkBody::Response(m) => self.face.send_response(m),
             NetworkBody::ResponseFinal(m) => self.face.send_response_final(m),

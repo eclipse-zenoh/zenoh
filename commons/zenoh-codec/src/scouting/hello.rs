@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use alloc::{vec, vec::Vec};
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -25,6 +25,8 @@ use zenoh_protocol::{
         id,
     },
 };
+
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
 impl<W> WCodec<&Hello, &mut W> for Zenoh080
 where

@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{convert::TryFrom, sync::Arc, time::Duration};
+
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
@@ -22,7 +23,6 @@ use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
-
 #[cfg(target_os = "linux")]
 #[cfg(any(feature = "transport_tcp", feature = "transport_udp"))]
 use zenoh_util::net::get_ipv4_ipaddrs;
@@ -152,7 +152,7 @@ async fn openclose_transport(
     println!("Transport Open Close [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Open Close [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Open Close [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -640,14 +640,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 
@@ -738,14 +738,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 

@@ -13,7 +13,6 @@
 mod dynamic_plugin;
 mod static_plugin;
 
-use crate::*;
 use zenoh_keyexpr::keyexpr;
 use zenoh_result::ZResult;
 use zenoh_util::LibLoader;
@@ -22,6 +21,7 @@ use self::{
     dynamic_plugin::{DynamicPlugin, DynamicPluginSource},
     static_plugin::StaticPlugin,
 };
+use crate::*;
 
 pub trait DeclaredPlugin<StartArgs, Instance>: PluginStatus {
     fn as_status(&self) -> &dyn PluginStatus;

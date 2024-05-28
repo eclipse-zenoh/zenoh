@@ -17,14 +17,11 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use core::ptr::NonNull;
 
-use crate::keyexpr;
-use crate::keyexpr_tree::{
-    support::{IWildness, NonWild, UnknownWildness},
-    *,
-};
-
-use super::impls::KeyedSetProvider;
 use super::support::IterOrOption;
+use crate::{
+    keyexpr,
+    keyexpr_tree::{support::IWildness, *},
+};
 
 /// A fully owned KeTree.
 ///
@@ -399,26 +396,6 @@ impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> AsMut<
 {
     fn as_mut(&mut self) -> &mut Self {
         self
-    }
-}
-
-trait TransmuteInto<T> {
-    fn transmute_into(self) -> T;
-}
-impl<'a, Weight: 'static>
-    TransmuteInto<&'a mut KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider>>
-    for &'a mut KeyExprTreeNode<Weight, NonWild, KeyedSetProvider>
-{
-    fn transmute_into(self) -> &'a mut KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider> {
-        unsafe { core::mem::transmute(self) }
-    }
-}
-impl<'a, Weight: 'static>
-    TransmuteInto<&'a KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider>>
-    for &'a KeyExprTreeNode<Weight, NonWild, KeyedSetProvider>
-{
-    fn transmute_into(self) -> &'a KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider> {
-        unsafe { core::mem::transmute(self) }
     }
 }
 

@@ -17,6 +17,28 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    sync::{atomic::AtomicU32, Arc},
+    time::Duration,
+};
+
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::{
+    common::ZExtBody,
+    network::{
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+        interest::InterestId,
+        oam::id::OAM_LINKSTATE,
+        Oam,
+    },
+};
+use zenoh_result::ZResult;
+use zenoh_sync::get_mut_unchecked;
+use zenoh_task::TerminatableTask;
+use zenoh_transport::unicast::TransportUnicast;
+
 use self::{
     network::Network,
     pubsub::{pubsub_new_face, pubsub_remove_node, undeclare_client_subscription},
@@ -29,35 +51,16 @@ use super::{
     },
     HatBaseTrait, HatTrait,
 };
-use crate::{
-    net::{
-        codec::Zenoh080Routing,
-        protocol::linkstate::LinkStateList,
-        routing::{
-            dispatcher::face::Face,
-            hat::TREES_COMPUTATION_DELAY_MS,
-            router::{
-                compute_data_routes, compute_matching_pulls, compute_query_routes, RoutesIndexes,
-            },
-        },
+use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::linkstate::LinkStateList,
+    routing::{
+        dispatcher::face::Face,
+        hat::TREES_COMPUTATION_DELAY_MS,
+        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
     },
     runtime::Runtime,
 };
-use std::{
-    any::Any,
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Duration,
-};
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
-use zenoh_protocol::{
-    common::ZExtBody,
-    network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE, Oam},
-};
-use zenoh_result::ZResult;
-use zenoh_sync::get_mut_unchecked;
-use zenoh_task::TerminatableTask;
-use zenoh_transport::unicast::TransportUnicast;
 
 mod network;
 mod pubsub;
@@ -136,7 +139,6 @@ impl HatTables {
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        tracing::trace!("Schedule computations");
         if self.peers_trees_task.is_none() {
             let task = TerminatableTask::spawn(
                 zenoh_runtime::ZRuntime::Net,
@@ -249,6 +251,12 @@ impl HatBaseTrait for HatCode {
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
+
+        face_hat_mut!(face).remote_sub_interests.clear();
+        face_hat_mut!(face).local_subs.clear();
+        face_hat_mut!(face).remote_qabl_interests.clear();
+        face_hat_mut!(face).local_qabls.clear();
+
         let face = get_mut_unchecked(face);
         for res in face.remote_mappings.values_mut() {
             get_mut_unchecked(res).session_ctxs.remove(&face.id);
@@ -262,7 +270,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for mut res in face
+        for (_id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -290,7 +298,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for mut res in face
+        for (_, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -323,11 +331,7 @@ impl HatBaseTrait for HatCode {
         let rtables = zread!(tables.tables);
         for _match in subs_matches.drain(..) {
             let mut expr = RoutingExpr::new(&_match, "");
-            matches_data_routes.push((
-                _match.clone(),
-                compute_data_routes(&rtables, &mut expr),
-                compute_matching_pulls(&rtables, &mut expr),
-            ));
+            matches_data_routes.push((_match.clone(), compute_data_routes(&rtables, &mut expr)));
         }
         for _match in qabls_matches.drain(..) {
             matches_query_routes.push((_match.clone(), compute_query_routes(&rtables, &_match)));
@@ -335,13 +339,10 @@ impl HatBaseTrait for HatCode {
         drop(rtables);
 
         let mut wtables = zwrite!(tables.tables);
-        for (mut res, data_routes, matching_pulls) in matches_data_routes {
+        for (mut res, data_routes) in matches_data_routes {
             get_mut_unchecked(&mut res)
                 .context_mut()
                 .update_data_routes(data_routes);
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .update_matching_pulls(matching_pulls);
             Resource::clean(&mut res);
         }
         for (mut res, query_routes) in matches_query_routes {
@@ -431,10 +432,6 @@ impl HatBaseTrait for HatCode {
         Ok(())
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     #[inline]
     fn ingress_filter(&self, _tables: &Tables, _face: &FaceState, _expr: &mut RoutingExpr) -> bool {
         true
@@ -470,7 +467,7 @@ impl HatBaseTrait for HatCode {
 struct HatContext {
     router_subs: HashSet<ZenohId>,
     peer_subs: HashSet<ZenohId>,
-    peer_qabls: HashMap<ZenohId, QueryableInfo>,
+    peer_qabls: HashMap<ZenohId, QueryableInfoType>,
 }
 
 impl HatContext {
@@ -485,20 +482,26 @@ impl HatContext {
 
 struct HatFace {
     link_id: usize,
-    local_subs: HashSet<Arc<Resource>>,
-    remote_subs: HashSet<Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
-    remote_qabls: HashSet<Arc<Resource>>,
+    next_id: AtomicU32, // @TODO: manage rollover and uniqueness
+    remote_sub_interests: HashMap<InterestId, (Option<Arc<Resource>>, bool)>,
+    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    remote_subs: HashMap<SubscriberId, Arc<Resource>>,
+    remote_qabl_interests: HashMap<InterestId, Option<Arc<Resource>>>,
+    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
+    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
 
 impl HatFace {
     fn new() -> Self {
         Self {
             link_id: 0,
-            local_subs: HashSet::new(),
-            remote_subs: HashSet::new(),
+            next_id: AtomicU32::new(0),
+            remote_sub_interests: HashMap::new(),
+            local_subs: HashMap::new(),
+            remote_subs: HashMap::new(),
+            remote_qabl_interests: HashMap::new(),
             local_qabls: HashMap::new(),
-            remote_qabls: HashSet::new(),
+            remote_qabls: HashMap::new(),
         }
     }
 }

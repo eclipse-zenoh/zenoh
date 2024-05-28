@@ -11,25 +11,33 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::codec::Zenoh080Routing;
-use crate::net::protocol::linkstate::{LinkState, LinkStateList};
-use crate::net::routing::dispatcher::tables::NodeId;
-use crate::net::runtime::Runtime;
-use crate::runtime::WeakRuntime;
-use petgraph::graph::NodeIndex;
-use petgraph::visit::{VisitMap, Visitable};
-use rand::Rng;
 use std::convert::TryInto;
+
+use petgraph::{
+    graph::NodeIndex,
+    visit::{VisitMap, Visitable},
+};
+use rand::Rng;
 use vec_map::VecMap;
-use zenoh_buffers::writer::{DidntWrite, HasWriter};
-use zenoh_buffers::ZBuf;
+use zenoh_buffers::{
+    writer::{DidntWrite, HasWriter},
+    ZBuf,
+};
 use zenoh_codec::WCodec;
 use zenoh_link::Locator;
-use zenoh_protocol::common::ZExtBody;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
-use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
-use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
+use zenoh_protocol::{
+    common::ZExtBody,
+    core::{WhatAmI, WhatAmIMatcher, ZenohId},
+    network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
+};
 use zenoh_transport::unicast::TransportUnicast;
+
+use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::linkstate::{LinkState, LinkStateList},
+    routing::dispatcher::tables::NodeId,
+    runtime::{Runtime, WeakRuntime},
+};
 
 #[derive(Clone)]
 struct Details {
@@ -271,7 +279,7 @@ impl Network {
         Ok(NetworkBody::OAM(Oam {
             id: OAM_LINKSTATE,
             body: ZExtBody::ZBuf(buf),
-            ext_qos: oam::ext::QoSType::oam_default(),
+            ext_qos: oam::ext::QoSType::OAM,
             ext_tstamp: None,
         })
         .into())
@@ -460,10 +468,10 @@ impl Network {
                         (oldsn < sn)
                             .then(|| {
                                 node.sn = sn;
-                                node.links = links.clone();
+                                node.links.clone_from(&links);
                                 changes.updated_nodes.push((idx, node.clone()));
                                 (node.locators != locators && locators.is_some()).then(|| {
-                                    node.locators = locators.clone();
+                                    node.locators.clone_from(&locators);
                                     idx
                                 })
                             })
@@ -524,7 +532,7 @@ impl Network {
                         let oldsn = node.sn;
                         if oldsn < sn {
                             node.sn = sn;
-                            node.links = links.clone();
+                            node.links.clone_from(&links);
                             if locators.is_some() {
                                 node.locators = locators;
                             }

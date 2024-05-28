@@ -13,11 +13,16 @@
 //
 #[cfg(target_family = "unix")]
 mod tests {
-    use std::any::Any;
-    use std::convert::TryFrom;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::time::Duration;
+    use std::{
+        any::Any,
+        convert::TryFrom,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
+
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -70,11 +75,11 @@ mod tests {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
+                ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
                     payload: vec![0u8; MSG_SIZE].into(),
                     timestamp: None,
-                    encoding: Encoding::default(),
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -160,7 +165,7 @@ mod tests {
             println!("[Simultaneous 01a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
-        let locs = peer01_manager.get_listeners().await;
+        let locs = ztimeout!(peer01_manager.get_listeners());
         println!("[Simultaneous 01b] => Getting endpoints: {endpoint01:?} {locs:?}");
         assert_eq!(endpoint01.len(), locs.len());
 
@@ -170,7 +175,7 @@ mod tests {
             println!("[Simultaneous 02a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
-        let locs = peer02_manager.get_listeners().await;
+        let locs = ztimeout!(peer02_manager.get_listeners());
         println!("[Simultaneous 02b] => Getting endpoints: {endpoint02:?} {locs:?}");
         assert_eq!(endpoint02.len(), locs.len());
 

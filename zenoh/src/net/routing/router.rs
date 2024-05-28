@@ -11,33 +11,32 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::dispatcher::face::{Face, FaceState};
-pub use super::dispatcher::pubsub::*;
-pub use super::dispatcher::queries::*;
-pub use super::dispatcher::resource::*;
-use super::dispatcher::tables::Tables;
-use super::dispatcher::tables::TablesLock;
-use super::hat;
-use super::interceptor::EgressInterceptor;
-use super::interceptor::InterceptorsChain;
-use super::runtime::Runtime;
-use crate::net::primitives::DeMux;
-use crate::net::primitives::DummyPrimitives;
-use crate::net::primitives::EPrimitives;
-use crate::net::primitives::McastMux;
-use crate::net::primitives::Mux;
-use crate::net::routing::interceptor::IngressInterceptor;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::{Mutex, RwLock};
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex, RwLock},
+};
+
 use uhlc::HLC;
 use zenoh_config::Config;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_transport::multicast::TransportMulticast;
-use zenoh_transport::unicast::TransportUnicast;
-use zenoh_transport::TransportPeer;
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
+
+pub use super::dispatcher::{pubsub::*, queries::*, resource::*};
+use super::{
+    dispatcher::{
+        face::{Face, FaceState},
+        tables::{Tables, TablesLock},
+    },
+    hat,
+    interceptor::{EgressInterceptor, InterceptorsChain},
+    runtime::Runtime,
+};
+use crate::net::{
+    primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
+    routing::interceptor::IngressInterceptor,
+};
 
 pub struct Router {
     // whatami: WhatAmI,

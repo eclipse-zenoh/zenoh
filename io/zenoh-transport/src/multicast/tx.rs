@@ -11,9 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportMulticastInner;
 use zenoh_core::zread;
 use zenoh_protocol::network::NetworkMessage;
+
+use super::transport::TransportMulticastInner;
+#[cfg(feature = "shared-memory")]
+use crate::shm::map_zmsg_to_partner;
 
 //noinspection ALL
 impl TransportMulticastInner {
@@ -53,12 +56,7 @@ impl TransportMulticastInner {
     pub(super) fn schedule(&self, mut msg: NetworkMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
-            let res = if self.manager.config.multicast.is_shm {
-                crate::shm::map_zmsg_to_shminfo(&mut msg)
-            } else {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.multicast.shm.reader)
-            };
-            if let Err(e) = res {
+            if let Err(e) = map_zmsg_to_partner(&mut msg, &self.shm) {
                 tracing::trace!("Failed SHM conversion: {}", e);
                 return false;
             }

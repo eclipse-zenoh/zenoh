@@ -11,16 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::digest::*;
-use super::Snapshotter;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeSet, HashMap, HashSet},
+    str,
+    str::FromStr,
+};
+
 use async_std::sync::Arc;
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::str;
-use std::str::FromStr;
-use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
-use zenoh::Session;
+use zenoh::prelude::*;
+
+use super::{digest::*, Snapshotter};
 
 pub struct AlignQueryable {
     session: Arc<Session>,
@@ -70,7 +71,6 @@ impl AlignQueryable {
             .session
             .declare_queryable(&self.digest_key)
             .complete(true) // This queryable is meant to have all the history
-            .res()
             .await
             .unwrap();
 
@@ -94,29 +94,39 @@ impl AlignQueryable {
                 for value in values {
                     match value {
                         AlignData::Interval(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .await
+                                .unwrap();
                         }
                         AlignData::Subinterval(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .await
+                                .unwrap();
                         }
                         AlignData::Content(i, c) => {
-                            let sample = Sample::new(
-                                query.key_expr().clone(),
-                                serde_json::to_string(&(i, c)).unwrap(),
-                            );
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(
+                                    query.key_expr().clone(),
+                                    serde_json::to_string(&(i, c)).unwrap(),
+                                )
+                                .await
+                                .unwrap();
                         }
                         AlignData::Data(k, (v, ts)) => {
-                            let sample = Sample::new(k, v).with_timestamp(ts);
-                            query.reply(Ok(sample)).res().await.unwrap();
+                            query
+                                .reply(k, v.payload().clone())
+                                .encoding(v.encoding().clone())
+                                .timestamp(ts)
+                                .await
+                                .unwrap();
                         }
                     }
                 }
@@ -164,8 +174,8 @@ impl AlignQueryable {
                     if entry.is_some() {
                         let entry = entry.unwrap();
                         result.push(AlignData::Data(
-                            OwnedKeyExpr::from(entry.key_expr),
-                            (entry.value, each.timestamp),
+                            OwnedKeyExpr::from(entry.key_expr().clone()),
+                            (Value::from(entry), each.timestamp),
                         ));
                     }
                 }
@@ -175,13 +185,13 @@ impl AlignQueryable {
     }
 
     fn parse_selector(&self, selector: Selector) -> Option<AlignComponent> {
-        let properties = selector.parameters_stringmap().unwrap(); // note: this is a hashmap
+        let properties = selector.parameters(); // note: this is a hashmap
         tracing::trace!("[ALIGN QUERYABLE] Properties are: {:?}", properties);
-        if properties.get(super::ERA).is_some() {
+        if properties.contains_key(super::ERA) {
             Some(AlignComponent::Era(
                 EraType::from_str(properties.get(super::ERA).unwrap()).unwrap(),
             ))
-        } else if properties.get(super::INTERVALS).is_some() {
+        } else if properties.contains_key(super::INTERVALS) {
             let mut intervals = properties.get(super::INTERVALS).unwrap().to_string();
             intervals.remove(0);
             intervals.pop();
@@ -191,7 +201,7 @@ impl AlignQueryable {
                     .map(|x| x.parse::<u64>().unwrap())
                     .collect::<Vec<u64>>(),
             ))
-        } else if properties.get(super::SUBINTERVALS).is_some() {
+        } else if properties.contains_key(super::SUBINTERVALS) {
             let mut subintervals = properties.get(super::SUBINTERVALS).unwrap().to_string();
             subintervals.remove(0);
             subintervals.pop();
@@ -201,7 +211,7 @@ impl AlignQueryable {
                     .map(|x| x.parse::<u64>().unwrap())
                     .collect::<Vec<u64>>(),
             ))
-        } else if properties.get(super::CONTENTS).is_some() {
+        } else if properties.contains_key(super::CONTENTS) {
             let contents = serde_json::from_str(properties.get(super::CONTENTS).unwrap()).unwrap();
             Some(AlignComponent::Contents(contents))
         } else {
@@ -214,17 +224,17 @@ impl AlignQueryable {
 impl AlignQueryable {
     async fn get_entry(&self, logentry: &LogEntry) -> Option<Sample> {
         // get corresponding key from log
-        let replies = self.session.get(&logentry.key).res().await.unwrap();
+        let replies = self.session.get(&logentry.key).await.unwrap();
         if let Ok(reply) = replies.recv_async().await {
-            match reply.sample {
+            match reply.into_result() {
                 Ok(sample) => {
                     tracing::trace!(
                         "[ALIGN QUERYABLE] Received ('{}': '{}' @ {:?})",
-                        sample.key_expr.as_str(),
-                        sample.value,
-                        sample.timestamp
+                        sample.key_expr().as_str(),
+                        StringOrBase64::from(sample.payload()),
+                        sample.timestamp()
                     );
-                    if let Some(timestamp) = sample.timestamp {
+                    if let Some(timestamp) = sample.timestamp() {
                         match timestamp.cmp(&logentry.timestamp) {
                             Ordering::Greater => {
                                 tracing::error!(

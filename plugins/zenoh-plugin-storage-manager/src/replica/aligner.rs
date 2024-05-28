@@ -12,16 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{Digest, EraType, LogEntry, Snapshotter};
-use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
+use std::{
+    collections::{HashMap, HashSet},
+    str,
+};
+
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
-use std::collections::{HashMap, HashSet};
-use std::str;
-use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
-use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
-use zenoh::Session;
+use zenoh::prelude::*;
+
+use super::{Digest, EraType, LogEntry, Snapshotter, CONTENTS, ERA, INTERVALS, SUBINTERVALS};
 
 pub struct Aligner {
     session: Arc<Session>,
@@ -104,7 +104,10 @@ impl Aligner {
             tracing::trace!("[ALIGNER] Received queried samples: {missing_data:?}");
 
             for (key, (ts, value)) in missing_data {
-                let sample = Sample::new(key, value).with_timestamp(ts);
+                let sample = SampleBuilder::put(key, value.payload().clone())
+                    .encoding(value.encoding().clone())
+                    .timestamp(ts)
+                    .into();
                 tracing::debug!("[ALIGNER] Adding {:?} to storage", sample);
                 self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
                     tracing::error!("[ALIGNER] Error adding sample to storage: {}", e)
@@ -135,8 +138,8 @@ impl Aligner {
 
         for sample in replies {
             result.insert(
-                sample.key_expr.into(),
-                (sample.timestamp.unwrap(), sample.value),
+                sample.key_expr().clone().into(),
+                (*sample.timestamp().unwrap(), Value::from(sample)),
             );
         }
         (result, no_err)
@@ -202,9 +205,9 @@ impl Aligner {
             let properties = format!("timestamp={}&{}=cold", other.timestamp, ERA);
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
-            // expecting sample.value to be a vec of intervals with their checksum
+            // expecting sample.payload to be a vec of intervals with their checksum
             for each in reply_content {
-                match serde_json::from_str(&each.value.to_string()) {
+                match serde_json::from_str(&StringOrBase64::from(each.payload())) {
                     Ok((i, c)) => {
                         other_intervals.insert(i, c);
                     }
@@ -246,11 +249,11 @@ impl Aligner {
                     INTERVALS,
                     diff_string.join(",")
                 );
-                // expecting sample.value to be a vec of subintervals with their checksum
+                // expecting sample.payload to be a vec of subintervals with their checksum
                 let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
-                    match serde_json::from_str(&each.value.to_string()) {
+                    match serde_json::from_str(&StringOrBase64::from(each.payload())) {
                         Ok((i, c)) => {
                             other_subintervals.insert(i, c);
                         }
@@ -287,11 +290,11 @@ impl Aligner {
                 SUBINTERVALS,
                 diff_string.join(",")
             );
-            // expecting sample.value to be a vec of log entries with their checksum
+            // expecting sample.payload to be a vec of log entries with their checksum
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
-                match serde_json::from_str(&each.value.to_string()) {
+                match serde_json::from_str(&StringOrBase64::from(each.payload())) {
                     Ok((i, c)) => {
                         other_content.insert(i, c);
                     }
@@ -311,10 +314,10 @@ impl Aligner {
 
     async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
         let mut no_err = true;
-        let selector = KeyExpr::from(&self.digest_key)
-            .join(&from)
-            .unwrap()
-            .with_parameters(&properties);
+        let selector = Selector::new(
+            KeyExpr::from(&self.digest_key).join(&from).unwrap(),
+            properties,
+        );
         tracing::trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         match self
@@ -322,23 +325,22 @@ impl Aligner {
             .get(&selector)
             .consolidation(zenoh::query::ConsolidationMode::None)
             .accept_replies(zenoh::query::ReplyKeyExpr::Any)
-            .res()
             .await
         {
             Ok(replies) => {
                 while let Ok(reply) = replies.recv_async().await {
-                    match reply.sample {
+                    match reply.into_result() {
                         Ok(sample) => {
                             tracing::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",
-                                sample.key_expr.as_str(),
-                                sample.value
+                                sample.key_expr().as_str(),
+                                StringOrBase64::from(sample.payload())
                             );
                             return_val.push(sample);
                         }
                         Err(err) => {
                             tracing::error!(
-                                "[ALIGNER] Received error for query on selector {} :{}",
+                                "[ALIGNER] Received error for query on selector {} :{:?}",
                                 selector,
                                 err
                             );
@@ -348,7 +350,11 @@ impl Aligner {
                 }
             }
             Err(err) => {
-                tracing::error!("[ALIGNER] Query failed on selector `{}`: {}", selector, err);
+                tracing::error!(
+                    "[ALIGNER] Query failed on selector `{}`: {:?}",
+                    selector,
+                    err
+                );
                 no_err = false;
             }
         };

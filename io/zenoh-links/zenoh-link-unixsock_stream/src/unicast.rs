@@ -11,30 +11,34 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME;
+use std::{
+    cell::UnsafeCell, collections::HashMap, fmt, fs::remove_file, os::unix::io::RawFd,
+    path::PathBuf, sync::Arc, time::Duration,
+};
+
 use async_trait::async_trait;
-use std::cell::UnsafeCell;
-use std::collections::HashMap;
-use std::fmt;
-use std::fs::remove_file;
-use std::os::unix::io::RawFd;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::RwLock as AsyncRwLock;
-use tokio::task::JoinHandle;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{UnixListener, UnixStream},
+    sync::RwLock as AsyncRwLock,
+    task::JoinHandle,
+};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{zerror, ZResult};
 
-use super::{get_unix_path_as_string, UNIXSOCKSTREAM_DEFAULT_MTU, UNIXSOCKSTREAM_LOCATOR_PREFIX};
+use super::{
+    get_unix_path_as_string, UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME, UNIXSOCKSTREAM_DEFAULT_MTU,
+    UNIXSOCKSTREAM_LOCATOR_PREFIX,
+};
 
 pub struct LinkUnicastUnixSocketStream {
     // The underlying socket as returned from the tokio library
@@ -119,7 +123,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *UNIXSOCKSTREAM_DEFAULT_MTU
     }
 

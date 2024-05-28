@@ -14,15 +14,14 @@
 use clap::Parser;
 use futures::future;
 use git_version::git_version;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
-use zenoh::config::{Config, ModeDependentValue, PermissionsConf, ValidatedMap};
-use zenoh::prelude::r#async::*;
-use zenoh::Result;
-
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 #[cfg(feature = "loki")]
 use url::Url;
+use zenoh::{
+    config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap},
+    core::Result,
+    scouting::WhatAmI,
+};
 
 #[cfg(feature = "loki")]
 const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
@@ -105,7 +104,7 @@ fn main() {
             let config = config_from_args(&args);
             tracing::info!("Initial conf: {}", &config);
 
-            let _session = match zenoh::open(config).res().await {
+            let _session = match zenoh::open(config).await {
                 Ok(runtime) => runtime,
                 Err(e) => {
                     println!("{e}. Exiting...");
@@ -338,7 +337,6 @@ fn test_default_features() {
         concat!(
             " zenoh/auth_pubkey",
             " zenoh/auth_usrpwd",
-            // " zenoh/complete_n",
             // " zenoh/shared-memory",
             // " zenoh/stats",
             " zenoh/transport_multilink",
@@ -365,7 +363,6 @@ fn test_no_default_features() {
         concat!(
             // " zenoh/auth_pubkey",
             // " zenoh/auth_usrpwd",
-            // " zenoh/complete_n",
             // " zenoh/shared-memory",
             // " zenoh/stats",
             // " zenoh/transport_multilink",

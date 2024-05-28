@@ -12,18 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use serde::{Deserialize, Serialize};
+use zenoh_core::zparse_default;
+use zenoh_protocol::core::WhatAmI;
+
 use crate::{
     defaults::{
         self, DEFAULT_CONNECT_EXIT_ON_FAIL, DEFAULT_CONNECT_TIMEOUT_MS,
         DEFAULT_LISTEN_EXIT_ON_FAIL, DEFAULT_LISTEN_TIMEOUT_MS,
     },
+    mode_dependent::*,
     Config,
 };
-use serde::{Deserialize, Serialize};
-use zenoh_core::zparse_default;
-use zenoh_protocol::core::WhatAmI;
-
-use crate::mode_dependent::*;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ConnectionRetryModeDependentConf {

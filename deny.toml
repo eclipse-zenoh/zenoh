@@ -1,0 +1,24 @@
+# NOTE: Before allowing a new license, make sure it is approved by the Eclipse Foundation.
+# A list of approved third party licenses is available at: https://www.eclipse.org/legal/licenses.php.
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "EPL-2.0",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "MPL-2.0",
+    "OpenSSL",
+]
+
+# This was copied from https://github.com/EmbarkStudios/cargo-deny/blob/main/deny.toml#L64
+[[licenses.clarify]]
+crate = "ring"
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+[licenses.private]
+ignore = true

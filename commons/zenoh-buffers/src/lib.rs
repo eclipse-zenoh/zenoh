@@ -101,9 +101,13 @@ pub mod buffer {
             let mut slices = self.slices();
             match slices.len() {
                 0 => Cow::Borrowed(b""),
-                1 => Cow::Borrowed(slices.next().unwrap()),
-                _ => Cow::Owned(slices.fold(Vec::new(), |mut acc, it| {
-                    acc.extend(it);
+                1 => {
+                    // SAFETY: unwrap here is safe because we have explicitly checked
+                    //         the iterator has 1 element.
+                    Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() })
+                }
+                _ => Cow::Owned(slices.fold(Vec::with_capacity(self.len()), |mut acc, it| {
+                    acc.extend_from_slice(it);
                     acc
                 })),
             }
@@ -112,8 +116,9 @@ pub mod buffer {
 }
 
 pub mod writer {
-    use crate::ZSlice;
     use core::num::NonZeroUsize;
+
+    use crate::ZSlice;
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntWrite;
@@ -155,8 +160,9 @@ pub mod writer {
 }
 
 pub mod reader {
-    use crate::ZSlice;
     use core::num::NonZeroUsize;
+
+    use crate::ZSlice;
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
@@ -196,6 +202,18 @@ pub mod reader {
 
         fn mark(&mut self) -> Self::Mark;
         fn rewind(&mut self, mark: Self::Mark) -> bool;
+    }
+
+    pub trait AdvanceableReader: Reader {
+        fn skip(&mut self, offset: usize) -> Result<(), DidntRead>;
+        fn backtrack(&mut self, offset: usize) -> Result<(), DidntRead>;
+        fn advance(&mut self, offset: isize) -> Result<(), DidntRead> {
+            if offset > 0 {
+                self.skip(offset as usize)
+            } else {
+                self.backtrack((-offset) as usize)
+            }
+        }
     }
 
     #[derive(Debug, Clone, Copy)]

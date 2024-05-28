@@ -13,16 +13,17 @@
 //
 #[cfg(feature = "transport_compression")]
 mod tests {
-    use std::fmt::Write as _;
     use std::{
         any::Any,
         convert::TryFrom,
+        fmt::Write as _,
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
         },
         time::Duration,
     };
+
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -178,7 +179,8 @@ mod tests {
             #[cfg(feature = "shared-memory")]
             false,
             lowlatency_transport,
-        );
+        )
+        .compression(true);
         let router_manager = TransportManager::builder()
             .zid(router_id)
             .whatami(WhatAmI::Router)
@@ -215,10 +217,7 @@ mod tests {
             let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
         }
 
-        let client_transport = client_manager
-            .get_transport_unicast(&router_id)
-            .await
-            .unwrap();
+        let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
 
         // Return the handlers
         (
@@ -290,11 +289,11 @@ mod tests {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(channel.priority, cctrl, false),
             ext_tstamp: None,
-            ext_nodeid: NodeIdType::default(),
+            ext_nodeid: NodeIdType::DEFAULT,
             payload: Put {
                 payload: vec![0u8; msg_size].into(),
                 timestamp: None,
-                encoding: Encoding::default(),
+                encoding: Encoding::empty(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
@@ -357,13 +356,12 @@ mod tests {
         {
             let c_stats = client_transport.get_stats().unwrap().report();
             println!("\tClient: {:?}", c_stats);
-            let r_stats = router_manager
-                .get_transport_unicast(&client_manager.config.zid)
-                .await
-                .unwrap()
-                .get_stats()
-                .map(|s| s.report())
-                .unwrap();
+            let r_stats =
+                ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
+                    .unwrap()
+                    .get_stats()
+                    .map(|s| s.report())
+                    .unwrap();
             println!("\tRouter: {:?}", r_stats);
         }
 
@@ -432,7 +430,7 @@ mod tests {
         // Define the reliability and congestion control
         let channel = [
             Channel {
-                priority: Priority::default(),
+                priority: Priority::DEFAULT,
                 reliability: Reliability::Reliable,
             },
             Channel {
@@ -454,7 +452,7 @@ mod tests {
         // Define the reliability and congestion control
         let channel = [
             Channel {
-                priority: Priority::default(),
+                priority: Priority::DEFAULT,
                 reliability: Reliability::Reliable,
             },
             Channel {
@@ -479,7 +477,7 @@ mod tests {
         // Define the reliability and congestion control
         let channel = [
             Channel {
-                priority: Priority::default(),
+                priority: Priority::DEFAULT,
                 reliability: Reliability::BestEffort,
             },
             Channel {
@@ -501,7 +499,7 @@ mod tests {
         // Define the reliability and congestion control
         let channel = [
             Channel {
-                priority: Priority::default(),
+                priority: Priority::DEFAULT,
                 reliability: Reliability::BestEffort,
             },
             Channel {

@@ -29,22 +29,29 @@ maintenance = { status = "actively-developed" }
 [features]
 unstable = []
 default = []
+shared-memory = [
+    "zenoh/shared-memory",
+]
 
 [dependencies]
-tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
+tokio = { workspace = true, features = [
+    "rt",
+    "sync",
+    "time",
+    "macros",
+    "io-std",
+] }
 bincode = { workspace = true }
-zenoh-util = {workspace = true }
+zenoh-util = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-tracing = {workspace = true}
+phf = { workspace = true }
+tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"], default-features = false }
-zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
-zenoh-result = { workspace = true }
-zenoh-sync = { workspace = true }
-zenoh-runtime = { workspace = true }
-zenoh-task = { workspace = true }
 
 [package.metadata.docs.rs]
 features = ["unstable"]

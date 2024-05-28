@@ -31,12 +31,12 @@ maintenance = { status = "actively-developed" }
 [features]
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
-complete_n = ["zenoh-codec/complete_n"]
 plugins = []
 shared-memory = [
     "zenoh-shm",
     "zenoh-protocol/shared-memory",
     "zenoh-transport/shared-memory",
+    "zenoh-buffers/shared-memory",
 ]
 stats = ["zenoh-transport/stats", "zenoh-protocol/stats"]
 transport_multilink = ["zenoh-transport/transport_multilink"]
@@ -77,17 +77,22 @@ form_urlencoded = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 lazy_static = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 ordered-float = { workspace = true }
 paste = { workspace = true }
 petgraph = { workspace = true }
+phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 regex = { workspace = true }
 serde = { workspace = true, features = ["default"] }
+serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+serde-pickle = { workspace = true }
+serde_yaml = { workspace = true }
 socket2 = { workspace = true }
 stop-token = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
+unwrap-infallible = { workspace = true }
 uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
@@ -109,6 +114,9 @@ zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 
+[dev-dependencies]
+tokio = { workspace = true }
+
 [build-dependencies]
 rustc_version = { workspace = true }
 
@@ -119,6 +127,7 @@ name = "zenoh"
 # NOTE: if you change this, also change it in .github/workflows/release.yml in "doc" job.
 [package.metadata.docs.rs]
 features = ["unstable"]
+rustdoc-args = ["--cfg", "doc_auto_cfg"]
 
 [package.metadata.deb]
 name = "zenoh"

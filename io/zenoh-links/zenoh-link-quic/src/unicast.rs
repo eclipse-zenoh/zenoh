@@ -12,17 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::{
-    config::*,
-    utils::{get_quic_addr, TlsClientConfig, TlsServerConfig},
-    ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
+use std::{
+    fmt,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::Arc,
+    time::Duration,
 };
+
 use async_trait::async_trait;
-use std::fmt;
-use std::net::IpAddr;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::*;
@@ -31,8 +28,17 @@ use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkAuthIdBuilder, LinkAuthType, LinkManagerUnicastTrait,
     LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
-use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{bail, zerror, ZResult};
+
+use crate::{
+    config::*,
+    utils::{get_quic_addr, TlsClientConfig, TlsServerConfig},
+    ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
+};
 
 pub struct LinkUnicastQuic {
     connection: quinn::Connection,
@@ -136,7 +142,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *QUIC_DEFAULT_MTU
     }
 

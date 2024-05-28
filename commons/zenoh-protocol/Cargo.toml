@@ -33,10 +33,9 @@ std = [
     "zenoh-keyexpr/std",
     "zenoh-result/std",
 ]
-test = ["rand", "zenoh-buffers/test"]
+test = ["rand", "zenoh-buffers/test", "zenoh-collections/test"]
 shared-memory = ["std", "zenoh-buffers/shared-memory"]
 stats = []
-complete_n = []
 
 [dependencies]
 const_format = { workspace = true }
@@ -44,6 +43,7 @@ rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true, default-features = false }
 zenoh-buffers = { workspace = true, default-features = false }
+zenoh-collections = { workspace = true, default-features = false }
 zenoh-keyexpr = { workspace = true }
 zenoh-result = { workspace = true }
 

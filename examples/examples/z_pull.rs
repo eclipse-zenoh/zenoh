@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
 use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+
+use clap::Parser;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -22,46 +22,92 @@ async fn main() {
     // initiate logging
     zenoh_util::try_init_log_from_env();
 
-    let (config, key_expr) = parse_args();
+    let (config, key_expr, size, interval) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Subscriber on '{key_expr}'...");
-
     let subscriber = session
         .declare_subscriber(&key_expr)
-        .pull_mode()
-        .callback(|sample| {
-            println!(
-                ">> [Subscriber] Received {} ('{}': '{}')",
-                sample.kind,
-                sample.key_expr.as_str(),
-                sample.value,
-            );
-        })
-        .res()
+        .with(RingChannel::new(size))
         .await
         .unwrap();
 
     println!("Press CTRL-C to quit...");
-    for idx in 0..u32::MAX {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        println!("[{idx:4}] Pulling...");
-        subscriber.pull().res().await.unwrap();
+
+    // Blocking recv. If the ring is empty, wait for the first sample to arrive.
+    loop {
+        // Use .recv() for the synchronous version.
+        match subscriber.recv_async().await {
+            Ok(sample) => {
+                let payload = sample
+                    .payload()
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
+                println!(
+                    ">> [Subscriber] Pulled {} ('{}': '{}')... performing a computation of {:#?}",
+                    sample.kind(),
+                    sample.key_expr().as_str(),
+                    payload,
+                    interval
+                );
+                tokio::time::sleep(interval).await;
+            }
+            Err(e) => {
+                println!(">> [Subscriber] Pull error: {e}");
+                return;
+            }
+        }
     }
+
+    // Non-blocking recv. This can be usually used to implement a polling mechanism.
+    // loop {
+    //     match subscriber.try_recv() {
+    //         Ok(Some(sample)) => {
+    //             let payload = sample
+    //                 .payload()
+    //                 .deserialize::<String>()
+    //                 .unwrap_or_else(|e| format!("{}", e));
+    //             println!(
+    //                 ">> [Subscriber] Pulled {} ('{}': '{}')",
+    //                 sample.kind(),
+    //                 sample.key_expr().as_str(),
+    //                 payload,
+    //             );
+    //         }
+    //         Ok(None) => {
+    //             println!(
+    //                 ">> [Subscriber] Pulled nothing... sleep for {:#?}",
+    //                 interval
+    //             );
+    //             tokio::time::sleep(interval).await;
+    //         }
+    //         Err(e) => {
+    //             println!(">> [Subscriber] Pull error: {e}");
+    //             return;
+    //         }
+    //     }
+    // }
 }
 
-#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(clap::Parser, Clone, PartialEq, Debug)]
 struct SubArgs {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The Key Expression to subscribe to.
     key: KeyExpr<'static>,
+    /// The size of the ringbuffer.
+    #[arg(short, long, default_value = "3")]
+    size: usize,
+    /// The interval for pulling the ringbuffer.
+    #[arg(short, long, default_value = "5.0")]
+    interval: f32,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, KeyExpr<'static>) {
+fn parse_args() -> (Config, KeyExpr<'static>, usize, Duration) {
     let args = SubArgs::parse();
-    (args.common.into(), args.key)
+    let interval = Duration::from_secs_f32(args.interval);
+    (args.common.into(), args.key, args.size, interval)
 }

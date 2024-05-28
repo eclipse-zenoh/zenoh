@@ -16,40 +16,30 @@
 // 1. normal case, just some wild card puts and deletes on existing keys and ensure it works
 // 2. check for dealing with out of order updates
 
-use std::str::FromStr;
-use std::thread::sleep;
+use std::{str::FromStr, thread::sleep};
 
 use async_std::task;
-use zenoh::prelude::r#async::*;
-use zenoh::query::Reply;
-use zenoh::{prelude::Config, time::Timestamp};
-use zenoh_core::zasync_executor_init;
+use zenoh::{internal::zasync_executor_init, prelude::*};
 use zenoh_plugin_trait::Plugin;
 
-async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
+async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
     println!("Putting Data ('{key_expr}': '{value}')...");
     //  @TODO: how to add timestamp metadata with put, not manipulating sample...
-    session.put(key_expr, value).res().await.unwrap();
+    session.put(key_expr, value).await.unwrap();
 }
 
-async fn delete_data(session: &zenoh::Session, key_expr: &str, _timestamp: Timestamp) {
+async fn delete_data(session: &Session, key_expr: &str, _timestamp: Timestamp) {
     println!("Deleting Data '{key_expr}'...");
     //  @TODO: how to add timestamp metadata with delete, not manipulating sample...
-    session.delete(key_expr).res().await.unwrap();
+    session.delete(key_expr).await.unwrap();
 }
 
-async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
-    let replies: Vec<Reply> = session
-        .get(key_expr)
-        .res()
-        .await
-        .unwrap()
-        .into_iter()
-        .collect();
+async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
+    let replies: Vec<Reply> = session.get(key_expr).await.unwrap().into_iter().collect();
     println!("Getting replies on '{key_expr}': '{replies:?}'...");
     let mut samples = Vec::new();
     for reply in replies {
-        if let Ok(sample) = reply.sample {
+        if let Ok(sample) = reply.into_result() {
             samples.push(sample);
         }
     }
@@ -85,7 +75,7 @@ async fn test_updates_in_order() {
     let storage =
         zenoh_plugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
 
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).await.unwrap();
 
     sleep(std::time::Duration::from_secs(1));
 
@@ -103,7 +93,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/a").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(format!("{}", data[0].value), "1");
+    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "1");
 
     put_data(
         &session,
@@ -119,7 +109,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(format!("{}", data[0].value), "2");
+    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "2");
 
     delete_data(
         &session,
@@ -138,8 +128,8 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(format!("{}", data[0].value), "2");
-    assert_eq!(data[0].key_expr.as_str(), "operation/test/b");
+    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "2");
+    assert_eq!(data[0].key_expr().as_str(), "operation/test/b");
 
     drop(storage);
 }

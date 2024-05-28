@@ -24,8 +24,8 @@ categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
 
 [features]
-default = ["no_mangle", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
-no_mangle = []
+default = ["dynamic_plugin", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
+dynamic_plugin = []
 
 [lib]
 name = "zenoh_plugin_rest"
@@ -36,7 +36,6 @@ anyhow = { workspace = true, features = ["default"] }
 async-std = { workspace = true, features = ["default", "attributes"] }
 base64 = { workspace = true }
 const_format = { workspace = true }
-zenoh-util = {workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }

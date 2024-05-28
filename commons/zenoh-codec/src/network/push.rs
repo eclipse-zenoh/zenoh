@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -26,6 +25,8 @@ use zenoh_protocol::{
     },
     zenoh::PushBody,
 };
+
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 
 impl<W> WCodec<&Push, &mut W> for Zenoh080
 where
@@ -44,13 +45,13 @@ where
 
         // Header
         let mut header = id::PUSH;
-        let mut n_exts = ((ext_qos != &ext::QoSType::default()) as u8)
+        let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8)
             + (ext_tstamp.is_some() as u8)
-            + ((ext_nodeid != &ext::NodeIdType::default()) as u8);
+            + ((ext_nodeid != &ext::NodeIdType::DEFAULT) as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::DEFAULT {
             header |= flag::M;
         }
         if wire_expr.has_suffix() {
@@ -62,7 +63,7 @@ where
         self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if ext_qos != &ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
@@ -70,7 +71,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if ext_nodeid != &ext::NodeIdType::default() {
+        if ext_nodeid != &ext::NodeIdType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
@@ -116,9 +117,9 @@ where
         };
 
         // Extensions
-        let mut ext_qos = ext::QoSType::default();
+        let mut ext_qos = ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
-        let mut ext_nodeid = ext::NodeIdType::default();
+        let mut ext_nodeid = ext::NodeIdType::DEFAULT;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {

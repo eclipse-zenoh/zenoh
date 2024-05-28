@@ -24,6 +24,7 @@ mod tests {
         },
         time::Duration,
     };
+
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -168,13 +169,19 @@ mod tests {
         // Open transport -> This should be accepted
         println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer01_manager.open_transport_multicast(endpoint.clone())).unwrap();
-        assert!(!peer01_manager.get_transports_multicast().await.is_empty());
-        println!("\t{:?}", peer01_manager.get_transports_multicast().await);
+        assert!(!ztimeout!(peer01_manager.get_transports_multicast()).is_empty());
+        println!(
+            "\t{:?}",
+            ztimeout!(peer01_manager.get_transports_multicast())
+        );
 
         println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer02_manager.open_transport_multicast(endpoint.clone())).unwrap();
-        assert!(!peer02_manager.get_transports_multicast().await.is_empty());
-        println!("\t{:?}", peer02_manager.get_transports_multicast().await);
+        assert!(!ztimeout!(peer02_manager.get_transports_multicast()).is_empty());
+        println!(
+            "\t{:?}",
+            ztimeout!(peer02_manager.get_transports_multicast())
+        );
 
         // Wait to for peer 01 and 02 to join each other
         ztimeout!(async {
@@ -186,10 +193,8 @@ mod tests {
                 tokio::time::sleep(SLEEP_COUNT).await;
             }
         });
-        let peer01_transport = peer01_manager
-            .get_transport_multicast(&peer02_id)
-            .await
-            .unwrap();
+        let peer01_transport =
+            ztimeout!(peer01_manager.get_transport_multicast(&peer02_id)).unwrap();
         println!(
             "\tPeer01 peers: {:?}",
             peer01_transport.get_peers().unwrap()
@@ -204,10 +209,8 @@ mod tests {
                 tokio::time::sleep(SLEEP_COUNT).await;
             }
         });
-        let peer02_transport = peer02_manager
-            .get_transport_multicast(&peer01_id)
-            .await
-            .unwrap();
+        let peer02_transport =
+            ztimeout!(peer02_manager.get_transport_multicast(&peer01_id)).unwrap();
         println!(
             "\tPeer02 peers: {:?}",
             peer02_transport.get_peers().unwrap()
@@ -235,7 +238,7 @@ mod tests {
         // Close the peer01 transport
         println!("Closing transport with {endpoint}");
         ztimeout!(peer01.transport.close()).unwrap();
-        assert!(peer01.manager.get_transports_multicast().await.is_empty());
+        assert!(ztimeout!(peer01.manager.get_transports_multicast()).is_empty());
         ztimeout!(async {
             while !peer02.transport.get_peers().unwrap().is_empty() {
                 tokio::time::sleep(SLEEP_COUNT).await;
@@ -245,7 +248,7 @@ mod tests {
         // Close the peer02 transport
         println!("Closing transport with {endpoint}");
         ztimeout!(peer02.transport.close()).unwrap();
-        assert!(peer02.manager.get_transports_multicast().await.is_empty());
+        assert!(ztimeout!(peer02.manager.get_transports_multicast()).is_empty());
 
         // Wait a little bit
         tokio::time::sleep(SLEEP).await;
@@ -262,11 +265,11 @@ mod tests {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: NodeIdType::default(),
+            ext_nodeid: NodeIdType::DEFAULT,
             payload: Put {
                 payload: vec![0u8; msg_size].into(),
                 timestamp: None,
-                encoding: Encoding::default(),
+                encoding: Encoding::empty(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
@@ -352,7 +355,7 @@ mod tests {
         // Define the reliability and congestion control
         let channel = [
             Channel {
-                priority: Priority::default(),
+                priority: Priority::DEFAULT,
                 reliability: Reliability::BestEffort,
             },
             Channel {

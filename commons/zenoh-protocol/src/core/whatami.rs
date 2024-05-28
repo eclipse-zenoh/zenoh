@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::string::String;
-use const_format::formatcp;
 use core::{convert::TryFrom, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
+
+use const_format::formatcp;
 use zenoh_result::{bail, ZError};
 
 #[repr(u8)]

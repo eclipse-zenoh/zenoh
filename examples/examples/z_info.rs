@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -24,17 +23,17 @@ async fn main() {
     let config = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     let info = session.info();
-    println!("zid: {}", info.zid().res().await);
+    println!("zid: {}", info.zid().await);
     println!(
         "routers zid: {:?}",
-        info.routers_zid().res().await.collect::<Vec<ZenohId>>()
+        info.routers_zid().await.collect::<Vec<ZenohId>>()
     );
     println!(
         "peers zid: {:?}",
-        info.peers_zid().res().await.collect::<Vec<ZenohId>>()
+        info.peers_zid().await.collect::<Vec<ZenohId>>()
     );
 }
 

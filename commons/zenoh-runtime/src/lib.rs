@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use core::panic;
-use lazy_static::lazy_static;
-use serde::Deserialize;
 use std::{
     borrow::Borrow,
     collections::HashMap,
@@ -26,6 +24,9 @@ use std::{
     },
     time::Duration,
 };
+
+use lazy_static::lazy_static;
+use serde::Deserialize;
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 use zenoh_macros::{GenericRuntimeParam, RegisterParam};
 use zenoh_result::ZResult as Result;
@@ -145,11 +146,17 @@ lazy_static! {
         .collect();
 }
 
-// To drop the data mannually since Rust does not drop static variables.
-pub extern "C" fn cleanup() {
-    unsafe {
-        std::mem::drop((ZRUNTIME_POOL.deref() as *const ZRuntimePool).read());
-        std::mem::drop((ZRUNTIME_INDEX.deref() as *const HashMap<ZRuntime, AtomicUsize>).read());
+// A runtime guard used to explicitly drop the static variables that Rust doesn't drop by default
+pub struct ZRuntimePoolGuard;
+
+impl Drop for ZRuntimePoolGuard {
+    fn drop(&mut self) {
+        unsafe {
+            std::mem::drop((ZRUNTIME_POOL.deref() as *const ZRuntimePool).read());
+            std::mem::drop(
+                (ZRUNTIME_INDEX.deref() as *const HashMap<ZRuntime, AtomicUsize>).read(),
+            );
+        }
     }
 }
 
@@ -157,12 +164,6 @@ pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<Runtime>>);
 
 impl ZRuntimePool {
     fn new() -> Self {
-        // It has been recognized that using atexit within Windows DLL is problematic
-        #[cfg(not(target_os = "windows"))]
-        // Register a callback to clean the static variables.
-        unsafe {
-            libc::atexit(cleanup);
-        }
         Self(ZRuntime::iter().map(|zrt| (zrt, OnceLock::new())).collect())
     }
 

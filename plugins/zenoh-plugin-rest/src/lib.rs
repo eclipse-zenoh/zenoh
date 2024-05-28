@@ -17,23 +17,27 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use std::{borrow::Cow, convert::TryFrom, str::FromStr, sync::Arc};
+
 use async_std::prelude::FutureExt;
-use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
+use base64::Engine;
 use futures::StreamExt;
 use http_types::Method;
-use std::convert::TryFrom;
-use std::str::FromStr;
-use std::sync::Arc;
-use tide::http::Mime;
-use tide::sse::Sender;
-use tide::{Request, Response, Server, StatusCode};
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::r#async::*;
-use zenoh::properties::Properties;
-use zenoh::query::{QueryConsolidation, Reply};
-use zenoh::runtime::Runtime;
-use zenoh::selector::TIME_RANGE_KEY;
-use zenoh::Session;
+use serde::{Deserialize, Serialize};
+use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
+use zenoh::{
+    bytes::{StringOrBase64, ZBytes},
+    core::try_init_log_from_env,
+    encoding::Encoding,
+    key_expr::{keyexpr, KeyExpr},
+    plugins::{RunningPluginTrait, ZenohPlugin},
+    query::{QueryConsolidation, Reply},
+    runtime::Runtime,
+    sample::{Sample, SampleKind, ValueBuilderTrait},
+    selector::{Selector, TIME_RANGE_KEY},
+    session::{Session, SessionDeclarations},
+    value::Value,
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -46,68 +50,70 @@ lazy_static::lazy_static! {
 }
 const RAW_KEY: &str = "_raw";
 
-fn value_to_json(value: Value) -> String {
-    // @TODO: transcode to JSON when implemented in Value
-    match &value.encoding {
-        p if p.starts_with(KnownEncoding::TextPlain)
-            || p.starts_with(KnownEncoding::AppXWwwFormUrlencoded) =>
-        {
-            // convert to Json string for special characters escaping
-            serde_json::json!(value.to_string()).to_string()
-        }
-        p if p.starts_with(KnownEncoding::AppProperties) => {
-            // convert to Json string for special characters escaping
-            serde_json::json!(*Properties::from(value.to_string())).to_string()
-        }
-        p if p.starts_with(KnownEncoding::AppJson)
-            || p.starts_with(KnownEncoding::AppInteger)
-            || p.starts_with(KnownEncoding::AppFloat) =>
-        {
-            value.to_string()
-        }
-        _ => {
-            format!(r#""{}""#, b64_std_engine.encode(value.payload.contiguous()))
+#[derive(Serialize, Deserialize)]
+struct JSONSample {
+    key: String,
+    value: serde_json::Value,
+    encoding: String,
+    time: Option<String>,
+}
+
+pub fn base64_encode(data: &[u8]) -> String {
+    use base64::engine::general_purpose;
+    general_purpose::STANDARD.encode(data)
+}
+
+fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
+    match payload.is_empty() {
+        // If the value is empty return a JSON null
+        true => serde_json::Value::Null,
+        // if it is not check the encoding
+        false => {
+            match encoding {
+                // If it is a JSON try to deserialize as json, if it fails fallback to base64
+                &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
+                    payload
+                        .deserialize::<serde_json::Value>()
+                        .unwrap_or_else(|_| {
+                            serde_json::Value::String(StringOrBase64::from(payload).into_string())
+                        })
+                }
+                // otherwise convert to JSON string
+                _ => serde_json::Value::String(StringOrBase64::from(payload).into_string()),
+            }
         }
     }
 }
 
-fn sample_to_json(sample: Sample) -> String {
-    let encoding = sample.value.encoding.to_string();
-    format!(
-        r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-        sample.key_expr.as_str(),
-        value_to_json(sample.value),
-        encoding,
-        if let Some(ts) = sample.timestamp {
-            ts.to_string()
-        } else {
-            "None".to_string()
-        }
-    )
+fn sample_to_json(sample: &Sample) -> JSONSample {
+    JSONSample {
+        key: sample.key_expr().as_str().to_string(),
+        value: payload_to_json(sample.payload(), sample.encoding()),
+        encoding: sample.encoding().to_string(),
+        time: sample.timestamp().map(|ts| ts.to_string()),
+    }
 }
 
-fn result_to_json(sample: Result<Sample, Value>) -> String {
+fn result_to_json(sample: Result<&Sample, &Value>) -> JSONSample {
     match sample {
         Ok(sample) => sample_to_json(sample),
-        Err(err) => {
-            let encoding = err.encoding.to_string();
-            format!(
-                r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
-                value_to_json(err),
-                encoding,
-            )
-        }
+        Err(err) => JSONSample {
+            key: "ERROR".into(),
+            value: payload_to_json(err.payload(), err.encoding()),
+            encoding: err.encoding().to_string(),
+            time: None,
+        },
     }
 }
 
 async fn to_json(results: flume::Receiver<Reply>) -> String {
     let values = results
         .stream()
-        .filter_map(move |reply| async move { Some(result_to_json(reply.sample)) })
-        .collect::<Vec<String>>()
-        .await
-        .join(",\n");
-    format!("[\n{values}\n]\n")
+        .filter_map(move |reply| async move { Some(result_to_json(reply.result())) })
+        .collect::<Vec<JSONSample>>()
+        .await;
+
+    serde_json::to_string(&values).unwrap_or("[]".into())
 }
 
 async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
@@ -118,21 +124,24 @@ async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
     )
 }
 
-fn sample_to_html(sample: Sample) -> String {
+fn sample_to_html(sample: &Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.key_expr.as_str(),
-        String::from_utf8_lossy(&sample.payload.contiguous())
+        sample.key_expr().as_str(),
+        sample
+            .payload()
+            .deserialize::<Cow<str>>()
+            .unwrap_or_default()
     )
 }
 
-fn result_to_html(sample: Result<Sample, Value>) -> String {
+fn result_to_html(sample: Result<&Sample, &Value>) -> String {
     match sample {
         Ok(sample) => sample_to_html(sample),
         Err(err) => {
             format!(
                 "<dt>ERROR</dt>\n<dd>{}</dd>\n",
-                String::from_utf8_lossy(&err.payload.contiguous())
+                err.payload().deserialize::<Cow<str>>().unwrap_or_default()
             )
         }
     }
@@ -141,7 +150,7 @@ fn result_to_html(sample: Result<Sample, Value>) -> String {
 async fn to_html(results: flume::Receiver<Reply>) -> String {
     let values = results
         .stream()
-        .filter_map(move |reply| async move { Some(result_to_html(reply.sample)) })
+        .filter_map(move |reply| async move { Some(result_to_html(reply.result())) })
         .collect::<Vec<String>>()
         .await
         .join("\n");
@@ -154,16 +163,22 @@ async fn to_html_response(results: flume::Receiver<Reply>) -> Response {
 
 async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
     match results.recv_async().await {
-        Ok(reply) => match reply.sample {
+        Ok(reply) => match reply.result() {
             Ok(sample) => response(
                 StatusCode::Ok,
-                sample.value.encoding.to_string().as_ref(),
-                String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
+                Cow::from(sample.encoding()).as_ref(),
+                &sample
+                    .payload()
+                    .deserialize::<Cow<str>>()
+                    .unwrap_or_default(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
-                value.encoding.to_string().as_ref(),
-                String::from_utf8_lossy(&value.payload.contiguous()).as_ref(),
+                Cow::from(value.encoding()).as_ref(),
+                &value
+                    .payload()
+                    .deserialize::<Cow<str>>()
+                    .unwrap_or_default(),
             ),
         },
         Err(_) => response(StatusCode::Ok, "", ""),
@@ -189,30 +204,10 @@ fn response(status: StatusCode, content_type: impl TryInto<Mime>, body: &str) ->
     builder.build()
 }
 
-#[cfg(feature = "no_mangle")]
+#[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
 
 pub struct RestPlugin {}
-#[derive(Clone, Copy, Debug)]
-struct StrError {
-    err: &'static str,
-}
-impl std::error::Error for StrError {}
-impl std::fmt::Display for StrError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.err)
-    }
-}
-#[derive(Debug, Clone)]
-struct StringError {
-    err: String,
-}
-impl std::error::Error for StringError {}
-impl std::fmt::Display for StringError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.err)
-    }
-}
 
 impl ZenohPlugin for RestPlugin {}
 
@@ -227,7 +222,7 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::try_init_log_from_env();
+        try_init_log_from_env();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -261,7 +256,7 @@ impl RunningPluginTrait for RunningPlugin {
         with_extended_string(&mut key, &["/version"], |key| {
             if keyexpr::new(key.as_str())
                 .unwrap()
-                .intersects(&selector.key_expr)
+                .intersects(selector.key_expr())
             {
                 responses.push(zenoh::plugins::Response::new(
                     key.clone(),
@@ -272,7 +267,7 @@ impl RunningPluginTrait for RunningPlugin {
         with_extended_string(&mut key, &["/port"], |port_key| {
             if keyexpr::new(port_key.as_str())
                 .unwrap()
-                .intersects(&selector.key_expr)
+                .intersects(selector.key_expr())
             {
                 responses.push(zenoh::plugins::Response::new(
                     port_key.clone(),
@@ -333,17 +328,14 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let sub = req
-                        .state()
-                        .0
-                        .declare_subscriber(&key_expr)
-                        .res()
-                        .await
-                        .unwrap();
+                    let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
+                        let json_sample =
+                            serde_json::to_string(&sample_to_json(&sample)).unwrap_or("{}".into());
+
                         match sender
-                            .send(&sample.kind.to_string(), sample_to_json(sample), None)
+                            .send(&sample.kind().to_string(), json_sample, None)
                             .timeout(std::time::Duration::new(10, 0))
                             .await
                         {
@@ -354,7 +346,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                                     e,
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -364,7 +356,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                                     "SSE timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -390,25 +382,25 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         };
         let query_part = url.query();
         let selector = if let Some(q) = query_part {
-            Selector::from(key_expr).with_parameters(q)
+            Selector::new(key_expr, q)
         } else {
             key_expr.into()
         };
-        let consolidation = if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
+        let consolidation = if selector.parameters().contains_key(TIME_RANGE_KEY) {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
         } else {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
-        let raw = selector.decode().any(|(k, _)| k.as_ref() == RAW_KEY);
+        let raw = selector.parameters().contains_key(RAW_KEY);
         let mut query = req.state().0.get(&selector).consolidation(consolidation);
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| m.to_string().into())
+                .map(|m| Encoding::from(m.to_string()))
                 .unwrap_or_default();
-            query = query.with_value(Value::from(body).encoding(encoding));
+            query = query.payload(body).encoding(encoding);
         }
-        match query.res().await {
+        match query.await {
             Ok(receiver) => {
                 if raw {
                     Ok(to_raw_response(receiver).await)
@@ -441,21 +433,19 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                     ))
                 }
             };
+
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| m.to_string().into())
+                .map(|m| Encoding::from(m.to_string()))
                 .unwrap_or_default();
 
             // @TODO: Define the right congestion control value
-            match req
-                .state()
-                .0
-                .put(&key_expr, bytes)
-                .encoding(encoding)
-                .kind(method_to_kind(req.method()))
-                .res()
-                .await
-            {
+            let session = &req.state().0;
+            let res = match method_to_kind(req.method()) {
+                SampleKind::Put => session.put(&key_expr, bytes).encoding(encoding).await,
+                SampleKind::Delete => session.delete(&key_expr).await,
+            };
+            match res {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
                 Err(e) => Ok(response(
                     StatusCode::InternalServerError,
@@ -476,10 +466,10 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    zenoh_util::try_init_log_from_env();
+    try_init_log_from_env();
 
     let zid = runtime.zid().to_string();
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));
     app.with(

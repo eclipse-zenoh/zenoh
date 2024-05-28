@@ -24,8 +24,8 @@ categories = { workspace = true }
 description = "The zenoh storages plugin."
 
 [features]
-default = ["no_mangle", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
-no_mangle = []
+default = ["dynamic_plugin", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
+dynamic_plugin = []
 
 [lib]
 name = "zenoh_plugin_storage_manager"
@@ -37,21 +37,16 @@ async-trait = { workspace = true }
 crc = { workspace = true }
 const_format = { workspace = true }
 derive-new = { workspace = true }
-zenoh-util = {workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 libloading = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"] }
-zenoh-collections = { workspace = true }
-zenoh-core = { workspace = true }
-zenoh-keyexpr = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
-zenoh-result = { workspace = true }
 zenoh_backend_traits = { workspace = true }
 
 [build-dependencies]

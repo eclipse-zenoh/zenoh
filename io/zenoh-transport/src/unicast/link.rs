@@ -11,14 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
-use std::fmt;
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
+
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::zcondfeat;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::transport::{BatchSize, Close, OpenAck, TransportMessage};
 use zenoh_result::{zerror, ZResult};
+
+use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum TransportLinkUnicastDirection {
@@ -66,7 +67,9 @@ impl TransportLinkUnicast {
                     .batch
                     .is_compression
                     .then_some(BBuf::with_capacity(
-                        lz4_flex::block::get_maximum_output_size(self.config.batch.mtu as usize),
+                        lz4_flex::block::get_maximum_output_size(
+                            self.config.batch.max_buffer_size()
+                        ),
                     )),
                 None
             ),
@@ -207,7 +210,7 @@ impl TransportLinkUnicastRx {
     pub async fn recv_batch<C, T>(&mut self, buff: C) -> ZResult<RBatch>
     where
         C: Fn() -> T + Copy,
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         const ERR: &str = "Read error from link: ";
 
@@ -220,19 +223,19 @@ impl TransportLinkUnicastRx {
 
             // Read the bytes
             let slice = into
-                .as_mut_slice()
+                .as_mut()
                 .get_mut(len.len()..len.len() + l)
                 .ok_or_else(|| zerror!("{ERR}{self}. Invalid batch length or buffer size."))?;
             self.link.read_exact(slice).await?;
             len.len() + l
         } else {
             // Read the bytes
-            self.link.read(into.as_mut_slice()).await?
+            self.link.read(into.as_mut()).await?
         };
 
         // tracing::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
 
-        let buffer = ZSlice::make(Arc::new(into), 0, end)
+        let buffer = ZSlice::new(Arc::new(into), 0, end)
             .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
         let mut batch = RBatch::new(self.batch, buffer);
         batch
@@ -286,7 +289,21 @@ impl MaybeOpenAck {
 
     pub(crate) async fn send_open_ack(mut self) -> ZResult<()> {
         if let Some(msg) = self.open_ack {
-            return self.link.send(&msg.into()).await.map(|_| {});
+            zcondfeat!(
+                "transport_compression",
+                {
+                    // !!! Workaround !!! as the state of the link is set with compression once the OpenSyn is received.
+                    // Here we are disabling the compression just to send the OpenAck (that is not supposed to be compressed).
+                    // Then then we re-enable it, in case it was enabled, after the OpenAck has been sent.
+                    let compression = self.link.inner.config.batch.is_compression;
+                    self.link.inner.config.batch.is_compression = false;
+                    self.link.send(&msg.into()).await?;
+                    self.link.inner.config.batch.is_compression = compression;
+                },
+                {
+                    self.link.send(&msg.into()).await?;
+                }
+            )
         }
         Ok(())
     }

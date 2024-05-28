@@ -167,8 +167,9 @@ macro_rules! stats_struct {
     }
 }
 
-use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+use serde::{Deserialize, Serialize};
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct DiscriminatedStats {
@@ -207,6 +208,10 @@ stats_struct! {
         # HELP "Counter of sent zenoh del messages."
         # TYPE "counter"
         pub tx_z_del_msgs DiscriminatedStats,
+
+         # HELP "Counter of received bytes in zenoh del message attachments."
+        # TYPE "counter"
+        pub tx_z_del_pl_bytes DiscriminatedStats,
 
         # HELP "Counter of sent zenoh query messages."
         # TYPE "counter"
@@ -251,6 +256,10 @@ stats_struct! {
         # HELP "Counter of received zenoh del messages."
         # TYPE "counter"
         pub rx_z_del_msgs DiscriminatedStats,
+
+        # HELP "Counter of received bytes in zenoh del message attachments."
+        # TYPE "counter"
+        pub rx_z_del_pl_bytes DiscriminatedStats,
 
         # HELP "Counter of received zenoh query messages."
         # TYPE "counter"

@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::Zenoh080Bounded, RCodec, WCodec, Zenoh080, Zenoh080Condition};
 use alloc::string::String;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -21,6 +21,8 @@ use zenoh_protocol::{
     core::{ExprId, ExprLen, WireExpr},
     network::Mapping,
 };
+
+use crate::{core::Zenoh080Bounded, RCodec, WCodec, Zenoh080, Zenoh080Condition};
 
 impl<W> WCodec<&WireExpr<'_>, &mut W> for Zenoh080
 where
@@ -65,7 +67,7 @@ where
         Ok(WireExpr {
             scope,
             suffix: suffix.into(),
-            mapping: Mapping::default(),
+            mapping: Mapping::DEFAULT,
         })
     }
 }

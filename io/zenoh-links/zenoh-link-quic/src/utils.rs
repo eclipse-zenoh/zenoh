@@ -11,29 +11,31 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::config::*;
-use crate::verify::WebPkiVerifierAnyServerName;
-use rustls::OwnedTrustAnchor;
+// use rustls_pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor};
+use std::{
+    fs::File,
+    io,
+    io::{BufReader, Cursor},
+    net::SocketAddr,
+    sync::Arc,
+};
+
 use rustls::{
-    server::AllowAnyAuthenticatedClient, version::TLS13, Certificate, ClientConfig, PrivateKey,
-    RootCertStore, ServerConfig,
+    server::AllowAnyAuthenticatedClient, version::TLS13, Certificate, ClientConfig,
+    OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
 };
 use rustls_pki_types::{CertificateDer, TrustAnchor};
 use secrecy::ExposeSecret;
-use zenoh_link_commons::ConfigurationInspector;
-// use rustls_pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor};
-use std::fs::File;
-use std::io;
-use std::net::SocketAddr;
-use std::{
-    io::{BufReader, Cursor},
-    sync::Arc,
-};
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
-use zenoh_protocol::core::endpoint::Config;
-use zenoh_protocol::core::endpoint::{self, Address};
+use zenoh_link_commons::ConfigurationInspector;
+use zenoh_protocol::core::{
+    endpoint::{Address, Config},
+    Parameters,
+};
 use zenoh_result::{bail, zerror, ZError, ZResult};
+
+use crate::{config::*, verify::WebPkiVerifierAnyServerName};
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
@@ -138,10 +140,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             };
         }
 
-        let mut s = String::new();
-        endpoint::Parameters::extend(ps.drain(..), &mut s);
-
-        Ok(s)
+        Ok(Parameters::from_iter(ps.drain(..)))
     }
 }
 
@@ -501,8 +500,7 @@ pub async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
 }
 
 pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
-    use base64::engine::general_purpose;
-    use base64::Engine;
+    use base64::{engine::general_purpose, Engine};
     Ok(general_purpose::STANDARD
         .decode(data)
         .map_err(|e| zerror!("Unable to perform base64 decoding: {e:?}"))?)

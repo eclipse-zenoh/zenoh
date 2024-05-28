@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
-use async_trait::async_trait;
 use core::{
     fmt,
     hash::{Hash, Hasher},
@@ -20,7 +19,12 @@ use core::{
 };
 use serde::Serialize;
 use std::net::SocketAddr;
-use zenoh_protocol::core::{EndPoint, Locator};
+
+use async_trait::async_trait;
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::ZResult;
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
@@ -41,7 +45,7 @@ pub struct LinkUnicast(pub Arc<dyn LinkUnicastTrait>);
 
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
-    fn get_mtu(&self) -> u16;
+    fn get_mtu(&self) -> BatchSize;
     fn get_src(&self) -> &Locator;
     fn get_dst(&self) -> &Locator;
     fn is_reliable(&self) -> bool;

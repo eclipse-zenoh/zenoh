@@ -12,4 +12,3 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod extension;
-mod priority;

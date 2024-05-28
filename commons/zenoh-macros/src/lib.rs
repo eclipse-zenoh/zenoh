@@ -18,8 +18,8 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::LitStr;
+use quote::{quote, ToTokens};
+use syn::{parse_macro_input, parse_quote, Attribute, Error, Item, LitStr, TraitItem};
 use zenoh_keyexpr::{
     format::{
         macro_support::{self, SegmentBuilder},
@@ -59,19 +59,129 @@ pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
     (quote! {(#release, #commit)}).into()
 }
 
+/// An enumeration of items supported by the [`unstable`] attribute.
+enum UnstableItem {
+    /// Wrapper around [`syn::Item`].
+    Item(Item),
+    /// Wrapper around [`syn::TraitItem`].
+    TraitItem(TraitItem),
+}
+
+macro_rules! parse_unstable_item {
+    ($tokens:ident) => {{
+        let item: Item = parse_macro_input!($tokens as Item);
+
+        if matches!(item, Item::Verbatim(_)) {
+            let tokens = TokenStream::from(item.to_token_stream());
+            let trait_item: TraitItem = parse_macro_input!(tokens as TraitItem);
+
+            if matches!(trait_item, TraitItem::Verbatim(_)) {
+                Err(Error::new_spanned(
+                    trait_item,
+                    "the `unstable` proc-macro attribute only supports items and trait items",
+                ))
+            } else {
+                Ok(UnstableItem::TraitItem(trait_item))
+            }
+        } else {
+            Ok(UnstableItem::Item(item))
+        }
+    }};
+}
+
+impl UnstableItem {
+    /// Mutably borrows the attribute list of this item.
+    fn attributes_mut(&mut self) -> Result<&mut Vec<Attribute>, Error> {
+        match self {
+            UnstableItem::Item(item) => match item {
+                Item::Const(item) => Ok(&mut item.attrs),
+                Item::Enum(item) => Ok(&mut item.attrs),
+                Item::ExternCrate(item) => Ok(&mut item.attrs),
+                Item::Fn(item) => Ok(&mut item.attrs),
+                Item::ForeignMod(item) => Ok(&mut item.attrs),
+                Item::Impl(item) => Ok(&mut item.attrs),
+                Item::Macro(item) => Ok(&mut item.attrs),
+                Item::Mod(item) => Ok(&mut item.attrs),
+                Item::Static(item) => Ok(&mut item.attrs),
+                Item::Struct(item) => Ok(&mut item.attrs),
+                Item::Trait(item) => Ok(&mut item.attrs),
+                Item::TraitAlias(item) => Ok(&mut item.attrs),
+                Item::Type(item) => Ok(&mut item.attrs),
+                Item::Union(item) => Ok(&mut item.attrs),
+                Item::Use(item) => Ok(&mut item.attrs),
+                other => Err(Error::new_spanned(
+                    other,
+                    "item is not supported by the `unstable` proc-macro attribute",
+                )),
+            },
+            UnstableItem::TraitItem(trait_item) => match trait_item {
+                TraitItem::Const(trait_item) => Ok(&mut trait_item.attrs),
+                TraitItem::Fn(trait_item) => Ok(&mut trait_item.attrs),
+                TraitItem::Type(trait_item) => Ok(&mut trait_item.attrs),
+                TraitItem::Macro(trait_item) => Ok(&mut trait_item.attrs),
+                other => Err(Error::new_spanned(
+                    other,
+                    "item is not supported by the `unstable` proc-macro attribute",
+                )),
+            },
+        }
+    }
+
+    /// Converts this item to a `proc_macro2::TokenStream`.
+    fn to_token_stream(&self) -> proc_macro2::TokenStream {
+        match self {
+            UnstableItem::Item(item) => item.to_token_stream(),
+            UnstableItem::TraitItem(trait_item) => trait_item.to_token_stream(),
+        }
+    }
+}
+
 #[proc_macro_attribute]
-pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let item = proc_macro2::TokenStream::from(item);
-    TokenStream::from(quote! {
-        #[cfg(feature = "unstable")]
-        /// <div class="stab unstable">
-        ///   <span class="emoji">🔬</span>
-        ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
-        ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
-        /// </div>
-        ///
-        #item
-    })
+pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut item = match parse_unstable_item!(tokens) {
+        Ok(item) => item,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let attrs = match item.attributes_mut() {
+        Ok(attrs) => attrs,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    if attrs.iter().any(is_doc_attribute) {
+        // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
+        let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
+        let note: Attribute = parse_quote!(#[doc = #message]);
+        attrs.push(note);
+    }
+
+    TokenStream::from(item.to_token_stream())
+}
+
+#[proc_macro_attribute]
+pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let tokens = unstable_doc(attr, tokens);
+    let mut item = match parse_unstable_item!(tokens) {
+        Ok(item) => item,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let attrs = match item.attributes_mut() {
+        Ok(attrs) => attrs,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let feature_gate: Attribute = parse_quote!(#[cfg(feature = "unstable")]);
+    attrs.push(feature_gate);
+
+    TokenStream::from(item.to_token_stream())
+}
+
+/// Returns `true` if the attribute is a `#[doc = "..."]` attribute.
+fn is_doc_attribute(attr: &Attribute) -> bool {
+    attr.path()
+        .get_ident()
+        .is_some_and(|ident| &ident.to_string() == "doc")
 }
 
 fn keformat_support(source: &str) -> proc_macro2::TokenStream {
@@ -152,7 +262,7 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
     let formatter_doc = format!("And instance of a formatter for `{source}`.");
 
     quote! {
-            use ::zenoh::Result as ZResult;
+            use ::zenoh::core::Result as ZResult;
             const FORMAT_INNER: ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> = unsafe {
                 ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])
             };

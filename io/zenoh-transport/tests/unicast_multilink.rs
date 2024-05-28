@@ -14,6 +14,7 @@
 #[cfg(feature = "transport_multilink")]
 mod tests {
     use std::{convert::TryFrom, sync::Arc, time::Duration};
+
     use zenoh_core::ztimeout;
     use zenoh_link::EndPoint;
     use zenoh_protocol::core::{WhatAmI, ZenohId};
@@ -134,7 +135,7 @@ mod tests {
         println!("Transport Open Close [1a1]: {res:?}");
         assert!(res.is_ok());
         println!("Transport Open Close [1a2]");
-        let locators = router_manager.get_listeners().await;
+        let locators = ztimeout!(router_manager.get_listeners());
         println!("Transport Open Close [1a2]: {locators:?}");
         assert_eq!(locators.len(), 1);
 
@@ -148,7 +149,7 @@ mod tests {
         assert!(res.is_ok());
         let c_ses1 = res.unwrap();
         println!("Transport Open Close [1d1]");
-        let transports = client01_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client01_manager.get_transports_unicast());
         println!("Transport Open Close [1d2]: {transports:?}");
         assert_eq!(transports.len(), 1);
         assert_eq!(c_ses1.get_zid().unwrap(), router_id);
@@ -188,7 +189,7 @@ mod tests {
         assert!(res.is_ok());
         let c_ses2 = res.unwrap();
         println!("Transport Open Close [2b1]");
-        let transports = client01_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client01_manager.get_transports_unicast());
         println!("Transport Open Close [2b2]: {transports:?}");
         assert_eq!(transports.len(), 1);
         assert_eq!(c_ses2.get_zid().unwrap(), router_id);
@@ -224,7 +225,7 @@ mod tests {
         println!("Transport Open Close [3a2]: {res:?}");
         assert!(res.is_err());
         println!("Transport Open Close [3b1]");
-        let transports = client01_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client01_manager.get_transports_unicast());
         println!("Transport Open Close [3b2]: {transports:?}");
         assert_eq!(transports.len(), 1);
         assert_eq!(c_ses1.get_zid().unwrap(), router_id);
@@ -254,7 +255,7 @@ mod tests {
         println!("Transport Open Close [4a2]: {res:?}");
         assert!(res.is_ok());
         println!("Transport Open Close [4b1]");
-        let transports = client01_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client01_manager.get_transports_unicast());
         println!("Transport Open Close [4b2]: {transports:?}");
         assert_eq!(transports.len(), 0);
 
@@ -284,7 +285,7 @@ mod tests {
         assert!(res.is_ok());
         let c_ses3 = res.unwrap();
         println!("Transport Open Close [5b1]");
-        let transports = client01_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client01_manager.get_transports_unicast());
         println!("Transport Open Close [5b2]: {transports:?}");
         assert_eq!(transports.len(), 1);
         assert_eq!(c_ses3.get_zid().unwrap(), router_id);
@@ -316,7 +317,7 @@ mod tests {
         assert!(res.is_ok());
         let c_ses4 = res.unwrap();
         println!("Transport Open Close [6b1]");
-        let transports = client02_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client02_manager.get_transports_unicast());
         println!("Transport Open Close [6b2]: {transports:?}");
         assert_eq!(transports.len(), 1);
         assert_eq!(c_ses4.get_zid().unwrap(), router_id);
@@ -332,7 +333,7 @@ mod tests {
         println!("Transport Open Close [6d2]: {res:?}");
         assert!(res.is_err());
         println!("Transport Open Close [6e1]");
-        let transports = client02_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client02_manager.get_transports_unicast());
         println!("Transport Open Close [6e2]: {transports:?}");
         assert_eq!(transports.len(), 1);
 
@@ -340,7 +341,7 @@ mod tests {
         println!("Transport Open Close [6f1]");
         ztimeout!(async {
             tokio::time::sleep(SLEEP).await;
-            let transports = router_manager.get_transports_unicast().await;
+            let transports = ztimeout!(router_manager.get_transports_unicast());
             assert_eq!(transports.len(), 2);
             let s = transports
                 .iter()
@@ -358,7 +359,7 @@ mod tests {
         println!("Transport Open Close [7a2]: {res:?}");
         assert!(res.is_err());
         println!("Transport Open Close [7b1]");
-        let transports = client03_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client03_manager.get_transports_unicast());
         println!("Transport Open Close [7b2]: {transports:?}");
         assert_eq!(transports.len(), 0);
 
@@ -373,7 +374,7 @@ mod tests {
         println!("Transport Open Close [8b2]: {res:?}");
         assert!(res.is_ok());
         println!("Transport Open Close [8c1]");
-        let transports = client01_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client01_manager.get_transports_unicast());
         println!("Transport Open Close [8c2]: {transports:?}");
         assert_eq!(transports.len(), 0);
 
@@ -400,7 +401,7 @@ mod tests {
         assert!(res.is_ok());
         let c_ses4 = res.unwrap();
         println!("Transport Open Close [9b1]");
-        let transports = client02_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client02_manager.get_transports_unicast());
         println!("Transport Open Close [9b2]: {transports:?}");
         assert_eq!(transports.len(), 1);
         println!("Transport Open Close [9c1]");
@@ -434,7 +435,7 @@ mod tests {
         println!("Transport Open Close [9a2]: {res:?}");
         assert!(res.is_ok());
         println!("Transport Open Close [9b1]");
-        let transports = client02_manager.get_transports_unicast().await;
+        let transports = ztimeout!(client02_manager.get_transports_unicast());
         println!("Transport Open Close [9b2]: {transports:?}");
         assert_eq!(transports.len(), 0);
 
@@ -611,14 +612,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         let mut endpoint: EndPoint = format!("tls/localhost:{}", 18030).parse().unwrap();
         endpoint
             .config_mut()
-            .extend(
+            .extend_from_iter(
                 [
                     (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                     (TLS_SERVER_PRIVATE_KEY_RAW, key),
                     (TLS_SERVER_CERTIFICATE_RAW, cert),
                 ]
                 .iter()
-                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+                .copied(),
             )
             .unwrap();
 
@@ -709,14 +710,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         let mut endpoint: EndPoint = format!("quic/localhost:{}", 18040).parse().unwrap();
         endpoint
             .config_mut()
-            .extend(
+            .extend_from_iter(
                 [
                     (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                     (TLS_SERVER_PRIVATE_KEY_RAW, key),
                     (TLS_SERVER_CERTIFICATE_RAW, cert),
                 ]
                 .iter()
-                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+                .copied(),
             )
             .unwrap();
 

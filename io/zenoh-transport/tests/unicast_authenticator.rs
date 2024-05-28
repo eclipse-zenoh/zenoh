@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{any::Any, sync::Arc, time::Duration};
+
 use zenoh_core::{zasyncwrite, ztimeout};
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -20,11 +21,9 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    multicast::TransportMulticast, unicast::establishment::ext::auth::Auth,
-    TransportMulticastEventHandler,
-};
-use zenoh_transport::{
-    unicast::TransportUnicast, DummyTransportPeerEventHandler, TransportEventHandler,
+    multicast::TransportMulticast,
+    unicast::{establishment::ext::auth::Auth, TransportUnicast},
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler,
 };
 
@@ -291,10 +290,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     ];
     let router_pri_key = RsaPrivateKey::from_components(n, e, d, primes).unwrap();
     let mut auth_pubkey = AuthPubKey::new(router_pub_key.into(), router_pri_key.into());
-    auth_pubkey
-        .add_pubkey(client01_pub_key.into())
-        .await
-        .unwrap();
+    ztimeout!(auth_pubkey.add_pubkey(client01_pub_key.into())).unwrap();
     let mut auth = Auth::empty();
     auth.set_pubkey(Some(auth_pubkey));
     let unicast = make_basic_transport_manager_builder(
@@ -315,7 +311,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     // Add the locator on the router
     ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     println!("Transport Authenticator PubKey [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Authenticator PubKey [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -344,10 +340,10 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     // Add client02 pubkey to the router
     let router_auth_handle = router_manager.get_auth_handle_unicast();
-    zasyncwrite!(router_auth_handle.get_pubkey().unwrap())
-        .add_pubkey(client02_pub_key.into())
-        .await
-        .unwrap();
+    ztimeout!(
+        zasyncwrite!(router_auth_handle.get_pubkey().unwrap()).add_pubkey(client02_pub_key.into())
+    )
+    .unwrap();
 
     /* [3b] */
     // Open a first transport from client02 to the router
@@ -435,13 +431,9 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router transport manager
     let mut auth_usrpwd_router = AuthUsrPwd::new(None);
-    auth_usrpwd_router
-        .add_user(user01.clone().into(), password01.clone().into())
-        .await
+    ztimeout!(auth_usrpwd_router.add_user(user01.clone().into(), password01.clone().into()))
         .unwrap();
-    auth_usrpwd_router
-        .add_user(user03.clone().into(), password03.clone().into())
-        .await
+    ztimeout!(auth_usrpwd_router.add_user(user03.clone().into(), password03.clone().into()))
         .unwrap();
     let mut auth_router = Auth::empty();
     auth_router.set_usrpwd(Some(auth_usrpwd_router));
@@ -520,7 +512,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     println!("Transport Authenticator UserPassword [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Authenticator UserPassword [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Authenticator UserPassword [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -802,14 +794,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 8030).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 
@@ -902,14 +894,14 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 8040).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 

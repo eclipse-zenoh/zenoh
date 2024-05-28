@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::num::NonZeroUsize;
+
 use zenoh_buffers::{
     buffer::Buffer,
     reader::{DidntRead, HasReader},
@@ -423,7 +424,7 @@ impl RBatch {
     pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
     where
         C: Fn() -> T + Copy,
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         #[allow(unused_variables)]
         let (l, h, p) = Self::split(self.buffer.as_slice(), &self.config);
@@ -455,12 +456,12 @@ impl RBatch {
     #[cfg(feature = "transport_compression")]
     fn decompress<T>(&self, payload: &[u8], mut buff: impl FnMut() -> T) -> ZResult<ZSlice>
     where
-        T: ZSliceBuffer + 'static,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
         let mut into = (buff)();
-        let n = lz4_flex::block::decompress_into(payload, into.as_mut_slice())
+        let n = lz4_flex::block::decompress_into(payload, into.as_mut())
             .map_err(|_| zerror!("Decompression error"))?;
-        let zslice = ZSlice::make(Arc::new(into), 0, n)
+        let zslice = ZSlice::new(Arc::new(into), 0, n)
             .map_err(|_| zerror!("Invalid decompression buffer length"))?;
         Ok(zslice)
     }
@@ -497,7 +498,6 @@ impl Decode<(TransportMessage, BatchSize)> for &mut RBatch {
 mod tests {
     use std::vec;
 
-    use super::*;
     use rand::Rng;
     use zenoh_buffers::ZBuf;
     use zenoh_core::zcondfeat;
@@ -510,6 +510,8 @@ mod tests {
         },
         zenoh::{PushBody, Put},
     };
+
+    use super::*;
 
     #[test]
     fn rw_batch() {
@@ -574,12 +576,12 @@ mod tests {
         let tmsg: TransportMessage = KeepAlive.into();
         let nmsg: NetworkMessage = Push {
             wire_expr: WireExpr::empty(),
-            ext_qos: ext::QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: ext::QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: PushBody::Put(Put {
                 timestamp: None,
-                encoding: Encoding::default(),
+                encoding: Encoding::empty(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
@@ -601,7 +603,7 @@ mod tests {
         let mut frame = FrameHeader {
             reliability: Reliability::Reliable,
             sn: 0,
-            ext_qos: frame::ext::QoSType::default(),
+            ext_qos: frame::ext::QoSType::DEFAULT,
         };
 
         // Serialize with a frame

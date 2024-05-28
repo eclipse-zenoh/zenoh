@@ -18,6 +18,7 @@ use alloc::{
     string::{String, ToString},
 };
 use core::{convert::TryInto, fmt, sync::atomic::AtomicU16};
+
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_result::{bail, ZResult};
 
@@ -69,6 +70,10 @@ impl<'a> WireExpr<'a> {
             suffix: "".into(),
             mapping: Mapping::Sender,
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.scope == 0 && self.suffix.as_ref().is_empty()
     }
 
     pub fn as_str(&'a self) -> &'a str {
@@ -257,7 +262,7 @@ impl WireExpr<'_> {
         WireExpr {
             scope,
             suffix: suffix.into(),
-            mapping: Mapping::default(),
+            mapping: Mapping::DEFAULT,
         }
     }
 }

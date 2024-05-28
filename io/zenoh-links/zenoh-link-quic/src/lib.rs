@@ -18,10 +18,9 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_trait::async_trait;
-
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::Locator;
+use zenoh_protocol::{core::Locator, transport::BatchSize};
 use zenoh_result::ZResult;
 
 mod unicast;
@@ -39,7 +38,7 @@ pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the QUIC MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
-const QUIC_MAX_MTU: u16 = u16::MAX;
+const QUIC_MAX_MTU: BatchSize = BatchSize::MAX;
 pub const QUIC_LOCATOR_PREFIX: &str = "quic";
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -58,7 +57,7 @@ impl LocatorInspector for QuicLocatorInspector {
 
 zconfigurable! {
     // Default MTU (QUIC PDU) in bytes.
-    static ref QUIC_DEFAULT_MTU: u16 = QUIC_MAX_MTU;
+    static ref QUIC_DEFAULT_MTU: BatchSize = QUIC_MAX_MTU;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:

@@ -11,6 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::time::Duration;
+
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use zenoh_buffers::ZSliceBuffer;
+use zenoh_protocol::transport::{KeepAlive, TransportMessage};
+use zenoh_result::{zerror, ZResult};
+use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
+#[cfg(feature = "stats")]
+use {crate::common::stats::TransportStats, std::sync::Arc};
+
 use super::transport::TransportUnicastUniversal;
 use crate::{
     common::{
@@ -23,14 +33,6 @@ use crate::{
     },
     unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx, TransportLinkUnicastTx},
 };
-use std::time::Duration;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_buffers::ZSliceBuffer;
-use zenoh_protocol::transport::{KeepAlive, TransportMessage};
-use zenoh_result::{zerror, ZResult};
-use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
-#[cfg(feature = "stats")]
-use {crate::common::stats::TransportStats, std::sync::Arc};
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicastUniversal {
@@ -236,7 +238,7 @@ async fn rx_task(
     where
         T: ZSliceBuffer + 'static,
         F: Fn() -> T,
-        RecyclingObject<T>: ZSliceBuffer,
+        RecyclingObject<T>: AsMut<[u8]> + ZSliceBuffer,
     {
         let batch = link
             .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))

@@ -15,6 +15,7 @@ use core::{
     convert::TryFrom,
     fmt::{self, Debug},
 };
+
 use zenoh_buffers::ZBuf;
 
 /// # Zenoh extensions
@@ -109,6 +110,12 @@ pub struct DidntConvert;
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ZExtUnit<const ID: u8>;
+
+impl<const ID: u8> Default for ZExtUnit<{ ID }> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl<const ID: u8> ZExtUnit<{ ID }> {
     pub const ID: u8 = ID;

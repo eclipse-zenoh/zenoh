@@ -56,7 +56,7 @@ members = [
 exclude = ["ci/nostd-check", "ci/valgrind-check"]
 
 [workspace.package]
-rust-version = "1.66.1"
+rust-version = "1.72.0"
 version = "0.11.0-dev" # Zenoh version
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -115,13 +115,16 @@ lazy_static = "1.4.0"
 libc = "0.2.139"
 libloading = "0.8"
 tracing = "0.1"
+lockfree = "0.5"
 lz4_flex = "0.11"
 nix = { version = "0.27", features = ["fs"] }
-num_cpus = "1.15.0"
+num_cpus = "1.16.0"
+num-traits = { version = "0.2.17", default-features = false }
 ordered-float = "4.1.1"
 panic-message = "0.3.0"
 paste = "1.0.12"
 petgraph = "0.6.3"
+phf = { version = "0.11.2", features = ["macros"] }
 pnet = "0.34"
 pnet_datalink = "0.34"
 proc-macro2 = "1.0.51"
@@ -145,8 +148,11 @@ secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
 serde = { version = "1.0.154", default-features = false, features = [
   "derive",
 ] } # Default features are disabled due to usage in no_std crates
-serde_json = "1.0.94"
+serde_cbor = "0.11.2"
+serde_json = "1.0.114"
+serde-pickle = "1.1.1"
 serde_yaml = "0.9.19"
+stabby = "5.0.1"
 sha3 = "0.10.6"
 shared_memory = "0.12.4"
 shellexpand = "3.0.0"
@@ -160,9 +166,11 @@ tokio-util = "0.7.10"
 tokio-tungstenite = "0.21"
 tokio-rustls = "0.25.0"
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
+thread-priority = "0.15"
 console-subscriber = "0.2"
 typenum = "1.16.0"
 uhlc = { version = "0.7.0", default-features = false } # Default features are disabled due to usage in no_std crates
+unwrap-infallible = "0.1.5"
 unzip-n = "0.1.2"
 url = "2.3.1"
 urlencoding = "2.1.2"

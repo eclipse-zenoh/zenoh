@@ -21,7 +21,6 @@ mod keepalive;
 mod oam;
 mod open;
 
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -31,6 +30,8 @@ use zenoh_protocol::{
     network::NetworkMessage,
     transport::*,
 };
+
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 // TransportMessageLowLatency
 impl<W> WCodec<&TransportMessageLowLatency, &mut W> for Zenoh080

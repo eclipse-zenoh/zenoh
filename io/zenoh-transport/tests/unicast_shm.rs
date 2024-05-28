@@ -13,7 +13,6 @@
 //
 #[cfg(feature = "shared-memory")]
 mod tests {
-    use rand::{Rng, SeedableRng};
     use std::{
         any::Any,
         convert::TryFrom,
@@ -23,9 +22,9 @@ mod tests {
         },
         time::Duration,
     };
+
     use zenoh_buffers::buffer::SplitBuffer;
     use zenoh_core::ztimeout;
-    use zenoh_crypto::PseudoRng;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
@@ -35,8 +34,19 @@ mod tests {
         },
         zenoh::{PushBody, Put},
     };
-    use zenoh_result::{zerror, ZResult};
-    use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
+    use zenoh_result::ZResult;
+    use zenoh_shm::{
+        api::{
+            protocol_implementations::posix::{
+                posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+                protocol_id::POSIX_PROTOCOL_ID,
+            },
+            provider::shared_memory_provider::{
+                BlockOn, GarbageCollect, SharedMemoryProviderBuilder,
+            },
+        },
+        SharedMemoryBuf,
+    };
     use zenoh_transport::{
         multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
         TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -44,7 +54,6 @@ mod tests {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const USLEEP: Duration = Duration::from_micros(100);
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE: usize = 1_024;
@@ -152,22 +161,16 @@ mod tests {
         let peer_shm02 = ZenohId::try_from([2]).unwrap();
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
-        let mut tries = 100;
-        let mut prng = PseudoRng::from_entropy();
-        let mut shm01 = loop {
-            // Create the SharedMemoryManager
-            if let Ok(shm01) = SharedMemoryManager::make(
-                format!("peer_shm01_{}_{}", endpoint.protocol(), prng.gen::<usize>()),
-                2 * MSG_SIZE,
-            ) {
-                break Ok(shm01);
-            }
-            tries -= 1;
-            if tries == 0 {
-                break Err(zerror!("Unable to create SharedMemoryManager!"));
-            }
-        }
-        .unwrap();
+        // create SHM provider
+        let backend = PosixSharedMemoryProviderBackend::builder()
+            .with_size(2 * MSG_SIZE)
+            .unwrap()
+            .res()
+            .unwrap();
+        let shm01 = SharedMemoryProviderBuilder::builder()
+            .protocol_id::<POSIX_PROTOCOL_ID>()
+            .backend(backend)
+            .res();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
@@ -229,45 +232,35 @@ mod tests {
 
         // Retrieve the transports
         println!("Transport SHM [2a]");
-        let peer_shm02_transport = peer_shm01_manager
-            .get_transport_unicast(&peer_shm02)
-            .await
-            .unwrap();
+        let peer_shm02_transport =
+            ztimeout!(peer_shm01_manager.get_transport_unicast(&peer_shm02)).unwrap();
         assert!(peer_shm02_transport.is_shm().unwrap());
 
         println!("Transport SHM [2b]");
-        let peer_net01_transport = peer_shm01_manager
-            .get_transport_unicast(&peer_net01)
-            .await
-            .unwrap();
+        let peer_net01_transport =
+            ztimeout!(peer_shm01_manager.get_transport_unicast(&peer_net01)).unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
+
+        let layout = shm01.alloc(MSG_SIZE).into_layout().unwrap();
 
         // Send the message
         println!("Transport SHM [3a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = ztimeout!(async {
-                loop {
-                    match shm01.alloc(MSG_SIZE) {
-                        Ok(sbuf) => break sbuf,
-                        Err(_) => tokio::time::sleep(USLEEP).await,
-                    }
-                }
-            });
-
-            let bs = unsafe { sbuf.as_mut_slice() };
-            bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
+            let mut sbuf =
+                ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
+            sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
-                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
+                ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
                     payload: sbuf.into(),
                     timestamp: None,
-                    encoding: Encoding::default(),
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     ext_shm: None,
                     ext_attachment: None,
@@ -296,26 +289,19 @@ mod tests {
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = ztimeout!(async {
-                loop {
-                    match shm01.alloc(MSG_SIZE) {
-                        Ok(sbuf) => break sbuf,
-                        Err(_) => tokio::time::sleep(USLEEP).await,
-                    }
-                }
-            });
-            let bs = unsafe { sbuf.as_mut_slice() };
-            bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
+            let mut sbuf =
+                ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
+            sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
-                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
+                ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
                     payload: sbuf.into(),
                     timestamp: None,
-                    encoding: Encoding::default(),
+                    encoding: Encoding::empty(),
                     ext_sinfo: None,
                     ext_shm: None,
                     ext_attachment: None,

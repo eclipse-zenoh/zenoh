@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+use std::{collections::HashMap, fmt};
+
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
-use std::{collections::HashMap, fmt};
 use tokio::sync::RwLock;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
@@ -26,9 +26,12 @@ use zenoh_core::{bail, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::hmac;
 use zenoh_protocol::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
 
+use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+
 mod ext {
-    use super::{id::USRPWD, ZExtUnit, ZExtZ64, ZExtZBuf};
     use zenoh_protocol::{zextunit, zextz64, zextzbuf};
+
+    use super::{id::USRPWD, ZExtUnit, ZExtZ64, ZExtZBuf};
 
     pub(super) type InitSyn = zextunit!(USRPWD, false);
     pub(super) type InitAck = zextz64!(USRPWD, false);
@@ -453,9 +456,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn authenticator_usrpwd_config() {
         async fn inner() {
-            use super::AuthUsrPwd;
             use std::{fs::File, io::Write};
+
             use zenoh_config::UsrPwdConf;
+
+            use super::AuthUsrPwd;
 
             /* [CONFIG] */
             let f1 = "zenoh-test-auth-usrpwd.txt";

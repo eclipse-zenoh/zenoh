@@ -11,19 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{Digest, DigestConfig, LogEntry};
-use async_std::stream::{interval, StreamExt};
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
-use async_std::task::sleep;
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    time::Duration,
+};
+
+use async_std::{
+    stream::{interval, StreamExt},
+    sync::{Arc, RwLock},
+    task::sleep,
+};
 use flume::Receiver;
 use futures::join;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::time::Duration;
-use zenoh::key_expr::OwnedKeyExpr;
-use zenoh::time::Timestamp;
+use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp};
 use zenoh_backend_traits::config::ReplicaConfig;
+
+use super::{Digest, DigestConfig, LogEntry};
 
 pub struct Snapshotter {
     // channel to get updates from the storage

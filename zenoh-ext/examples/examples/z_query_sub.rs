@@ -11,11 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::arg;
-use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
-use zenoh::query::ReplyKeyExpr;
+use clap::{arg, Parser};
+use zenoh::{config::Config, prelude::*};
 use zenoh_ext::*;
 use zenoh_ext_examples::CommonArgs;
 
@@ -27,7 +24,7 @@ async fn main() {
     let (config, key_expr, query) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!(
         "Declaring QueryingSubscriber on {} with an initial query on {}",
@@ -40,25 +37,27 @@ async fn main() {
             .querying()
             .query_selector(&selector)
             .query_accept_replies(ReplyKeyExpr::Any)
-            .res()
             .await
             .unwrap()
     } else {
         session
             .declare_subscriber(key_expr)
             .querying()
-            .res()
             .await
             .unwrap()
     };
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
+        let payload = sample
+            .payload()
+            .deserialize::<String>()
+            .unwrap_or_else(|e| format!("{}", e));
         println!(
             ">> [Subscriber] Received {} ('{}': '{}')",
-            sample.kind,
-            sample.key_expr.as_str(),
-            sample.value
+            sample.kind(),
+            sample.key_expr().as_str(),
+            payload
         );
     }
 }

@@ -13,11 +13,11 @@
 //
 #![recursion_limit = "256"]
 
+use std::collections::HashMap;
+
 use clap::Parser;
 use futures::select;
-use std::collections::HashMap;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -30,16 +30,15 @@ async fn main() {
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Subscriber on '{key_expr}'...");
-    let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
+    let subscriber = session.declare_subscriber(&key_expr).await.unwrap();
 
     println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
         .declare_queryable(&key_expr)
         .complete(complete)
-        .res()
         .await
         .unwrap();
 
@@ -48,21 +47,20 @@ async fn main() {
         select!(
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
-                println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), sample.value);
-                if sample.kind == SampleKind::Delete {
-                    stored.remove(&sample.key_expr.to_string());
-                } else {
-                    stored.insert(sample.key_expr.to_string(), sample);
-                }
+                let payload = sample.payload().deserialize::<String>().unwrap_or_else(|e| format!("{}", e));
+                println!(">> [Subscriber] Received {} ('{}': '{}')", sample.kind(), sample.key_expr().as_str(),payload);
+                match sample.kind() {
+                    SampleKind::Delete => stored.remove(&sample.key_expr().to_string()),
+                    SampleKind::Put => stored.insert(sample.key_expr().to_string(), sample),
+                };
             },
 
             query = queryable.recv_async() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
-                    if query.selector().key_expr.intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
-                        query.reply(Ok(sample.clone())).res().await.unwrap();
+                    if query.selector().key_expr().intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
+                        query.reply(sample.key_expr().clone(), sample.payload().clone()).await.unwrap();
                     }
                 }
             }

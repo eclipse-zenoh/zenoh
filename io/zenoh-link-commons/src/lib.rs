@@ -25,13 +25,14 @@ pub mod tls;
 mod unicast;
 
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};
-use async_trait::async_trait;
 use core::{cmp::PartialEq, fmt, hash::Hash};
+
+use async_trait::async_trait;
 pub use listener::*;
 pub use multicast::*;
 use serde::Serialize;
 pub use unicast::*;
-use zenoh_protocol::core::Locator;
+use zenoh_protocol::{core::Locator, transport::BatchSize};
 use zenoh_result::ZResult;
 
 /*************************************/
@@ -45,7 +46,7 @@ pub struct Link {
     pub src: Locator,
     pub dst: Locator,
     pub group: Option<Locator>,
-    pub mtu: u16,
+    pub mtu: BatchSize,
     pub is_reliable: bool,
     pub is_streamed: bool,
     pub interfaces: Vec<String>,

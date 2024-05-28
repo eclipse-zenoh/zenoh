@@ -14,22 +14,24 @@
 
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
-use crate::backends_mgt::StoreIntercept;
-use crate::storages_mgt::StorageMessage;
-use async_std::stream::{interval, StreamExt};
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
+use std::{
+    collections::{HashMap, HashSet},
+    str,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
+
+use async_std::{
+    stream::{interval, StreamExt},
+    sync::{Arc, RwLock},
+};
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
-use std::collections::{HashMap, HashSet};
-use std::str;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
 use urlencoding::encode;
-use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
-use zenoh::Session;
+use zenoh::prelude::*;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
+
+use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
 
 pub mod align_queryable;
 pub mod aligner;
@@ -208,7 +210,6 @@ impl Replica {
             .session
             .declare_subscriber(&digest_key)
             .allowed_origin(Locality::Remote)
-            .res()
             .await
             .unwrap();
         loop {
@@ -219,16 +220,17 @@ impl Replica {
                     continue;
                 }
             };
-            let from = &sample.key_expr.as_str()
+            let from = &sample.key_expr().as_str()
                 [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
             tracing::trace!(
                 "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
                 from,
-                sample.kind,
-                sample.key_expr.as_str(),
-                sample.value
+                sample.kind(),
+                sample.key_expr().as_str(),
+                StringOrBase64::from(sample.payload())
             );
-            let digest: Digest = match serde_json::from_str(&format!("{}", sample.value)) {
+            let digest: Digest = match serde_json::from_str(&StringOrBase64::from(sample.payload()))
+            {
                 Ok(digest) => digest,
                 Err(e) => {
                     tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
@@ -266,12 +268,7 @@ impl Replica {
             .unwrap();
 
         tracing::debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
-        let publisher = self
-            .session
-            .declare_publisher(digest_key)
-            .res()
-            .await
-            .unwrap();
+        let publisher = self.session.declare_publisher(digest_key).await.unwrap();
 
         // Ensure digest gets published every interval, accounting for
         // time it takes to publish.
@@ -288,7 +285,7 @@ impl Replica {
             drop(digest);
 
             tracing::trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
-            match publisher.put(digest_json).res().await {
+            match publisher.put(digest_json).await {
                 Ok(()) => {}
                 Err(e) => tracing::error!("[DIGEST_PUB] Digest publication failed: {}", e),
             }

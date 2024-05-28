@@ -12,29 +12,35 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{
+    collections::HashMap,
+    fmt,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
+
 use async_trait::async_trait;
-use futures_util::stream::SplitSink;
-use futures_util::stream::SplitStream;
-use futures_util::SinkExt;
-use futures_util::StreamExt;
-use std::collections::HashMap;
-use std::fmt;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tokio::task::JoinHandle;
-use tokio_tungstenite::accept_async;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use futures_util::{
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt,
+};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock},
+    task::JoinHandle,
+};
+use tokio_tungstenite::{accept_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::LinkAuthId;
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{get_ws_addr, get_ws_url, TCP_ACCEPT_THROTTLE_TIME, WS_DEFAULT_MTU, WS_LOCATOR_PREFIX};
@@ -201,7 +207,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *WS_DEFAULT_MTU
     }
 

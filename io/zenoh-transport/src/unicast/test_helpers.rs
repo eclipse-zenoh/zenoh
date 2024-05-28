@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{unicast::TransportManagerBuilderUnicast, TransportManager};
 use zenoh_core::zcondfeat;
+
+use crate::{unicast::TransportManagerBuilderUnicast, TransportManager};
 
 pub fn make_transport_manager_builder(
     #[cfg(feature = "transport_multilink")] max_links: usize,
