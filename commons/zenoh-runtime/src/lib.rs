@@ -177,8 +177,11 @@ impl ZRuntimePool {
 
         self.0
             .get(&zrt)
-            .expect("The hashmap should contains {zrt} after initialization")
-            .get_or_init(|| zrt.init().expect("Failed to init {zrt}"))
+            .unwrap_or_else(|| panic!("The hashmap should contains {zrt} after initialization"))
+            .get_or_init(|| {
+                zrt.init()
+                    .unwrap_or_else(|_| panic!("Failed to init {zrt}"))
+            })
             .handle()
     }
 }
