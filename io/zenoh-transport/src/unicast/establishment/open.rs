@@ -554,7 +554,12 @@ pub(crate) async fn open_link(
     let mut fsm = OpenLink {
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "transport_multilink")]
-        ext_mlink: manager.state.unicast.multilink.as_ref().map(|multilink| multilink.fsm(&manager.prng)),
+        ext_mlink: manager
+            .state
+            .unicast
+            .multilink
+            .as_ref()
+            .map(|multilink| multilink.fsm(&manager.prng)),
         #[cfg(feature = "shared-memory")]
         ext_shm: manager
             .state
