@@ -82,7 +82,7 @@ pub struct TransportManagerStateUnicast {
     pub(super) transports: Arc<AsyncMutex<HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>>,
     // Multilink
     #[cfg(feature = "transport_multilink")]
-    pub(super) multilink: Option<Arc<MultiLink>>,
+    pub(super) multilink: Arc<MultiLink>,
     // Active authenticators
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Arc<Auth>,
@@ -243,13 +243,7 @@ impl TransportManagerBuilderUnicast {
             protocols: Arc::new(AsyncMutex::new(HashMap::new())),
             transports: Arc::new(AsyncMutex::new(HashMap::new())),
             #[cfg(feature = "transport_multilink")]
-            multilink: {
-                if config.max_links > 1 {
-                    Some(Arc::new(MultiLink::make(prng)?))
-                } else {
-                    None
-                }
-            },
+            multilink: Arc::new(MultiLink::make(prng, config.max_links > 1)?),
             #[cfg(feature = "transport_auth")]
             authenticator: Arc::new(self.authenticator),
             #[cfg(feature = "shared-memory")]

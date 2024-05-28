@@ -130,7 +130,7 @@ struct AcceptLink<'a> {
     cipher: &'a BlockCipher,
     ext_qos: ext::qos::QoSFsm<'a>,
     #[cfg(feature = "transport_multilink")]
-    ext_mlink: Option<ext::multilink::MultiLinkFsm<'a>>,
+    ext_mlink: ext::multilink::MultiLinkFsm<'a>,
     #[cfg(feature = "shared-memory")]
     // Will be None if SHM operation is disabled by Config
     ext_shm: Option<ext::shm::ShmFsm<'a>>,
@@ -232,12 +232,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
-        if let Some(ext_mlink) = &self.ext_mlink {
-            ext_mlink
-                .recv_init_syn((&mut state.transport.ext_mlink, init_syn.ext_mlink))
-                .await
-                .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-        }
+        self.ext_mlink
+            .recv_init_syn((&mut state.transport.ext_mlink, init_syn.ext_mlink))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension LowLatency
         self.ext_lowlatency
@@ -300,13 +298,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         // Extension MultiLink
         let ext_mlink = zcondfeat!(
             "transport_multilink",
-            match &self.ext_mlink {
-                Some(ext_mlink) => ext_mlink
-                    .send_init_ack(&state.transport.ext_mlink)
-                    .await
-                    .map_err(|e| (e, Some(close::reason::GENERIC)))?,
-                _ => None,
-            },
+            self.ext_mlink
+                .send_init_ack(&state.transport.ext_mlink)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
         );
 
@@ -499,12 +494,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
-        if let Some(ext_mlink) = &self.ext_mlink {
-            ext_mlink
-                .recv_open_syn((&mut state.transport.ext_mlink, open_syn.ext_mlink))
-                .await
-                .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-        }
+        self.ext_mlink
+            .recv_open_syn((&mut state.transport.ext_mlink, open_syn.ext_mlink))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension LowLatency
         self.ext_lowlatency
@@ -573,13 +566,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         // Extension MultiLink
         let ext_mlink = zcondfeat!(
             "transport_multilink",
-            match &self.ext_mlink {
-                Some(ext_mlink) => ext_mlink
-                    .send_open_ack(&state.transport.ext_mlink)
-                    .await
-                    .map_err(|e| (e, Some(close::reason::GENERIC)))?,
-                _ => None,
-            },
+            self.ext_mlink
+                .send_open_ack(&state.transport.ext_mlink)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
         );
 
@@ -641,12 +631,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             .as_ref()
             .map(ext::shm::ShmFsm::new),
         #[cfg(feature = "transport_multilink")]
-        ext_mlink: manager
-            .state
-            .unicast
-            .multilink
-            .as_ref()
-            .map(|multilink| multilink.fsm(&manager.prng)),
+        ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
         #[cfg(feature = "transport_auth")]
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
         ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),
@@ -675,10 +660,11 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                 resolution: manager.config.resolution,
                 ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
                 #[cfg(feature = "transport_multilink")]
-                ext_mlink: match &manager.state.unicast.multilink {
-                    Some(multilink) => multilink.accept(),
-                    _ => ext::multilink::StateAccept::disabled(),
-                },
+                ext_mlink: manager
+                    .state
+                    .unicast
+                    .multilink
+                    .accept(manager.config.unicast.max_links > 1),
                 #[cfg(feature = "shared-memory")]
                 ext_shm: ext::shm::StateAccept::new(),
                 ext_lowlatency: ext::lowlatency::StateAccept::new(
