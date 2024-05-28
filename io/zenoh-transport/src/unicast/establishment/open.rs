@@ -114,7 +114,7 @@ struct RecvOpenAckOut {
 struct OpenLink<'a> {
     ext_qos: ext::qos::QoSFsm<'a>,
     #[cfg(feature = "transport_multilink")]
-    ext_mlink: ext::multilink::MultiLinkFsm<'a>,
+    ext_mlink: Option<ext::multilink::MultiLinkFsm<'a>>,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<ext::shm::ShmFsm<'a>>,
     #[cfg(feature = "transport_auth")]
@@ -166,10 +166,13 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         // Extension MultiLink
         let ext_mlink = zcondfeat!(
             "transport_multilink",
-            self.ext_mlink
-                .send_init_syn(&state.transport.ext_mlink)
-                .await
-                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            match &self.ext_mlink {
+                Some(ext_mlink) => ext_mlink
+                    .send_init_syn(&state.transport.ext_mlink)
+                    .await
+                    .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+                _ => None,
+            },
             None
         );
 
@@ -319,10 +322,12 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
-        self.ext_mlink
-            .recv_init_ack((&mut state.transport.ext_mlink, init_ack.ext_mlink))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        if let Some(ext_mlink) = &self.ext_mlink {
+            ext_mlink
+                .recv_init_ack((&mut state.transport.ext_mlink, init_ack.ext_mlink))
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        }
 
         // Extension LowLatency
         self.ext_lowlatency
@@ -385,10 +390,13 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         // Extension MultiLink
         let ext_mlink = zcondfeat!(
             "transport_multilink",
-            self.ext_mlink
-                .send_open_syn(&state.transport.ext_mlink)
-                .await
-                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            match &self.ext_mlink {
+                Some(ext_mlink) => ext_mlink
+                    .send_open_syn(&state.transport.ext_mlink)
+                    .await
+                    .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+                _ => None,
+            },
             None
         );
 
@@ -500,10 +508,12 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
-        self.ext_mlink
-            .recv_open_ack((&mut state.transport.ext_mlink, open_ack.ext_mlink))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        if let Some(ext_mlink) = &self.ext_mlink {
+            ext_mlink
+                .recv_open_ack((&mut state.transport.ext_mlink, open_ack.ext_mlink))
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        }
 
         // Extension LowLatency
         self.ext_lowlatency
@@ -544,7 +554,7 @@ pub(crate) async fn open_link(
     let mut fsm = OpenLink {
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "transport_multilink")]
-        ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
+        ext_mlink: manager.state.unicast.multilink.as_ref().map(|multilink| multilink.fsm(&manager.prng)),
         #[cfg(feature = "shared-memory")]
         ext_shm: manager
             .state
@@ -569,11 +579,10 @@ pub(crate) async fn open_link(
             resolution: manager.config.resolution,
             ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
             #[cfg(feature = "transport_multilink")]
-            ext_mlink: manager
-                .state
-                .unicast
-                .multilink
-                .open(manager.config.unicast.max_links > 1),
+            ext_mlink: match &manager.state.unicast.multilink {
+                Some(multilink) => multilink.open(),
+                _ => ext::multilink::StateOpen::disabled(),
+            },
             #[cfg(feature = "shared-memory")]
             ext_shm: ext::shm::StateOpen::new(),
 

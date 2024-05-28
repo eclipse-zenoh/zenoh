@@ -50,18 +50,18 @@ impl MultiLink {
         })
     }
 
-    pub(crate) fn open(&self, is_multilink: bool) -> StateOpen {
+    pub(crate) fn open(&self) -> StateOpen {
         StateOpen {
-            pubkey: is_multilink.then_some((
+            pubkey: Some((
                 pubkey::StateOpen::new(),
                 RsaPublicKey::new_unchecked(BigUint::new(vec![]), BigUint::new(vec![])).into(),
             )),
         }
     }
 
-    pub(crate) fn accept(&self, is_multilink: bool) -> StateAccept {
+    pub(crate) fn accept(&self) -> StateAccept {
         StateAccept {
-            pubkey: is_multilink.then_some((
+            pubkey: Some((
                 pubkey::StateAccept::new(),
                 RsaPublicKey::new_unchecked(BigUint::new(vec![]), BigUint::new(vec![])).into(),
             )),
@@ -89,6 +89,10 @@ pub(crate) struct StateOpen {
 impl StateOpen {
     pub(crate) fn multilink(&self) -> Option<ZPublicKey> {
         self.pubkey.as_ref().map(|(_, p)| p.clone())
+    }
+
+    pub(crate) fn disabled() -> Self {
+        Self { pubkey: None }
     }
 }
 
@@ -207,6 +211,10 @@ pub(crate) struct StateAccept {
 impl StateAccept {
     pub(crate) fn multilink(&self) -> Option<ZPublicKey> {
         self.pubkey.as_ref().map(|(_, p)| p.clone())
+    }
+
+    pub(crate) fn disabled() -> Self {
+        Self { pubkey: None }
     }
 
     #[cfg(test)]
