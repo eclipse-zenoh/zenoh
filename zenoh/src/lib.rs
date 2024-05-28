@@ -279,8 +279,8 @@ pub mod publication {
     pub use crate::api::publication::PublisherRef;
     pub use crate::api::{
         builders::publication::{
-            PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
-            PublisherDeleteBuilder,
+            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+            PublisherDeleteBuilder, PublisherPutBuilder,
         },
         publication::{Priority, Publisher, PublisherUndeclaration},
     };
@@ -376,6 +376,8 @@ pub mod internal {
     pub use zenoh_util::{
         core::ResolveFuture, zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR,
     };
+
+    pub use crate::api::encoding::EncodingInternals;
 }
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]

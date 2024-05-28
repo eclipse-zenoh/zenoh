@@ -836,6 +836,28 @@ impl EncodingMapping for serde_pickle::Value {
     const ENCODING: Encoding = Encoding::APPLICATION_PYTHON_SERIALIZED_OBJECT;
 }
 
+pub trait EncodingInternals {
+    fn id(&self) -> u16;
+
+    fn schema(&self) -> Option<&ZSlice>;
+
+    fn new(id: u16, schema: Option<ZSlice>) -> Self;
+}
+
+impl EncodingInternals for Encoding {
+    fn id(&self) -> u16 {
+        self.0.id
+    }
+
+    fn schema(&self) -> Option<&ZSlice> {
+        self.0.schema.as_ref()
+    }
+
+    fn new(id: u16, schema: Option<ZSlice>) -> Self {
+        Encoding(zenoh_protocol::core::Encoding { id, schema })
+    }
+}
+
 // - Zenoh SHM
 #[cfg(feature = "shared-memory")]
 impl EncodingMapping for ZShm {

@@ -622,7 +622,7 @@ impl HatPubSubTrait for HatCode {
         aggregate: bool,
     ) {
         if mode.current() && face.whatami == WhatAmI::Client {
-            let interest_id = mode.future().then_some(id);
+            let interest_id = (!mode.future()).then_some(id);
             let sub_info = SubscriberInfo {
                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
             };

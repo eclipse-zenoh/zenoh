@@ -335,6 +335,14 @@ impl Primitives for Face {
                         .local_interests
                         .entry(id)
                         .and_modify(|interest| interest.finalized = true);
+
+                    // recompute routes
+                    // TODO: disable  routes and recompute them in parallel to avoid holding
+                    // tables write lock for a long time.
+                    let mut wtables = zwrite!(self.tables.tables);
+                    let mut root_res = wtables.root_res.clone();
+                    update_data_routes_from(&mut wtables, &mut root_res);
+                    update_query_routes_from(&mut wtables, &mut root_res);
                 }
             }
         }
