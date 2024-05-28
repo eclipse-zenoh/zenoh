@@ -193,13 +193,13 @@ impl Query {
     /// Sends a error reply to this Query.
     ///
     #[inline(always)]
-    pub fn reply_err<IntoValue>(&self, value: IntoValue) -> ReplyErrBuilder<'_>
+    pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
-        IntoValue: Into<Value>,
+        IntoZBytes: Into<ZBytes>,
     {
         ReplyErrBuilder {
             query: self,
-            value: value.into(),
+            value: Value::new(payload, Encoding::default()),
         }
     }
 
