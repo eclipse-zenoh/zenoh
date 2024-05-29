@@ -17,8 +17,7 @@ use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
-    // initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
 
     let (config, key_expr, value) = parse_args();
 
@@ -27,6 +26,12 @@ async fn main() {
 
     println!("Putting Data ('{key_expr}': '{value}')...");
     session.put(&key_expr, value).await.unwrap();
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

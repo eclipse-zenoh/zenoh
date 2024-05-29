@@ -15,8 +15,7 @@ use zenoh::{config::WhatAmI, scout, Config};
 
 #[tokio::main]
 async fn main() {
-    // initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
 
     println!("Scouting...");
     let receiver = scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
@@ -32,4 +31,10 @@ async fn main() {
 
     // stop scouting
     receiver.stop();
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }

@@ -25,8 +25,7 @@ use zenoh::{
 use zenoh_examples::CommonArgs;
 
 fn main() {
-    // Initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
 
     let (mut config, warmup, size, n) = parse_args();
 
@@ -100,6 +99,12 @@ fn main() {
             rtt / 2
         );
     }
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }
 
 #[derive(Parser)]

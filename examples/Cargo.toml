@@ -34,13 +34,13 @@ transport_unixpipe = ["zenoh/transport_unixpipe"]
 [dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
 clap = { workspace = true, features = ["derive"] }
-zenoh-util = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 zenoh-collections = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 zenoh = { workspace = true, default-features = true }
 zenoh-ext = { workspace = true }
 

@@ -23,8 +23,8 @@ use zenoh::{
 use zenoh_examples::CommonArgs;
 
 fn main() {
-    // initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
+
     let args = Args::parse();
 
     let mut prio = Priority::DEFAULT;
@@ -66,6 +66,12 @@ fn main() {
             }
         }
     }
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }
 
 #[derive(Parser, Clone, PartialEq, Eq, Hash, Debug)]

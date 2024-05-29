@@ -68,8 +68,7 @@ impl Drop for Stats {
 }
 
 fn main() {
-    // initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
 
     let (mut config, m, n) = parse_args();
 
@@ -96,6 +95,12 @@ fn main() {
 
     println!("Press CTRL-C to quit...");
     std::thread::park();
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

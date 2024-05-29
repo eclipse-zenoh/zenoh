@@ -27,8 +27,7 @@ const N: usize = 10;
 
 #[tokio::main]
 async fn main() -> Result<(), ZError> {
-    // Initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
 
     let (mut config, path, value) = parse_args();
 
@@ -90,6 +89,12 @@ async fn main() -> Result<(), ZError> {
     }
 
     Ok(())
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

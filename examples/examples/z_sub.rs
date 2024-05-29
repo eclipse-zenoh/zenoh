@@ -17,8 +17,7 @@ use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
-    // Initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
 
     let (mut config, key_expr) = parse_args();
 
@@ -53,6 +52,12 @@ async fn main() {
         }
         println!();
     }
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

@@ -16,8 +16,7 @@ use zenoh::{key_expr::keyexpr, prelude::*, publisher::CongestionControl, Config}
 use zenoh_examples::CommonArgs;
 
 fn main() {
-    // initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
 
     let (mut config, express) = parse_args();
 
@@ -47,6 +46,12 @@ fn main() {
         .wait()
         .unwrap();
     std::thread::park();
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]

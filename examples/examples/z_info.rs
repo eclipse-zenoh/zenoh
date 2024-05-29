@@ -17,8 +17,7 @@ use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
-    // initiate logging
-    zenoh_util::try_init_log_from_env();
+    initialize_logging();
 
     let config = parse_args();
 
@@ -35,6 +34,12 @@ async fn main() {
         "peers zid: {:?}",
         info.peers_zid().await.collect::<Vec<ZenohId>>()
     );
+}
+
+fn initialize_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init()
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
