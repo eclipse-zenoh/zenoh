@@ -49,6 +49,7 @@ pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
     // Static plugins are to be added here, with `.add_static::<PluginType>()`
     for plugin_load in config.plugins().load_requests() {
         let PluginLoad {
+            id,
             name,
             paths,
             required,
@@ -57,7 +58,7 @@ pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
             "Loading {req} plugin \"{name}\"",
             req = if required { "required" } else { "" }
         );
-        if let Err(e) = load_plugin(&mut manager, &name, &name, &paths, required) {
+        if let Err(e) = load_plugin(&mut manager, &name, &id, &paths, required) {
             if required {
                 panic!("Plugin load failure: {}", e)
             } else {
