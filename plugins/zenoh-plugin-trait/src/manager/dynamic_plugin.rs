@@ -222,9 +222,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArg
             .add_error(&mut self.report)?;
         let already_started = self.instance.is_some();
         if !already_started {
-            let instance = starter
-                .start(self.name(), args)
-                .add_error(&mut self.report)?;
+            let instance = starter.start(self.id(), args).add_error(&mut self.report)?;
             tracing::debug!("Plugin `{}` started", self.name);
             self.instance = Some(instance);
         } else {
