@@ -106,6 +106,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
 
 pub struct DynamicPlugin<StartArgs, Instance> {
     name: String,
+    id: String,
     required: bool,
     report: PluginReport,
     source: DynamicPluginSource,
@@ -114,9 +115,10 @@ pub struct DynamicPlugin<StartArgs, Instance> {
 }
 
 impl<StartArgs, Instance> DynamicPlugin<StartArgs, Instance> {
-    pub fn new(name: String, source: DynamicPluginSource, required: bool) -> Self {
+    pub fn new(name: String, id: String, source: DynamicPluginSource, required: bool) -> Self {
         Self {
             name,
+            id,
             required,
             report: PluginReport::new(),
             source,
@@ -132,6 +134,11 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
     fn name(&self) -> &str {
         self.name.as_str()
     }
+
+    fn id(&self) -> &str {
+        self.id.as_str()
+    }
+
     fn version(&self) -> Option<&str> {
         self.starter.as_ref().map(|v| v.vtable.plugin_version)
     }

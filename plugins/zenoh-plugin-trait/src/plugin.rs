@@ -62,6 +62,8 @@ pub struct PluginReport {
 pub trait PluginStatus {
     /// Returns the name of the plugin
     fn name(&self) -> &str;
+    /// Returns the ID of the plugin
+    fn id(&self) -> &str;
     /// Returns the version of the loaded plugin (usually the version of the plugin's crate)
     fn version(&self) -> Option<&str>;
     /// Returns the long version of the loaded plugin (usually the version of the plugin's crate + git commit hash)
@@ -79,6 +81,7 @@ pub trait PluginStatus {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginStatusRec<'a> {
     pub name: Cow<'a, str>,
+    pub id: Cow<'a, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, str>>,
     pub long_version: Option<Cow<'a, str>>,
@@ -91,6 +94,11 @@ impl PluginStatus for PluginStatusRec<'_> {
     fn name(&self) -> &str {
         &self.name
     }
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+
     fn version(&self) -> Option<&str> {
         self.version.as_deref()
     }
@@ -113,6 +121,7 @@ impl<'a> PluginStatusRec<'a> {
     pub fn new<T: PluginStatus + ?Sized>(plugin: &'a T) -> Self {
         Self {
             name: Cow::Borrowed(plugin.name()),
+            id: Cow::Borrowed(plugin.id()),
             version: plugin.version().map(Cow::Borrowed),
             long_version: plugin.long_version().map(Cow::Borrowed),
             path: Cow::Borrowed(plugin.path()),
@@ -124,6 +133,7 @@ impl<'a> PluginStatusRec<'a> {
     pub fn into_owned(self) -> PluginStatusRec<'static> {
         PluginStatusRec {
             name: Cow::Owned(self.name.into_owned()),
+            id: Cow::Owned(self.id.into_owned()),
             version: self.version.map(|v| Cow::Owned(v.into_owned())),
             long_version: self.long_version.map(|v| Cow::Owned(v.into_owned())),
             path: Cow::Owned(self.path.into_owned()),

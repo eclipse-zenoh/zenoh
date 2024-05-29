@@ -111,8 +111,9 @@ impl StorageRuntimeInner {
             .map(|search_dirs| LibLoader::new(&search_dirs, false))
             .unwrap_or_default();
 
-        let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
-            .declare_static_plugin::<MemoryBackend>(true);
+        let plugins_manager =
+            PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
+                .declare_static_plugin::<MemoryBackend, &str>(MEMORY_BACKEND_NAME, true);
 
         let session = Arc::new(zenoh::init(runtime.clone()).res_sync()?);
 
@@ -197,11 +198,19 @@ impl StorageRuntimeInner {
         let declared = if let Some(declared) = self.plugins_manager.plugin_mut(volume_id) {
             declared
         } else if let Some(paths) = config.paths() {
-            self.plugins_manager
-                .declare_dynamic_plugin_by_paths(volume_id, paths, true)?
+            self.plugins_manager.declare_dynamic_plugin_by_paths(
+                backend_name,
+                volume_id,
+                paths,
+                true,
+            )?
         } else {
-            self.plugins_manager
-                .declare_dynamic_plugin_by_name(volume_id, backend_name, true)?
+            self.plugins_manager.declare_dynamic_plugin_by_name(
+                backend_name,
+                volume_id,
+                backend_name,
+                true,
+            )?
         };
         let loaded = declared.load()?;
         loaded.start(config)?;
@@ -319,7 +328,7 @@ impl RunningPluginTrait for StorageRuntime {
         let guard = self.0.lock().unwrap();
         with_extended_string(&mut key, &["/volumes/"], |key| {
             for plugin in guard.plugins_manager.started_plugins_iter() {
-                with_extended_string(key, &[plugin.name()], |key| {
+                with_extended_string(key, &[plugin.id()], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
                         if keyexpr::new(key.as_str())
                             .unwrap()

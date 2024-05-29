@@ -60,6 +60,11 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
     fn name(&self) -> &str {
         self.0.name()
     }
+
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+
     fn version(&self) -> Option<&str> {
         self.0.version()
     }
@@ -125,11 +130,14 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     /// Adds a statically linked plugin to the manager.
     pub fn declare_static_plugin<
         P: Plugin<StartArgs = StartArgs, Instance = Instance> + Send + Sync,
+        S: Into<String>,
     >(
         mut self,
+        id: S,
         required: bool,
     ) -> Self {
-        let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new(required);
+        let id = id.into();
+        let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new(id, required);
         self.plugins.push(PluginRecord::new(plugin_loader));
         tracing::debug!(
             "Declared static plugin {}",
@@ -142,10 +150,12 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     pub fn declare_dynamic_plugin_by_name<S: Into<String>>(
         &mut self,
         name: S,
+        id: S,
         plugin_name: &str,
         required: bool,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
+        let id = id.into();
         let plugin_name = format!("{}{}", self.default_lib_prefix, plugin_name);
         let libloader = self
             .loader
@@ -155,6 +165,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         tracing::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
         let loader = DynamicPlugin::new(
             name,
+            id,
             DynamicPluginSource::ByName((libloader, plugin_name)),
             required,
         );
@@ -166,13 +177,15 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     pub fn declare_dynamic_plugin_by_paths<S: Into<String>, P: AsRef<str> + std::fmt::Debug>(
         &mut self,
         name: S,
+        id: S,
         paths: &[P],
         required: bool,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
+        let id = id.into();
         let paths = paths.iter().map(|p| p.as_ref().into()).collect();
         tracing::debug!("Declared dynamic plugin {} by paths {:?}", &name, &paths);
-        let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths), required);
+        let loader = DynamicPlugin::new(name, id, DynamicPluginSource::ByPaths(paths), required);
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
     }

@@ -22,17 +22,19 @@ where
     instance: Option<Instance>,
     required: bool,
     phantom: PhantomData<P>,
+    id: String,
 }
 
 impl<StartArgs, Instance: PluginInstance, P> StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
-    pub fn new(required: bool) -> Self {
+    pub fn new(id: String, required: bool) -> Self {
         Self {
             instance: None,
             required,
             phantom: PhantomData,
+            id,
         }
     }
 }
@@ -44,6 +46,11 @@ where
     fn name(&self) -> &str {
         P::DEFAULT_NAME
     }
+
+    fn id(&self) -> &str {
+        self.id.as_str()
+    }
+
     fn version(&self) -> Option<&str> {
         Some(P::PLUGIN_VERSION)
     }

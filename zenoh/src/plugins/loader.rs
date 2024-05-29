@@ -19,6 +19,7 @@ use zenoh_result::ZResult;
 pub(crate) fn load_plugin(
     plugin_mgr: &mut PluginsManager,
     name: &str,
+    id: &str,
     paths: &Option<Vec<String>>,
     required: bool,
 ) -> ZResult<()> {
@@ -26,9 +27,9 @@ pub(crate) fn load_plugin(
         tracing::warn!("Plugin `{}` was already declared", declared.name());
         declared
     } else if let Some(paths) = paths {
-        plugin_mgr.declare_dynamic_plugin_by_paths(name, paths, required)?
+        plugin_mgr.declare_dynamic_plugin_by_paths(name, id, paths, required)?
     } else {
-        plugin_mgr.declare_dynamic_plugin_by_name(name, name, required)?
+        plugin_mgr.declare_dynamic_plugin_by_name(name, id, name, required)?
     };
 
     if let Some(loaded) = declared.loaded_mut() {
@@ -56,7 +57,7 @@ pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
             "Loading {req} plugin \"{name}\"",
             req = if required { "required" } else { "" }
         );
-        if let Err(e) = load_plugin(&mut manager, &name, &paths, required) {
+        if let Err(e) = load_plugin(&mut manager, &name, &name, &paths, required) {
             if required {
                 panic!("Plugin load failure: {}", e)
             } else {
