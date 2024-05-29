@@ -240,7 +240,7 @@ client2name:client2passwd";
     async fn get_basic_router_config_tls() -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec!["tls/127.0.0.1:7447".parse().unwrap()];
+        config.listen.endpoints = vec!["tls/127.0.0.1:37447".parse().unwrap()];
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .insert_json5(
@@ -266,7 +266,7 @@ client2name:client2passwd";
     async fn get_basic_router_config_quic() -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec!["quic/127.0.0.1:7447".parse().unwrap()];
+        config.listen.endpoints = vec!["quic/127.0.0.1:37447".parse().unwrap()];
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .insert_json5(
@@ -293,7 +293,7 @@ client2name:client2passwd";
     async fn get_basic_router_config_usrpswd() -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
+        config.listen.endpoints = vec!["tcp/127.0.0.1:37447".parse().unwrap()];
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .insert_json5(
@@ -318,7 +318,7 @@ client2name:client2passwd";
 
     async fn get_client_sessions_tls() -> (Session, Session) {
         println!("Opening client sessions");
-        let mut config = config::client(["tls/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
+        let mut config = config::client(["tls/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
@@ -339,7 +339,7 @@ client2name:client2passwd";
             )
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = config::client(["tls/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
+        let mut config = config::client(["tls/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
@@ -365,7 +365,7 @@ client2name:client2passwd";
 
     async fn get_client_sessions_quic() -> (Session, Session) {
         println!("Opening client sessions");
-        let mut config = config::client(["quic/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
+        let mut config = config::client(["quic/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
@@ -386,7 +386,7 @@ client2name:client2passwd";
             )
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = config::client(["quic/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
+        let mut config = config::client(["quic/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
@@ -412,7 +412,7 @@ client2name:client2passwd";
 
     async fn get_client_sessions_usrpswd() -> (Session, Session) {
         println!("Opening client sessions");
-        let mut config = config::client(["tcp/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
+        let mut config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
@@ -427,7 +427,7 @@ client2name:client2passwd";
             )
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = config::client(["tcp/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
+        let mut config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
