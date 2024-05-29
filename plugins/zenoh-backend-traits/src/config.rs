@@ -36,6 +36,7 @@ pub struct PluginConfig {
     #[as_mut]
     #[schemars(skip)]
     pub rest: Map<String, Value>,
+    __plugin__: Option<String>,
 }
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
 pub struct VolumeConfig {
