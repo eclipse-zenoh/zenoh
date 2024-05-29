@@ -205,7 +205,7 @@ impl<'a> KeyExpr<'a> {
     /// This is notably useful for workspaces:
     /// ```rust
     /// # use std::convert::TryFrom;
-    /// # use zenoh::KeyExpr;
+    /// # use zenoh::key_expr::KeyExpr;
     /// # let get_workspace = || KeyExpr::try_from("some/workspace").unwrap();
     /// let workspace: KeyExpr = get_workspace();
     /// let topic = workspace.join("some/topic").unwrap();

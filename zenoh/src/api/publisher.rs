@@ -37,7 +37,7 @@ use {
 };
 
 use super::{
-    builders::publication::{
+    builders::publisher::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
         PublisherDeleteBuilder, PublisherPutBuilder,
     },

@@ -91,10 +91,10 @@ impl<'a> SubscriberInner<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::{prelude::*, sample::Sample};
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
-    /// # fn data_handler(_sample: zenoh::Sample) { };
+    /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(data_handler)

@@ -130,13 +130,13 @@ pub(crate) struct QueryState {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
+/// use zenoh::{prelude::*, query::{ConsolidationMode, QueryTarget}};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let replies = session
 ///     .get("key/expression?value>1")
-///     .target(zenoh::QueryTarget::All)
-///     .consolidation(zenoh::ConsolidationMode::None)
+///     .target(QueryTarget::All)
+///     .consolidation(ConsolidationMode::None)
 ///     .await
 ///     .unwrap();
 /// while let Ok(reply) = replies.recv_async().await {

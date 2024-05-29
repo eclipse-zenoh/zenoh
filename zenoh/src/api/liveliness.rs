@@ -123,14 +123,14 @@ impl<'a> Liveliness<'a> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::{prelude::*, sample::SampleKind};
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session.liveliness().declare_subscriber("key/expression").await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     match sample.kind() {
-    ///         zenoh::SampleKind::Put => println!("New liveliness: {}", sample.key_expr()),
-    ///         zenoh::SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
+    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr()),
+    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
     ///     }
     /// }
     /// # }

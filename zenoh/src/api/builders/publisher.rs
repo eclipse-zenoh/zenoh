@@ -59,13 +59,13 @@ pub struct PublicationBuilderDelete;
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
+/// use zenoh::{encoding::Encoding, prelude::*, publisher::CongestionControl};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// session
 ///     .put("key/expression", "payload")
-///     .encoding(zenoh::Encoding::TEXT_PLAIN)
-///     .congestion_control(zenoh::CongestionControl::Block)
+///     .encoding(Encoding::TEXT_PLAIN)
+///     .congestion_control(CongestionControl::Block)
 ///     .await
 ///     .unwrap();
 /// # }
@@ -238,12 +238,12 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
+/// use zenoh::{prelude::*, publisher::CongestionControl};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session
 ///     .declare_publisher("key/expression")
-///     .congestion_control(zenoh::CongestionControl::Block)
+///     .congestion_control(CongestionControl::Block)
 ///     .await
 ///     .unwrap();
 /// # }

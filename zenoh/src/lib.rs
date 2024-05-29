@@ -204,7 +204,7 @@ pub mod session {
     #[doc(hidden)]
     pub use crate::api::session::InitBuilder;
     pub use crate::api::{
-        builders::publication::{SessionDeleteBuilder, SessionPutBuilder},
+        builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
     };
 }
@@ -282,7 +282,7 @@ pub mod publisher {
     #[zenoh_macros::unstable]
     pub use crate::api::publisher::PublisherRef;
     pub use crate::api::{
-        builders::publication::{
+        builders::publisher::{
             PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
             PublisherDeleteBuilder, PublisherPutBuilder,
         },
