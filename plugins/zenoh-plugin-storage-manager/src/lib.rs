@@ -85,6 +85,7 @@ struct StorageRuntimeInner {
     runtime: Runtime,
     session: Arc<Session>,
     storages: HashMap<String, HashMap<String, Sender<StorageMessage>>>,
+    volumes: HashMap<String, String>,
     plugins_manager: PluginsManager,
 }
 impl StorageRuntimeInner {
@@ -124,6 +125,7 @@ impl StorageRuntimeInner {
             runtime,
             session,
             storages: Default::default(),
+            volumes: Default::default(),
             plugins_manager,
         };
         new_self
@@ -195,7 +197,7 @@ impl StorageRuntimeInner {
             volume_id,
             backend_name
         );
-        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(volume_id) {
+        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(backend_name) {
             declared
         } else if let Some(paths) = config.paths() {
             self.plugins_manager.declare_dynamic_plugin_by_paths(
@@ -214,6 +216,9 @@ impl StorageRuntimeInner {
         };
         let loaded = declared.load()?;
         loaded.start(config)?;
+
+        self.volumes
+            .insert(volume_id.to_string(), backend_name.to_string());
         Ok(())
     }
     fn kill_storage(&mut self, config: &StorageConfig) {
@@ -234,9 +239,13 @@ impl StorageRuntimeInner {
     fn spawn_storage(&mut self, storage: &StorageConfig) -> ZResult<()> {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
+        let backend_name = self
+            .volumes
+            .get(&volume_id)
+            .ok_or(format!("Cannot find backend for volume {}", volume_id))?;
         let backend = self
             .plugins_manager
-            .started_plugin(&volume_id)
+            .started_plugin(&backend_name)
             .ok_or(format!(
                 "Cannot find volume '{}' to spawn storage '{}'",
                 volume_id, storage.name
