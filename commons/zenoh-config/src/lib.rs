@@ -1039,16 +1039,16 @@ impl PluginsConfig {
         Ok(())
     }
     pub fn load_requests(&'_ self) -> impl Iterator<Item = PluginLoad> + '_ {
-        self.values.as_object().unwrap().iter().map(|(name, value)| {
+        self.values.as_object().unwrap().iter().map(|(id, value)| {
             let value = value.as_object().expect("Plugin configurations must be objects");
             let required = match value.get("__required__") {
                 None => false,
                 Some(Value::Bool(b)) => *b,
-                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", name)
+                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", id)
             };
-            let id = match value.get("__plugin__") {
+            let name = match value.get("__plugin__") {
                 Some(Value::String(p)) => p,
-                _ => name,
+                _ => id,
             };
 
             if let Some(paths) = value.get("__path__"){
