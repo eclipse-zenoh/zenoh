@@ -321,8 +321,6 @@ pub mod handlers {
 
 /// Scouting primitives
 pub mod scouting {
-    /// Constants and helpers for zenoh `whatami` flags.
-    pub use zenoh_protocol::core::WhatAmI;
     /// A zenoh Hello message.
     pub use zenoh_protocol::scouting::Hello;
 
