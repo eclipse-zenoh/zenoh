@@ -236,19 +236,19 @@ client2name:client2passwd";
             .insert_json5(
                 "transport",
                 r#"{
-        "link": {
-          "protocols": [
-            "tls"
-          ],
-          "tls": {
-            "server_private_key": "tests/testfiles/serversidekey.pem",
-            "server_certificate": "tests/testfiles/serverside.pem",
-            "root_ca_certificate": "tests/testfiles/ca.pem",
-            "client_auth": true,
-            "server_name_verification": false
-          },
-        },
-      }"#,
+                    "link": {
+                    "protocols": [
+                        "tls"
+                    ],
+                    "tls": {
+                        "server_private_key": "tests/testfiles/serversidekey.pem",
+                        "server_certificate": "tests/testfiles/serverside.pem",
+                        "root_ca_certificate": "tests/testfiles/ca.pem",
+                        "client_auth": true,
+                        "server_name_verification": false
+                    },
+                    },
+                }"#,
             )
             .unwrap();
         config
@@ -262,19 +262,19 @@ client2name:client2passwd";
             .insert_json5(
                 "transport",
                 r#"{
-        "link": {
-          "protocols": [
-            "quic"
-          ],
-          "tls": {
-            "server_private_key": "tests/testfiles/serversidekey.pem",
-            "server_certificate": "tests/testfiles/serverside.pem",
-            "root_ca_certificate": "tests/testfiles/ca.pem",
-            "client_auth": true,
-            "server_name_verification": false
-          },
-        },  
-      }"#,
+                    "link": {
+                    "protocols": [
+                        "quic"
+                    ],
+                    "tls": {
+                        "server_private_key": "tests/testfiles/serversidekey.pem",
+                        "server_certificate": "tests/testfiles/serverside.pem",
+                        "root_ca_certificate": "tests/testfiles/ca.pem",
+                        "client_auth": true,
+                        "server_name_verification": false
+                    },
+                    },  
+                }"#,
             )
             .unwrap();
         config
@@ -289,14 +289,14 @@ client2name:client2passwd";
             .insert_json5(
                 "transport",
                 r#"{
-        "auth": {
-            usrpwd: {
-                user: "routername",
-                password: "routerpasswd",
-                dictionary_file: "tests/testfiles/credentials.txt",
-              },
-        },
-      }"#,
+                    "auth": {
+                        usrpwd: {
+                            user: "routername",
+                            password: "routerpasswd",
+                            dictionary_file: "tests/testfiles/credentials.txt",
+                        },
+                    },
+                }"#,
             )
             .unwrap();
         config
@@ -326,8 +326,8 @@ client2name:client2passwd";
                             "client_auth": true,
                             "server_name_verification": false
                         }
-                        }
-                    }"#,
+                    }
+                }"#,
             )
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
@@ -349,8 +349,8 @@ client2name:client2passwd";
                             "client_auth": true,
                             "server_name_verification": false
                         }
-                        }
-                    }"#,
+                    }
+                }"#,
             )
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
@@ -377,8 +377,8 @@ client2name:client2passwd";
                             "client_auth": true,
                             "server_name_verification": false
                         }
-                        }
-                    }"#,
+                    }
+                }"#,
             )
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
@@ -400,8 +400,8 @@ client2name:client2passwd";
                             "client_auth": true,
                             "server_name_verification": false
                         }
-                        }
-                    }"#,
+                    }
+                }"#,
             )
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
@@ -415,13 +415,13 @@ client2name:client2passwd";
             .insert_json5(
                 "transport",
                 r#"{
-                        "auth": {
-                            usrpwd: {
+                    "auth": {
+                        usrpwd: {
                             user: "client1name",
                             password: "client1passwd",
-                          },
-                        }
-                    }"#,
+                        },
+                    }
+                }"#,
             )
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
@@ -430,16 +430,13 @@ client2name:client2passwd";
             .insert_json5(
                 "transport",
                 r#"{
-                    
-                        "auth": {
-                            usrpwd: {
+                    "auth": {
+                        usrpwd: {
                             user: "client2name",
                             password: "client2passwd",
-                          },
-                        
-                        }
-                    
-                    }"#,
+                        },
+                    }
+                }"#,
             )
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
@@ -461,27 +458,25 @@ client2name:client2passwd";
             .insert_json5(
                 "access_control",
                 r#"{
-                
-              "enabled": false,
-              "default_permission": "deny",
-              "rules":
-              [
-                {
-                  "permission": "allow",
-                  "flows": ["ingress","egress"],
-                  "actions": [
-                    "put",
-                    "declare_subscriber"
-                  ],
-                  "key_exprs": [
-                    "test/demo"
-                  ],
-                  "cert_common_names": [
-                    "client_side"
-                  ]
-                },
-              ]
-            }"#,
+                    "enabled": false,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "permission": "allow",
+                            "flows": ["ingress","egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "cert_common_names": [
+                                "client_side"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -518,28 +513,26 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-        {"enabled": true,
-          "default_permission": "allow",
-          "rules":
-          [
-            {
-              "permission": "deny",
-              "flows": ["egress"],
-              "actions": [
-                "put",
-                "declare_subscriber"
-              ],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "cert_common_names": [
-                    "client_side"
-                  ]
-            },
-          ]
-    }
-    "#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "cert_common_names": [
+                                "client_side"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -578,27 +571,26 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-        {"enabled": true,
-          "default_permission": "deny",
-          "rules":
-          [
-            {
-              "permission": "allow",
-              "flows": ["egress","ingress"],
-              "actions": [
-                "get",
-                "declare_queryable"],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "cert_common_names": [
-                "client_side"
-              ]
-            },
-          ]
-    }
-    "#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "permission": "allow",
+                            "flows": ["egress","ingress"],
+                            "actions": [
+                                "get",
+                                "declare_queryable"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "cert_common_names": [
+                                "client_side"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
 
@@ -652,27 +644,26 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-        {"enabled": true,
-          "default_permission": "allow",
-          "rules":
-          [
-            {
-              "permission": "deny",
-              "flows": ["egress"],
-              "actions": [
-                "get",
-                "declare_queryable" ],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "cert_common_names": [
-                    "client_side"
-                  ]
-            },
-          ]
-    }
-    "#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "get",
+                                "declare_queryable"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "cert_common_names": [
+                                "client_side"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -727,27 +718,25 @@ client2name:client2passwd";
             .insert_json5(
                 "access_control",
                 r#"{
-            
-          "enabled": false,
-          "default_permission": "deny",
-          "rules":
-          [
-            {
-              "permission": "allow",
-              "flows": ["ingress","egress"],
-              "actions": [
-                "put",
-                "declare_subscriber"
-              ],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "cert_common_names": [
-                "client_side"
-              ]
-            },
-          ]
-        }"#,
+                    "enabled": false,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "permission": "allow",
+                            "flows": ["ingress","egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "cert_common_names": [
+                                "client_side"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -786,28 +775,26 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-    {"enabled": true,
-      "default_permission": "allow",
-      "rules":
-      [
-        {
-          "permission": "deny",
-          "flows": ["egress"],
-          "actions": [
-            "put",
-            "declare_subscriber"
-          ],
-          "key_exprs": [
-            "test/demo"
-          ],
-          "cert_common_names": [
-                "client_side"
-              ]
-        },
-      ]
-}
-"#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "cert_common_names": [
+                                "client_side"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -847,27 +834,25 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-    {"enabled": true,
-      "default_permission": "deny",
-      "rules":
-      [
-        {
-          "permission": "allow",
-          "flows": ["egress","ingress"],
-          "actions": [
-            "get",
-            "declare_queryable"],
-          "key_exprs": [
-            "test/demo"
-          ],
-          "cert_common_names": [
-            "client_side"
-          ]
-        },
-      ]
-}
-"#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "permission": "allow",
+                            "flows": ["egress","ingress"],
+                            "actions": [
+                                "get",
+                                "declare_queryable"],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "cert_common_names": [
+                                "client_side"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
 
@@ -922,27 +907,27 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-    {"enabled": true,
-      "default_permission": "allow",
-      "rules":
-      [
-        {
-          "permission": "deny",
-          "flows": ["egress"],
-          "actions": [
-            "get",
-            "declare_queryable" ],
-          "key_exprs": [
-            "test/demo"
-          ],
-          "cert_common_names": [
-                "client_side"
-              ]
-        },
-      ]
-}
-"#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules":
+                    [
+                        {
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "get",
+                                "declare_queryable"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "cert_common_names": [
+                                "client_side"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -997,27 +982,26 @@ client2name:client2passwd";
             .insert_json5(
                 "access_control",
                 r#"{
-            
-          "enabled": false,
-          "default_permission": "deny",
-          "rules":
-          [
-            {
-              "permission": "allow",
-              "flows": ["ingress","egress"],
-              "actions": [
-                "put",
-                "declare_subscriber"
-              ],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "usernames": [
-                "client1name","client2name"
-              ]
-            },
-          ]
-        }"#,
+                    "enabled": false,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "permission": "allow",
+                            "flows": ["ingress","egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "usernames": [
+                                "client1name",
+                                "client2name"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -1055,28 +1039,27 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-    {"enabled": true,
-      "default_permission": "allow",
-      "rules":
-      [
-        {
-          "permission": "deny",
-          "flows": ["egress"],
-          "actions": [
-            "put",
-            "declare_subscriber"
-          ],
-          "key_exprs": [
-            "test/demo"
-          ],
-          "usernames": [
-                "client1name","client2name"
-              ]
-        },
-      ]
-}
-"#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "usernames": [
+                                "client1name",
+                                "client2name"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -1115,27 +1098,27 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-    {"enabled": true,
-      "default_permission": "deny",
-      "rules":
-      [
-        {
-          "permission": "allow",
-          "flows": ["egress","ingress"],
-          "actions": [
-            "get",
-            "declare_queryable"],
-          "key_exprs": [
-            "test/demo"
-          ],
-          "usernames": [
-                "client1name","client2name"
-              ]
-        },
-      ]
-}
-"#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "permission": "allow",
+                            "flows": ["egress","ingress"],
+                            "actions": [
+                                "get",
+                                "declare_queryable"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "usernames": [
+                                "client1name",
+                                "client2name"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
 
@@ -1189,27 +1172,27 @@ client2name:client2passwd";
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-    {"enabled": true,
-      "default_permission": "allow",
-      "rules":
-      [
-        {
-          "permission": "deny",
-          "flows": ["egress"],
-          "actions": [
-            "get",
-            "declare_queryable" ],
-          "key_exprs": [
-            "test/demo"
-          ],
-          "usernames": [
-                "client1name","client2name"
-              ]
-        },
-      ]
-}
-"#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "get",
+                                "declare_queryable"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                            "usernames": [
+                                "client1name",
+                                "client2name"
+                            ]
+                        },
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
