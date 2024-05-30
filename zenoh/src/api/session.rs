@@ -1252,6 +1252,7 @@ impl Session {
                     s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
                 }) {
                     let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
                     primitives.send_declare(Declare {
                         interest_id: None,
                         ext_qos: declare::ext::QoSType::DECLARE,
@@ -1266,6 +1267,7 @@ impl Session {
                     });
                     #[cfg(feature = "unstable")]
                     {
+                        let state = zread!(self.state);
                         self.update_status_down(&state, &sub_state.key_expr)
                     }
                 }
