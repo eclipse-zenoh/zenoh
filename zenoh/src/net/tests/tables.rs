@@ -638,13 +638,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_wr1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_wr1".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_wr1");
     // mapping strategy check
@@ -672,13 +672,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_wr2");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_wr2".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_wr2");
     // mapping strategy check
@@ -706,13 +706,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives0.get_last_name().is_some());
     assert_eq!(primitives0.get_last_name().unwrap(), "test/client/**");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(11, "/**".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/**");
     // mapping strategy check
@@ -740,13 +740,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_pub1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_pub1".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_pub1");
     // mapping strategy check
@@ -774,13 +774,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives0.get_last_name().is_some());
     assert_eq!(primitives0.get_last_name().unwrap(), "test/client/z2_pub1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(11, "/z2_pub1".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z2_pub1");
     // mapping strategy check

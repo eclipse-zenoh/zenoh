@@ -362,7 +362,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                     .state
                     .router
                     .new_transport_multicast(transport.clone())?;
-                Ok(Arc::new(RuntimeMuticastGroup {
+                Ok(Arc::new(RuntimeMulticastGroup {
                     runtime: runtime.clone(),
                     transport,
                     slave_handlers,
@@ -419,20 +419,20 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 }
 
-pub(super) struct RuntimeMuticastGroup {
+pub(super) struct RuntimeMulticastGroup {
     pub(super) runtime: Runtime,
     pub(super) transport: TransportMulticast,
     pub(super) slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>>,
 }
 
-impl TransportMulticastEventHandler for RuntimeMuticastGroup {
+impl TransportMulticastEventHandler for RuntimeMulticastGroup {
     fn new_peer(&self, peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> = self
             .slave_handlers
             .iter()
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
-        Ok(Arc::new(RuntimeMuticastSession {
+        Ok(Arc::new(RuntimeMulticastSession {
             main_handler: self
                 .runtime
                 .state
@@ -459,12 +459,12 @@ impl TransportMulticastEventHandler for RuntimeMuticastGroup {
     }
 }
 
-pub(super) struct RuntimeMuticastSession {
+pub(super) struct RuntimeMulticastSession {
     pub(super) main_handler: Arc<DeMux>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
 }
 
-impl TransportPeerEventHandler for RuntimeMuticastSession {
+impl TransportPeerEventHandler for RuntimeMulticastSession {
     fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
         self.main_handler.handle_message(msg)
     }

@@ -62,7 +62,7 @@ impl PartialEq for Chunk {
     }
 }
 
-/// Informations about a [`SharedMemoryBuf`].
+/// Information about a [`SharedMemoryBuf`].
 ///
 /// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -274,7 +274,7 @@ impl fmt::Debug for SharedMemoryReader {
 
 /// A shared memory segment manager.
 ///
-/// Allows to access a shared memory segment and reserve some parts of this segment for writting.
+/// Allows to access a shared memory segment and reserve some parts of this segment for writing.
 pub struct SharedMemoryManager {
     segment_path: String,
     size: usize,

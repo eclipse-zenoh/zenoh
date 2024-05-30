@@ -320,7 +320,7 @@ impl Recipe {
                 // node_task_tracker.close();
                 // node_task_tracker.wait().await;
 
-                // Close the session once all the task assoicated with the node are done.
+                // Close the session once all the task associated with the node are done.
                 Arc::try_unwrap(session)
                     .unwrap()
                     .close()

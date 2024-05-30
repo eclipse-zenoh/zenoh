@@ -41,7 +41,7 @@ const W_TO_SECS: f64 = D_TO_SECS * 7.0;
 /// - the "offset" syntax, which is written `now(<sign: '-'?><offset: Duration?>)`, and allows to specify a target instant as
 ///   an offset applied to an instant of evaluation. These offset are resolved at the evaluation site.
 ///
-/// In range syntax, omiting `<start>` and/or `<end>` implies that the range is unbounded in that direction.
+/// In range syntax, omitting `<start>` and/or `<end>` implies that the range is unbounded in that direction.
 ///
 /// Exclusive bounds are represented by their respective delimiters pointing towards the exterior.
 /// Interior bounds are represented by the opposite.
@@ -283,7 +283,7 @@ impl TimeExpr {
             }),
         }
     }
-    /// Substracts `duration` from `self`, returning `None` if `self` is a `Fixed(SystemTime)` and subsctracting the duration is not possible
+    /// Subtracts `duration` from `self`, returning `None` if `self` is a `Fixed(SystemTime)` and subsctracting the duration is not possible
     /// because the result would be outside the bounds of the underlying data structure (see [`SystemTime::checked_sub`]).
     /// Otherwise returns `Some(time_expr)`.
     pub fn checked_sub(&self, duration: f64) -> Option<Self> {

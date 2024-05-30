@@ -275,7 +275,7 @@ impl LinkManagerMulticastUdp {
                             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
                     }
                 }
-                IpAddr::V6(src_ip6) => bail!("{}: unexepcted IPv6 source address", src_ip6),
+                IpAddr::V6(src_ip6) => bail!("{}: unexpected IPv6 source address", src_ip6),
             },
             IpAddr::V6(dst_ip6) => {
                 // Join default multicast group

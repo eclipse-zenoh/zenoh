@@ -111,7 +111,7 @@ impl fmt::Display for Bits {
 }
 
 #[repr(u8)]
-// The value indicates the bit offest
+// The value indicates the bit offset
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
     FrameSN = 0,

@@ -153,7 +153,7 @@ pub trait ConfigValidator: Send + Sync {
     }
 }
 
-// Necessary to allow to set default emplty weak referece value to plugin.validator field
+// Necessary to allow to set default emplty weak reference value to plugin.validator field
 // because empty weak value is not allowed for Arc<dyn Trait>
 impl ConfigValidator for () {}
 
@@ -267,8 +267,8 @@ validated_struct::validator! {
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
                 enabled: Option<bool>,
-                /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
-                /// When false, gossip scouting informations are only propagated to the next hop.
+                /// When true, gossip scouting information are propagated multiple hops to all nodes in the local network.
+                /// When false, gossip scouting information are only propagated to the next hop.
                 /// Activating multihop gossip implies more scouting traffic and a lower scalability.
                 /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
                 /// direct connectivity with each other.
@@ -375,7 +375,7 @@ validated_struct::validator! {
                     sequence_number_resolution: Bits where (sequence_number_resolution_validator),
                     /// Link lease duration in milliseconds (default: 10000)
                     lease: u64,
-                    /// Number fo keep-alive messages in a link lease duration (default: 4)
+                    /// Number of keep-alive messages in a link lease duration (default: 4)
                     keep_alive: usize,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
                     batch_size: BatchSize,
@@ -396,7 +396,7 @@ validated_struct::validator! {
                             background: usize,
                         } where (queue_size_validator),
                         /// Congestion occurs when the queue is empty (no available batch).
-                        /// Using CongestionControl::Block the caller is blocked until a batch is available and re-insterted into the queue.
+                        /// Using CongestionControl::Block the caller is blocked until a batch is available and re-inserted into the queue.
                         /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
                         pub congestion_control: CongestionControlConf {
                             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
@@ -412,7 +412,7 @@ validated_struct::validator! {
                 pub rx: LinkRxConf {
                     /// Receiving buffer size in bytes for each link
                     /// The default the rx_buffer_size value is the same as the default batch size: 65335.
-                    /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
+                    /// For very high throughput scenarios, the rx_buffer_size can be increased to accommodate
                     /// more in-flight data. This is particularly relevant when dealing with large messages.
                     /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
                     buffer_size: usize,
@@ -455,7 +455,7 @@ validated_struct::validator! {
             },
             pub auth: #[derive(Default)]
             AuthConf {
-                /// The configuration of authentification.
+                /// The configuration of authentication.
                 /// A password implies a username is required.
                 pub usrpwd: #[derive(Default)]
                 UsrPwdConf {

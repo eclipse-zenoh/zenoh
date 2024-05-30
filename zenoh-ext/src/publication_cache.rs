@@ -202,7 +202,7 @@ impl<'a> PublicationCache<'a> {
                             }
                         },
 
-                        // on query, reply with cach content
+                        // on query, reply with cached content
                         query = quer_recv.recv_async() => {
                             if let Ok(query) = query {
                                 if !query.selector().key_expr.as_str().contains('*') {

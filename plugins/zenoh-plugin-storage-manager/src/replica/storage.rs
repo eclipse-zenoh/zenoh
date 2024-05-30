@@ -295,7 +295,7 @@ impl StorageService {
                         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
                 tracing::trace!(
-                    "Sample `{}` identified as neded processing for key {}",
+                    "Sample `{}` identified as needed processing for key {}",
                     sample,
                     k
                 );

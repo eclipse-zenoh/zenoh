@@ -49,8 +49,8 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     ///
     /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
-    /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
-    /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
+    /// will run the given `fetch` function. The user defined `fetch` function should fetch some samples and return them
+    /// through the callback function. Those samples will be merged with the received publications and made available in the receiver.
     /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
     ///
     /// A typical usage of the `FetchingSubscriber` is to retrieve publications that were made in the past, but stored in some zenoh Storage.
@@ -133,8 +133,8 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     ///
     /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
-    /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
-    /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
+    /// will run the given `fetch` function. The user defined `fetch` function should fetch some samples and return them
+    /// through the callback function. Those samples will be merged with the received publications and made available in the receiver.
     /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
     ///
     /// A typical usage of the `FetchingSubscriber` is to retrieve publications that were made in the past, but stored in some zenoh Storage.
@@ -246,8 +246,8 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     ///
     /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.
     /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
-    /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
-    /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
+    /// will run the given `fetch` function. The user defined `fetch` function should fetch some samples and return them
+    /// through the callback function. Those samples will be merged with the received publications and made available in the receiver.
     /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
     ///
     /// A typical usage of the fetching liveliness subscriber is to retrieve existing liveliness tokens while susbcribing to

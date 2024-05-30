@@ -48,7 +48,7 @@ impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
 /// This macro adds non-mangled functions which provides plugin version and loads it into the host.
 /// If plugin library should work also as static, consider calling this macro under feature condition
 ///
-/// The funcitons declared by this macro are:
+/// The functions declared by this macro are:
 ///
 /// - `get_plugin_loader_version` - returns `PLUGIN_LOADER_VERSION` const of the crate. The [`PluginsManager`](crate::manager::PluginsManager)
 ///    will check if this version is compatible with the host.

@@ -51,7 +51,7 @@ async fn main() -> Result<(), zenoh::Error> {
             Err(_) => {
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 println!(
-                    "Afer failing allocation the GC collected: {} bytes -- retrying",
+                    "After failing allocation the GC collected: {} bytes -- retrying",
                     shm.garbage_collect()
                 );
                 println!(
@@ -67,7 +67,7 @@ async fn main() -> Result<(), zenoh::Error> {
         let prefix = format!("[{idx:4}] ");
         let prefix_len = prefix.as_bytes().len();
 
-        // Retrive a mutable slice from the SharedMemoryBuf.
+        // Retrieve a mutable slice from the SharedMemoryBuf.
         //
         // This operation is marked unsafe since we cannot guarantee a single mutable reference
         // across multiple processes. Thus if you use it, and you'll inevitable have to use it,
@@ -93,7 +93,7 @@ async fn main() -> Result<(), zenoh::Error> {
             let freed = shm.garbage_collect();
             println!("The Gargabe collector freed {freed} bytes");
             let defrag = shm.defragment();
-            println!("De-framented {defrag} bytes");
+            println!("De-fragmented {defrag} bytes");
         }
         // Dropping the SharedMemoryBuf means to free it.
         drop(sbuf);

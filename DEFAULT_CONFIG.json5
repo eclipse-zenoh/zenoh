@@ -40,7 +40,7 @@
     exit_on_failure: { router: false, peer: false, client: true },
     /// connect establishing retry configuration
     retry: {
-      /// intial wait timeout until next connect try
+      /// initial wait timeout until next connect try
       period_init_ms: 1000,
       /// maximum wait timeout until next connect try
       period_max_ms: 4000,
@@ -73,7 +73,7 @@
     exit_on_failure: true,
     /// listen retry configuration
     retry: {
-      /// intial wait timeout until next try
+      /// initial wait timeout until next try
       period_init_ms: 1000,
       /// maximum wait timeout until next try
       period_max_ms: 4000,
@@ -108,8 +108,8 @@
     gossip: {
       /// Whether gossip scouting is enabled or not
       enabled: true,
-      /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
-      /// When false, gossip scouting informations are only propagated to the next hop.
+      /// When true, gossip scouting information are propagated multiple hops to all nodes in the local network.
+      /// When false, gossip scouting information are only propagated to the next hop.
       /// Activating multihop gossip implies more scouting traffic and a lower scalability.
       /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
       /// direct connectivity with each other.
@@ -265,7 +265,7 @@
         ///       set the actual keep_alive interval to one fourth of the lease time: i.e. send
         ///       4 keep_alive messages in a lease period. Changing the lease time will have the
         ///       keep_alive messages sent more or less often.
-        ///       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+        ///       This is in-line with the ITU-T G.8013/Y.1731 specification on continuous connectivity
         ///       check which considers a link as failed when no messages are received in 3.5 times the
         ///       target interval.
         keep_alive: 4,
@@ -291,7 +291,7 @@
             background: 4,
           },
           /// Congestion occurs when the queue is empty (no available batch).
-          /// Using CongestionControl::Block the caller is blocked until a batch is available and re-insterted into the queue.
+          /// Using CongestionControl::Block the caller is blocked until a batch is available and re-inserted into the queue.
           /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
           congestion_control: {
             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
@@ -306,7 +306,7 @@
       rx: {
         /// Receiving buffer size in bytes for each link
         /// The default the rx_buffer_size value is the same as the default batch size: 65335.
-        /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
+        /// For very high throughput scenarios, the rx_buffer_size can be increased to accommodate
         /// more in-flight data. This is particularly relevant when dealing with large messages.
         /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
         buffer_size: 65535,
@@ -343,7 +343,7 @@
       enabled: false,
     },
     auth: {
-      /// The configuration of authentification.
+      /// The configuration of authentication.
       /// A password implies a username is required.
       usrpwd: {
         user: null,
@@ -396,7 +396,7 @@
   //    /// - If json objects in loaded file contains `__config__` properties, they are processed recursively
   //    ///   This is used in the 'storage_manager' which supports subplugins, each with it's own config
   //    ///
-  //    /// See below exapmle of plugin configuration using `__config__` property
+  //    /// See below example of plugin configuration using `__config__` property
   //
   //    /// Configure the REST API plugin
   //    rest: {

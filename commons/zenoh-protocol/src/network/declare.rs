@@ -693,8 +693,8 @@ pub mod interest {
     ///
     /// The DECLARE INTEREST message is sent to request the transmission of existing and future
     /// declarations of a given kind matching a target keyexpr. E.g., a declare interest could be sent to
-    /// request the transmisison of all existing subscriptions matching `a/*`. A FINAL INTEREST is used to
-    /// mark the end of the transmission of exisiting matching declarations.
+    /// request the transmission of all existing subscriptions matching `a/*`. A FINAL INTEREST is used to
+    /// mark the end of the transmission of existing matching declarations.
     ///
     /// E.g., the [`DeclareInterest`]/[`FinalInterest`]/[`UndeclareInterest`] message flow is the following:
     ///

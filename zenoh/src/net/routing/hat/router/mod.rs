@@ -267,7 +267,7 @@ impl HatTables {
                     let mut tables = zwrite!(tables_ref.tables);
 
                     tracing::trace!("Compute trees");
-                    let new_childs = match net_type {
+                    let new_children = match net_type {
                         WhatAmI::Router => hat_mut!(tables)
                             .routers_net
                             .as_mut()
@@ -277,8 +277,8 @@ impl HatTables {
                     };
 
                     tracing::trace!("Compute routes");
-                    pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
-                    queries::queries_tree_change(&mut tables, &new_childs, net_type);
+                    pubsub::pubsub_tree_change(&mut tables, &new_children, net_type);
+                    queries::queries_tree_change(&mut tables, &new_children, net_type);
 
                     tracing::trace!("Computations completed");
                     match net_type {

@@ -81,7 +81,7 @@ pub(crate) struct SubscriberInner<'a> {
 
 /// A [`PullMode`] subscriber that provides data through a callback.
 ///
-/// CallbackPullSubscribers only provide data when explicitely pulled by the
+/// CallbackPullSubscribers only provide data when explicitly pulled by the
 /// application with the [`pull`](CallbackPullSubscriber::pull) function.
 /// CallbackPullSubscribers can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,
@@ -671,7 +671,7 @@ pub struct Subscriber<'a, Receiver> {
 
 /// A [`PullMode`] subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
 ///
-/// PullSubscribers only provide data when explicitely pulled by the
+/// PullSubscribers only provide data when explicitly pulled by the
 /// application with the [`pull`](PullSubscriber::pull) function.
 /// PullSubscribers can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function,

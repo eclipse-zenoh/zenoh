@@ -1,0 +1,9 @@
+[files]
+extend-exclude = [
+  "io/zenoh-transport/tests/*.rs",
+]
+
+
+[default.extend-words]
+mis = "mis" # mismatch
+thr = "thr" # throughput
