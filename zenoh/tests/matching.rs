@@ -147,7 +147,7 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_local() -> ZResult<()> {
     zenoh_util::try_init_log_from_env();
-  
+
     let session1 = ztimeout!(zenoh::open(zenoh::config::peer())).unwrap();
     let session2 = ztimeout!(zenoh::open(zenoh::config::peer())).unwrap();
 
