@@ -13,7 +13,7 @@
 //
 use std::time::Duration;
 
-use zenoh::{config::Config, prelude::*};
+use zenoh::{config::Config, key_expr::KeyExpr, prelude::*};
 
 #[tokio::main]
 async fn main() {

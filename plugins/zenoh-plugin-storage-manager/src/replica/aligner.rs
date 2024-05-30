@@ -19,7 +19,16 @@ use std::{
 
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
-use zenoh::prelude::*;
+use zenoh::{
+    bytes::StringOrBase64,
+    key_expr::{KeyExpr, OwnedKeyExpr},
+    prelude::*,
+    sample::{Sample, SampleBuilder},
+    selector::Selector,
+    time::Timestamp,
+    value::Value,
+    Session,
+};
 
 use super::{Digest, EraType, LogEntry, Snapshotter, CONTENTS, ERA, INTERVALS, SUBINTERVALS};
 

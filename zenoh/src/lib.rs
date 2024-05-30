@@ -38,7 +38,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
 //!     session.put("key/expression", "value").await.unwrap();
 //!     session.close().await.unwrap();
 //! }
@@ -52,7 +52,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
 //!     let subscriber = session.declare_subscriber("key/expression").await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
 //!         println!("Received: {:?}", sample);
@@ -69,7 +69,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
 //!     let replies = session.get("key/expression").await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
 //!         println!(">> Received {:?}", reply.result());
@@ -111,23 +111,27 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     ]
 );
 
-// Expose some functions directly to root `zenoh::`` namespace for convenience
-pub use crate::api::{scouting::scout, session::open};
+#[doc(inline)]
+pub use crate::{
+    config::Config,
+    core::{Error, Result},
+    key_expr::{kedefine, keformat, kewrite},
+    scouting::scout,
+    session::{open, Session},
+};
 
 pub mod prelude;
 
 /// Zenoh core types
 pub mod core {
     #[allow(deprecated)]
-    pub use zenoh_core::AsyncResolve;
-    #[allow(deprecated)]
-    pub use zenoh_core::SyncResolve;
+    pub use zenoh_core::{AsyncResolve, SyncResolve};
     pub use zenoh_core::{Resolvable, Resolve, Wait};
+    pub use zenoh_result::ErrNo;
     /// A zenoh error.
     pub use zenoh_result::Error;
     /// A zenoh result.
     pub use zenoh_result::ZResult as Result;
-    pub use zenoh_util::{core::zresult::ErrNo, try_init_log_from_env};
 }
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
@@ -200,7 +204,7 @@ pub mod session {
     #[doc(hidden)]
     pub use crate::api::session::InitBuilder;
     pub use crate::api::{
-        builders::publication::{SessionDeleteBuilder, SessionPutBuilder},
+        builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
     };
 }
@@ -262,27 +266,27 @@ pub mod subscriber {
 }
 
 /// Publishing primitives
-pub mod publication {
+pub mod publisher {
     pub use zenoh_protocol::core::CongestionControl;
 
     #[zenoh_macros::unstable]
-    pub use crate::api::publication::MatchingListener;
+    pub use crate::api::publisher::MatchingListener;
     #[zenoh_macros::unstable]
-    pub use crate::api::publication::MatchingListenerBuilder;
+    pub use crate::api::publisher::MatchingListenerBuilder;
     #[zenoh_macros::unstable]
-    pub use crate::api::publication::MatchingListenerUndeclaration;
+    pub use crate::api::publisher::MatchingListenerUndeclaration;
     #[zenoh_macros::unstable]
-    pub use crate::api::publication::MatchingStatus;
+    pub use crate::api::publisher::MatchingStatus;
     #[zenoh_macros::unstable]
-    pub use crate::api::publication::PublisherDeclarations;
+    pub use crate::api::publisher::PublisherDeclarations;
     #[zenoh_macros::unstable]
-    pub use crate::api::publication::PublisherRef;
+    pub use crate::api::publisher::PublisherRef;
     pub use crate::api::{
-        builders::publication::{
+        builders::publisher::{
             PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
             PublisherDeleteBuilder, PublisherPutBuilder,
         },
-        publication::{Priority, Publisher, PublisherUndeclaration},
+        publisher::{Priority, Publisher, PublisherUndeclaration},
     };
 }
 
@@ -369,13 +373,11 @@ pub mod plugins {
 
 #[doc(hidden)]
 pub mod internal {
-    pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout};
+    pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout, ResolveFuture};
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
     pub use zenoh_task::{TaskController, TerminatableTask};
-    pub use zenoh_util::{
-        core::ResolveFuture, zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR,
-    };
+    pub use zenoh_util::{zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
 
     pub use crate::api::encoding::EncodingInternals;
 }

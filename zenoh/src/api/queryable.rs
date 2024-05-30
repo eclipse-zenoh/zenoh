@@ -41,7 +41,7 @@ use super::{
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
-    publication::Priority,
+    publisher::Priority,
     sample::{Locality, QoSBuilder, Sample, SampleKind},
     selector::{Parameters, Selector},
     session::{SessionRef, Undeclarable},
@@ -611,11 +611,11 @@ impl fmt::Debug for QueryableState {
 /// use futures::prelude::*;
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(KeyExpr::try_from("key/expression").unwrap(), "value")
+///     query.reply("key/expression", "value")
 ///         .await
 ///         .unwrap();
 /// }
@@ -642,7 +642,7 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// queryable.undeclare().await.unwrap();
 /// # }
@@ -690,7 +690,7 @@ impl Drop for CallbackQueryable<'_> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// # }
 /// ```
@@ -713,7 +713,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
@@ -753,7 +753,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .declare_queryable("key/expression")
@@ -781,7 +781,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .with(flume::bounded(32))
@@ -846,7 +846,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session
 ///     .declare_queryable("key/expression")
 ///     .with(flume::bounded(32))
@@ -854,7 +854,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///     .unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(KeyExpr::try_from("key/expression").unwrap(), "value")
+///     query.reply("key/expression", "value")
 ///         .await
 ///         .unwrap();
 /// }
@@ -876,7 +876,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
     ///     .await
     ///     .unwrap();

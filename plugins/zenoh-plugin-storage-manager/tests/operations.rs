@@ -19,7 +19,10 @@
 use std::{str::FromStr, thread::sleep};
 
 use async_std::task;
-use zenoh::{internal::zasync_executor_init, prelude::*};
+use zenoh::{
+    bytes::StringOrBase64, internal::zasync_executor_init, prelude::*, query::Reply,
+    sample::Sample, time::Timestamp, Config, Session,
+};
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
