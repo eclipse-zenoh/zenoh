@@ -893,7 +893,8 @@ impl Network {
         let indexes = self.graph.node_indices().collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
 
-        let old_children: Vec<Vec<NodeIndex>> = self.trees.iter().map(|t| t.children.clone()).collect();
+        let old_children: Vec<Vec<NodeIndex>> =
+            self.trees.iter().map(|t| t.children.clone()).collect();
 
         self.trees.clear();
         self.trees.resize_with(max_idx.index() + 1, || Tree {
