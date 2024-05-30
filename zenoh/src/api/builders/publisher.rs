@@ -19,32 +19,33 @@ use zenoh_protocol::{core::CongestionControl, network::Mapping};
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::{
-    builders::sample::{
-        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+    builders::{
+        encoding::{AutoEncodingBuilderTrait, EncodingBuilderTrait},
+        sample::{QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait},
     },
     bytes::{OptionZBytes, ZBytes},
-    encoding::Encoding,
+    encoding::{AutoEncoding, Encoding},
     key_expr::KeyExpr,
     publisher::{Priority, Publisher},
     sample::{Locality, SampleKind},
     session::SessionRef,
-    value::Value,
 };
 
-pub type SessionPutBuilder<'a, 'b> =
-    PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut>;
+pub type SessionPutBuilder<'a, 'b, Payload> =
+    PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut<Payload>>;
 
 pub type SessionDeleteBuilder<'a, 'b> =
     PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderDelete>;
 
-pub type PublisherPutBuilder<'a> = PublicationBuilder<&'a Publisher<'a>, PublicationBuilderPut>;
+pub type PublisherPutBuilder<'a, Payload> =
+    PublicationBuilder<&'a Publisher<'a>, PublicationBuilderPut<Payload>>;
 
 pub type PublisherDeleteBuilder<'a> =
     PublicationBuilder<&'a Publisher<'a>, PublicationBuilderDelete>;
 
 #[derive(Debug, Clone)]
-pub struct PublicationBuilderPut {
-    pub(crate) payload: ZBytes,
+pub struct PublicationBuilderPut<Payload> {
+    pub(crate) payload: Payload,
     pub(crate) encoding: Encoding,
 }
 #[derive(Debug, Clone)]
@@ -70,16 +71,16 @@ pub struct PublicationBuilderDelete;
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
-pub struct PublicationBuilder<P, T> {
+pub struct PublicationBuilder<P, Kind> {
     pub(crate) publisher: P,
-    pub(crate) kind: T,
+    pub(crate) kind: Kind,
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
     pub(crate) attachment: Option<ZBytes>,
 }
 
-impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+impl<Kind> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, Kind> {
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -103,7 +104,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
-impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+impl<Kind> PublicationBuilder<PublisherBuilder<'_, '_>, Kind> {
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
@@ -114,7 +115,7 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
-impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
+impl<P, Payload> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut<Payload>> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: PublicationBuilderPut {
@@ -124,29 +125,19 @@ impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
             ..self
         }
     }
+}
 
-    fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<ZBytes>,
-    {
-        Self {
-            kind: PublicationBuilderPut {
-                payload: payload.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            kind: PublicationBuilderPut { payload, encoding },
-            ..self
-        }
+impl<P, Payload> AutoEncodingBuilderTrait<Payload>
+    for PublicationBuilder<P, PublicationBuilderPut<Payload>>
+where
+    Payload: AutoEncoding,
+{
+    fn get_payload(&self) -> Option<&Payload> {
+        Some(&self.kind.payload)
     }
 }
 
-impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
+impl<P, Kind> SampleBuilderTrait for PublicationBuilder<P, Kind> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -163,7 +154,7 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     }
 }
 
-impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
+impl<P, Kind> TimestampBuilderTrait for PublicationBuilder<P, Kind> {
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
             timestamp: timestamp.into(),
@@ -172,16 +163,19 @@ impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
     }
 }
 
-impl<P, T> Resolvable for PublicationBuilder<P, T> {
+impl<P, Kind> Resolvable for PublicationBuilder<P, Kind> {
     type To = ZResult<()>;
 }
 
-impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
+impl<Payload> Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut<Payload>>
+where
+    Payload: Into<ZBytes>,
+{
     #[inline]
     fn wait(self) -> <Self as Resolvable>::To {
         let publisher = self.publisher.create_one_shot_publisher()?;
         publisher.resolve_put(
-            self.kind.payload,
+            self.kind.payload.into(),
             SampleKind::Put,
             self.kind.encoding,
             self.timestamp,
@@ -208,7 +202,11 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     }
 }
 
-impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
+impl<Payload> IntoFuture
+    for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut<Payload>>
+where
+    Payload: Into<ZBytes>,
+{
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -378,10 +376,13 @@ impl<'a, 'b> IntoFuture for PublisherBuilder<'a, 'b> {
     }
 }
 
-impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
+impl<Payload> Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut<Payload>>
+where
+    Payload: Into<ZBytes>,
+{
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.resolve_put(
-            self.kind.payload,
+            self.kind.payload.into(),
             SampleKind::Put,
             self.kind.encoding,
             self.timestamp,
@@ -406,7 +407,10 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     }
 }
 
-impl IntoFuture for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
+impl<Payload> IntoFuture for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut<Payload>>
+where
+    Payload: Into<ZBytes>,
+{
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

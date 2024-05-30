@@ -718,7 +718,7 @@ impl Session {
         &'a self,
         key_expr: TryIntoKeyExpr,
         payload: IntoZBytes,
-    ) -> SessionPutBuilder<'a, 'b>
+    ) -> SessionPutBuilder<'a, 'b, IntoZBytes>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -727,7 +727,7 @@ impl Session {
         SessionPutBuilder {
             publisher: self.declare_publisher(key_expr),
             kind: PublicationBuilderPut {
-                payload: payload.into(),
+                payload,
                 encoding: Encoding::default(),
             },
             timestamp: None,
@@ -796,7 +796,7 @@ impl Session {
     pub fn get<'a, 'b: 'a, TryIntoSelector>(
         &'a self,
         selector: TryIntoSelector,
-    ) -> SessionGetBuilder<'a, 'b, DefaultHandler>
+    ) -> SessionGetBuilder<'a, 'b, ZBytes, DefaultHandler>
     where
         TryIntoSelector: TryInto<Selector<'b>>,
         <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
@@ -816,7 +816,9 @@ impl Session {
             qos: qos.into(),
             destination: Locality::default(),
             timeout,
-            value: None,
+            payload: None,
+            encoding: Encoding::default(),
+            #[cfg(feature = "unstable")]
             attachment: None,
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]

@@ -234,14 +234,14 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     #[inline]
-    pub fn put<IntoZBytes>(&self, payload: IntoZBytes) -> PublisherPutBuilder<'_>
+    pub fn put<IntoZBytes>(&self, payload: IntoZBytes) -> PublisherPutBuilder<'_, IntoZBytes>
     where
         IntoZBytes: Into<ZBytes>,
     {
         PublicationBuilder {
             publisher: self,
             kind: PublicationBuilderPut {
-                payload: payload.into(),
+                payload,
                 encoding: Encoding::ZENOH_BYTES,
             },
             timestamp: None,

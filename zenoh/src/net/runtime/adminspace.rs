@@ -44,13 +44,13 @@ use super::{routing::dispatcher::face::Face, Runtime};
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
-        builders::sample::ValueBuilderTrait,
+        builders::encoding::EncodingBuilderTrait,
         bytes::ZBytes,
+        encoding::Encoding,
         key_expr::KeyExpr,
         queryable::{Query, QueryInner},
         value::Value,
     },
-    encoding::Encoding,
     net::primitives::Primitives,
 };
 

@@ -24,18 +24,24 @@ use zenoh_protocol::core::{CongestionControl, ZenohId};
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
-use super::{builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo};
-use super::{
-    builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
-    bytes::ZBytes,
-    encoding::Encoding,
-    handlers::{locked, Callback, DefaultHandler, IntoHandler},
-    key_expr::KeyExpr,
-    publisher::Priority,
-    sample::{Locality, QoSBuilder, Sample},
-    selector::Selector,
-    session::Session,
-    value::Value,
+use crate::api::{builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo};
+use crate::{
+    api::{
+        builders::{
+            encoding::{AutoEncodingBuilderTrait, EncodingBuilderTrait},
+            sample::QoSBuilderTrait,
+        },
+        bytes::ZBytes,
+        encoding::Encoding,
+        handlers::{locked, Callback, DefaultHandler, IntoHandler},
+        key_expr::KeyExpr,
+        publisher::Priority,
+        sample::{Locality, QoSBuilder, Sample},
+        selector::Selector,
+        session::Session,
+        value::Value,
+    },
+    encoding::AutoEncoding,
 };
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
@@ -146,7 +152,7 @@ pub(crate) struct QueryState {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct SessionGetBuilder<'a, 'b, Handler> {
+pub struct SessionGetBuilder<'a, 'b, Payload, Handler> {
     pub(crate) session: &'a Session,
     pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
@@ -156,14 +162,15 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
-    pub(crate) value: Option<Value>,
+    pub(crate) payload: Option<Payload>,
+    pub(crate) encoding: Encoding,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+impl<Payload, Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Payload, Handler> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -181,7 +188,7 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     }
 }
 
-impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
+impl<Payload, Handler> QoSBuilderTrait for SessionGetBuilder<'_, '_, Payload, Handler> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
@@ -198,34 +205,24 @@ impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     }
 }
 
-impl<Handler> ValueBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
-    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        let mut value = self.value.unwrap_or_default();
-        value.encoding = encoding.into();
-        Self {
-            value: Some(value),
-            ..self
-        }
-    }
-
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        let mut value = self.value.unwrap_or_default();
-        value.payload = payload.into();
-        Self {
-            value: Some(value),
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let value: Value = value.into();
-        Self {
-            value: if value.is_empty() { None } else { Some(value) },
-            ..self
-        }
+impl<Payload, Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Payload, Handler> {
+    fn encoding<T: Into<Encoding>>(mut self, encoding: T) -> Self {
+        self.encoding = encoding.into();
+        self
     }
 }
 
-impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
+impl<Payload, Handler> AutoEncodingBuilderTrait<Payload>
+    for SessionGetBuilder<'_, '_, Payload, Handler>
+where
+    Payload: AutoEncoding,
+{
+    fn get_payload(&self) -> Option<&Payload> {
+        self.payload.as_ref()
+    }
+}
+
+impl<'a, 'b, Payload> SessionGetBuilder<'a, 'b, Payload, DefaultHandler> {
     /// Receive the replies for this query with a callback.
     ///
     /// # Examples
@@ -243,7 +240,10 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> SessionGetBuilder<'a, 'b, Callback>
+    pub fn callback<Callback>(
+        self,
+        callback: Callback,
+    ) -> SessionGetBuilder<'a, 'b, Payload, Callback>
     where
         Callback: Fn(Reply) + Send + Sync + 'static,
     {
@@ -256,7 +256,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             qos,
             destination,
             timeout,
-            value,
+            payload,
+            encoding,
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
@@ -271,7 +272,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             qos,
             destination,
             timeout,
-            value,
+            payload,
+            encoding,
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
@@ -303,7 +305,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> SessionGetBuilder<'a, 'b, impl Fn(Reply) + Send + Sync + 'static>
+    ) -> SessionGetBuilder<'a, 'b, Payload, impl Fn(Reply) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(Reply) + Send + Sync + 'static,
     {
@@ -330,7 +332,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> SessionGetBuilder<'a, 'b, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> SessionGetBuilder<'a, 'b, Payload, Handler>
     where
         Handler: IntoHandler<'static, Reply>,
     {
@@ -343,7 +345,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             qos,
             destination,
             timeout,
-            value,
+            payload,
+            encoding,
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
@@ -358,7 +361,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             qos,
             destination,
             timeout,
-            value,
+            payload,
+            encoding,
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
@@ -366,7 +370,44 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
         }
     }
 }
-impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
+impl<'a, 'b, Payload, Handler> SessionGetBuilder<'a, 'b, Payload, Handler> {
+    pub fn payload<IntoZBytes>(
+        self,
+        payload: IntoZBytes,
+    ) -> SessionGetBuilder<'a, 'b, IntoZBytes, Handler> {
+        let Self {
+            session,
+            selector,
+            scope,
+            target,
+            consolidation,
+            qos,
+            destination,
+            timeout,
+            payload: _,
+            encoding,
+            attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
+            handler,
+        } = self;
+        SessionGetBuilder {
+            session,
+            selector,
+            scope,
+            target,
+            consolidation,
+            qos,
+            destination,
+            timeout,
+            payload: Some(payload),
+            encoding,
+            attachment,
+            #[cfg(feature = "unstable")]
+            source_info,
+            handler,
+        }
+    }
     /// Change the target of the query.
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
@@ -430,7 +471,7 @@ pub enum ReplyKeyExpr {
     MatchingQuery,
 }
 
-impl<Handler> Resolvable for SessionGetBuilder<'_, '_, Handler>
+impl<Payload, Handler> Resolvable for SessionGetBuilder<'_, '_, Payload, Handler>
 where
     Handler: IntoHandler<'static, Reply> + Send,
     Handler::Handler: Send,
@@ -438,10 +479,11 @@ where
     type To = ZResult<Handler::Handler>;
 }
 
-impl<Handler> Wait for SessionGetBuilder<'_, '_, Handler>
+impl<Payload, Handler> Wait for SessionGetBuilder<'_, '_, Payload, Handler>
 where
     Handler: IntoHandler<'static, Reply> + Send,
     Handler::Handler: Send,
+    Payload: Into<ZBytes>,
 {
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
@@ -455,7 +497,7 @@ where
                 self.qos.into(),
                 self.destination,
                 self.timeout,
-                self.value,
+                self.payload.map(|p| Value::new(p, self.encoding)),
                 self.attachment,
                 #[cfg(feature = "unstable")]
                 self.source_info,
@@ -465,10 +507,11 @@ where
     }
 }
 
-impl<Handler> IntoFuture for SessionGetBuilder<'_, '_, Handler>
+impl<Payload, Handler> IntoFuture for SessionGetBuilder<'_, '_, Payload, Handler>
 where
     Handler: IntoHandler<'static, Reply> + Send,
     Handler::Handler: Send,
+    Payload: Into<ZBytes>,
 {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;

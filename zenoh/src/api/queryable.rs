@@ -28,27 +28,30 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
-    super::{query::ReplyKeyExpr, sample::SourceInfo},
+    super::{bytes::OptionZBytes, query::ReplyKeyExpr, sample::SourceInfo},
     zenoh_protocol::core::EntityGlobalId,
 };
 
-use super::{
-    builders::sample::{
-        QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
-        ValueBuilderTrait,
+use crate::{
+    api::{
+        builders::{
+            encoding::{AutoEncodingBuilderTrait, EncodingBuilderTrait},
+            sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait},
+        },
+        bytes::ZBytes,
+        encoding::{AutoEncoding, Encoding},
+        handlers::{locked, DefaultHandler, IntoHandler},
+        key_expr::KeyExpr,
+        publisher::Priority,
+        sample::{Locality, QoSBuilder, Sample, SampleKind},
+        selector::{Parameters, Selector},
+        session::{SessionRef, Undeclarable},
+        value::Value,
+        Id,
     },
-    bytes::{OptionZBytes, ZBytes},
-    encoding::Encoding,
-    handlers::{locked, DefaultHandler, IntoHandler},
-    key_expr::KeyExpr,
-    publisher::Priority,
-    sample::{Locality, QoSBuilder, Sample, SampleKind},
-    selector::{Parameters, Selector},
-    session::{SessionRef, Undeclarable},
-    value::Value,
-    Id,
+    net::primitives::Primitives,
+    sample::SampleBuilderTrait,
 };
-use crate::net::primitives::Primitives;
 
 pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
@@ -164,7 +167,7 @@ impl Query {
         &self,
         key_expr: TryIntoKeyExpr,
         payload: IntoZBytes,
-    ) -> ReplyBuilder<'_, 'b, ReplyBuilderPut>
+    ) -> ReplyBuilder<'_, 'b, ReplyBuilderPut<IntoZBytes>>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -175,7 +178,7 @@ impl Query {
             key_expr: key_expr.try_into().map_err(Into::into),
             qos: response::ext::QoSType::RESPONSE.into(),
             kind: ReplyBuilderPut {
-                payload: payload.into(),
+                payload,
                 encoding: Encoding::default(),
             },
             timestamp: None,
@@ -188,13 +191,14 @@ impl Query {
     /// Sends a error reply to this Query.
     ///
     #[inline(always)]
-    pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
+    pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_, IntoZBytes>
     where
         IntoZBytes: Into<ZBytes>,
     {
         ReplyErrBuilder {
             query: self,
-            value: Value::new(payload, Encoding::default()),
+            payload,
+            encoding: Encoding::default(),
         }
     }
 
@@ -295,8 +299,8 @@ impl IntoFuture for ReplySample<'_> {
 }
 
 #[derive(Debug)]
-pub struct ReplyBuilderPut {
-    payload: ZBytes,
+pub struct ReplyBuilderPut<Payload> {
+    payload: Payload,
     encoding: Encoding,
 }
 #[derive(Debug)]
@@ -305,10 +309,10 @@ pub struct ReplyBuilderDelete;
 /// A builder returned by [`Query::reply()`](Query::reply) and [`Query::reply_del()`](Query::reply_del)
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct ReplyBuilder<'a, 'b, T> {
+pub struct ReplyBuilder<'a, 'b, Kind> {
     query: &'a Query,
     key_expr: ZResult<KeyExpr<'b>>,
-    kind: T,
+    kind: Kind,
     timestamp: Option<Timestamp>,
     qos: QoSBuilder,
     #[cfg(feature = "unstable")]
@@ -316,17 +320,15 @@ pub struct ReplyBuilder<'a, 'b, T> {
     attachment: Option<ZBytes>,
 }
 
-impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
-    fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
-        Self {
-            timestamp: timestamp.into(),
-            ..self
-        }
+impl<Kind> TimestampBuilderTrait for ReplyBuilder<'_, '_, Kind> {
+    fn timestamp<T: Into<Option<Timestamp>>>(mut self, timestamp: T) -> Self {
+        self.timestamp = timestamp.into();
+        self
     }
 }
 
-impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
-    fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
+impl<Kind> SampleBuilderTrait for ReplyBuilder<'_, '_, Kind> {
+    fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
@@ -343,7 +345,7 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
+impl<Kind> QoSBuilderTrait for ReplyBuilder<'_, '_, Kind> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
@@ -360,40 +362,30 @@ impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-impl ValueBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
-    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        Self {
-            kind: ReplyBuilderPut {
-                encoding: encoding.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        Self {
-            kind: ReplyBuilderPut {
-                payload: payload.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            kind: ReplyBuilderPut { payload, encoding },
-            ..self
-        }
+impl<Payload> EncodingBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut<Payload>> {
+    fn encoding<T: Into<Encoding>>(mut self, encoding: T) -> Self {
+        self.kind.encoding = encoding.into();
+        self
     }
 }
 
-impl<T> Resolvable for ReplyBuilder<'_, '_, T> {
+impl<Payload> AutoEncodingBuilderTrait<Payload> for ReplyBuilder<'_, '_, ReplyBuilderPut<Payload>>
+where
+    Payload: AutoEncoding,
+{
+    fn get_payload(&self) -> Option<&Payload> {
+        Some(&self.kind.payload)
+    }
+}
+
+impl<Kind> Resolvable for ReplyBuilder<'_, '_, Kind> {
     type To = ZResult<()>;
 }
 
-impl Wait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+impl<Payload> Wait for ReplyBuilder<'_, '_, ReplyBuilderPut<Payload>>
+where
+    Payload: Into<ZBytes>,
+{
     fn wait(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?.into_owned();
         let sample = SampleBuilder::put(key_expr, self.kind.payload)
@@ -474,7 +466,10 @@ impl Query {
     }
 }
 
-impl IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+impl<Payload> IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderPut<Payload>>
+where
+    Payload: Into<ZBytes>,
+{
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -495,37 +490,36 @@ impl IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
 /// A builder returned by [`Query::reply_err()`](Query::reply_err).
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct ReplyErrBuilder<'a> {
+pub struct ReplyErrBuilder<'a, Payload> {
     query: &'a Query,
-    value: Value,
+    payload: Payload,
+    encoding: Encoding,
 }
 
-impl ValueBuilderTrait for ReplyErrBuilder<'_> {
-    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        let mut value = self.value.clone();
-        value.encoding = encoding.into();
-        Self { value, ..self }
-    }
-
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        let mut value = self.value.clone();
-        value.payload = payload.into();
-        Self { value, ..self }
-    }
-
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        Self {
-            value: value.into(),
-            ..self
-        }
+impl<Payload> EncodingBuilderTrait for ReplyErrBuilder<'_, Payload> {
+    fn encoding<T: Into<Encoding>>(mut self, encoding: T) -> Self {
+        self.encoding = encoding.into();
+        self
     }
 }
 
-impl<'a> Resolvable for ReplyErrBuilder<'a> {
+impl<Payload> AutoEncodingBuilderTrait<Payload> for ReplyErrBuilder<'_, Payload>
+where
+    Payload: AutoEncoding,
+{
+    fn get_payload(&self) -> Option<&Payload> {
+        Some(&self.payload)
+    }
+}
+
+impl<'a, Payload> Resolvable for ReplyErrBuilder<'a, Payload> {
     type To = ZResult<()>;
 }
 
-impl Wait for ReplyErrBuilder<'_> {
+impl<Payload> Wait for ReplyErrBuilder<'_, Payload>
+where
+    Payload: Into<ZBytes>,
+{
     fn wait(self) -> <Self as Resolvable>::To {
         self.query.inner.primitives.send_response(Response {
             rid: self.query.inner.qid,
@@ -535,12 +529,12 @@ impl Wait for ReplyErrBuilder<'_> {
                 mapping: Mapping::Sender,
             },
             payload: ResponseBody::Err(zenoh::Err {
-                encoding: self.value.encoding.into(),
+                encoding: self.encoding.into(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
                 ext_unknown: vec![],
-                payload: self.value.payload.into(),
+                payload: self.payload.into().into(),
             }),
             ext_qos: response::ext::QoSType::RESPONSE,
             ext_tstamp: None,
@@ -553,7 +547,10 @@ impl Wait for ReplyErrBuilder<'_> {
     }
 }
 
-impl<'a> IntoFuture for ReplyErrBuilder<'a> {
+impl<'a, Payload> IntoFuture for ReplyErrBuilder<'a, Payload>
+where
+    Payload: Into<ZBytes>,
+{
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -896,7 +893,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
     }
 }
 
-impl<'a, T> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
+impl<'a, Kind> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, Kind> {
     fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
         Undeclarable::undeclare_inner(self.queryable, ())
     }

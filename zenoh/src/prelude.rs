@@ -29,8 +29,9 @@ mod _prelude {
     pub use crate::api::publisher::PublisherDeclarations;
     pub use crate::{
         api::{
-            builders::sample::{
-                QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+            builders::{
+                encoding::{AutoEncodingBuilderTrait, EncodingBuilderTrait},
+                sample::{QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait},
             },
             session::{SessionDeclarations, Undeclarable},
         },

@@ -221,7 +221,7 @@ pub mod sample {
     pub use crate::api::{
         builders::sample::{
             QoSBuilderTrait, SampleBuilder, SampleBuilderAny, SampleBuilderDelete,
-            SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+            SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait,
         },
         sample::{Sample, SampleFields, SampleKind, SourceSn},
     };
@@ -234,7 +234,10 @@ pub mod value {
 
 /// Encoding support
 pub mod encoding {
-    pub use crate::api::encoding::Encoding;
+    pub use crate::api::{
+        builders::encoding::{AutoEncodingBuilderTrait, EncodingBuilderTrait},
+        encoding::{AutoEncoding, Encoding},
+    };
 }
 
 /// Payload primitives
