@@ -773,7 +773,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
         let statuses = guard.plugins_status(names);
         for status in statuses {
             tracing::debug!("plugin status: {:?}", status);
-            let key = root_key.join(status.id()).unwrap();
+            let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
             if let Err(e) = query.reply(Ok(Sample::new(key, Value::from(status)))).res() {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
