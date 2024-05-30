@@ -810,43 +810,6 @@ fn forget_client_queryable(
     }
 }
 
-pub(super) fn queries_new_face(_tables: &mut Tables, _face: &mut Arc<FaceState>) {
-    // if face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
-    //     for qabl in hat!(tables).router_qabls.iter() {
-    //         if qabl.context.is_some()
-    //             && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
-    //                 || qabl.session_ctxs.values().any(|s| {
-    //                     s.qabl.is_some()
-    //                         && (s.face.whatami == WhatAmI::Client
-    //                             || (s.face.whatami == WhatAmI::Peer
-    //                                 && hat!(tables).failover_brokering(s.face.zid, face.zid)))
-    //                 }))
-    //         {
-    //             let info = local_qabl_info(tables, qabl, face);
-    //             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-    //             face_hat_mut!(face)
-    //                 .local_qabls
-    //                 .insert(qabl.clone(), (id, info));
-    //             let key_expr = Resource::decl_key(qabl, face);
-    //             face.primitives.send_declare(RoutingContext::with_expr(
-    //                 Declare {
-    //                     interest_id: None,
-    //                     ext_qos: ext::QoSType::DECLARE,
-    //                     ext_tstamp: None,
-    //                     ext_nodeid: ext::NodeIdType::DEFAULT,
-    //                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
-    //                         id,
-    //                         wire_expr: key_expr,
-    //                         ext_info: info,
-    //                     }),
-    //                 },
-    //                 qabl.expr(),
-    //             ));
-    //         }
-    //     }
-    // }
-}
-
 pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {

@@ -41,8 +41,8 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
     network::Network,
-    pubsub::{pubsub_new_face, pubsub_remove_node, undeclare_client_subscription},
-    queries::{queries_new_face, queries_remove_node, undeclare_client_queryable},
+    pubsub::{pubsub_remove_node, undeclare_client_subscription},
+    queries::{queries_remove_node, undeclare_client_queryable},
 };
 use super::{
     super::dispatcher::{
@@ -212,12 +212,11 @@ impl HatBaseTrait for HatCode {
 
     fn new_local_face(
         &self,
-        tables: &mut Tables,
+        _tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
+        _face: &mut Face,
     ) -> ZResult<()> {
-        pubsub_new_face(tables, &mut face.state);
-        queries_new_face(tables, &mut face.state);
+        // Nothing to do
         Ok(())
     }
 
@@ -239,8 +238,6 @@ impl HatBaseTrait for HatCode {
         };
 
         face_hat_mut!(&mut face.state).link_id = link_id;
-        pubsub_new_face(tables, &mut face.state);
-        queries_new_face(tables, &mut face.state);
 
         if face.state.whatami != WhatAmI::Client {
             hat_mut!(tables).schedule_compute_trees(tables_ref.clone());

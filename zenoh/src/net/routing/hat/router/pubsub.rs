@@ -684,10 +684,6 @@ fn forget_client_subscription(
     }
 }
 
-pub(super) fn pubsub_new_face(_tables: &mut Tables, _face: &mut Arc<FaceState>) {
-    // Nothing to do
-}
-
 pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {

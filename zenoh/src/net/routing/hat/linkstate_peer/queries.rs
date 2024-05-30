@@ -584,10 +584,6 @@ fn forget_client_queryable(
     }
 }
 
-pub(super) fn queries_new_face(_tables: &mut Tables, _face: &mut Arc<FaceState>) {
-    // Nothing to do
-}
-
 pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId) {
     let mut qabls = vec![];
     for res in hat!(tables).peer_qabls.iter() {
