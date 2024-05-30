@@ -2294,8 +2294,6 @@ impl Primitives for Session {
                         .map(|e| e.into_owned())
                     {
                         Ok(key_expr) => {
-                            state.remote_tokens.insert(m.id, key_expr.clone());
-
                             if let Some(interest_id) = msg.interest_id {
                                 if let Some(query) = state.liveliness_queries.get(&interest_id) {
                                     // NOTE(fuzzypixelz): This was shamlessly copied from `zenoh::net::routing::dispatcher::queries::route_query`
@@ -2318,6 +2316,7 @@ impl Primitives for Session {
                                     (query.callback)(reply);
                                 }
                             } else {
+                                state.remote_tokens.insert(m.id, key_expr.clone());
                                 // NOTE(fuzzypixelz): I didn't put
                                 // self.update_status_up() here because it doesn't
                                 // make sense. An application which declares a
