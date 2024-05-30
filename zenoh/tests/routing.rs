@@ -22,9 +22,11 @@ use std::{
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::{
-    core::Result,
+    config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
     internal::{bail, ztimeout},
     prelude::*,
+    publisher::CongestionControl,
+    Config, Result, Session,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(10);

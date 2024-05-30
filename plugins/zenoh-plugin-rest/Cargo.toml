@@ -41,7 +41,7 @@ futures = { workspace = true }
 git-version = { workspace = true }
 http-types = { workspace = true }
 lazy_static = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
@@ -49,6 +49,7 @@ tide = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"] }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
+zenoh-util = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }

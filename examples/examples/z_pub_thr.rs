@@ -15,7 +15,11 @@
 use std::convert::TryInto;
 
 use clap::Parser;
-use zenoh::prelude::*;
+use zenoh::{
+    bytes::ZBytes,
+    prelude::*,
+    publisher::{CongestionControl, Priority},
+};
 use zenoh_examples::CommonArgs;
 
 fn main() {

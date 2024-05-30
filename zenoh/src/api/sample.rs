@@ -24,7 +24,7 @@ use zenoh_protocol::{
 
 use super::{
     builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
-    publication::Priority, value::Value,
+    publisher::Priority, value::Value,
 };
 
 pub type SourceSn = u64;

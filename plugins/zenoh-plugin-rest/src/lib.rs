@@ -27,7 +27,6 @@ use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
 use zenoh::{
     bytes::{StringOrBase64, ZBytes},
-    core::try_init_log_from_env,
     encoding::Encoding,
     key_expr::{keyexpr, KeyExpr},
     plugins::{RunningPluginTrait, ZenohPlugin},
@@ -222,7 +221,7 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        try_init_log_from_env();
+        zenoh_util::try_init_log_from_env();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -466,7 +465,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    try_init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let zid = runtime.zid().to_string();
     let session = zenoh::session::init(runtime).await.unwrap();

@@ -11,21 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "unstable")]
-use {
-    flume::RecvTimeoutError, std::str::FromStr, std::time::Duration, zenoh::internal::ztimeout,
-    zenoh::prelude::*,
-};
+#![cfg(feature = "unstable")]
+use std::{str::FromStr, time::Duration};
 
-#[cfg(feature = "unstable")]
+use flume::RecvTimeoutError;
+use zenoh::{config, config::Locator, internal::ztimeout, prelude::*, sample::Locality, Session};
+
 const TIMEOUT: Duration = Duration::from_secs(60);
-#[cfg(feature = "unstable")]
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);
 
-#[cfg(feature = "unstable")]
 async fn create_session_pair(locator: &str) -> (Session, Session) {
     let config1 = {
-        let mut config = zenoh::config::peer();
+        let mut config = config::peer();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .listen
@@ -33,14 +30,13 @@ async fn create_session_pair(locator: &str) -> (Session, Session) {
             .unwrap();
         config
     };
-    let config2 = zenoh::config::client([Locator::from_str(locator).unwrap()]);
+    let config2 = config::client([Locator::from_str(locator).unwrap()]);
 
     let session1 = ztimeout!(zenoh::open(config1)).unwrap();
     let session2 = ztimeout!(zenoh::open(config2)).unwrap();
     (session1, session2)
 }
 
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_any() -> ZResult<()> {
     zenoh_util::try_init_log_from_env();
@@ -93,13 +89,12 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_remote() -> ZResult<()> {
     zenoh_util::try_init_log_from_env();
-    let session1 = ztimeout!(zenoh::open(peer())).unwrap();
 
-    let session2 = ztimeout!(zenoh::open(peer())).unwrap();
+    let session1 = ztimeout!(zenoh::open(config::peer())).unwrap();
+    let session2 = ztimeout!(zenoh::open(config::peer())).unwrap();
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("zenoh_matching_status_remote_test")
@@ -149,13 +144,12 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_local() -> ZResult<()> {
     zenoh_util::try_init_log_from_env();
-    let session1 = ztimeout!(zenoh::open(config::peer())).unwrap();
-
-    let session2 = ztimeout!(zenoh::open(config::peer())).unwrap();
+  
+    let session1 = ztimeout!(zenoh::open(zenoh::config::peer())).unwrap();
+    let session2 = ztimeout!(zenoh::open(zenoh::config::peer())).unwrap();
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("zenoh_matching_status_local_test")

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::*;
+use zenoh::{config::ZenohId, prelude::*};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -43,7 +43,7 @@ struct Args {
     common: CommonArgs,
 }
 
-fn parse_args() -> Config {
+fn parse_args() -> zenoh::Config {
     let args = Args::parse();
     args.common.into()
 }

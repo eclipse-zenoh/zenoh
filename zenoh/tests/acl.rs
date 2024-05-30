@@ -19,8 +19,13 @@ mod test {
     };
 
     use tokio::runtime::Handle;
-    use zenoh::prelude::*;
-    use zenoh_core::{zlock, ztimeout};
+    use zenoh::{
+        config,
+        config::{EndPoint, WhatAmI},
+        internal::{zlock, ztimeout},
+        prelude::*,
+        Config, Session,
+    };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);

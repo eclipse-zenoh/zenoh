@@ -16,7 +16,7 @@ use std::time::Duration;
 use clap::{arg, Parser};
 use zenoh::{
     config::{Config, ModeDependentValue},
-    prelude::*,
+    key_expr::KeyExpr,
 };
 use zenoh_ext::*;
 use zenoh_ext_examples::CommonArgs;

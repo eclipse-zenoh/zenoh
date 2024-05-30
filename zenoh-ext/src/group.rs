@@ -27,8 +27,12 @@ use futures::{prelude::*, select};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use zenoh::{
+    bytes::ZBytesReader,
     internal::{bail, Condition, TaskController},
+    key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::*,
+    publisher::{Priority, Publisher},
+    Session,
 };
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";
@@ -289,7 +293,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 );
                                 let qres = format!("{}/{}/{}", GROUP_PREFIX, &state.gid, kae.mid);
                                 // @TODO: we could also send this member info
-                                let qc = ConsolidationMode::None;
+                                let qc = zenoh::query::ConsolidationMode::None;
                                 tracing::trace!("Issuing Query for {}", &qres);
                                 let receiver = z.get(&qres).consolidation(qc).await.unwrap();
 

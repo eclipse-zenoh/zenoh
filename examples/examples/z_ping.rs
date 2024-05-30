@@ -14,7 +14,7 @@
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use zenoh::prelude::*;
+use zenoh::{bytes::ZBytes, key_expr::keyexpr, prelude::*, publisher::CongestionControl, Config};
 use zenoh_examples::CommonArgs;
 
 fn main() {

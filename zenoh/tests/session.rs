@@ -21,7 +21,10 @@ use std::{
 
 #[cfg(feature = "unstable")]
 use zenoh::runtime::{Runtime, RuntimeBuilder};
-use zenoh::{internal::ztimeout, prelude::*};
+use zenoh::{
+    config, internal::ztimeout, key_expr::KeyExpr, prelude::*, publisher::CongestionControl,
+    sample::SampleKind, subscriber::Reliability, Session,
+};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -166,7 +169,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
                     });
                 }
                 "err" => {
-                    let rep = Value::from(vec![0u8; size]);
+                    let rep = vec![0u8; size];
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current()
                             .block_on(async { ztimeout!(query.reply_err(rep)).unwrap() })
@@ -295,7 +298,7 @@ async fn zenoh_2sessions_1runtime_init() {
     println!("[RI][02c] Creating peer01a session from runtime 1");
     let peer01a = zenoh::session::init(r1.clone()).await.unwrap();
     println!("[RI][03c] Closing peer01a session");
-    std::mem::drop(peer01a);
+    drop(peer01a);
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     close_session(peer01, peer02).await;
     println!("[  ][01e] Closing r1 runtime");
