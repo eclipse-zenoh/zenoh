@@ -75,9 +75,6 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 # DEFAULT-FEATURES NOTE: Be careful with default-features and additivity!
 #                        (https://github.com/rust-lang/cargo/issues/11329)
 [workspace.dependencies]
-
-
-async-rustls = "0.4.0"
 async-trait = "0.1.60"
 aes = "0.8.2"
 ahash = "0.8.7"
