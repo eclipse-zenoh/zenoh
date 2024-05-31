@@ -20,7 +20,12 @@ mod test {
     };
 
     use tokio::runtime::Handle;
-    use zenoh::prelude::*;
+    use zenoh::{
+        config,
+        config::{EndPoint, WhatAmI},
+        prelude::*,
+        Config, Session,
+    };
     use zenoh_core::{zlock, ztimeout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
