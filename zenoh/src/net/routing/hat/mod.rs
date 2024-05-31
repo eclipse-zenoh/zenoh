@@ -19,18 +19,14 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::{any::Any, collections::HashMap, sync::Arc};
 
-use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
-use zenoh_protocol::{
-    core::WireExpr,
-    network::{
-        declare::{
-            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
-            SubscriberId, TokenId,
-        },
-        interest::{InterestId, InterestMode},
-        Oam,
+use zenoh_protocol::network::{
+    declare::{
+        queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+        SubscriberId, TokenId,
     },
+    interest::{InterestId, InterestMode},
+    Oam,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
@@ -236,14 +232,6 @@ pub(crate) trait HatQueriesTrait {
     ) -> Arc<QueryTargetQablSet>;
 
     fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
-
-    fn compute_local_replies(
-        &self,
-        tables: &Tables,
-        prefix: &Arc<Resource>,
-        suffix: &str,
-        face: &Arc<FaceState>,
-    ) -> Vec<(WireExpr<'static>, ZBuf)>;
 }
 
 pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {

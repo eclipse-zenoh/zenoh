@@ -21,6 +21,8 @@ use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
 use zenoh_config::WhatAmI;
+#[cfg(feature = "stats")]
+use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
@@ -32,7 +34,7 @@ use zenoh_protocol::{
         },
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
-    zenoh::{self, query::Consolidation, reply::ReplyBody, Put, Reply, RequestBody, ResponseBody},
+    zenoh::{self, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
@@ -655,57 +657,9 @@ pub fn route_query(
                 let queries_lock = zwrite!(tables_ref.queries_lock);
                 let route =
                     compute_final_route(&rtables, &route, face, &mut expr, &ext_target, query);
-                let local_replies =
-                    rtables
-                        .hat_code
-                        .compute_local_replies(&rtables, &prefix, expr.suffix, face);
-                let zid = rtables.zid;
-
                 let timeout = ext_timeout.unwrap_or(rtables.queries_default_timeout);
-
                 drop(queries_lock);
                 drop(rtables);
-
-                for (wexpr, payload) in local_replies {
-                    let payload = ResponseBody::Reply(Reply {
-                        consolidation: Consolidation::DEFAULT, // @TODO: handle Del case
-                        ext_unknown: vec![],                   // @TODO: handle unknown extensions
-                        payload: ReplyBody::Put(Put {
-                            // @TODO: handle Del case
-                            timestamp: None,             // @TODO: handle timestamp
-                            encoding: Encoding::empty(), // @TODO: handle encoding
-                            ext_sinfo: None,             // @TODO: handle source info
-                            ext_attachment: None,        // @TODO: expose it in the API
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_unknown: vec![], // @TODO: handle unknown extensions
-                            payload,
-                        }),
-                    });
-                    #[cfg(feature = "stats")]
-                    if !admin {
-                        inc_res_stats!(face, tx, user, payload)
-                    } else {
-                        inc_res_stats!(face, tx, admin, payload)
-                    }
-
-                    face.primitives
-                        .clone()
-                        .send_response(RoutingContext::with_expr(
-                            Response {
-                                rid: qid,
-                                wire_expr: wexpr,
-                                payload,
-                                ext_qos: response::ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_respid: Some(response::ext::ResponderIdType {
-                                    zid,
-                                    eid: 0, // 0 is reserved for routing core
-                                }),
-                            },
-                            expr.full_expr().to_string(),
-                        ));
-                }
 
                 if route.is_empty() {
                     tracing::debug!(

@@ -19,14 +19,13 @@ use std::{
 
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
-use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{
         key_expr::{
             include::{Includer, DEFAULT_INCLUDER},
             OwnedKeyExpr,
         },
-        WhatAmI, WireExpr, ZenohId,
+        WhatAmI, ZenohId,
     },
     network::{
         declare::{
@@ -1406,17 +1405,6 @@ impl HatQueriesTrait for HatCode {
         }
         route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
         Arc::new(route)
-    }
-
-    #[inline]
-    fn compute_local_replies(
-        &self,
-        _tables: &Tables,
-        _prefix: &Arc<Resource>,
-        _suffix: &str,
-        _face: &Arc<FaceState>,
-    ) -> Vec<(WireExpr<'static>, ZBuf)> {
-        vec![]
     }
 
     fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
