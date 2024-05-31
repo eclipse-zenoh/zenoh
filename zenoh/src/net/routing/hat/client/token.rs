@@ -306,32 +306,34 @@ impl HatTokenTrait for HatCode {
             ));
         }
 
-        for dst_face in tables
-            .faces
-            .values_mut()
-            .filter(|f| f.whatami == WhatAmI::Client)
-        {
-            let tokens = face_hat!(dst_face)
-                .remote_tokens
-                .values()
-                .filter(|res| res.matches(res))
-                .cloned()
-                .collect::<Vec<_>>();
+        if mode.current() {
+            for dst_face in tables
+                .faces
+                .values_mut()
+                .filter(|f| f.whatami == WhatAmI::Client)
+            {
+                let tokens = face_hat!(dst_face)
+                    .remote_tokens
+                    .values()
+                    .filter(|res| res.matches(res))
+                    .cloned()
+                    .collect::<Vec<_>>();
 
-            for res in tokens {
-                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                let wire_expr = Resource::decl_key(&res, dst_face);
-
-                face.primitives.send_declare(RoutingContext::with_expr(
-                    Declare {
-                        interest_id: Some(src_id),
-                        ext_qos: ext::QoSType::default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                    },
-                    res.expr(),
-                ))
+                for res in tokens {
+                    let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+                    let wire_expr = Resource::decl_key(&res, dst_face);
+                    face_hat_mut!(face).local_tokens.insert(res.clone(), id);
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(src_id),
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                        },
+                        res.expr(),
+                    ))
+                }
             }
         }
 
