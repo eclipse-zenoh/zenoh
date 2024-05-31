@@ -44,6 +44,9 @@ pub use aligner::Aligner;
 pub use digest::{Digest, DigestConfig, EraType, LogEntry};
 pub use snapshotter::Snapshotter;
 pub use storage::{ReplicationService, StorageService};
+use zenoh::{
+    bytes::StringOrBase64, key_expr::OwnedKeyExpr, sample::Locality, time::Timestamp, Session,
+};
 
 const ERA: &str = "era";
 const INTERVALS: &str = "intervals";

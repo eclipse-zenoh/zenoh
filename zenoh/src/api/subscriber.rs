@@ -66,7 +66,7 @@ impl fmt::Debug for SubscriberState {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()) })
@@ -92,9 +92,9 @@ impl<'a> SubscriberInner<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::{prelude::*, sample::Sample};
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
@@ -124,7 +124,7 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .await
@@ -177,7 +177,7 @@ impl Drop for SubscriberInner<'_> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .best_effort()
@@ -223,7 +223,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
@@ -265,7 +265,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
@@ -293,7 +293,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
@@ -426,7 +426,7 @@ where
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .with(flume::bounded(32))
@@ -453,7 +453,7 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();
@@ -498,7 +498,7 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();

@@ -59,7 +59,7 @@ pub(super) fn config(s: &str) -> &str {
 pub struct Protocol<'a>(pub(super) &'a str);
 
 impl<'a> Protocol<'a> {
-    pub fn as_str(&'a self) -> &'a str {
+    pub fn as_str(&self) -> &'a str {
         self.0
     }
 }
@@ -123,7 +123,7 @@ impl fmt::Debug for ProtocolMut<'_> {
 pub struct Address<'a>(pub(super) &'a str);
 
 impl<'a> Address<'a> {
-    pub fn as_str(&'a self) -> &'a str {
+    pub fn as_str(&self) -> &'a str {
         self.0
     }
 }
@@ -187,7 +187,7 @@ impl fmt::Debug for AddressMut<'_> {
 pub struct Metadata<'a>(pub(super) &'a str);
 
 impl<'a> Metadata<'a> {
-    pub fn as_str(&'a self) -> &'a str {
+    pub fn as_str(&self) -> &'a str {
         self.0
     }
 
@@ -317,7 +317,7 @@ impl fmt::Debug for MetadataMut<'_> {
 pub struct Config<'a>(pub(super) &'a str);
 
 impl<'a> Config<'a> {
-    pub fn as_str(&'a self) -> &'a str {
+    pub fn as_str(&self) -> &'a str {
         self.0
     }
 

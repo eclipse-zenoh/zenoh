@@ -31,7 +31,7 @@ use super::{
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
-    publication::Priority,
+    publisher::Priority,
     sample::{Locality, QoSBuilder, Sample},
     selector::Selector,
     session::Session,
@@ -134,9 +134,9 @@ pub(crate) struct QueryState {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
+/// use zenoh::{prelude::*, query::{ConsolidationMode, QueryTarget}};
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let replies = session
 ///     .get("key/expression?value>1")
 ///     .target(QueryTarget::All)
@@ -240,7 +240,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
     ///     .callback(|reply| {println!("Received {:?}", reply.result());})
@@ -298,7 +298,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .get("key/expression")
@@ -326,7 +326,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let replies = session
     ///     .get("key/expression")
     ///     .with(flume::bounded(32))

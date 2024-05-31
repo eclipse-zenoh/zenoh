@@ -11,12 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(all(feature = "shared-memory", feature = "unstable"))]
+use zenoh::{
+    bytes::ZBytes,
+    prelude::*,
+    shm::{
+        zshm, zshmmut, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, ZShm,
+        ZShmMut, POSIX_PROTOCOL_ID,
+    },
+};
 
 #[test]
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
 fn shm_bytes_single_buf() {
-    use zenoh::prelude::*;
-
     // create an SHM backend...
     let backend = PosixSharedMemoryProviderBackend::builder()
         .with_size(4096)

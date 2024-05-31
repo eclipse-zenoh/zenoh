@@ -127,7 +127,7 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (peers, scouting, addr, ifaces, timeout) = {
+        let (peers, scouting, addr, ifaces, timeout, multicast_ttl) = {
             let guard = self.state.config.lock();
             (
                 guard.connect().endpoints().clone(),
@@ -135,6 +135,7 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 std::time::Duration::from_millis(unwrap_or_default!(guard.scouting().timeout())),
+                unwrap_or_default!(guard.scouting().multicast().ttl()),
             )
         };
         match peers.len() {
@@ -147,7 +148,7 @@ impl Runtime {
                     } else {
                         let sockets: Vec<UdpSocket> = ifaces
                             .into_iter()
-                            .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
+                            .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
                             .collect();
                         if sockets.is_empty() {
                             bail!("Unable to bind UDP port to any multicast interface!")
@@ -271,12 +272,16 @@ impl Runtime {
         addr: SocketAddr,
         ifaces: String,
     ) -> ZResult<()> {
+        let multicast_ttl = {
+            let guard = self.state.config.lock();
+            unwrap_or_default!(guard.scouting().multicast().ttl())
+        };
         let ifaces = Runtime::get_interfaces(&ifaces);
-        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
+        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?;
         if !ifaces.is_empty() {
             let sockets: Vec<UdpSocket> = ifaces
                 .into_iter()
-                .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
+                .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
                 .collect();
             if !sockets.is_empty() {
                 let this = self.clone();
@@ -613,7 +618,11 @@ impl Runtime {
         }
     }
 
-    pub async fn bind_mcast_port(sockaddr: &SocketAddr, ifaces: &[IpAddr]) -> ZResult<UdpSocket> {
+    pub async fn bind_mcast_port(
+        sockaddr: &SocketAddr,
+        ifaces: &[IpAddr],
+        multicast_ttl: u32,
+    ) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -691,6 +700,11 @@ impl Runtime {
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         socket.set_nonblocking(true)?;
+        socket.set_multicast_ttl_v4(multicast_ttl)?;
+
+        if sockaddr.is_ipv6() && multicast_ttl > 1 {
+            tracing::warn!("UDP Multicast TTL has been set to a value greater than 1 on a socket bound to an IPv6 address. This might not have the desired effect");
+        }
 
         // UdpSocket::from_std requires a runtime even though it's a sync function
         let udp_socket = zenoh_runtime::ZRuntime::Net
@@ -698,7 +712,7 @@ impl Runtime {
         Ok(udp_socket)
     }
 
-    pub fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
+    pub fn bind_ucast_port(addr: IpAddr, multicast_ttl: u32) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -725,6 +739,7 @@ impl Runtime {
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         socket.set_nonblocking(true)?;
+        socket.set_multicast_ttl_v4(multicast_ttl)?;
 
         // UdpSocket::from_std requires a runtime even though it's a sync function
         let udp_socket = zenoh_runtime::ZRuntime::Net

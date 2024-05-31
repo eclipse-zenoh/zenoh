@@ -43,9 +43,9 @@ impl From<&CommonArgs> for Config {
             None => Config::default(),
         };
         match value.mode {
-            Some(Wai::Peer) => config.set_mode(Some(zenoh::scouting::WhatAmI::Peer)),
-            Some(Wai::Client) => config.set_mode(Some(zenoh::scouting::WhatAmI::Client)),
-            Some(Wai::Router) => config.set_mode(Some(zenoh::scouting::WhatAmI::Router)),
+            Some(Wai::Peer) => config.set_mode(Some(zenoh::config::WhatAmI::Peer)),
+            Some(Wai::Client) => config.set_mode(Some(zenoh::config::WhatAmI::Client)),
+            Some(Wai::Router) => config.set_mode(Some(zenoh::config::WhatAmI::Router)),
             None => Ok(None),
         }
         .unwrap();

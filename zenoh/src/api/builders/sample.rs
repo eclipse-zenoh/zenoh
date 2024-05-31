@@ -21,7 +21,7 @@ use crate::api::{
     bytes::ZBytes,
     encoding::Encoding,
     key_expr::KeyExpr,
-    publication::Priority,
+    publisher::Priority,
     sample::{QoS, QoSBuilder, Sample, SampleKind},
     value::Value,
 };

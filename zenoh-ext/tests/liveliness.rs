@@ -12,6 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use zenoh::{
+    config::{self, EndPoint, WhatAmI},
+    sample::SampleKind,
+};
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_querying_subscriber_clique() {
     use std::time::Duration;

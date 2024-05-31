@@ -42,12 +42,8 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
     network::{shared_nodes, Network},
-    pubsub::{
-        pubsub_linkstate_change, pubsub_new_face, pubsub_remove_node, undeclare_client_subscription,
-    },
-    queries::{
-        queries_linkstate_change, queries_new_face, queries_remove_node, undeclare_client_queryable,
-    },
+    pubsub::{pubsub_linkstate_change, pubsub_remove_node, undeclare_client_subscription},
+    queries::{queries_linkstate_change, queries_remove_node, undeclare_client_queryable},
 };
 use super::{
     super::dispatcher::{
@@ -369,12 +365,11 @@ impl HatBaseTrait for HatCode {
 
     fn new_local_face(
         &self,
-        tables: &mut Tables,
+        _tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
+        _face: &mut Face,
     ) -> ZResult<()> {
-        pubsub_new_face(tables, &mut face.state);
-        queries_new_face(tables, &mut face.state);
+        // Nothing to do
         Ok(())
     }
 
@@ -409,8 +404,6 @@ impl HatBaseTrait for HatCode {
         }
 
         face_hat_mut!(&mut face.state).link_id = link_id;
-        pubsub_new_face(tables, &mut face.state);
-        queries_new_face(tables, &mut face.state);
 
         match face.state.whatami {
             WhatAmI::Router => {

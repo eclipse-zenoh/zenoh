@@ -53,7 +53,7 @@ use super::{
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -80,7 +80,7 @@ impl<'a> Liveliness<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
@@ -113,9 +113,9 @@ impl<'a> Liveliness<'a> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::{prelude::*, sample::SampleKind};
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session.liveliness().declare_subscriber("key/expression").await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     match sample.kind() {
@@ -153,7 +153,7 @@ impl<'a> Liveliness<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let replies = session.liveliness().get("key/expression").await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     if let Ok(sample) = reply.result() {
@@ -193,7 +193,7 @@ impl<'a> Liveliness<'a> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -268,7 +268,7 @@ pub(crate) struct LivelinessTokenState {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -292,7 +292,7 @@ pub struct LivelinessToken<'a> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -345,7 +345,7 @@ impl<'a> LivelinessToken<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
@@ -385,7 +385,7 @@ impl Drop for LivelinessToken<'_> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .best_effort()
@@ -412,7 +412,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
@@ -452,7 +452,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
@@ -481,7 +481,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
@@ -571,7 +571,7 @@ where
 /// # use std::convert::TryFrom;
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let tokens = session
 ///     .liveliness()
 ///     .get("key/expression")
@@ -603,7 +603,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
     ///     .liveliness()
     ///     .get("key/expression")
@@ -642,7 +642,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .liveliness()
@@ -671,7 +671,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let replies = session
     ///     .liveliness()
     ///     .get("key/expression")

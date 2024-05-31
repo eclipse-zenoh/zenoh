@@ -41,6 +41,7 @@ pub mod scouting {
         pub const enabled: bool = true;
         pub const address: ([u8; 4], u16) = ([224, 0, 0, 224], 7446);
         pub const interface: &str = "auto";
+        pub const ttl: u32 = 1;
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();

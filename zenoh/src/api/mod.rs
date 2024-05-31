@@ -27,7 +27,7 @@ pub(crate) mod liveliness;
 pub(crate) mod loader;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 pub(crate) mod plugins;
-pub(crate) mod publication;
+pub(crate) mod publisher;
 pub(crate) mod query;
 pub(crate) mod queryable;
 pub(crate) mod sample;

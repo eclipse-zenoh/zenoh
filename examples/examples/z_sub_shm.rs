@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{config::Config, prelude::*};
+use zenoh::{config::Config, key_expr::KeyExpr, prelude::*, shm::zshm};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

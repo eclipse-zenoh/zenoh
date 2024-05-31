@@ -13,7 +13,9 @@
 //
 use std::{convert::TryFrom, time::Duration};
 
-use zenoh::{config::Config, prelude::*};
+use zenoh::{
+    config::Config, key_expr::KeyExpr, prelude::*, query::QueryTarget, selector::Selector,
+};
 
 #[tokio::main]
 async fn main() {

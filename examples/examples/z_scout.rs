@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::prelude::*;
+use zenoh::{config::WhatAmI, scout, Config};
 
 #[tokio::main]
 async fn main() {

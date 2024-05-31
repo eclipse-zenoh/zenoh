@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use zenoh::prelude as zenoh;
-
+use zenoh::key_expr::keyexpr;
 zenoh::kedefine!(
     pub file_format: "user_id/${user_id:*}/file/${file:*/**}",
     pub(crate) settings_format: "user_id/${user_id:*}/settings/${setting:**}"
@@ -26,8 +25,8 @@ fn main() {
     let ke = zenoh::keformat!(formatter, user_id = 42, file).unwrap();
     println!("{formatter:?} => {ke}");
     // Parsing
-    let settings_ke = zenoh::keyexpr::new("user_id/30/settings/dark_mode").unwrap();
+    let settings_ke = keyexpr::new("user_id/30/settings/dark_mode").unwrap();
     let parsed = settings_format::parse(settings_ke).unwrap();
-    assert_eq!(parsed.user_id(), zenoh::keyexpr::new("30").unwrap());
-    assert_eq!(parsed.setting(), zenoh::keyexpr::new("dark_mode").ok());
+    assert_eq!(parsed.user_id(), keyexpr::new("30").unwrap());
+    assert_eq!(parsed.setting(), keyexpr::new("dark_mode").ok());
 }

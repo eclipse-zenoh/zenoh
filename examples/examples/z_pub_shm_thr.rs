@@ -12,7 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::prelude::*;
+use zenoh::{
+    buffers::ZSlice,
+    prelude::*,
+    publisher::CongestionControl,
+    shm::{PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID},
+    Config,
+};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

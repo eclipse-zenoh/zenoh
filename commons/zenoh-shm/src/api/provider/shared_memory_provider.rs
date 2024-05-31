@@ -277,7 +277,7 @@ pub trait AllocPolicy {
 /// Trait for async allocation policies
 #[zenoh_macros::unstable_doc]
 #[async_trait]
-pub trait AsyncAllocPolicy {
+pub trait AsyncAllocPolicy: Send {
     async fn alloc_async<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend + Sync>(
         layout: &MemoryLayout,
         provider: &SharedMemoryProvider<IDSource, Backend>,
@@ -420,7 +420,7 @@ where
 #[async_trait]
 impl<InnerPolicy> AsyncAllocPolicy for BlockOn<InnerPolicy>
 where
-    InnerPolicy: AllocPolicy,
+    InnerPolicy: AllocPolicy + Send,
 {
     async fn alloc_async<
         IDSource: ProtocolIDSource,
@@ -577,7 +577,7 @@ where
     Policy: AsyncAllocPolicy,
 {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = Pin<Box<dyn Future<Output = <Self as Resolvable>::To> + 'a>>;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + 'a + Send>>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(
@@ -652,7 +652,7 @@ where
     Policy: AsyncAllocPolicy,
 {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = Pin<Box<dyn Future<Output = <Self as Resolvable>::To> + 'a>>;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as Resolvable>::To> + 'a + Send>>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(

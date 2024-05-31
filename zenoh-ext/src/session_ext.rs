@@ -67,7 +67,7 @@ impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     /// use zenoh::config::ModeDependentValue::Unique;
     /// use zenoh_ext::SessionExt;
     ///
-    /// let mut config = config::default();
+    /// let mut config = zenoh::config::default();
     /// config.timestamping.set_enabled(Some(Unique(true)));
     /// let session = zenoh::open(config).await.unwrap().into_arc();
     /// let publication_cache = session.declare_publication_cache("key/expression").await.unwrap();
