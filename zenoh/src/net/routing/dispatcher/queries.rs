@@ -46,7 +46,6 @@ use super::{
 };
 use crate::net::routing::{hat::HatTrait, RoutingContext};
 
-#[allow(clippy::too_many_arguments)] // TODO refactor
 pub(crate) fn declare_qabl_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,

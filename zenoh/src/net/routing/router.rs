@@ -61,7 +61,6 @@ impl Router {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn init_link_state(&mut self, runtime: Runtime) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);

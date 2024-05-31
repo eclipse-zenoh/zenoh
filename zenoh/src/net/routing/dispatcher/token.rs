@@ -108,7 +108,7 @@ pub(crate) fn undeclare_token(
                 Some(res) => Some(res),
                 None => {
                     tracing::error!(
-                        "{} Undeclare unknown token token {}{}!",
+                        "{} Undeclare unknown token {}{}!",
                         face,
                         prefix.expr(),
                         expr.wire_expr.suffix
@@ -135,7 +135,6 @@ pub(crate) fn undeclare_token(
     }
 }
 
-#[allow(clippy::too_many_arguments)] // TODO refactor
 pub(crate) fn declare_token_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
@@ -211,7 +210,7 @@ pub(crate) fn undeclare_token_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
 ) {
-    tracing::debug!("{} Undeclare liveliness interest {}", face, id,);
+    tracing::debug!("{} Undeclare token interest {}", face, id,);
     let mut wtables = zwrite!(tables.tables);
     hat_code.undeclare_token_interest(&mut wtables, face, id);
 }

@@ -133,7 +133,6 @@ pub(crate) trait HatBaseTrait {
 }
 
 pub(crate) trait HatPubSubTrait {
-    #[allow(clippy::too_many_arguments)] // TODO refactor
     fn declare_sub_interest(
         &self,
         tables: &mut Tables,
@@ -187,7 +186,6 @@ pub(crate) trait HatPubSubTrait {
 }
 
 pub(crate) trait HatQueriesTrait {
-    #[allow(clippy::too_many_arguments)] // TODO refactor
     fn declare_qabl_interest(
         &self,
         tables: &mut Tables,
@@ -268,7 +266,6 @@ pub trait HatTokenTrait {
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    #[allow(clippy::too_many_arguments)] // TODO refactor
     fn declare_token_interest(
         &self,
         tables: &mut Tables,
