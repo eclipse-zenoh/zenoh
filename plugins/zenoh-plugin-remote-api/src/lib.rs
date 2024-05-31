@@ -139,6 +139,14 @@ enum ControlMsg {
     Error(),
 }
 
+
+// Session(Uuid),
+// KeyExpr(KeyExprWrapper),
+// Subscriber(Uuid),
+// Publisher(Uuid),
+
+
+
 #[derive(Debug, Serialize, Deserialize)]
 enum ErrorMsg {}
 
@@ -233,7 +241,7 @@ pub async fn run_websocket_server() {
 
                     sock_adress = Arc::new(sock_addr.clone());
                     if let Some(remote_state) = write_guard.insert(sock_addr, state) {
-                        println!("TODO: remote State existed in Map already, Error in Logic");
+                        println!("TODO: remote State existed in Map already, Error in Logic?");
                     }
                 }
                 Err(err) => {
@@ -382,8 +390,12 @@ async fn handle_control_message(
                 while !stop {
                     match receiver.recv_async().await {
                         Ok(sample) => {
-                            println!("Fwd Sample to Websocket");
-                            let sample_ws = serde_json::to_string(&SampleWS::from(sample)).unwrap();
+                            let sample_ws = serde_json::to_string(&RemoteAPIMsg::Data(
+                                DataMsg::Sample(SampleWS::from(sample)),
+                            ))
+                            .unwrap();
+                            println!("Fwd -> WS {:?}", sample_ws);
+
                             channel_tx.send(Message::text(sample_ws)).await.unwrap();
                             // println!("Sample {}", sample);
                         }
@@ -396,26 +408,27 @@ async fn handle_control_message(
                 // TODO: figure out how to store keep reference to Subscriber so that i can undeclare subscriber
 
                 // TODO: Do i want to keep this Join handle
-                let join_handle = task::spawn(async move {
-                    // subscriber;
-                    println!("Spawn subscriber async ");
-                    let mut stop = false;
-                    while !stop {
-                        match receiver.recv_async().await {
-                            Ok(sample) => {
-                                println!("Fwd Sample to Websocket");
-                                let sample_ws =
-                                    serde_json::to_string(&SampleWS::from(sample)).unwrap();
-                                channel_tx.send(Message::text(sample_ws)).await.unwrap();
-                            }
-                            Err(err) => {
-                                println!("stop ERR : {} ---", err);
-                                stop = true;
-                            }
-                        }
-                    }
-                    println!("End subscriber async ");
-                });
+                // let join_handle = task::spawn(async move {
+                //     // subscriber;
+                //     println!("Spawn subscriber async ");
+                //     let mut stop = false;
+                //     while !stop {
+                //         match receiver.recv_async().await {
+                //             Ok(sample) => {
+                //                 let sample_ws =
+                //                     serde_json::to_string(&DataMsg::Sample(SampleWS::from(sample)))
+                //                         .unwrap();
+                //                     println!("Fwd -> WS {:?}", sample_ws);
+                //                 channel_tx.send(Message::text(sample_ws)).await.unwrap();
+                //             }
+                //             Err(err) => {
+                //                 println!("stop ERR : {} ---", err);
+                //                 stop = true;
+                //             }
+                //         }
+                //     }
+                //     println!("End subscriber async ");
+                // });
 
                 Some(ControlMsg::Subscriber(sub_id))
             } else {
