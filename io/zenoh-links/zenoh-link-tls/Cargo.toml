@@ -47,5 +47,3 @@ zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
-
-x509-parser = "0.16.0"

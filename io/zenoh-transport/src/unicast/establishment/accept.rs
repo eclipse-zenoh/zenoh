@@ -31,8 +31,6 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-#[cfg(feature = "auth_usrpwd")]
-use super::ext::auth::UsrPwdId;
 #[cfg(feature = "shared-memory")]
 use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
@@ -113,8 +111,6 @@ struct RecvOpenSynOut {
     other_whatami: WhatAmI,
     other_lease: Duration,
     other_initial_sn: TransportSn,
-    #[cfg(feature = "auth_usrpwd")]
-    other_auth_id: UsrPwdId,
 }
 
 // OpenAck
@@ -490,18 +486,11 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         }
 
         // Extension Auth
-        #[allow(unused_mut, unused_assignments)]
-        #[cfg(feature = "auth_usrpwd")]
-        let mut user_password_id = UsrPwdId(None);
-
-        #[cfg(feature = "auth_usrpwd")]
-        {
-            user_password_id = self
-                .ext_auth
-                .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
-                .await
-                .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-        }
+        #[cfg(feature = "transport_auth")]
+        self.ext_auth
+            .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
@@ -528,8 +517,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             other_whatami: cookie.whatami,
             other_lease: open_syn.lease,
             other_initial_sn: open_syn.initial_sn,
-            #[cfg(feature = "auth_usrpwd")]
-            other_auth_id: user_password_id,
         };
         Ok((state, output))
     }
@@ -724,6 +711,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         cookie_nonce: iack_out.cookie_nonce,
     };
     let (mut state, osyn_out) = step!(fsm.recv_open_syn(osyn_in).await);
+
     // Create the OpenAck but not send it yet
     let oack_in = SendOpenAckIn {
         mine_zid: manager.config.zid,
@@ -747,8 +735,6 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             false => None,
         },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
-        #[cfg(feature = "auth_usrpwd")]
-        auth_id: osyn_out.other_auth_id,
     };
 
     let a_config = TransportLinkUnicastConfig {

@@ -30,14 +30,13 @@ base64 = { workspace = true }
 futures = { workspace = true }
 quinn = { workspace = true }
 rustls-native-certs = { workspace = true }
-rustls-pki-types = { workspace = true }
+rustls-pki-types =  { workspace = true }
 rustls-webpki = { workspace = true }
-
 secrecy = { workspace = true }
 tokio = { workspace = true, features = [
+  "fs",
   "io-util",
   "net",
-  "fs",
   "sync",
   "time",
 ] }
@@ -57,5 +56,3 @@ zenoh-util = { workspace = true }
 rustls = { version = "0.21", features = ["dangerous_configuration", "quic"] }
 tokio-rustls = "0.24.1"
 rustls-pemfile = { version = "1" }
-
-x509-parser = "0.16.0"

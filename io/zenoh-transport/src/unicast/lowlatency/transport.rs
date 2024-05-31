@@ -32,7 +32,6 @@ use zenoh_result::{zerror, ZResult};
 use crate::stats::TransportStats;
 use crate::{
     unicast::{
-        authentication::AuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicast},
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         TransportConfigUnicast,
@@ -186,10 +185,6 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     fn get_zid(&self) -> ZenohId {
         self.config.zid
-    }
-
-    fn get_auth_ids(&self) -> Vec<AuthId> {
-        vec![]
     }
 
     fn get_whatami(&self) -> WhatAmI {

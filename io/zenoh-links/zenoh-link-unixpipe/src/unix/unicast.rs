@@ -36,8 +36,8 @@ use tokio_util::sync::CancellationToken;
 use unix_named_pipe::{create, open_write};
 use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, Wait};
 use zenoh_link_commons::{
-    ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, NewLinkChannelSender,
+    ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -524,10 +524,6 @@ impl LinkUnicastTrait for UnicastPipe {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
-    }
-    #[inline(always)]
-    fn get_auth_identifier(&self) -> LinkAuthId {
-        LinkAuthId::default()
     }
 }
 

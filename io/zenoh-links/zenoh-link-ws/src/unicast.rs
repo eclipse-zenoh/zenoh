@@ -34,7 +34,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message, MaybeTlsStream, WebS
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
-    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -225,10 +225,6 @@ impl LinkUnicastTrait for LinkUnicastWs {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         false
-    }
-    #[inline(always)]
-    fn get_auth_identifier(&self) -> LinkAuthId {
-        LinkAuthId::default()
     }
 }
 
