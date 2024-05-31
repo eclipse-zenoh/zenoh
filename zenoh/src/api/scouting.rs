@@ -299,6 +299,12 @@ fn _scout(
     tracing::trace!("scout({}, {})", what, &config);
     let default_addr = SocketAddr::from(zenoh_config::defaults::scouting::multicast::address);
     let addr = config.scouting.multicast.address().unwrap_or(default_addr);
+    let default_multicast_ttl = zenoh_config::defaults::scouting::multicast::ttl;
+    let multicast_ttl = config
+        .scouting
+        .multicast
+        .ttl
+        .unwrap_or(default_multicast_ttl);
     let ifaces = config.scouting.multicast.interface().as_ref().map_or(
         zenoh_config::defaults::scouting::multicast::interface,
         |s| s.as_ref(),
@@ -307,7 +313,7 @@ fn _scout(
     if !ifaces.is_empty() {
         let sockets: Vec<UdpSocket> = ifaces
             .into_iter()
-            .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
+            .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
             .collect();
         if !sockets.is_empty() {
             let cancellation_token = TerminatableTask::create_cancellation_token();
