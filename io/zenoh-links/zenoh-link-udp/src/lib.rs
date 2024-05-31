@@ -37,14 +37,15 @@ use zenoh_result::{zerror, ZResult};
 //           $ sysctl -w net.core.rmem_max=4194304
 //           $ sysctl -w net.core.rmem_default=4194304
 
-// Maximum MTU (UDP PDU) in bytes.
-// NOTE: The UDP field size sets a theoretical limit of 65,535 bytes (8 byte header + 65,527 bytes of
-//       data) for a UDP datagram. However the actual limit for the data length, which is imposed by
-//       the underlying IPv4 protocol, is 65,507 bytes (65,535 − 8 byte UDP header − 20 byte IP header).
-//       Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via
-//       IPv6 Jumbograms, its usage in Zenoh is discouraged unless the consequences are very well
-//       understood.
-const UDP_MAX_MTU: u16 = 65_507;
+/// Maximum MTU (UDP PDU) in bytes.
+///
+/// # Note
+/// The UDP field size sets a theoretical limit of 65,535 bytes (8 byte header + 65,527 bytes of
+/// data) for a UDP datagram. However the actual limit for the data length, which is imposed by the
+/// underlying IPv4 protocol, is 65,507 bytes (65,535 − 8 byte UDP header − 20 byte IP header).
+/// Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via IPv6
+/// Jumbograms, its usage in Zenoh is discouraged unless the consequences are very well understood.
+const UDP_MAX_MTU: u16 = u16::MAX - 8 - 40;
 
 pub const UDP_LOCATOR_PREFIX: &str = "udp";
 
