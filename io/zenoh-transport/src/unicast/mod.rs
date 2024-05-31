@@ -11,15 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod authentication;
 pub mod establishment;
 pub(crate) mod link;
 pub(crate) mod lowlatency;
 pub(crate) mod manager;
-pub(crate) mod transport_unicast_inner;
-pub(crate) mod universal;
-
 #[cfg(feature = "test")]
 pub mod test_helpers;
+pub(crate) mod transport_unicast_inner;
+pub(crate) mod universal;
 
 use std::{
     fmt,
@@ -42,6 +42,9 @@ use self::transport_unicast_inner::TransportUnicastTrait;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
+use crate::unicast::authentication::AuthId;
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::establishment::ext::auth::UsrPwdId;
 
 /*************************************/
 /*        TRANSPORT UNICAST          */
@@ -58,6 +61,8 @@ pub(crate) struct TransportConfigUnicast {
     #[cfg(feature = "shared-memory")]
     pub(crate) shm: Option<TransportShmConfig>,
     pub(crate) is_lowlatency: bool,
+    #[cfg(feature = "auth_usrpwd")]
+    pub(crate) auth_id: UsrPwdId,
 }
 
 /// [`TransportUnicast`] is the transport handler returned
@@ -115,6 +120,11 @@ impl TransportUnicast {
     pub fn get_links(&self) -> ZResult<Vec<Link>> {
         let transport = self.get_inner()?;
         Ok(transport.get_links())
+    }
+
+    pub fn get_auth_ids(&self) -> ZResult<Vec<AuthId>> {
+        let transport = self.get_inner()?;
+        Ok(transport.get_auth_ids())
     }
 
     #[inline(always)]

@@ -20,6 +20,7 @@ use core::{
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
+use serde::Serialize;
 use zenoh_protocol::{
     core::{EndPoint, Locator},
     transport::BatchSize,
@@ -51,6 +52,7 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
+    fn get_auth_identifier(&self) -> LinkAuthId;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
@@ -115,6 +117,72 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
         Err(e) => {
             tracing::debug!("get_interface_names for {:?} failed: {:?}", addr.ip(), e);
             vec![]
+        }
+    }
+}
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
+
+pub enum LinkAuthType {
+    Tls,
+    Quic,
+    None,
+}
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
+
+pub struct LinkAuthId {
+    auth_type: LinkAuthType,
+    auth_value: Option<String>,
+}
+
+impl LinkAuthId {
+    pub fn get_type(&self) -> &LinkAuthType {
+        &self.auth_type
+    }
+    pub fn get_value(&self) -> &Option<String> {
+        &self.auth_value
+    }
+}
+impl Default for LinkAuthId {
+    fn default() -> Self {
+        LinkAuthId {
+            auth_type: LinkAuthType::None,
+            auth_value: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LinkAuthIdBuilder {
+    pub auth_type: LinkAuthType,    //HAS to be provided when building
+    pub auth_value: Option<String>, //actual value added to the above type; is None for None type
+}
+impl Default for LinkAuthIdBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LinkAuthIdBuilder {
+    pub fn new() -> LinkAuthIdBuilder {
+        LinkAuthIdBuilder {
+            auth_type: LinkAuthType::None,
+            auth_value: None,
+        }
+    }
+
+    pub fn auth_type(&mut self, auth_type: LinkAuthType) -> &mut Self {
+        self.auth_type = auth_type;
+        self
+    }
+    pub fn auth_value(&mut self, auth_value: Option<String>) -> &mut Self {
+        self.auth_value = auth_value;
+        self
+    }
+
+    pub fn build(&self) -> LinkAuthId {
+        LinkAuthId {
+            auth_type: self.auth_type.clone(),
+            auth_value: self.auth_value.clone(),
         }
     }
 }
