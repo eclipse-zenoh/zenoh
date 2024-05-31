@@ -24,43 +24,22 @@
 //!use zenoh::prelude::*;
 //! ```
 
-// Reexport API in flat namespace
-pub(crate) mod flat {
-    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-    pub use crate::shm::*;
+mod _prelude {
+    #[zenoh_macros::unstable]
+    pub use crate::api::publisher::PublisherDeclarations;
     pub use crate::{
-        buffers::*,
-        bytes::*,
-        config::*,
+        api::{
+            builders::sample::{
+                QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+            },
+            session::{SessionDeclarations, Undeclarable},
+        },
+        config::ValidatedMap,
         core::{Error as ZError, Resolvable, Resolve, Result as ZResult},
-        encoding::*,
-        handlers::*,
-        key_expr::*,
-        publication::*,
-        query::*,
-        queryable::*,
-        sample::*,
-        scouting::*,
-        selector::*,
-        session::*,
-        subscriber::*,
-        time::*,
-        value::*,
     };
 }
 
-// Reexport API in hierarchical namespace
-pub(crate) mod mods {
-    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
-    pub use crate::shm;
-    pub use crate::{
-        buffers, bytes, config, core, encoding, handlers, key_expr, publication, query, queryable,
-        sample, scouting, selector, session, subscriber, time, value,
-    };
-}
-
-pub use flat::*;
-pub use mods::*;
+pub use _prelude::*;
 
 #[allow(deprecated)]
 pub use crate::core::AsyncResolve;
@@ -71,14 +50,14 @@ pub use crate::core::Wait;
 /// Prelude to import when using Zenoh's sync API.
 #[deprecated = "use `zenoh::prelude` instead"]
 pub mod sync {
-    pub use super::{flat::*, mods::*};
+    pub use super::_prelude::*;
     #[allow(deprecated)]
     pub use crate::core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
 #[deprecated = "use `zenoh::prelude` instead"]
 pub mod r#async {
-    pub use super::{flat::*, mods::*};
+    pub use super::_prelude::*;
     #[allow(deprecated)]
     pub use crate::core::AsyncResolve;
 }

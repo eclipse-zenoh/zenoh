@@ -14,7 +14,7 @@
 use std::time::Instant;
 
 use clap::Parser;
-use zenoh::prelude::*;
+use zenoh::{prelude::*, Config};
 use zenoh_examples::CommonArgs;
 
 struct Stats {

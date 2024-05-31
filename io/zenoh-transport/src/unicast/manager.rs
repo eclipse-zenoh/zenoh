@@ -243,7 +243,7 @@ impl TransportManagerBuilderUnicast {
             protocols: Arc::new(AsyncMutex::new(HashMap::new())),
             transports: Arc::new(AsyncMutex::new(HashMap::new())),
             #[cfg(feature = "transport_multilink")]
-            multilink: Arc::new(MultiLink::make(prng)?),
+            multilink: Arc::new(MultiLink::make(prng, config.max_links > 1)?),
             #[cfg(feature = "transport_auth")]
             authenticator: Arc::new(self.authenticator),
             #[cfg(feature = "shared-memory")]

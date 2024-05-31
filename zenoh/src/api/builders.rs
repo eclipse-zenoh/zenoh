@@ -12,5 +12,5 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub(crate) mod publication;
+pub(crate) mod publisher;
 pub(crate) mod sample;

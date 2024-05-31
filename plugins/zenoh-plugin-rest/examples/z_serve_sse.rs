@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use clap::{arg, Command};
 use zenoh::{
-    config::Config, core::try_init_log_from_env, key_expr::keyexpr, publication::CongestionControl,
-    sample::QoSBuilderTrait, session::SessionDeclarations,
+    config::Config, key_expr::keyexpr, publisher::CongestionControl, sample::QoSBuilderTrait,
+    session::SessionDeclarations,
 };
 
 const HTML: &str = r#"
@@ -35,7 +35,7 @@ if(typeof(EventSource) !== "undefined") {
 #[async_std::main]
 async fn main() {
     // initiate logging
-    try_init_log_from_env();
+    zenoh_util::try_init_log_from_env();
 
     let config = parse_args();
     let key = keyexpr::new("demo/sse").unwrap();

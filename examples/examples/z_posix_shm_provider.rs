@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::prelude::*;
+use zenoh::shm::{
+    AllocAlignment, MemoryLayout, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder,
+    POSIX_PROTOCOL_ID,
+};
 
 fn main() {
     // Construct an SHM backend

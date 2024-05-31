@@ -19,8 +19,12 @@ use std::{
     },
 };
 
-use zenoh::prelude::*;
-use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
+use zenoh::{
+    config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow},
+    key_expr::KeyExpr,
+    prelude::*,
+    Config,
+};
 
 // Tokio's time granularity on different platforms
 #[cfg(target_os = "windows")]
