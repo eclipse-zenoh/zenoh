@@ -28,7 +28,6 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 
-use super::super::authentication::AuthId;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -382,18 +381,6 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         zread!(self.links).iter().map(|l| l.link.link()).collect()
     }
 
-    fn get_auth_ids(&self) -> Vec<super::transport::AuthId> {
-        //convert link level auth ids to AuthId
-        #[allow(unused_mut)]
-        let mut auth_ids: Vec<AuthId> = zread!(self.links)
-            .iter()
-            .map(|l| l.link.link().auth_identifier.into())
-            .collect();
-        //   convert usrpwd auth id to AuthId
-        #[cfg(feature = "auth_usrpwd")]
-        auth_ids.push(self.config.auth_id.clone().into());
-        auth_ids
-    }
     /*************************************/
     /*                TX                 */
     /*************************************/

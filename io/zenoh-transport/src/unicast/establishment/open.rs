@@ -32,8 +32,6 @@ use zenoh_result::ZResult;
 use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
-#[cfg(feature = "auth_usrpwd")]
-use crate::unicast::establishment::ext::auth::UsrPwdId;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
@@ -646,8 +644,6 @@ pub(crate) async fn open_link(
             false => None,
         },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
-        #[cfg(feature = "auth_usrpwd")]
-        auth_id: UsrPwdId(None),
     };
 
     let o_config = TransportLinkUnicastConfig {

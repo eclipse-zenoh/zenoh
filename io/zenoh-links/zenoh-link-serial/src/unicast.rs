@@ -32,8 +32,8 @@ use tokio_util::sync::CancellationToken;
 use z_serial::ZSerial;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
-    ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, NewLinkChannelSender,
+    ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -211,10 +211,6 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         false
-    }
-    #[inline(always)]
-    fn get_auth_identifier(&self) -> LinkAuthId {
-        LinkAuthId::default()
     }
 }
 
