@@ -23,7 +23,7 @@ use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     writer::HasWriter,
-    ZBufReader, ZBufWriter, ZSlice,
+    ZBufReader, ZBufWriter, ZSlice, ZBuf,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{core::Properties, zenoh::ext::AttachmentType};
@@ -36,8 +36,6 @@ use zenoh_shm::{
     },
     SharedMemoryBuf,
 };
-
-use crate::buffers::ZBuf;
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {

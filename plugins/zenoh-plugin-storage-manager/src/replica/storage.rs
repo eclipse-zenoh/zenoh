@@ -22,7 +22,6 @@ use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
 use zenoh::{
-    buffers::{SplitBuffer, ZBuf},
     core::Result as ZResult,
     internal::{bail, zenoh_home, Timed, TimedEvent, Timer},
     key_expr::{
@@ -38,6 +37,7 @@ use zenoh::{
     time::{new_reception_timestamp, Timestamp, NTP64},
     value::Value,
 };
+use zenoh::internal::buffers::{SplitBuffer, ZBuf};
 use zenoh_backend_traits::{
     config::{GarbageCollectionConfig, StorageConfig},
     Capability, History, Persistence, StorageInsertionResult, StoredData,

@@ -45,7 +45,7 @@ tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
-zenoh = { workspace = true, features = ["unstable"] }
+zenoh = { workspace = true, features = ["unstable", "internal"] }
 zenoh-plugin-trait = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh_backend_traits = { workspace = true }

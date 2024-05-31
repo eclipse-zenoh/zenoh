@@ -134,16 +134,6 @@ pub mod core {
     pub use zenoh_result::ZResult as Result;
 }
 
-/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
-/// reading and writing data.
-pub mod buffers {
-    pub use zenoh_buffers::{
-        buffer::SplitBuffer,
-        reader::{HasReader, Reader},
-        ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
-    };
-}
-
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
 /// In Zenoh, operations are performed on keys. To allow addressing multiple keys with a single operation, we use Key Expressions (KE).
@@ -372,6 +362,7 @@ pub mod plugins {
 }
 
 #[doc(hidden)]
+#[cfg(feature = "internal")]
 pub mod internal {
     pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout, ResolveFuture};
     pub use zenoh_result::bail;
@@ -380,6 +371,16 @@ pub mod internal {
     pub use zenoh_util::{zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
 
     pub use crate::api::encoding::EncodingInternals;
+
+    /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
+    /// reading and writing data.
+    pub mod buffers {
+        pub use zenoh_buffers::{
+            buffer::SplitBuffer,
+            reader::{HasReader, Reader},
+            ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
+        };
+    }
 }
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
