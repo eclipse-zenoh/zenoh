@@ -23,6 +23,7 @@ use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
+pub(crate) use super::dispatcher::token::*;
 pub use super::dispatcher::{pubsub::*, queries::*, resource::*};
 use super::{
     dispatcher::{

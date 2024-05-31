@@ -29,6 +29,11 @@ use super::{
 };
 use crate::net::routing::{hat::HatTrait, router::Resource};
 
+pub(crate) struct TokenQuery {
+    pub(crate) src_face: Arc<FaceState>,
+    pub(crate) src_interest_id: InterestId,
+}
+
 pub(crate) fn declare_token(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,

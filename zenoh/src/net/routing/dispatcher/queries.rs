@@ -132,11 +132,6 @@ pub(crate) struct Query {
     src_qid: RequestId,
 }
 
-pub(crate) struct TokenQuery {
-    pub(crate) src_face: Arc<FaceState>,
-    pub(crate) src_interest_id: InterestId,
-}
-
 pub(crate) fn declare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,

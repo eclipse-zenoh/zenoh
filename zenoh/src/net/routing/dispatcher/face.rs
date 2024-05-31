@@ -39,7 +39,6 @@ use super::{
     super::router::*,
     resource::*,
     tables::{self, TablesLock},
-    token::{declare_token, declare_token_interest, undeclare_token, undeclare_token_interest},
 };
 use crate::{
     api::key_expr::KeyExpr,
