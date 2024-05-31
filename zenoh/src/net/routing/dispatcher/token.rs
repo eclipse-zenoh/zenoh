@@ -22,16 +22,12 @@ use zenoh_protocol::{
         interest::{InterestId, InterestMode},
     },
 };
-use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face::FaceState,
     tables::{NodeId, TablesLock},
 };
-use crate::net::routing::{
-    hat::HatTrait,
-    router::{compute_matches_data_routes, disable_matches_data_routes, Resource},
-};
+use crate::net::routing::{hat::HatTrait, router::Resource};
 
 pub(crate) fn declare_token(
     hat_code: &(dyn HatTrait + Send + Sync),
@@ -127,23 +123,8 @@ pub(crate) fn undeclare_token(
     };
 
     let mut wtables = zwrite!(tables.tables);
-    if let Some(mut res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id) {
+    if let Some(res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id) {
         tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
-        disable_matches_data_routes(&mut wtables, &mut res);
-        drop(wtables);
-
-        let rtables = zread!(tables.tables);
-        let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-        drop(rtables);
-
-        let wtables = zwrite!(tables.tables);
-        for (mut res, data_routes) in matches_data_routes {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .update_data_routes(data_routes);
-        }
-        Resource::clean(&mut res);
-        drop(wtables);
     } else {
         tracing::error!("{} Undeclare unknown token {}", face, id);
     }
