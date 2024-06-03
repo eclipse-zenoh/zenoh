@@ -59,15 +59,15 @@ pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
     (quote! {(#release, #commit)}).into()
 }
 
-/// An enumeration of items supported by the [`unstable`] attribute.
-enum UnstableItem {
+/// An enumeration of items which can be annotated with `#[zenoh_macros::unstable]`, #[zenoh_macros::unstable]`, `#[zenoh_macros::internal]`
+enum AnnotableItem {
     /// Wrapper around [`syn::Item`].
     Item(Item),
     /// Wrapper around [`syn::TraitItem`].
     TraitItem(TraitItem),
 }
 
-macro_rules! parse_unstable_item {
+macro_rules! parse_annotable_item {
     ($tokens:ident) => {{
         let item: Item = parse_macro_input!($tokens as Item);
 
@@ -81,19 +81,19 @@ macro_rules! parse_unstable_item {
                     "the `unstable` proc-macro attribute only supports items and trait items",
                 ))
             } else {
-                Ok(UnstableItem::TraitItem(trait_item))
+                Ok(AnnotableItem::TraitItem(trait_item))
             }
         } else {
-            Ok(UnstableItem::Item(item))
+            Ok(AnnotableItem::Item(item))
         }
     }};
 }
 
-impl UnstableItem {
+impl AnnotableItem {
     /// Mutably borrows the attribute list of this item.
     fn attributes_mut(&mut self) -> Result<&mut Vec<Attribute>, Error> {
         match self {
-            UnstableItem::Item(item) => match item {
+            AnnotableItem::Item(item) => match item {
                 Item::Const(item) => Ok(&mut item.attrs),
                 Item::Enum(item) => Ok(&mut item.attrs),
                 Item::ExternCrate(item) => Ok(&mut item.attrs),
@@ -111,17 +111,17 @@ impl UnstableItem {
                 Item::Use(item) => Ok(&mut item.attrs),
                 other => Err(Error::new_spanned(
                     other,
-                    "item is not supported by the `unstable` proc-macro attribute",
+                    "item is not supported by the `unstable` or `internal` proc-macro attribute",
                 )),
             },
-            UnstableItem::TraitItem(trait_item) => match trait_item {
+            AnnotableItem::TraitItem(trait_item) => match trait_item {
                 TraitItem::Const(trait_item) => Ok(&mut trait_item.attrs),
                 TraitItem::Fn(trait_item) => Ok(&mut trait_item.attrs),
                 TraitItem::Type(trait_item) => Ok(&mut trait_item.attrs),
                 TraitItem::Macro(trait_item) => Ok(&mut trait_item.attrs),
                 other => Err(Error::new_spanned(
                     other,
-                    "item is not supported by the `unstable` proc-macro attribute",
+                    "item is not supported by the `unstable` or `internal` proc-macro attribute",
                 )),
             },
         }
@@ -130,15 +130,18 @@ impl UnstableItem {
     /// Converts this item to a `proc_macro2::TokenStream`.
     fn to_token_stream(&self) -> proc_macro2::TokenStream {
         match self {
-            UnstableItem::Item(item) => item.to_token_stream(),
-            UnstableItem::TraitItem(trait_item) => trait_item.to_token_stream(),
+            AnnotableItem::Item(item) => item.to_token_stream(),
+            AnnotableItem::TraitItem(trait_item) => trait_item.to_token_stream(),
         }
     }
 }
 
 #[proc_macro_attribute]
+/// Adds only piece of documentation about the item being unstable but no unstable attribute itself.
+/// This is useful when the whole crate is supposed to be used in unstable mode only, it makes sense
+/// to mention it in dcoumentation for the crate items, but not to add `#[cfg(feature = "unstable")]` to every item.
 pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    let mut item = match parse_unstable_item!(tokens) {
+    let mut item = match parse_annotable_item!(tokens) {
         Ok(item) => item,
         Err(err) => return err.into_compile_error().into(),
     };
@@ -159,9 +162,10 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+/// Adds a `#[cfg(feature = "unstable")]` attribute to the item and appends piece of documentation about the item being unstable.
 pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let tokens = unstable_doc(attr, tokens);
-    let mut item = match parse_unstable_item!(tokens) {
+    let mut item = match parse_annotable_item!(tokens) {
         Ok(item) => item,
         Err(err) => return err.into_compile_error().into(),
     };
@@ -173,6 +177,27 @@ pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
     let feature_gate: Attribute = parse_quote!(#[cfg(feature = "unstable")]);
     attrs.push(feature_gate);
+
+    TokenStream::from(item.to_token_stream())
+}
+
+#[proc_macro_attribute]
+/// Adds a `#[cfg(feature = "internal")]` and `#[doc(hidden)]` attributes to the item.
+pub fn internal(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut item = match parse_annotable_item!(tokens) {
+        Ok(item) => item,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let attrs = match item.attributes_mut() {
+        Ok(attrs) => attrs,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal")]);
+    let hide_doc: Attribute = parse_quote!(#[doc(hidden)]);
+    attrs.push(feature_gate);
+    attrs.push(hide_doc);
 
     TokenStream::from(item.to_token_stream())
 }
