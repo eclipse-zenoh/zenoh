@@ -311,6 +311,52 @@ pub struct ZSerde;
 #[derive(Debug, Clone, Copy)]
 pub struct ZDeserializeError;
 
+// ZBytes
+impl Serialize<ZBytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: ZBytes) -> Self::Output {
+        t
+    }
+}
+
+impl From<&ZBytes> for ZBytes {
+    fn from(t: &ZBytes) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl From<&mut ZBytes> for ZBytes {
+    fn from(t: &mut ZBytes) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&ZBytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: &ZBytes) -> Self::Output {
+        t.clone()
+    }
+}
+
+impl Serialize<&mut ZBytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: &mut ZBytes) -> Self::Output {
+        t.clone()
+    }
+}
+
+impl<'a> Deserialize<'a, ZBytes> for ZSerde {
+    type Input = &'a ZBytes;
+    type Error = Infallible;
+
+    fn deserialize(self, v: Self::Input) -> Result<ZBytes, Self::Error> {
+        Ok(v.clone())
+    }
+}
+
 // ZBuf
 impl Serialize<ZBuf> for ZSerde {
     type Output = ZBytes;
