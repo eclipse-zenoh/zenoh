@@ -103,20 +103,21 @@ impl AdminSpace {
         start_args: &Runtime,
         required: bool,
     ) -> ZResult<()> {
+        let id = &config.id;
         let name = &config.name;
-        let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-            tracing::warn!("Plugin `{}` was already declared", declared.name());
+        let declared = if let Some(declared) = plugin_mgr.plugin_mut(id) {
+            tracing::warn!("Plugin `{}` was already declared", declared.id());
             declared
         } else if let Some(paths) = &config.paths {
-            plugin_mgr.declare_dynamic_plugin_by_paths(name, name, paths, required)?
+            plugin_mgr.declare_dynamic_plugin_by_paths(id, name, paths, required)?
         } else {
-            plugin_mgr.declare_dynamic_plugin_by_name(name, name, required)?
+            plugin_mgr.declare_dynamic_plugin_by_name(id, name, required)?
         };
 
         let loaded = if let Some(loaded) = declared.loaded_mut() {
             tracing::warn!(
                 "Plugin `{}` was already loaded from {}",
-                loaded.name(),
+                loaded.id(),
                 loaded.path()
             );
             loaded
@@ -125,12 +126,12 @@ impl AdminSpace {
         };
 
         if let Some(started) = loaded.started_mut() {
-            tracing::warn!("Plugin `{}` was already started", started.name());
+            tracing::warn!("Plugin `{}` was already started", started.id());
         } else {
             let started = loaded.start(start_args)?;
             tracing::info!(
                 "Successfully started plugin `{}` from {}",
-                started.name(),
+                started.id(),
                 started.path()
             );
         };
@@ -768,7 +769,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
         let statuses = guard.plugins_status(names);
         for status in statuses {
             tracing::debug!("plugin status: {:?}", status);
-            let key = root_key.join(status.name()).unwrap();
+            let key = root_key.join(status.id()).unwrap();
             let status = serde_json::to_value(status).unwrap();
             if let Err(e) = query.reply(Ok(Sample::new(key, Value::from(status)))).res() {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -834,15 +835,15 @@ fn plugins_status(context: &AdminContext, query: Query) {
                     }
                 }
                 Ok(Err(e)) => {
-                    tracing::error!("Plugin {} bailed from responding to {}: {}", plugin.name(), query.key_expr(), e)
+                    tracing::error!("Plugin {} bailed from responding to {}: {}", plugin.id(), query.key_expr(), e)
                 }
                 Err(e) => match e
                     .downcast_ref::<String>()
                     .map(|s| s.as_str())
                     .or_else(|| e.downcast_ref::<&str>().copied())
                 {
-                    Some(e) => tracing::error!("Plugin {} panicked while responding to {}: {}", plugin.name(), query.key_expr(), e),
-                    None => tracing::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.name(), query.key_expr()),
+                    Some(e) => tracing::error!("Plugin {} panicked while responding to {}: {}", plugin.id(), query.key_expr(), e),
+                    None => tracing::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.id(), query.key_expr()),
                 },
             }
         });

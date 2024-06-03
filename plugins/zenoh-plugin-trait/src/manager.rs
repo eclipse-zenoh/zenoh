@@ -322,21 +322,21 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
         );
         let mut plugins = Vec::new();
         for plugin in self.declared_plugins_iter() {
-            let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
-            if names.includes(name) {
+            let id = unsafe { keyexpr::from_str_unchecked(plugin.id()) };
+            if names.includes(id) {
                 let status = PluginStatusRec::new(plugin.as_status());
                 plugins.push(status);
             }
             // for running plugins append their subplugins prepended with the running plugin name
             if let Some(plugin) = plugin.loaded() {
                 if let Some(plugin) = plugin.started() {
-                    if let [names, ..] = names.strip_prefix(name)[..] {
+                    if let [names, ..] = names.strip_prefix(id)[..] {
                         plugins.append(
                             &mut plugin
                                 .instance()
                                 .plugins_status(names)
                                 .into_iter()
-                                .map(|s| s.prepend_name(name))
+                                .map(|s| s.prepend_name(id))
                                 .collect(),
                         );
                     }

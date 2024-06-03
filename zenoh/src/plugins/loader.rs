@@ -24,7 +24,7 @@ pub(crate) fn load_plugin(
     required: bool,
 ) -> ZResult<()> {
     let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-        tracing::warn!("Plugin `{}` was already declared", declared.name());
+        tracing::warn!("Plugin `{}` was already declared", declared.id());
         declared
     } else if let Some(paths) = paths {
         plugin_mgr.declare_dynamic_plugin_by_paths(name, id, paths, required)?
@@ -35,7 +35,7 @@ pub(crate) fn load_plugin(
     if let Some(loaded) = declared.loaded_mut() {
         tracing::warn!(
             "Plugin `{}` was already loaded from {}",
-            loaded.name(),
+            loaded.id(),
             loaded.path()
         );
     } else {
@@ -76,13 +76,13 @@ pub(crate) fn start_plugins(runtime: &Runtime) {
         tracing::info!(
             "Starting {req} plugin \"{name}\"",
             req = if required { "required" } else { "" },
-            name = plugin.name()
+            name = plugin.id()
         );
         match plugin.start(runtime) {
             Ok(_) => {
                 tracing::info!(
                     "Successfully started plugin {} from {:?}",
-                    plugin.name(),
+                    plugin.id(),
                     plugin.path()
                 );
             }
@@ -94,7 +94,7 @@ pub(crate) fn start_plugins(runtime: &Runtime) {
                 if required {
                     panic!(
                         "Plugin \"{}\" failed to start: {}",
-                        plugin.name(),
+                        plugin.id(),
                         if report.is_empty() {
                             "no details provided"
                         } else {
@@ -104,7 +104,7 @@ pub(crate) fn start_plugins(runtime: &Runtime) {
                 } else {
                     tracing::error!(
                         "Required plugin \"{}\" failed to start: {}",
-                        plugin.name(),
+                        plugin.id(),
                         if report.is_empty() {
                             "no details provided"
                         } else {
