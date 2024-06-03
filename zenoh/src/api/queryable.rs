@@ -149,8 +149,8 @@ impl Query {
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     /// This api is for internal use only.
     #[inline(always)]
-    #[cfg(feature = "unstable")]
-    #[doc(hidden)]
+    #[zenoh_macros::unstable]
+    #[zenoh_macros::internal]
     pub fn reply_sample(&self, sample: Sample) -> ReplySample<'_> {
         ReplySample {
             query: self,
@@ -272,21 +272,29 @@ impl fmt::Display for Query {
     }
 }
 
+#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 pub struct ReplySample<'a> {
     query: &'a Query,
     sample: Sample,
 }
 
+#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl Resolvable for ReplySample<'_> {
     type To = ZResult<()>;
 }
 
+#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl Wait for ReplySample<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.query._reply_sample(self.sample)
     }
 }
 
+#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl IntoFuture for ReplySample<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;

@@ -284,22 +284,30 @@ pub mod publisher {
     };
 }
 
-/// Query primitives
+/// Get operation primitives
+pub mod querier {
+    // Later the `Querier` with `get`` operation will be added here, in addition to `Session::get`,
+    // similarly to the `Publisher` with `put` operation and `Session::put`
+}
+
+/// Query and Reply primitives
 pub mod query {
     #[zenoh_macros::unstable]
     pub use crate::api::query::ReplyKeyExpr;
     #[zenoh_macros::unstable]
     pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
     pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply};
+    pub use crate::api::queryable::Query;
+    pub use crate::api::queryable::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder};
+    #[zenoh_macros::unstable]
+    #[zenoh_macros::internal]
+    pub use crate::api::queryable::ReplySample;
 }
 
 /// Queryable primitives
 pub mod queryable {
-    #[zenoh_macros::unstable]
-    pub use crate::api::queryable::ReplySample;
     pub use crate::api::queryable::{
-        Query, Queryable, QueryableBuilder, QueryableUndeclaration, ReplyBuilder,
-        ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+        Queryable, QueryableBuilder, QueryableUndeclaration,
     };
 }
 
