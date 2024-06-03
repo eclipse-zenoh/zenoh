@@ -115,7 +115,6 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
 pub use crate::{
     config::Config,
     core::{Error, Result},
-    key_expr::{kedefine, keformat, kewrite},
     scouting::scout,
     session::{open, Session},
 };
@@ -132,6 +131,8 @@ pub mod core {
     pub use zenoh_result::Error;
     /// A zenoh result.
     pub use zenoh_result::ZResult as Result;
+    /// Zenoh message priority
+    pub use crate::api::publisher::Priority;
 }
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
@@ -165,6 +166,7 @@ pub mod core {
 /// [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
 /// as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 pub mod key_expr {
+    #[zenoh_macros::unstable]
     pub mod keyexpr_tree {
         pub use zenoh_keyexpr::keyexpr_tree::{
             impls::KeyedSetProvider,
@@ -172,12 +174,16 @@ pub mod key_expr {
             IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
         };
     }
-    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr, SetIntersectionLevel};
-    pub use zenoh_macros::{kedefine, keformat, kewrite};
+    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
+    
+    #[zenoh_macros::unstable]
+    pub use zenoh_keyexpr::SetIntersectionLevel;
 
     pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
     // keyexpr format macro support
+    #[zenoh_macros::unstable]
     pub mod format {
+        pub use zenoh_macros::{kedefine, keformat, kewrite};
         pub use zenoh_keyexpr::format::*;
         pub mod macro_support {
             pub use zenoh_keyexpr::format::macro_support::*;
@@ -188,11 +194,8 @@ pub mod key_expr {
 /// Zenoh [`Session`](crate::session::Session) and associated types
 pub mod session {
     #[zenoh_macros::unstable]
-    #[doc(hidden)]
-    pub use crate::api::session::init;
-    #[zenoh_macros::unstable]
-    #[doc(hidden)]
-    pub use crate::api::session::InitBuilder;
+    #[zenoh_macros::internal]
+    pub use crate::api::session::{init, InitBuilder};
     pub use crate::api::{
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
@@ -276,7 +279,7 @@ pub mod publisher {
             PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
             PublisherDeleteBuilder, PublisherPutBuilder,
         },
-        publisher::{Priority, Publisher, PublisherUndeclaration},
+        publisher::{Publisher, PublisherUndeclaration},
     };
 }
 

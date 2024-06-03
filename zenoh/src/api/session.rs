@@ -2794,8 +2794,8 @@ where
 
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime as the router.
-#[doc(hidden)]
 #[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder {
         runtime,
@@ -2808,6 +2808,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[doc(hidden)]
 #[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 pub struct InitBuilder {
     runtime: Runtime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
@@ -2815,6 +2816,7 @@ pub struct InitBuilder {
 }
 
 #[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl InitBuilder {
     #[inline]
     pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
@@ -2830,11 +2832,13 @@ impl InitBuilder {
 }
 
 #[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl Resolvable for InitBuilder {
     type To = ZResult<Session>;
 }
 
 #[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl Wait for InitBuilder {
     fn wait(self) -> <Self as Resolvable>::To {
         Ok(Session::init(
@@ -2847,6 +2851,7 @@ impl Wait for InitBuilder {
 }
 
 #[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl IntoFuture for InitBuilder {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
