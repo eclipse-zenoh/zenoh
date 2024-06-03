@@ -58,8 +58,12 @@ pub trait Wait: Resolvable {
 pub trait AsyncResolve: Resolvable {
     type Future: Future<Output = Self::To> + Send;
 
+    #[allow(deprecated)]
+    #[deprecated = "use `.await` directly instead"]
     fn res_async(self) -> Self::Future;
 
+    #[allow(deprecated)]
+    #[deprecated = "use `.wait()` instead`"]
     fn res(self) -> Self::Future
     where
         Self: Sized,
@@ -83,8 +87,11 @@ where
 
 #[deprecated = "use `.wait()` instead`"]
 pub trait SyncResolve: Resolvable {
+    #[deprecated = "use `.wait()` instead`"]
     fn res_sync(self) -> Self::To;
 
+    #[allow(deprecated)]
+    #[deprecated = "use `.wait()` instead`"]
     fn res(self) -> Self::To
     where
         Self: Sized,
