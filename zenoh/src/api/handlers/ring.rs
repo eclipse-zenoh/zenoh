@@ -15,7 +15,7 @@
 //! Callback handler trait.
 use std::{
     sync::{Arc, Weak},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use zenoh_collections::RingBuffer;
@@ -80,10 +80,32 @@ impl<T> RingChannelHandler<T> {
             if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
                 return Ok(Some(t));
             }
-            channel
-                .not_empty
-                .recv_deadline(deadline)
-                .map_err(|e| zerror!("{}", e))?;
+            match channel.not_empty.recv_deadline(deadline) {
+                Ok(()) => {}
+                Err(flume::RecvTimeoutError::Timeout) => return Ok(None),
+                Err(err) => bail!("{}", err),
+            }
+        }
+    }
+
+    /// Receive from the ring channel with a timeout.
+    ///
+    /// If the ring channel is empty, this call will block until an element is available in the channel,
+    /// or return `None` if the deadline has expired.
+    pub fn recv_timeout(&self, timeout: Duration) -> ZResult<Option<T>> {
+        let Some(channel) = self.ring.upgrade() else {
+            bail!("The ringbuffer has been deleted.");
+        };
+
+        loop {
+            if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
+                return Ok(Some(t));
+            }
+            match channel.not_empty.recv_timeout(timeout) {
+                Ok(()) => {}
+                Err(flume::RecvTimeoutError::Timeout) => return Ok(None),
+                Err(err) => bail!("{}", err),
+            }
         }
     }
 
