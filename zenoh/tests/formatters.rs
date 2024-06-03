@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::{kedefine, keformat};
+use zenoh::key_expr::format::{kedefine, keformat};
 
 #[test]
 fn kedefine_reuse() {

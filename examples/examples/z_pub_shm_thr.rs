@@ -13,7 +13,7 @@
 //
 use clap::Parser;
 use zenoh::{
-    buffers::ZSlice,
+    internal::buffers::ZSlice,
     prelude::*,
     publisher::CongestionControl,
     shm::{PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID},
