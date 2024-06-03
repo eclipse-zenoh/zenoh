@@ -13,7 +13,10 @@
 //
 
 //! Callback handler trait.
-use std::sync::{Arc, Weak};
+use std::{
+    sync::{Arc, Weak},
+    time::Instant,
+};
 
 use zenoh_collections::RingBuffer;
 use zenoh_result::ZResult;
@@ -49,7 +52,9 @@ pub struct RingChannelHandler<T> {
 }
 
 impl<T> RingChannelHandler<T> {
-    /// Receive from the ring channel. If the ring channel is empty, this call will block until an element is available in the channel.
+    /// Receive from the ring channel.
+    ///
+    /// If the ring channel is empty, this call will block until an element is available in the channel.
     pub fn recv(&self) -> ZResult<T> {
         let Some(channel) = self.ring.upgrade() else {
             bail!("The ringbuffer has been deleted.");
@@ -62,7 +67,29 @@ impl<T> RingChannelHandler<T> {
         }
     }
 
-    /// Receive from the ring channel. If the ring channel is empty, this call will block until an element is available in the channel.
+    /// Receive from the ring channel with a deadline.
+    ///
+    /// If the ring channel is empty, this call will block until an element is available in the channel,
+    /// or return `None` if the deadline has passed.
+    pub fn recv_deadline(&self, deadline: Instant) -> ZResult<Option<T>> {
+        let Some(channel) = self.ring.upgrade() else {
+            bail!("The ringbuffer has been deleted.");
+        };
+
+        loop {
+            if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
+                return Ok(Some(t));
+            }
+            channel
+                .not_empty
+                .recv_deadline(deadline)
+                .map_err(|e| zerror!("{}", e))?;
+        }
+    }
+
+    /// Receive from the ring channel.
+    ///
+    /// If the ring channel is empty, this call will block until an element is available in the channel.
     pub async fn recv_async(&self) -> ZResult<T> {
         let Some(channel) = self.ring.upgrade() else {
             bail!("The ringbuffer has been deleted.");
@@ -79,7 +106,9 @@ impl<T> RingChannelHandler<T> {
         }
     }
 
-    /// Try to receive from the ring channel. If the ring channel is empty, this call will return immediately without blocking.
+    /// Try to receive from the ring channel.
+    ///
+    /// If the ring channel is empty, this call will return immediately without blocking.
     pub fn try_recv(&self) -> ZResult<Option<T>> {
         let Some(channel) = self.ring.upgrade() else {
             bail!("The ringbuffer has been deleted.");
