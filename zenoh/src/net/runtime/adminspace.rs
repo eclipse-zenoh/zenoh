@@ -19,14 +19,14 @@ use std::{
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI, ZenohId};
 use zenoh_core::Wait;
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(all(feature = "unstable", feature = "plugins"))]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, EMPTY_EXPR_ID},
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
@@ -467,7 +467,7 @@ impl Primitives for AdminSpace {
                         key_expr: key_expr.clone(),
                         parameters: query.parameters.into(),
                         qid: msg.id,
-                        zid,
+                        zid: zid.into(),
                         primitives,
                     }),
                     eid: self.queryable_id,

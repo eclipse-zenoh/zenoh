@@ -25,8 +25,9 @@ use std::{
     time::Duration,
 };
 
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
+    core::ZenohId,
     common::ZExtBody,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},

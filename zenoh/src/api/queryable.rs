@@ -894,7 +894,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
-            zid: self.queryable.session.zid(),
+            zid: self.queryable.session.zid().into(),
             eid: self.queryable.state.id,
         }
     }

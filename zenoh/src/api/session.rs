@@ -28,14 +28,14 @@ use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, Config, Notifier};
+use zenoh_config::{unwrap_or_default, Config, Notifier, ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, ZenohId,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr,
         EMPTY_EXPR_ID,
     },
     network::{
@@ -1711,7 +1711,7 @@ impl Session {
                                 }
                                 (query.callback)(Reply {
                                     result: Err("Timeout".into()),
-                                    replier_id: zid,
+                                    replier_id: zid.into(),
                                 });
                             }
                         }
@@ -1860,7 +1860,7 @@ impl Session {
             key_expr,
             parameters: parameters.to_owned().into(),
             qid,
-            zid,
+            zid: zid.into(),
             primitives: if local {
                 Arc::new(self.clone())
             } else {
@@ -2227,7 +2227,7 @@ impl Primitives for Session {
                         };
                         let replier_id = match e.ext_sinfo {
                             Some(info) => info.id.zid,
-                            None => ZenohId::rand(),
+                            None => zenoh_protocol::core::ZenohId::rand().into(),
                         };
                         let new_reply = Reply {
                             replier_id,
@@ -2354,7 +2354,7 @@ impl Primitives for Session {
                         );
                         let new_reply = Reply {
                             result: Ok(sample),
-                            replier_id: ZenohId::rand(), // TODO
+                            replier_id: zenoh_protocol::core::ZenohId::rand().into(), // TODO
                         };
                         let callback =
                             match query.reception_mode {

@@ -155,7 +155,7 @@ impl<'a> Publisher<'a> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
-            zid: self.session.zid(),
+            zid: self.session.zid().into(),
             eid: self.id,
         }
     }
@@ -661,11 +661,16 @@ impl Priority {
     /// Default
     pub const DEFAULT: Self = Self::Data;
     /// The lowest Priority
-    pub const MIN: Self = Self::Background;
+    #[zenoh_macros::internal]
+    pub const MIN: Self = Self::MIN_;
+    const MIN_: Self = Self::Background;
     /// The highest Priority
-    pub const MAX: Self = Self::RealTime;
+    #[zenoh_macros::internal]
+    pub const MAX: Self = Self::MAX_;
+    const MAX_: Self = Self::RealTime;
     /// The number of available priorities
-    pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
+    #[zenoh_macros::internal]
+    pub const NUM: usize = 1 + Self::MIN_ as usize - Self::MAX_ as usize;
 }
 
 impl TryFrom<u8> for Priority {
@@ -691,8 +696,8 @@ impl TryFrom<u8> for Priority {
             unknown => bail!(
                 "{} is not a valid priority value. Admitted values are: [{}-{}].",
                 unknown,
-                Self::MAX as u8,
-                Self::MIN as u8
+                Self::MAX_ as u8,
+                Self::MIN_ as u8
             ),
         }
     }

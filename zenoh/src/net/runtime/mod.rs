@@ -36,10 +36,11 @@ use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
+use zenoh_config::ZenohId;
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI, ZenohId},
+    core::{Locator, WhatAmI},
     network::NetworkMessage,
 };
 use zenoh_result::{bail, ZResult};
@@ -133,7 +134,7 @@ impl RuntimeBuilder {
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-        let zid = *config.id();
+        let zid = (*config.id()).into();
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
@@ -175,7 +176,7 @@ impl RuntimeBuilder {
         let config = Notifier::new(config);
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
-                zid,
+                zid: zid.into(),
                 whatami,
                 next_id: AtomicU32::new(1), // 0 is reserved for routing core
                 metadata,

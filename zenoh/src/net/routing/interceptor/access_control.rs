@@ -20,8 +20,9 @@
 
 use std::{any::Any, sync::Arc};
 
-use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject, ZenohId};
+use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject};
 use zenoh_protocol::{
+    core::ZenohId,
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
     zenoh::{PushBody, RequestBody},
 };
