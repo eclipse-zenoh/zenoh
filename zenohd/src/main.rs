@@ -20,7 +20,7 @@ use url::Url;
 use zenoh::{
     config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap},
     core::Result,
-    scouting::WhatAmI,
+    config::WhatAmI,
 };
 
 #[cfg(feature = "loki")]
