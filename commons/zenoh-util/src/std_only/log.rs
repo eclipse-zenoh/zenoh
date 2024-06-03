@@ -11,9 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use tracing_subscriber::EnvFilter;
+use std::{fmt, thread, thread::ThreadId};
 
-/// This is an utility function to enable the tracing formatting subscriber from
+use tracing::{field::Field, span, Event, Subscriber};
+use tracing_subscriber::{
+    layer::{Context, SubscriberExt},
+    registry::LookupSpan,
+    EnvFilter,
+};
+
+/// This is a utility function to enable the tracing formatting subscriber from
 /// the `RUST_LOG` environment variable. If `RUST_LOG` is not set, then logging is not enabled.
 ///
 /// # Safety
@@ -27,7 +34,7 @@ pub fn try_init_log_from_env() {
     }
 }
 
-/// This is an utility function to enable the tracing formatting subscriber from
+/// This is a utility function to enable the tracing formatting subscriber from
 /// the environment variable. If `RUST_LOG` is not set, then fallback directives are used.
 ///
 /// # Safety
@@ -52,6 +59,79 @@ fn init_env_filter(env_filter: EnvFilter) {
         .with_target(true);
 
     let subscriber = subscriber.finish();
+    let _ = tracing::subscriber::set_global_default(subscriber);
+}
+
+pub struct LogRecord {
+    pub target: String,
+    pub level: tracing::Level,
+    pub file: Option<&'static str>,
+    pub line: Option<u32>,
+    pub thread_id: ThreadId,
+    pub thread_name: Option<String>,
+    pub message: Option<String>,
+    pub attributes: Vec<(&'static str, String)>,
+}
+
+#[derive(Clone)]
+struct SpanFields(Vec<(&'static str, String)>);
+
+struct Layer<F>(F);
+
+impl<S, F> tracing_subscriber::Layer<S> for Layer<F>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    F: Fn(LogRecord) + 'static,
+{
+    fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
+        let span = ctx.span(id).unwrap();
+        let mut extensions = span.extensions_mut();
+        let mut fields = vec![];
+        attrs.record(&mut |field: &Field, value: &dyn fmt::Debug| {
+            fields.push((field.name(), format!("{value:?}")))
+        });
+        extensions.insert(SpanFields(fields));
+    }
+    fn on_record(&self, id: &span::Id, values: &span::Record<'_>, ctx: Context<'_, S>) {
+        let span = ctx.span(id).unwrap();
+        let mut extensions = span.extensions_mut();
+        let fields = extensions.get_mut::<SpanFields>().unwrap();
+        values.record(&mut |field: &Field, value: &dyn fmt::Debug| {
+            fields.0.push((field.name(), format!("{value:?}")))
+        });
+    }
+    fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
+        let thread = thread::current();
+        let mut record = LogRecord {
+            target: event.metadata().target().into(),
+            level: *event.metadata().level(),
+            file: event.metadata().file(),
+            line: event.metadata().line(),
+            thread_id: thread.id(),
+            thread_name: thread.name().map(Into::into),
+            message: None,
+            attributes: vec![],
+        };
+        if let Some(scope) = ctx.event_scope(event) {
+            for span in scope.from_root() {
+                let extensions = span.extensions();
+                let fields = extensions.get::<SpanFields>().unwrap();
+                record.attributes.extend(fields.0.iter().cloned());
+            }
+        }
+        event.record(&mut |field: &Field, value: &dyn fmt::Debug| {
+            if field.name() == "message" {
+                record.message = Some(format!("{value:?}"));
+            } else {
+                record.attributes.push((field.name(), format!("{value:?}")))
+            }
+        });
+        self.0(record);
+    }
+}
+
+pub fn init_log_with_callback(cb: impl Fn(LogRecord) + Send + Sync + 'static) {
+    let subscriber = tracing_subscriber::registry().with(Layer(cb));
     let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
