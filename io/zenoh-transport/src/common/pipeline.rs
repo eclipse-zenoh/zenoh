@@ -351,6 +351,7 @@ struct Backoff {
     last_bytes: BatchSize,
     bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
+    cause: u16,
 }
 
 impl Backoff {
@@ -360,6 +361,7 @@ impl Backoff {
             last_bytes: 0,
             bytes,
             backoff,
+            cause: 0,
         }
     }
 
@@ -374,9 +376,17 @@ impl Backoff {
                 }
                 None => {
                     self.retry_time = NanoSeconds::MAX;
+                    let cause = match self.cause {
+                        0 => "Empty",
+                        1 => "TryLock",
+                        2 => "Bytes",
+                        3 => "TryLock and Bytes",
+                        _ => "Unkown",
+                    };
                     tracing::warn!(
-                        "Pipeline pull backoff overflow detected! Retrying in {}ns.",
-                        self.retry_time
+                        "Pipeline pull backoff overflow detected! Cause: {}. Retrying in {}ns.",
+                        cause,
+                        self.retry_time,
                     );
                 }
             }
@@ -385,7 +395,16 @@ impl Backoff {
 
     fn stop(&mut self) {
         self.retry_time = 0;
+        self.cause = 0;
         self.backoff.store(false, Ordering::Relaxed);
+    }
+
+    fn cause_try_lock(&mut self) {
+        self.cause |= 1;
+    }
+
+    fn cause_bytes(&mut self) {
+        self.cause |= 2;
     }
 }
 
@@ -414,6 +433,12 @@ impl StageOutIn {
 
         match new_bytes.cmp(&old_bytes) {
             std::cmp::Ordering::Equal => {
+                // First try to pull from stage OUT
+                if let Some(batch) = self.s_out_r.pull() {
+                    self.backoff.stop();
+                    return Pull::Some(batch);
+                }
+
                 // No new bytes have been written on the batch, try to pull
                 if let Ok(mut g) = self.current.try_lock() {
                     // First try to pull from stage OUT
@@ -434,17 +459,16 @@ impl StageOutIn {
                         }
                     }
                 }
+                self.backoff.cause_try_lock();
                 // Go to backoff
             }
-            std::cmp::Ordering::Less => {
+            std::cmp::Ordering::Less | std::cmp::Ordering::Greater => {
                 // There should be a new batch in Stage OUT
                 if let Some(batch) = self.s_out_r.pull() {
                     self.backoff.stop();
                     return Pull::Some(batch);
                 }
-                // Go to backoff
-            }
-            std::cmp::Ordering::Greater => {
+                self.backoff.cause_bytes();
                 // Go to backoff
             }
         }
