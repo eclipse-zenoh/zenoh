@@ -146,7 +146,7 @@ pub(crate) struct QueryState {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct GetBuilder<'a, 'b, Handler> {
+pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,
     pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
@@ -164,7 +164,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
+impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -183,7 +183,7 @@ impl<Handler> SampleBuilderTrait for GetBuilder<'_, '_, Handler> {
     }
 }
 
-impl QoSBuilderTrait for GetBuilder<'_, '_, DefaultHandler> {
+impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
@@ -200,7 +200,7 @@ impl QoSBuilderTrait for GetBuilder<'_, '_, DefaultHandler> {
     }
 }
 
-impl<Handler> ValueBuilderTrait for GetBuilder<'_, '_, Handler> {
+impl<Handler> ValueBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.unwrap_or_default();
         value.encoding = encoding.into();
@@ -227,7 +227,7 @@ impl<Handler> ValueBuilderTrait for GetBuilder<'_, '_, Handler> {
     }
 }
 
-impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
+impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// Receive the replies for this query with a callback.
     ///
     /// # Examples
@@ -245,11 +245,11 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> GetBuilder<'a, 'b, Callback>
+    pub fn callback<Callback>(self, callback: Callback) -> SessionGetBuilder<'a, 'b, Callback>
     where
         Callback: Fn(Reply) + Send + Sync + 'static,
     {
-        let GetBuilder {
+        let SessionGetBuilder {
             session,
             selector,
             scope,
@@ -265,7 +265,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             source_info,
             handler: _,
         } = self;
-        GetBuilder {
+        SessionGetBuilder {
             session,
             selector,
             scope,
@@ -307,7 +307,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> GetBuilder<'a, 'b, impl Fn(Reply) + Send + Sync + 'static>
+    ) -> SessionGetBuilder<'a, 'b, impl Fn(Reply) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(Reply) + Send + Sync + 'static,
     {
@@ -334,11 +334,11 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> GetBuilder<'a, 'b, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> SessionGetBuilder<'a, 'b, Handler>
     where
         Handler: IntoHandler<'static, Reply>,
     {
-        let GetBuilder {
+        let SessionGetBuilder {
             session,
             selector,
             scope,
@@ -354,7 +354,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             source_info,
             handler: _,
         } = self;
-        GetBuilder {
+        SessionGetBuilder {
             session,
             selector,
             scope,
@@ -372,7 +372,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
         }
     }
 }
-impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
+impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
     /// Change the target of the query.
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
@@ -436,7 +436,7 @@ pub enum ReplyKeyExpr {
     MatchingQuery,
 }
 
-impl<Handler> Resolvable for GetBuilder<'_, '_, Handler>
+impl<Handler> Resolvable for SessionGetBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Reply> + Send,
     Handler::Handler: Send,
@@ -444,7 +444,7 @@ where
     type To = ZResult<Handler::Handler>;
 }
 
-impl<Handler> Wait for GetBuilder<'_, '_, Handler>
+impl<Handler> Wait for SessionGetBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Reply> + Send,
     Handler::Handler: Send,
@@ -472,7 +472,7 @@ where
     }
 }
 
-impl<Handler> IntoFuture for GetBuilder<'_, '_, Handler>
+impl<Handler> IntoFuture for SessionGetBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Reply> + Send,
     Handler::Handler: Send,

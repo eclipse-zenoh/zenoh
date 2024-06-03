@@ -123,6 +123,8 @@ pub mod prelude;
 
 /// Zenoh core types
 pub mod core {
+    /// Zenoh message priority
+    pub use crate::api::publisher::Priority;
     #[allow(deprecated)]
     pub use zenoh_core::{AsyncResolve, SyncResolve};
     pub use zenoh_core::{Resolvable, Resolve, Wait};
@@ -131,8 +133,6 @@ pub mod core {
     pub use zenoh_result::Error;
     /// A zenoh result.
     pub use zenoh_result::ZResult as Result;
-    /// Zenoh message priority
-    pub use crate::api::publisher::Priority;
 }
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
@@ -175,7 +175,7 @@ pub mod key_expr {
         };
     }
     pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
-    
+
     #[zenoh_macros::unstable]
     pub use zenoh_keyexpr::SetIntersectionLevel;
 
@@ -183,8 +183,8 @@ pub mod key_expr {
     // keyexpr format macro support
     #[zenoh_macros::unstable]
     pub mod format {
-        pub use zenoh_macros::{kedefine, keformat, kewrite};
         pub use zenoh_keyexpr::format::*;
+        pub use zenoh_macros::{kedefine, keformat, kewrite};
         pub mod macro_support {
             pub use zenoh_keyexpr::format::macro_support::*;
         }
@@ -197,6 +197,7 @@ pub mod session {
     #[zenoh_macros::internal]
     pub use crate::api::session::{init, InitBuilder};
     pub use crate::api::{
+        query::SessionGetBuilder,
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
     };
@@ -289,9 +290,7 @@ pub mod query {
     pub use crate::api::query::ReplyKeyExpr;
     #[zenoh_macros::unstable]
     pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
-    pub use crate::api::query::{
-        ConsolidationMode, GetBuilder, QueryConsolidation, QueryTarget, Reply,
-    };
+    pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply};
 }
 
 /// Queryable primitives
@@ -314,12 +313,9 @@ pub mod handlers {
 
 /// Scouting primitives
 pub mod scouting {
-    /// Constants and helpers for zenoh `whatami` flags.
-    pub use zenoh_protocol::core::WhatAmI;
+    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
     /// A zenoh Hello message.
     pub use zenoh_protocol::scouting::Hello;
-
-    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
 }
 
 /// Liveliness primitives

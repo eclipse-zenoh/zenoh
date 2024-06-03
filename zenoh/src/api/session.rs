@@ -72,7 +72,7 @@ use super::{
     info::SessionInfo,
     key_expr::{KeyExpr, KeyExprInner},
     publisher::{Priority, PublisherState},
-    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
+    query::{ConsolidationMode, SessionGetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::{Selector, TIME_RANGE_KEY},
@@ -796,7 +796,7 @@ impl Session {
     pub fn get<'a, 'b: 'a, TryIntoSelector>(
         &'a self,
         selector: TryIntoSelector,
-    ) -> GetBuilder<'a, 'b, DefaultHandler>
+    ) -> SessionGetBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoSelector: TryInto<Selector<'b>>,
         <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
@@ -807,7 +807,7 @@ impl Session {
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
-        GetBuilder {
+        SessionGetBuilder {
             session: self,
             selector,
             scope: Ok(None),
