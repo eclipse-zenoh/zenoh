@@ -197,8 +197,8 @@ pub mod session {
     #[zenoh_macros::internal]
     pub use crate::api::session::{init, InitBuilder};
     pub use crate::api::{
-        query::SessionGetBuilder,
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
+        query::SessionGetBuilder,
         session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
     };
 }
@@ -298,17 +298,17 @@ pub mod query {
     pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
     pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply};
     pub use crate::api::queryable::Query;
-    pub use crate::api::queryable::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder};
     #[zenoh_macros::unstable]
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
+    pub use crate::api::queryable::{
+        ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+    };
 }
 
 /// Queryable primitives
 pub mod queryable {
-    pub use crate::api::queryable::{
-        Queryable, QueryableBuilder, QueryableUndeclaration,
-    };
+    pub use crate::api::queryable::{Queryable, QueryableBuilder, QueryableUndeclaration};
 }
 
 /// Callback handler trait
