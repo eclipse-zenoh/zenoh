@@ -40,9 +40,10 @@ use zenoh_result::{zerror, ZResult};
 /// Maximum MTU (UDP PDU) in bytes.
 ///
 /// # Note
-/// The UDP field size sets a theoretical limit of 65,535 bytes (8 byte header + 65,527 bytes of
-/// data) for a UDP datagram. However the actual limit for the data length, which is imposed by the
-/// underlying IPv4 protocol, is 65,507 bytes (65,535 − 8 byte UDP header − 20 byte IP header).
+///
+/// The theoretical Maximum Transmission Unit (MTU) of UDP is `u16::MAX`. From that we substract the
+/// size of a UDP header (8 bytes) and the size of IPv4/IPv6 headers (resp. 20 and 40 bytes).
+///
 /// Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via IPv6
 /// Jumbograms, its usage in Zenoh is discouraged unless the consequences are very well understood.
 const UDP_MAX_MTU: u16 = u16::MAX - 8 - 40;
