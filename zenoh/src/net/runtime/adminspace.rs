@@ -108,7 +108,7 @@ impl AdminSpace {
             tracing::warn!("Plugin `{}` was already declared", declared.name());
             declared
         } else if let Some(paths) = &config.paths {
-            plugin_mgr.declare_dynamic_plugin_by_paths(name, paths, required)?
+            plugin_mgr.declare_dynamic_plugin_by_paths(name, name, paths, required)?
         } else {
             plugin_mgr.declare_dynamic_plugin_by_name(name, name, required)?
         };
@@ -204,7 +204,7 @@ impl AdminSpace {
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
-            .map(|rec| (rec.name().to_string(), rec.path().to_string()))
+            .map(|rec| (rec.id().to_string(), rec.path().to_string()))
             .collect::<HashMap<_, _>>();
 
         let context = Arc::new(AdminContext {
@@ -241,12 +241,12 @@ impl AdminSpace {
                         };
                         let mut diffs = Vec::new();
                         for plugin in active_plugins.keys() {
-                            if !requested_plugins.iter().any(|r| &r.name == plugin) {
+                            if !requested_plugins.iter().any(|r| &r.id == plugin) {
                                 diffs.push(PluginDiff::Delete(plugin.clone()))
                             }
                         }
                         for request in requested_plugins {
-                            if let Some(active) = active_plugins.get(&request.name) {
+                            if let Some(active) = active_plugins.get(&request.id) {
                                 if request
                                     .paths
                                     .as_ref()
@@ -255,16 +255,16 @@ impl AdminSpace {
                                 {
                                     continue;
                                 }
-                                diffs.push(PluginDiff::Delete(request.name.clone()))
+                                diffs.push(PluginDiff::Delete(request.id.clone()))
                             }
                             diffs.push(PluginDiff::Start(request))
                         }
                         let mut plugins_mgr = admin.context.runtime.plugins_manager();
                         for diff in diffs {
                             match diff {
-                                PluginDiff::Delete(name) => {
-                                    active_plugins.remove(name.as_str());
-                                    if let Some(running) = plugins_mgr.started_plugin_mut(&name) {
+                                PluginDiff::Delete(id) => {
+                                    active_plugins.remove(id.as_str());
+                                    if let Some(running) = plugins_mgr.started_plugin_mut(&id) {
                                         running.stop()
                                     }
                                 }
@@ -276,11 +276,11 @@ impl AdminSpace {
                                         plugin.required,
                                     ) {
                                         if plugin.required {
-                                            panic!("Failed to load plugin `{}`: {}", plugin.name, e)
+                                            panic!("Failed to load plugin `{}`: {}", plugin.id, e)
                                         } else {
                                             tracing::error!(
                                                 "Failed to load plugin `{}`: {}",
-                                                plugin.name,
+                                                plugin.id,
                                                 e
                                             )
                                         }
@@ -530,7 +530,7 @@ fn local_data(context: &AdminContext, query: Query) {
         let plugins_mgr = context.runtime.plugins_manager();
         plugins_mgr
             .started_plugins_iter()
-            .map(|rec| (rec.name(), json!({ "path": rec.path() })))
+            .map(|rec| (rec.id(), json!({"name":rec.name(), "path": rec.path() })))
             .collect()
     };
     #[cfg(not(all(feature = "unstable", feature = "plugins")))]
@@ -787,7 +787,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     );
 
     for plugin in guard.started_plugins_iter() {
-        with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
+        with_extended_string(&mut root_key, &[plugin.id()], |plugin_key| {
             // @TODO: response to "__version__", this need not to be implemented by each plugin
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
