@@ -23,7 +23,7 @@ use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     writer::HasWriter,
-    ZBufReader, ZBufWriter, ZSlice, ZBuf,
+    ZBuf, ZBufReader, ZBufWriter, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{core::Properties, zenoh::ext::AttachmentType};

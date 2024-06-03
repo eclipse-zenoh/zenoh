@@ -72,7 +72,9 @@ use super::{
     info::SessionInfo,
     key_expr::{KeyExpr, KeyExprInner},
     publisher::{Priority, PublisherState},
-    query::{ConsolidationMode, SessionGetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
+    query::{
+        ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply, SessionGetBuilder,
+    },
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::{Selector, TIME_RANGE_KEY},
