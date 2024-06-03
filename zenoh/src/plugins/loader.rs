@@ -29,7 +29,7 @@ pub(crate) fn load_plugin(
     } else if let Some(paths) = paths {
         plugin_mgr.declare_dynamic_plugin_by_paths(name, id, paths, required)?
     } else {
-        plugin_mgr.declare_dynamic_plugin_by_name(name, id, name, required)?
+        plugin_mgr.declare_dynamic_plugin_by_name(id, name, required)?
     };
 
     if let Some(loaded) = declared.loaded_mut() {
@@ -55,7 +55,7 @@ pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
             required,
         } = plugin_load;
         tracing::info!(
-            "Loading {req} plugin \"{name}\"",
+            "Loading {req} plugin \"{id}\"",
             req = if required { "required" } else { "" }
         );
         if let Err(e) = load_plugin(&mut manager, &name, &id, &paths, required) {

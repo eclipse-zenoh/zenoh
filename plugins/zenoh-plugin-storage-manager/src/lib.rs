@@ -205,12 +205,8 @@ impl StorageRuntimeInner {
                 true,
             )?
         } else {
-            self.plugins_manager.declare_dynamic_plugin_by_name(
-                backend_name,
-                volume_id,
-                backend_name,
-                true,
-            )?
+            self.plugins_manager
+                .declare_dynamic_plugin_by_name(volume_id, backend_name, true)?
         };
         let loaded = declared.load()?;
         loaded.start(config)?;

@@ -1020,8 +1020,8 @@ fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
 
 #[derive(Debug, Clone)]
 pub struct PluginLoad {
-    pub name: String,
     pub id: String,
+    pub name: String,
     pub paths: Option<Vec<String>>,
     pub required: bool,
 }
@@ -1054,8 +1054,8 @@ impl PluginsConfig {
             if let Some(paths) = value.get("__path__"){
                 let paths = match paths {
                     Value::String(s) => vec![s.clone()],
-                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", name)}).collect(),
-                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", name)
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)}).collect(),
+                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)
                 };
                 PluginLoad {id: id.clone(), name: name.clone(), paths: Some(paths), required}
             } else {

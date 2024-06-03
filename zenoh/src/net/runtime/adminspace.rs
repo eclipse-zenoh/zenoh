@@ -110,7 +110,7 @@ impl AdminSpace {
         } else if let Some(paths) = &config.paths {
             plugin_mgr.declare_dynamic_plugin_by_paths(name, name, paths, required)?
         } else {
-            plugin_mgr.declare_dynamic_plugin_by_name(name, name, name, required)?
+            plugin_mgr.declare_dynamic_plugin_by_name(name, name, required)?
         };
 
         let loaded = if let Some(loaded) = declared.loaded_mut() {
