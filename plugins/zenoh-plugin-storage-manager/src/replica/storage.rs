@@ -495,7 +495,7 @@ impl StorageService {
         true
     }
 
-    async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
+    async fn reply_query(&self, query: Result<zenoh::query::Query, flume::RecvError>) {
         let q = match query {
             Ok(q) => q,
             Err(e) => {

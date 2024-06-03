@@ -126,7 +126,12 @@ impl keyexpr {
     }
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
+    #[cfg(feature = "internal")]
+    #[cfg(feature = "unstable")]
     pub fn is_wild(&self) -> bool {
+        self.is_wild_impl()
+    }
+    pub(crate) fn is_wild_impl(&self) -> bool {
         self.0.contains(super::SINGLE_WILD as char)
     }
 
@@ -163,7 +168,12 @@ impl keyexpr {
     ///     None,
     ///     keyexpr::new("dem$*").unwrap().get_nonwild_prefix());
     /// ```
+    #[cfg(feature = "internal")]
+    #[cfg(feature = "unstable")]
     pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
+        self.get_nonwild_prefix_impl()
+    }
+    fn get_nonwild_prefix_impl(&self) -> Option<&keyexpr> {
         match self.0.find('*') {
             Some(i) => match self.0[..i].rfind('/') {
                 Some(j) => unsafe { Some(keyexpr::from_str_unchecked(&self.0[..j])) },
@@ -227,7 +237,12 @@ impl keyexpr {
     ///     keyexpr::new("demo/example/test/**").unwrap().strip_prefix(keyexpr::new("not/a/prefix").unwrap()).is_empty()
     /// );
     /// ```
+    #[cfg(feature = "internal")]
+    #[cfg(feature = "unstable")]
     pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
+        self.strip_prefix_impl(prefix)
+    }
+    fn strip_prefix_impl(&self, prefix: &Self) -> Vec<&keyexpr> {
         let mut result = alloc::vec![];
         'chunks: for i in (0..=self.len()).rev() {
             if if i == self.len() {
@@ -292,7 +307,13 @@ impl keyexpr {
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)
     }
+
+    #[cfg(feature = "internal")]
+    #[cfg(feature = "unstable")]
     pub const fn chunks(&self) -> Chunks {
+        self.chunks_impl()
+    }
+    pub(crate) const fn chunks_impl(&self) -> Chunks {
         Chunks {
             inner: self.as_str(),
         }
