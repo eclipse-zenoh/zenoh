@@ -126,8 +126,6 @@ pub mod prelude;
 
 /// Zenoh core types
 pub mod core {
-    /// Zenoh message priority
-    pub use crate::api::publisher::Priority;
     #[allow(deprecated)]
     pub use zenoh_core::{AsyncResolve, SyncResolve};
     pub use zenoh_core::{Resolvable, Resolve, Wait};
@@ -136,6 +134,9 @@ pub mod core {
     pub use zenoh_result::Error;
     /// A zenoh result.
     pub use zenoh_result::ZResult as Result;
+
+    /// Zenoh message priority
+    pub use crate::api::publisher::Priority;
 }
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
@@ -177,10 +178,9 @@ pub mod key_expr {
             IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
         };
     }
-    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
-
     #[zenoh_macros::unstable]
     pub use zenoh_keyexpr::SetIntersectionLevel;
+    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 
     pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
     // keyexpr format macro support
@@ -299,13 +299,12 @@ pub mod query {
     pub use crate::api::query::ReplyKeyExpr;
     #[zenoh_macros::unstable]
     pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
-    pub use crate::api::query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply};
-    pub use crate::api::queryable::Query;
     #[zenoh_macros::unstable]
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
-    pub use crate::api::queryable::{
-        ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+    pub use crate::api::{
+        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply},
+        queryable::{Query, ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
     };
 }
 
@@ -324,9 +323,10 @@ pub mod handlers {
 
 /// Scouting primitives
 pub mod scouting {
-    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
     /// A zenoh Hello message.
     pub use zenoh_protocol::scouting::Hello;
+
+    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
 }
 
 /// Liveliness primitives

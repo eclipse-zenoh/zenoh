@@ -22,8 +22,7 @@ use std::{any::Any, collections::HashMap, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
-    core::WireExpr,
-    core::ZenohId,
+    core::{WireExpr, ZenohId},
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,

@@ -21,10 +21,13 @@ use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
-use zenoh::internal::buffers::{SplitBuffer, ZBuf};
 use zenoh::{
     core::Result as ZResult,
-    internal::{bail, zenoh_home, Timed, TimedEvent, Timer},
+    internal::{
+        bail,
+        buffers::{SplitBuffer, ZBuf},
+        zenoh_home, Timed, TimedEvent, Timer,
+    },
     key_expr::{
         keyexpr_tree::{
             IKeyExprTree, IKeyExprTreeMut, KeBoxTree, KeyedSetProvider, NonWild, UnknownWildness,
