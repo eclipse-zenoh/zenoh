@@ -79,8 +79,6 @@ pub(crate) fn declare_token(
 
             hat_code.declare_token(&mut wtables, face, id, &mut res, node_id, interest_id);
             drop(wtables);
-
-            // NOTE(fuzzypixelz): I removed all data route handling.
         }
         None => tracing::error!(
             "{} Declare token {} for unknown scope {}!",

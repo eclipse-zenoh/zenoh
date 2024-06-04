@@ -944,11 +944,6 @@ impl Session {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
                     if let Resource::Node(res_node) = &mut res {
-                        // NOTE(fuzzypixelz): At this point, I'm not sure if
-                        // DeclareKeyExpr is relevant to subscribers or
-                        // liveliness subscribers. So I assume that this key
-                        // expression can be used both for tokens and
-                        // samples.
                         for kind in [
                             SubscriberKind::Subscriber,
                             SubscriberKind::LivelinessSubscriber,
@@ -1239,11 +1234,6 @@ impl Session {
                 res.subscribers_mut(kind)
                     .retain(|sub| sub.id != sub_state.id);
             }
-
-            // NOTE(fuzzypixelz): I'm assuming that liveliness subscribers are
-            // declared and undeclared just like subscribers. The old code seems
-            // to have prevented liveliness subscribers from being declared
-            // since they have @/liveliness/* key expressions?
 
             if sub_state.origin != Locality::SessionLocal && kind == SubscriberKind::Subscriber {
                 // Note: there might be several Subscribers on the same KeyExpr.
@@ -2215,11 +2205,6 @@ impl Primitives for Session {
                 match state.remote_key_to_expr(&m.wire_expr) {
                     Ok(key_expr) => {
                         let mut res_node = ResourceNode::new(key_expr.clone().into());
-                        // NOTE(fuzzypixelz): At this point, I'm not sure if
-                        // DeclareKeyExpr is relevant to subscribers or
-                        // liveliness subscribers. So I assume that this key
-                        // expression can be used both for tokens and
-                        // samples.
                         for kind in [
                             SubscriberKind::Subscriber,
                             SubscriberKind::LivelinessSubscriber,
@@ -2296,7 +2281,6 @@ impl Primitives for Session {
                         Ok(key_expr) => {
                             if let Some(interest_id) = msg.interest_id {
                                 if let Some(query) = state.liveliness_queries.get(&interest_id) {
-                                    // NOTE(fuzzypixelz): This was shamlessly copied from `zenoh::net::routing::dispatcher::queries::route_query`
                                     let reply = Reply {
                                         result: Ok(Sample {
                                             key_expr,
@@ -2310,19 +2294,13 @@ impl Primitives for Session {
                                             #[cfg(feature = "unstable")]
                                             attachment: None,
                                         }),
-                                        replier_id: ZenohId::rand(), // NOTE(fuzzypixelz): The `Session::query` function does the same thing
+                                        replier_id: ZenohId::rand(),
                                     };
 
                                     (query.callback)(reply);
                                 }
                             } else {
                                 state.remote_tokens.insert(m.id, key_expr.clone());
-                                // NOTE(fuzzypixelz): I didn't put
-                                // self.update_status_up() here because it doesn't
-                                // make sense. An application which declares a
-                                // liveliness token is not a subscriber and thus
-                                // doens't need to to be visible to publishers
-                                // through .matching_status().
 
                                 drop(state);
 
@@ -2349,13 +2327,6 @@ impl Primitives for Session {
                 {
                     let mut state = zwrite!(self.state);
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
-                        // NOTE(fuzzypixelz): I didn't put
-                        // self.update_status_down() here because it doesn't
-                        // make sense. An application which declares a
-                        // liveliness token is not a subscriber and thus
-                        // doens't need to to be visible to publishers
-                        // through .matching_status().
-
                         drop(state);
 
                         let data_info = DataInfo {

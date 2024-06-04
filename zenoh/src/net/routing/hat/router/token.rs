@@ -59,12 +59,7 @@ fn send_sourced_token_to_net_childs(
                                     node_id: routing_context,
                                 },
                                 body: DeclareBody::DeclareToken(DeclareToken {
-                                    // NOTE(fuzzypixelz): In the original
-                                    // subscriber-based liveliness
-                                    // implementation, sourced subscriptions
-                                    // don't use an id, should this be the same
-                                    // for liveliness declarators?
-                                    id: 0,
+                                    id: 0, // Sourced tokens do not use ids
                                     wire_expr: key_expr,
                                 }),
                                 interest_id: None,
@@ -364,12 +359,7 @@ fn send_forget_sourced_token_to_net_childs(
                                     node_id: routing_context.unwrap_or(0),
                                 },
                                 body: DeclareBody::UndeclareToken(UndeclareToken {
-                                    // NOTE(fuzzypixelz): In the original
-                                    // subscriber-based liveliness
-                                    // implementation, sourced subscriptions
-                                    // don't use an id, should this be the same
-                                    // for liveliness declarators?
-                                    id: 0,
+                                    id: 0, // Sourced tokens do not use ids
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                                 interest_id: None,
@@ -759,8 +749,6 @@ impl HatTokenTrait for HatCode {
         aggregate: bool,
     ) {
         if mode.current() && face.whatami == WhatAmI::Client {
-            // NOTE(fuzzypixelz): The pub/sub routing logic only sets the interest_id to Some(..)
-            // if mode.future(). For token queries (i.e. if mode.current()) an id is needed.
             let interest_id = (!mode.future()).then_some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {

@@ -59,12 +59,7 @@ fn send_sourced_token_to_net_childs(
                                     node_id: routing_context,
                                 },
                                 body: DeclareBody::DeclareToken(DeclareToken {
-                                    // NOTE(fuzzypixelz): In the
-                                    // subscription-based implementation of
-                                    // liveliness, a comment here stated
-                                    // that "sourced subscriptions" do not
-                                    // use ids
-                                    id: 0,
+                                    id: 0, // Sourced tokens do not use ids
                                     wire_expr: key_expr,
                                 }),
                                 interest_id: None,
@@ -311,12 +306,7 @@ fn send_forget_sourced_token_to_net_childs(
                                     node_id: routing_context.unwrap_or(0),
                                 },
                                 body: DeclareBody::UndeclareToken(UndeclareToken {
-                                    // NOTE(fuzzypixelz): In the
-                                    // subscription-based implementation of
-                                    // liveliness, a comment here stated
-                                    // that "sourced subscriptions" do not
-                                    // use ids
-                                    id: 0,
+                                    id: 0, // Sourced tokens do not use ids
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                                 interest_id: None,
