@@ -15,7 +15,7 @@ use zenoh_config::{Config, PluginLoad};
 use zenoh_result::ZResult;
 
 use super::plugins::{PluginsManager, PLUGIN_PREFIX};
-use crate::runtime::Runtime;
+use crate::net::runtime::Runtime;
 
 pub(crate) fn load_plugin(
     plugin_mgr: &mut PluginsManager,

@@ -26,9 +26,11 @@ use std::{
 use futures::select;
 use tracing::{debug, info};
 use zenoh::{
+    internal::{
+        plugins::{RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+    },
     key_expr::{keyexpr, KeyExpr},
-    plugins::{RunningPluginTrait, ZenohPlugin},
-    runtime::Runtime,
     sample::Sample,
     session::SessionDeclarations,
 };
@@ -50,7 +52,7 @@ const DEFAULT_SELECTOR: &str = "demo/example/**";
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
-    type Instance = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::internal::plugins::RunningPlugin;
 
     // A mandatory const to define, in case of the plugin is built as a standalone executable
     const DEFAULT_NAME: &'static str = "example";

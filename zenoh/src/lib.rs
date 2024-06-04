@@ -330,7 +330,7 @@ pub mod scouting {
 }
 
 /// Liveliness primitives
-#[cfg(feature = "unstable")]
+#[zenoh_macros::unstable]
 pub mod liveliness {
     pub use crate::api::liveliness::{
         Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
@@ -345,15 +345,6 @@ pub mod time {
     pub use crate::api::time::new_reception_timestamp;
 }
 
-/// Initialize a Session with an existing Runtime.
-/// This operation is used by the plugins to share the same Runtime as the router.
-#[doc(hidden)]
-pub mod runtime {
-    pub use zenoh_runtime::ZRuntime;
-
-    pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
-}
-
 /// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
 pub mod config {
     // pub use zenoh_config::{
@@ -363,16 +354,7 @@ pub mod config {
     pub use zenoh_config::*;
 }
 
-#[doc(hidden)]
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-pub mod plugins {
-    pub use crate::api::plugins::{
-        PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
-    };
-}
-
-#[doc(hidden)]
-#[cfg(feature = "internal")]
+#[zenoh_macros::internal]
 pub mod internal {
     pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout, ResolveFuture};
     pub use zenoh_result::bail;
@@ -381,7 +363,6 @@ pub mod internal {
     pub use zenoh_util::{zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
 
     pub use crate::api::encoding::EncodingInternals;
-
     /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
     /// reading and writing data.
     pub mod buffers {
@@ -389,6 +370,22 @@ pub mod internal {
             buffer::SplitBuffer,
             reader::{HasReader, Reader},
             ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
+        };
+    }
+    /// Initialize a Session with an existing Runtime.
+    /// This operation is used by the plugins to share the same Runtime as the router.
+    #[zenoh_macros::unstable]
+    pub mod runtime {
+        pub use zenoh_runtime::ZRuntime;
+
+        pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
+    }
+    /// Plugins support
+    #[zenoh_macros::unstable]
+    #[cfg(feature = "plugins")]
+    pub mod plugins {
+        pub use crate::api::plugins::{
+            PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
         };
     }
 }

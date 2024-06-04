@@ -20,12 +20,11 @@ use std::{
 
 use zenoh::{
     core::{Error, Resolvable, Resolve, Result as ZResult},
-    internal::{bail, ResolveFuture, TerminatableTask},
+    internal::{bail, runtime::ZRuntime, ResolveFuture, TerminatableTask},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::Wait,
     query::Query,
     queryable::Queryable,
-    runtime::ZRuntime,
     sample::{Locality, Sample},
     session::{SessionDeclarations, SessionRef},
     subscriber::FlumeSubscriber,

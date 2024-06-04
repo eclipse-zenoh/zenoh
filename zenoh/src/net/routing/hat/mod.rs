@@ -42,7 +42,7 @@ use super::{
     },
     router::RoutesIndexes,
 };
-use crate::{key_expr::KeyExpr, runtime::Runtime};
+use crate::{key_expr::KeyExpr, net::runtime::Runtime};
 
 mod client;
 mod linkstate_peer;
