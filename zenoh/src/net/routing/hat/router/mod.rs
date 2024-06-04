@@ -27,8 +27,8 @@ use std::{
 
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
-    core::ZenohId,
     common::ZExtBody,
+    core::ZenohId,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
         interest::InterestId,

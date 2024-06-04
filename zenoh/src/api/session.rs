@@ -35,8 +35,7 @@ use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr,
-        EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID,
     },
     network::{
         self,

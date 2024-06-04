@@ -19,7 +19,14 @@ mod include;
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
-    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, path::Path, str::FromStr, sync::{Arc, Mutex, MutexGuard, Weak}
+    any::Any,
+    collections::HashSet,
+    fmt,
+    io::Read,
+    net::SocketAddr,
+    path::Path,
+    str::FromStr,
+    sync::{Arc, Mutex, MutexGuard, Weak},
 };
 
 use include::recursive_include;
@@ -47,7 +54,7 @@ pub use connection_retry::*;
 
 /// The global unique id of a zenoh peer.
 #[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug, Default
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug, Default,
 )]
 #[repr(transparent)]
 pub struct ZenohId(zenoh_protocol::core::ZenohId);
