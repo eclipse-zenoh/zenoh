@@ -52,10 +52,7 @@ fn propagate_simple_token_to(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareToken(DeclareToken {
-                        // TODO(fuzzypixelz): In the subscription-based
-                        // implementation of liveliness, there was a comment
-                        // here that stated "use proper SubscriberId"
-                        id: 0,
+                        id,
                         wire_expr: key_expr,
                     }),
                     interest_id: None,
