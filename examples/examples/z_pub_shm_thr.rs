@@ -24,7 +24,7 @@ use zenoh_examples::CommonArgs;
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     let (mut config, sm_size, size) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm_thr` to operate

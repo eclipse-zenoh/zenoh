@@ -34,7 +34,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_acl() {
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
         test_pub_sub_deny().await;
         test_pub_sub_allow().await;
         test_pub_sub_deny_then_allow().await;
