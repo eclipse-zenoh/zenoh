@@ -23,6 +23,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use token::token_new_face;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
@@ -103,6 +104,7 @@ impl HatBaseTrait for HatCode {
     ) -> ZResult<()> {
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
+        token_new_face(tables, &mut face.state);
         Ok(())
     }
 
@@ -115,6 +117,7 @@ impl HatBaseTrait for HatCode {
     ) -> ZResult<()> {
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
+        token_new_face(tables, &mut face.state);
         Ok(())
     }
 

@@ -23,6 +23,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use token::token_new_face;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -148,6 +149,7 @@ impl HatBaseTrait for HatCode {
     ) -> ZResult<()> {
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
+        token_new_face(tables, &mut face.state);
         Ok(())
     }
 
@@ -176,6 +178,7 @@ impl HatBaseTrait for HatCode {
 
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
+        token_new_face(tables, &mut face.state);
 
         if face.state.whatami == WhatAmI::Peer {
             face.state

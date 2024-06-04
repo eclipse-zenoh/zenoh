@@ -221,6 +221,46 @@ fn forget_client_token(
     }
 }
 
+pub(super) fn token_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+    for mut src_face in tables
+        .faces
+        .values()
+        .cloned()
+        .collect::<Vec<Arc<FaceState>>>()
+    {
+        for token in face_hat!(src_face).remote_tokens.values() {
+            propagate_simple_token_to(tables, face, token, &mut src_face.clone());
+        }
+        if face.whatami != WhatAmI::Client {
+            for res in face_hat_mut!(&mut src_face).remote_token_interests.values() {
+                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                let options = InterestOptions::KEYEXPRS + InterestOptions::TOKENS;
+                get_mut_unchecked(face).local_interests.insert(
+                    id,
+                    InterestState {
+                        options,
+                        res: res.as_ref().map(|res| (*res).clone()),
+                        finalized: false,
+                    },
+                );
+                let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face));
+                face.primitives.send_interest(RoutingContext::with_expr(
+                    Interest {
+                        id,
+                        mode: InterestMode::CurrentFuture,
+                        options,
+                        wire_expr,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                    },
+                    res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+                ));
+            }
+        }
+    }
+}
+
 impl HatTokenTrait for HatCode {
     fn declare_token(
         &self,
