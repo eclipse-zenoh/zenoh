@@ -93,6 +93,7 @@ impl keyexpr {
     /// Returns the relation between `self` and `other` from `self`'s point of view ([`SetIntersectionLevel::Includes`] signifies that `self` includes `other`).
     ///
     /// Note that this is slower than [`keyexpr::intersects`] and [`keyexpr::includes`], so you should favor these methods for most applications.
+    #[cfg(feature = "unstable")]
     pub fn relation_to(&self, other: &Self) -> SetIntersectionLevel {
         use SetIntersectionLevel::*;
         if self.intersects(other) {
@@ -563,6 +564,7 @@ impl Div for &keyexpr {
 ///
 /// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg(feature = "unstable")]
 pub enum SetIntersectionLevel {
     Disjoint,
     Intersects,
