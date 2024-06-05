@@ -202,6 +202,13 @@ impl From<Option<DataInfo>> for SourceInfo {
     }
 }
 
+#[zenoh_macros::unstable]
+impl Default for SourceInfo {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 /// The kind of a `Sample`.
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
