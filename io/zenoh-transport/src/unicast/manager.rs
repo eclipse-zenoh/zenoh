@@ -746,11 +746,12 @@ impl TransportManager {
         let c_manager = self.clone();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Acceptor, async move {
-                if let Err(_) = tokio::time::timeout(
+                if tokio::time::timeout(
                     c_manager.config.unicast.accept_timeout,
                     super::establishment::accept::accept_link(link, &c_manager),
                 )
                 .await
+                .is_err()
                 {
                     tracing::debug!(
                         "Failed to accept link before deadline ({}ms)",
