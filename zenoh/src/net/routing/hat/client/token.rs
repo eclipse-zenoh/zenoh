@@ -360,9 +360,14 @@ impl HatTokenTrait for HatCode {
                     .collect::<Vec<_>>();
 
                 for res in tokens {
-                    let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+                    let id = if mode.future() {
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face).local_tokens.insert(res.clone(), id);
+                        id
+                    } else {
+                        0
+                    };
                     let wire_expr = Resource::decl_key(&res, dst_face);
-                    face_hat_mut!(face).local_tokens.insert(res.clone(), id);
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
                             interest_id: Some(src_id),

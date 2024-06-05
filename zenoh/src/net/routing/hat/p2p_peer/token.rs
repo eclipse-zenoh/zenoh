@@ -384,8 +384,13 @@ impl HatTokenTrait for HatCode {
                                 .values()
                                 .any(|token| token.context.is_some() && token.matches(res))
                     }) {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
+                        let id = if mode.future() {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
+                            id
+                        } else {
+                            0
+                        };
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -408,8 +413,14 @@ impl HatTokenTrait for HatCode {
                         if src_face.id != face.id {
                             for token in face_hat!(src_face).remote_tokens.values() {
                                 if token.context.is_some() && token.matches(res) {
-                                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                    face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                                    let id = if mode.future() {
+                                        let id =
+                                            face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                        face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                                        id
+                                    } else {
+                                        0
+                                    };
                                     let wire_expr = Resource::decl_key(token, face);
                                     face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
@@ -438,8 +449,13 @@ impl HatTokenTrait for HatCode {
                 {
                     if src_face.id != face.id {
                         for token in face_hat!(src_face).remote_tokens.values() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                            let id = if mode.future() {
+                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                                id
+                            } else {
+                                0
+                            };
                             let wire_expr = Resource::decl_key(token, face);
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {

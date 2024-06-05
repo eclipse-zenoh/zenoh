@@ -588,8 +588,13 @@ impl HatTokenTrait for HatCode {
                             && (remote_client_tokens(token, face)
                                 || remote_peer_tokens(tables, token))
                     }) {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
+                        let id = if mode.future() {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
+                            id
+                        } else {
+                            0
+                        };
                         let wire_expr = Resource::decl_key(res, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -609,8 +614,13 @@ impl HatTokenTrait for HatCode {
                             && (remote_client_tokens(token, face)
                                 || remote_peer_tokens(tables, token))
                         {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                            let id = if mode.future() {
+                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                                id
+                            } else {
+                                0
+                            };
                             let wire_expr = Resource::decl_key(token, face);
                             face.primitives.send_declare(RoutingContext::with_expr(
                                 Declare {
@@ -630,8 +640,13 @@ impl HatTokenTrait for HatCode {
                     if token.context.is_some()
                         && (remote_client_tokens(token, face) || remote_peer_tokens(tables, token))
                     {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                        let id = if mode.future() {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                            id
+                        } else {
+                            0
+                        };
                         let wire_expr = Resource::decl_key(token, face);
                         face.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
