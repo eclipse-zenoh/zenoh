@@ -221,6 +221,8 @@
       /// NOTE: Currently, the LowLatency transport doesn't preserve QoS prioritization.
       /// NOTE: Due to the note above, 'lowlatency' is incompatible with 'qos' option, so in order to
       ///       enable 'lowlatency' you need to explicitly disable 'qos'.
+      /// NOTE: LowLatency transport does not support the fragmentation, so the message size should be 
+      ///       smaller than the tx batch_size.
       lowlatency: false,
       /// Enables QoS on unicast communications.
       qos: {
