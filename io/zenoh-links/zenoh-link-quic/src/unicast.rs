@@ -13,11 +13,11 @@
 //
 
 use crate::{
-    config::*,
     utils::{get_quic_addr, TlsClientConfig, TlsServerConfig},
     ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
 use async_trait::async_trait;
+use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use std::fmt;
 use std::net::IpAddr;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -68,7 +68,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         tracing::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
         let mut guard = zasynclock!(self.send);
-        if let Err(e) = guard.finish().await {
+        if let Err(e) = guard.finish() {
             tracing::trace!("Error closing QUIC stream {}: {}", self, e);
         }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
@@ -206,15 +206,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let addr = get_quic_addr(&epaddr).await?;
 
-        let server_name_verification: bool = epconf
-            .get(TLS_SERVER_NAME_VERIFICATION)
-            .unwrap_or(TLS_SERVER_NAME_VERIFICATION_DEFAULT)
-            .parse()?;
-
-        if !server_name_verification {
-            tracing::warn!("Skipping name verification of servers");
-        }
-
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
             .await
@@ -230,9 +221,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
         let mut quic_endpoint = quinn::Endpoint::client(SocketAddr::new(ip_addr, 0))
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
-        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(
-            client_crypto.client_config,
-        )));
+
+        let quic_config: QuicClientConfig = client_crypto
+            .client_config
+            .try_into()
+            .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
+        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_config)));
 
         let src_addr = quic_endpoint
             .local_addr()
@@ -276,8 +270,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
         server_crypto.server_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
-        let mut server_config =
-            quinn::ServerConfig::with_crypto(Arc::new(server_crypto.server_config));
+
+        // Install rustls provider
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .ok();
+
+        let quic_config: QuicServerConfig = server_crypto
+            .server_config
+            .try_into()
+            .map_err(|e| zerror!("Can not create a new QUIC listener on {addr}: {e}"))?;
+        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_config));
 
         // We do not accept unidireactional streams.
         Arc::get_mut(&mut server_config.transport)

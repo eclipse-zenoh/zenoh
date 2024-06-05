@@ -12,16 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::config::*;
-use crate::verify::WebPkiVerifierAnyServerName;
-use rustls::OwnedTrustAnchor;
 use rustls::{
-    server::AllowAnyAuthenticatedClient, version::TLS13, Certificate, ClientConfig, PrivateKey,
-    RootCertStore, ServerConfig,
+    pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
+    server::WebPkiClientVerifier,
+    version::TLS13,
+    ClientConfig, RootCertStore, ServerConfig,
 };
-use rustls_pki_types::{CertificateDer, TrustAnchor};
 use secrecy::ExposeSecret;
-use zenoh_link_commons::ConfigurationInspector;
-// use rustls_pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor};
 use std::fs::File;
 use std::io;
 use std::net::SocketAddr;
@@ -31,6 +28,7 @@ use std::{
 };
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
+use zenoh_link_commons::{tls::WebPkiVerifierAnyServerName, ConfigurationInspector};
 use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::endpoint::{self, Address};
 use zenoh_result::{bail, zerror, ZError, ZResult};
@@ -160,39 +158,39 @@ impl TlsServerConfig {
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
 
-        let certs: Vec<Certificate> =
+        let certs: Vec<CertificateDer> =
             rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
-                .map_err(|err| zerror!("Error processing server certificate: {err}."))?
-                .into_iter()
-                .map(Certificate)
-                .collect();
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing server certificate: {err}."))?;
 
-        let mut keys: Vec<PrivateKey> =
+        let mut keys: Vec<PrivateKeyDer> =
             rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map_err(|err| zerror!("Error processing server key: {err}."))?
-                .into_iter()
-                .map(PrivateKey)
-                .collect();
+                .map(|x| x.map(PrivateKeyDer::from))
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing server key: {err}."))?;
 
         if keys.is_empty() {
             keys = rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map_err(|err| zerror!("Error processing server key: {err}."))?
-                .into_iter()
-                .map(PrivateKey)
-                .collect();
+                .map(|x| x.map(PrivateKeyDer::from))
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing server key: {err}."))?;
         }
 
         if keys.is_empty() {
             keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map_err(|err| zerror!("Error processing server key: {err}."))?
-                .into_iter()
-                .map(PrivateKey)
-                .collect();
+                .map(|x| x.map(PrivateKeyDer::from))
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing server key: {err}."))?;
         }
 
         if keys.is_empty() {
             bail!("No private key found for TLS server.");
         }
+
+        // Install rustls provider
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .ok();
 
         let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
@@ -203,17 +201,13 @@ impl TlsServerConfig {
                 },
                 Ok,
             )?;
-            let client_auth = AllowAnyAuthenticatedClient::new(root_cert_store);
-            ServerConfig::builder()
-                .with_safe_default_cipher_suites()
-                .with_safe_default_kx_groups()
-                .with_protocol_versions(&[&TLS13])?
-                .with_client_cert_verifier(Arc::new(client_auth))
+            let client_auth = WebPkiClientVerifier::builder(root_cert_store.into()).build()?;
+            ServerConfig::builder_with_protocol_versions(&[&TLS13])
+                .with_client_cert_verifier(client_auth)
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
         } else {
             ServerConfig::builder()
-                .with_safe_defaults()
                 .with_no_client_auth()
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
@@ -271,68 +265,55 @@ impl TlsClientConfig {
         // Allows mixed user-generated CA and webPKI CA
         tracing::debug!("Loading default Web PKI certificates.");
         let mut root_cert_store = RootCertStore {
-            roots: webpki_roots::TLS_SERVER_ROOTS
-                .iter()
-                .map(|ta| ta.to_owned())
-                .map(|ta| {
-                    OwnedTrustAnchor::from_subject_spki_name_constraints(
-                        ta.subject.to_vec(),
-                        ta.subject_public_key_info.to_vec(),
-                        ta.name_constraints.map(|nc| nc.to_vec()),
-                    )
-                })
-                .collect(),
+            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
         };
 
         if let Some(custom_root_cert) = load_trust_anchors(config)? {
             tracing::debug!("Loading user-generated certificates.");
-            root_cert_store.roots.extend(custom_root_cert.roots);
+            root_cert_store.extend(custom_root_cert.roots);
         }
+
+        // Install rustls provider
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .ok();
 
         let cc = if tls_client_server_auth {
             tracing::debug!("Loading client authentication key and certificate...");
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
             let tls_client_certificate = TlsClientConfig::load_tls_certificate(config).await?;
 
-            let certs: Vec<Certificate> =
+            let certs: Vec<CertificateDer> =
                 rustls_pemfile::certs(&mut Cursor::new(&tls_client_certificate))
-                    .map_err(|err| zerror!("Error processing client certificate: {err}."))?
-                    .into_iter()
-                    .map(Certificate)
-                    .collect();
+                    .collect::<Result<_, _>>()
+                    .map_err(|err| zerror!("Error processing client certificate: {err}."))?;
 
-            let mut keys: Vec<PrivateKey> =
+            let mut keys: Vec<PrivateKeyDer> =
                 rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map_err(|err| zerror!("Error processing client key: {err}."))?
-                    .into_iter()
-                    .map(PrivateKey)
-                    .collect();
+                    .map(|x| x.map(PrivateKeyDer::from))
+                    .collect::<Result<_, _>>()
+                    .map_err(|err| zerror!("Error processing client key: {err}."))?;
 
             if keys.is_empty() {
                 keys =
                     rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_client_private_key))
-                        .map_err(|err| zerror!("Error processing client key: {err}."))?
-                        .into_iter()
-                        .map(PrivateKey)
-                        .collect();
+                        .map(|x| x.map(PrivateKeyDer::from))
+                        .collect::<Result<_, _>>()
+                        .map_err(|err| zerror!("Error processing client key: {err}."))?;
             }
 
             if keys.is_empty() {
                 keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map_err(|err| zerror!("Error processing client key: {err}."))?
-                    .into_iter()
-                    .map(PrivateKey)
-                    .collect();
+                    .map(|x| x.map(PrivateKeyDer::from))
+                    .collect::<Result<_, _>>()
+                    .map_err(|err| zerror!("Error processing client key: {err}."))?;
             }
 
             if keys.is_empty() {
                 bail!("No private key found for TLS client.");
             }
 
-            let builder = ClientConfig::builder()
-                .with_safe_default_cipher_suites()
-                .with_safe_default_kx_groups()
-                .with_protocol_versions(&[&TLS13])?;
+            let builder = ClientConfig::builder_with_protocol_versions(&[&TLS13]);
 
             if tls_server_name_verification {
                 builder
@@ -340,6 +321,7 @@ impl TlsClientConfig {
                     .with_client_auth_cert(certs, keys.remove(0))
             } else {
                 builder
+                    .dangerous()
                     .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
                         root_cert_store,
                     )))
@@ -347,17 +329,14 @@ impl TlsClientConfig {
             }
             .map_err(|e| zerror!("Bad certificate/key: {}", e))?
         } else {
-            let builder = ClientConfig::builder()
-                .with_safe_default_cipher_suites()
-                .with_safe_default_kx_groups()
-                .with_protocol_versions(&[&TLS13])?;
-
+            let builder = ClientConfig::builder();
             if tls_server_name_verification {
                 builder
                     .with_root_certificates(root_cert_store)
                     .with_no_client_auth()
             } else {
                 builder
+                    .dangerous()
                     .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
                         root_cert_store,
                     )))
@@ -388,30 +367,19 @@ impl TlsClientConfig {
     }
 }
 
-fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<OwnedTrustAnchor>> {
+fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<TrustAnchor<'static>>> {
     let certs: Vec<CertificateDer> = rustls_pemfile::certs(pem)
-        .map_err(|err| zerror!("Error processing PEM certificates: {err}."))?
-        .into_iter()
-        .map(CertificateDer::from)
-        .collect();
+        .map(|result| result.map_err(|err| zerror!("Error processing PEM certificates: {err}.")))
+        .collect::<Result<Vec<CertificateDer>, ZError>>()?;
 
-    let trust_anchors: Vec<OwnedTrustAnchor> = certs
+    let trust_anchors: Vec<TrustAnchor> = certs
         .into_iter()
         .map(|cert| {
             anchor_from_trusted_cert(&cert)
                 .map_err(|err| zerror!("Error processing trust anchor: {err}."))
                 .map(|trust_anchor| trust_anchor.to_owned())
         })
-        .collect::<Result<Vec<TrustAnchor>, ZError>>()?
-        .into_iter()
-        .map(|ta| {
-            OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject.to_vec(),
-                ta.subject_public_key_info.to_vec(),
-                ta.name_constraints.map(|nc| nc.to_vec()),
-            )
-        })
-        .collect();
+        .collect::<Result<Vec<TrustAnchor>, ZError>>()?;
 
     Ok(trust_anchors)
 }
@@ -472,7 +440,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
     if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
         let mut pem = BufReader::new(value.as_bytes());
         let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.roots.extend(trust_anchors);
+        root_cert_store.extend(trust_anchors);
         return Ok(Some(root_cert_store));
     }
 
@@ -480,14 +448,14 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
         let certificate_pem = base64_decode(b64_certificate)?;
         let mut pem = BufReader::new(certificate_pem.as_slice());
         let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.roots.extend(trust_anchors);
+        root_cert_store.extend(trust_anchors);
         return Ok(Some(root_cert_store));
     }
 
     if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
         let mut pem = BufReader::new(File::open(filename)?);
         let trust_anchors = process_pem(&mut pem)?;
-        root_cert_store.roots.extend(trust_anchors);
+        root_cert_store.extend(trust_anchors);
         return Ok(Some(root_cert_store));
     }
     Ok(None)

@@ -26,7 +26,6 @@ use zenoh_result::ZResult;
 
 mod unicast;
 mod utils;
-mod verify;
 pub use unicast::*;
 pub use utils::TlsConfigurator as QuicConfigurator;
 

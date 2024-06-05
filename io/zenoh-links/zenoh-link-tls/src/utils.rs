@@ -188,6 +188,11 @@ impl TlsServerConfig {
             bail!("No private key found for TLS server.");
         }
 
+        // Install rustls provider
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .ok();
+
         let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
                 || {
@@ -268,6 +273,11 @@ impl TlsClientConfig {
             tracing::debug!("Loading user-generated certificates.");
             root_cert_store.extend(custom_root_cert.roots);
         }
+
+        // Install rustls provider
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .ok();
 
         let cc = if tls_client_server_auth {
             tracing::debug!("Loading client authentication key and certificate...");
