@@ -129,6 +129,7 @@ impl keyexpr {
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
     #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn is_wild(&self) -> bool {
         self.is_wild_impl()
     }
@@ -170,6 +171,7 @@ impl keyexpr {
     ///     keyexpr::new("dem$*").unwrap().get_nonwild_prefix());
     /// ```
     #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
         match self.0.find('*') {
             Some(i) => match self.0[..i].rfind('/') {
@@ -235,6 +237,7 @@ impl keyexpr {
     /// );
     /// ```
     #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
         let mut result = alloc::vec![];
         'chunks: for i in (0..=self.len()).rev() {
@@ -302,6 +305,7 @@ impl keyexpr {
     }
 
     #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub const fn chunks(&self) -> Chunks {
         self.chunks_impl()
     }
