@@ -157,7 +157,6 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
     pub(crate) value: Option<Value>,
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
@@ -173,7 +172,6 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    #[cfg(feature = "unstable")]
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -259,7 +257,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
-            #[cfg(feature = "unstable")]
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
@@ -275,7 +272,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
-            #[cfg(feature = "unstable")]
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
@@ -348,7 +344,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
-            #[cfg(feature = "unstable")]
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
@@ -364,7 +359,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
-            #[cfg(feature = "unstable")]
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
@@ -462,7 +456,6 @@ where
                 self.destination,
                 self.timeout,
                 self.value,
-                #[cfg(feature = "unstable")]
                 self.attachment,
                 #[cfg(feature = "unstable")]
                 self.source_info,

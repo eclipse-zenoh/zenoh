@@ -730,7 +730,6 @@ impl Session {
                 encoding: Encoding::default(),
             },
             timestamp: None,
-            #[cfg(feature = "unstable")]
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
@@ -766,7 +765,6 @@ impl Session {
             publisher: self.declare_publisher(key_expr),
             kind: PublicationBuilderDelete,
             timestamp: None,
-            #[cfg(feature = "unstable")]
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
@@ -818,7 +816,6 @@ impl Session {
             destination: Locality::default(),
             timeout,
             value: None,
-            #[cfg(feature = "unstable")]
             attachment: None,
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
@@ -1536,7 +1533,7 @@ impl Session {
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);

@@ -62,7 +62,7 @@ pub(crate) trait DataInfoIntoSample {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
@@ -79,7 +79,7 @@ impl DataInfoIntoSample for DataInfo {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
@@ -97,7 +97,6 @@ impl DataInfoIntoSample for DataInfo {
                 source_id: self.source_id,
                 source_sn: self.source_sn,
             },
-            #[cfg(feature = "unstable")]
             attachment,
         }
     }
@@ -109,19 +108,14 @@ impl DataInfoIntoSample for Option<DataInfo> {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoZBytes: Into<ZBytes>,
     {
         if let Some(data_info) = self {
-            data_info.into_sample(
-                key_expr,
-                payload,
-                #[cfg(feature = "unstable")]
-                attachment,
-            )
+            data_info.into_sample(key_expr, payload, attachment)
         } else {
             Sample {
                 key_expr: key_expr.into(),
@@ -132,7 +126,6 @@ impl DataInfoIntoSample for Option<DataInfo> {
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
-                #[cfg(feature = "unstable")]
                 attachment,
             }
         }
@@ -252,7 +245,6 @@ pub struct SampleFields {
     pub congestion_control: CongestionControl,
     #[cfg(feature = "unstable")]
     pub source_info: SourceInfo,
-    #[cfg(feature = "unstable")]
     pub attachment: Option<ZBytes>,
 }
 
@@ -269,7 +261,6 @@ impl From<Sample> for SampleFields {
             congestion_control: sample.qos.congestion_control(),
             #[cfg(feature = "unstable")]
             source_info: sample.source_info,
-            #[cfg(feature = "unstable")]
             attachment: sample.attachment,
         }
     }
@@ -285,11 +276,8 @@ pub struct Sample {
     pub(crate) encoding: Encoding,
     pub(crate) timestamp: Option<Timestamp>,
     pub(crate) qos: QoS,
-
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
-
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -353,14 +341,12 @@ impl Sample {
     }
 
     /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
     /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()

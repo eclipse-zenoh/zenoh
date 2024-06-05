@@ -74,7 +74,6 @@ pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
     pub(crate) eid: EntityId,
     pub(crate) value: Option<Value>,
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -131,13 +130,11 @@ impl Query {
     }
 
     /// This Query's attachment.
-    #[zenoh_macros::unstable]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
     /// This Query's attachment.
-    #[zenoh_macros::unstable]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
     }
@@ -184,7 +181,6 @@ impl Query {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -224,7 +220,6 @@ impl Query {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -316,11 +311,8 @@ pub struct ReplyBuilder<'a, 'b, T> {
     kind: T,
     timestamp: Option<Timestamp>,
     qos: QoSBuilder,
-
     #[cfg(feature = "unstable")]
     source_info: SourceInfo,
-
-    #[cfg(feature = "unstable")]
     attachment: Option<ZBytes>,
 }
 
@@ -335,7 +327,6 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
-    #[cfg(feature = "unstable")]
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -412,7 +403,6 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
             .qos(self.qos.into());
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
-        #[cfg(feature = "unstable")]
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -426,7 +416,6 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
             .qos(self.qos.into());
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
-        #[cfg(feature = "unstable")]
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -463,20 +452,14 @@ impl Query {
                         ext_sinfo,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
-                        #[cfg(feature = "unstable")]
                         ext_attachment: sample.attachment.map(|a| a.into()),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_attachment: None,
                         ext_unknown: vec![],
                         payload: sample.payload.into(),
                     }),
                     SampleKind::Delete => ReplyBody::Del(Del {
                         timestamp: sample.timestamp,
                         ext_sinfo,
-                        #[cfg(feature = "unstable")]
                         ext_attachment: sample.attachment.map(|a| a.into()),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_attachment: None,
                         ext_unknown: vec![],
                     }),
                 },
