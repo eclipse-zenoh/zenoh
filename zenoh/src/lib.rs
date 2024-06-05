@@ -343,7 +343,7 @@ pub mod liveliness {
 pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 
-    pub use crate::api::time::new_reception_timestamp;
+    pub use crate::api::time::new_timestamp;
 }
 
 /// Initialize a Session with an existing Runtime.

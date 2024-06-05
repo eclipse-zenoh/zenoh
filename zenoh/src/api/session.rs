@@ -35,8 +35,8 @@ use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, Timestamp, TimestampId,
-        WireExpr, ZenohId, EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, ZenohId,
+        EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -823,15 +823,6 @@ impl Session {
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
         }
-    }
-    /// Generates a reception [`Timestamp`] with id=0x01.
-    /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
-    /// that doesn't contain any timestamp.
-    pub fn now(&self) -> Timestamp {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        Timestamp::new(now.into(), self.zid().into())
     }
 }
 
