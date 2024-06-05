@@ -59,7 +59,7 @@ pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
     (quote! {(#release, #commit)}).into()
 }
 
-/// An enumeration of items which can be annotated with `#[zenoh_macros::unstable]`, #[zenoh_macros::unstable]`, `#[zenoh_macros::internal]`
+/// An enumeration of items which can be annotated with `#[zenoh_macros::unstable_doc]`, #[zenoh_macros::unstable]`, `#[zenoh_macros::internal]`
 enum AnnotableItem {
     /// Wrapper around [`syn::Item`].
     Item(Item),
