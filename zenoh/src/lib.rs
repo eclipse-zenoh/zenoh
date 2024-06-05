@@ -196,7 +196,6 @@ pub mod key_expr {
 
 /// Zenoh [`Session`](crate::session::Session) and associated types
 pub mod session {
-    #[zenoh_macros::unstable]
     #[zenoh_macros::internal]
     pub use crate::api::session::{init, InitBuilder};
     pub use crate::api::{
@@ -299,7 +298,6 @@ pub mod query {
     pub use crate::api::query::ReplyKeyExpr;
     #[zenoh_macros::unstable]
     pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
-    #[zenoh_macros::unstable]
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
     pub use crate::api::{
@@ -354,6 +352,18 @@ pub mod config {
     pub use zenoh_config::*;
 }
 
+#[cfg(all(feature = "internal", not(feature = "unstable")))]
+compile_error!(
+    "All internal functionality is unstable. The `unstable` feature must be enabled to use `internal`."
+);
+#[cfg(all(
+    feature = "plugins",
+    not(all(feature = "unstable", feature = "internal"))
+))]
+compile_error!(
+    "The plugins support is internal and unstable. The `unstable` and `internal` features must be enabled to use `plugins`."
+);
+
 #[zenoh_macros::internal]
 pub mod internal {
     pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout, ResolveFuture};
@@ -374,14 +384,13 @@ pub mod internal {
     }
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime as the router.
-    #[zenoh_macros::unstable]
+    #[zenoh_macros::internal]
     pub mod runtime {
         pub use zenoh_runtime::ZRuntime;
 
         pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
     }
     /// Plugins support
-    #[zenoh_macros::unstable]
     #[cfg(feature = "plugins")]
     pub mod plugins {
         pub use crate::api::plugins::{
@@ -390,7 +399,12 @@ pub mod internal {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+#[cfg(all(feature = "shared-memory", not(feature = "unstable")))]
+compile_error!(
+    "The shared-memory support is unstable. The `unstable` feature must be enabled to use `shared-memory`."
+);
+
+#[cfg(feature = "shared-memory")]
 pub mod shm {
     pub use zenoh_shm::api::{
         buffer::{

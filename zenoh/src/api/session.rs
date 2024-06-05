@@ -55,7 +55,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+#[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_task::TaskController;
 
@@ -842,9 +842,7 @@ impl Session {
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
         config: Config,
-        #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
-            Arc<SharedMemoryClientStorage>,
-        >,
+        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<SharedMemoryClientStorage>>,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
@@ -852,7 +850,7 @@ impl Session {
             let aggregated_publishers = config.aggregation().publishers().clone();
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
-            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            #[cfg(feature = "shared-memory")]
             {
                 runtime = runtime.shm_clients(shm_clients);
             }
@@ -2714,7 +2712,7 @@ where
 {
     OpenBuilder {
         config,
-        #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+        #[cfg(feature = "shared-memory")]
         shm_clients: None,
     }
 }
@@ -2737,11 +2735,11 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     config: TryIntoConfig,
-    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<SharedMemoryClientStorage>>,
 }
 
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+#[cfg(feature = "shared-memory")]
 impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -2773,7 +2771,7 @@ where
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
         Session::new(
             config,
-            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            #[cfg(feature = "shared-memory")]
             self.shm_clients,
         )
         .wait()
@@ -2795,7 +2793,6 @@ where
 
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime as the router.
-#[zenoh_macros::unstable]
 #[zenoh_macros::internal]
 pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder {
@@ -2808,7 +2805,6 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[doc(hidden)]
-#[zenoh_macros::unstable]
 #[zenoh_macros::internal]
 pub struct InitBuilder {
     runtime: Runtime,
@@ -2816,7 +2812,6 @@ pub struct InitBuilder {
     aggregated_publishers: Vec<OwnedKeyExpr>,
 }
 
-#[zenoh_macros::unstable]
 #[zenoh_macros::internal]
 impl InitBuilder {
     #[inline]
@@ -2832,13 +2827,11 @@ impl InitBuilder {
     }
 }
 
-#[zenoh_macros::unstable]
 #[zenoh_macros::internal]
 impl Resolvable for InitBuilder {
     type To = ZResult<Session>;
 }
 
-#[zenoh_macros::unstable]
 #[zenoh_macros::internal]
 impl Wait for InitBuilder {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -2851,7 +2844,6 @@ impl Wait for InitBuilder {
     }
 }
 
-#[zenoh_macros::unstable]
 #[zenoh_macros::internal]
 impl IntoFuture for InitBuilder {
     type Output = <Self as Resolvable>::To;

@@ -21,9 +21,9 @@ use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI, ZenohId};
 use zenoh_core::Wait;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, EMPTY_EXPR_ID},
@@ -40,7 +40,7 @@ use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{routing::dispatcher::face::Face, Runtime};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
@@ -71,7 +71,7 @@ pub struct AdminSpace {
     context: Arc<AdminContext>,
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
@@ -86,7 +86,7 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         {
             let plugins_mgr = self.context.runtime.plugins_manager();
             let Some(plugin) = plugins_mgr.started_plugin(name) else {
@@ -97,7 +97,7 @@ impl ConfigValidator for AdminSpace {
             };
             plugin.instance().config_checker(path, current, new)
         }
-        #[cfg(not(all(feature = "unstable", feature = "plugins")))]
+        #[cfg(not(feature = "plugins"))]
         {
             let _ = (name, path, current, new);
             Ok(None)
@@ -106,7 +106,7 @@ impl ConfigValidator for AdminSpace {
 }
 
 impl AdminSpace {
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     fn start_plugin(
         plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
@@ -195,7 +195,7 @@ impl AdminSpace {
             Arc::new(queryables_data),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         handlers.insert(
             format!("@/{whatami_str}/{zid_str}/plugins/**")
                 .try_into()
@@ -203,7 +203,7 @@ impl AdminSpace {
             Arc::new(plugins_data),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         handlers.insert(
             format!("@/{whatami_str}/{zid_str}/status/plugins/**")
                 .try_into()
@@ -211,7 +211,7 @@ impl AdminSpace {
             Arc::new(plugins_status),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
@@ -234,7 +234,7 @@ impl AdminSpace {
 
         config.set_plugin_validator(Arc::downgrade(&admin));
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         {
             let cfg_rx = admin.context.runtime.state.config.subscribe();
 
@@ -546,7 +546,7 @@ fn local_data(context: &AdminContext, query: Query) {
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     let plugins: serde_json::Value = {
         let plugins_mgr = context.runtime.plugins_manager();
         plugins_mgr
@@ -756,7 +756,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn plugins_data(context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!(
@@ -783,7 +783,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn plugins_status(context: &AdminContext, query: Query) {
     use crate::bytes::{Serialize, ZSerde};
 
@@ -854,7 +854,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     prefix: &mut String,
     suffixes: &[&str],

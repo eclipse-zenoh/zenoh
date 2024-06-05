@@ -24,7 +24,7 @@ categories = { workspace = true }
 description = "The zenoh storages plugin."
 
 [features]
-default = ["dynamic_plugin", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
+default = ["dynamic_plugin"]
 dynamic_plugin = []
 
 [lib]
@@ -45,7 +45,12 @@ tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
-zenoh = { workspace = true, features = ["unstable", "internal"] }
+zenoh = { workspace = true, features = [
+    "default",
+    "plugins",
+    "internal",
+    "unstable",
+] }
 zenoh-plugin-trait = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh_backend_traits = { workspace = true }

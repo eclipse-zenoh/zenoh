@@ -20,7 +20,7 @@
 mod adminspace;
 pub mod orchestrator;
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
@@ -44,9 +44,9 @@ use zenoh_protocol::{
     network::NetworkMessage,
 };
 use zenoh_result::{bail, ZResult};
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+#[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+#[cfg(feature = "shared-memory")]
 use zenoh_shm::reader::SharedMemoryReader;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
@@ -57,9 +57,9 @@ use zenoh_transport::{
 
 use self::orchestrator::StartConditions;
 use super::{primitives::DeMux, routing, routing::router::Router};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use crate::api::loader::{load_plugins, start_plugins};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
 use crate::{
     config::{unwrap_or_default, Config, ModeDependent, Notifier},
@@ -78,7 +78,7 @@ pub(crate) struct RuntimeState {
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
     task_controller: TaskController,
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     plugins_manager: Mutex<PluginsManager>,
     start_conditions: Arc<StartConditions>,
 }
@@ -95,9 +95,9 @@ impl WeakRuntime {
 
 pub struct RuntimeBuilder {
     config: Config,
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     plugins_manager: Option<PluginsManager>,
-    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<SharedMemoryClientStorage>>,
 }
 
@@ -105,20 +105,20 @@ impl RuntimeBuilder {
     pub fn new(config: Config) -> Self {
         Self {
             config,
-            #[cfg(all(feature = "unstable", feature = "plugins"))]
+            #[cfg(feature = "plugins")]
             plugins_manager: None,
-            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            #[cfg(feature = "shared-memory")]
             shm_clients: None,
         }
     }
 
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     pub fn plugins_manager<T: Into<Option<PluginsManager>>>(mut self, plugins_manager: T) -> Self {
         self.plugins_manager = plugins_manager.into();
         self
     }
 
-    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    #[cfg(feature = "shared-memory")]
     pub fn shm_clients(mut self, shm_clients: Option<Arc<SharedMemoryClientStorage>>) -> Self {
         self.shm_clients = shm_clients;
         self
@@ -127,9 +127,9 @@ impl RuntimeBuilder {
     pub async fn build(self) -> ZResult<Runtime> {
         let RuntimeBuilder {
             config,
-            #[cfg(all(feature = "unstable", feature = "plugins"))]
+            #[cfg(feature = "plugins")]
             mut plugins_manager,
-            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            #[cfg(feature = "shared-memory")]
             shm_clients,
         } = self;
 
@@ -166,7 +166,7 @@ impl RuntimeBuilder {
         let transport_manager = transport_manager.build(handler.clone())?;
 
         // Plugins manager
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         let plugins_manager = plugins_manager
             .take()
             .unwrap_or_else(|| load_plugins(&config));
@@ -187,7 +187,7 @@ impl RuntimeBuilder {
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
                 task_controller: TaskController::default(),
-                #[cfg(all(feature = "unstable", feature = "plugins"))]
+                #[cfg(feature = "plugins")]
                 plugins_manager: Mutex::new(plugins_manager),
                 start_conditions: Arc::new(StartConditions::default()),
             }),
@@ -201,7 +201,7 @@ impl RuntimeBuilder {
         }
 
         // Start plugins
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         start_plugins(&runtime);
 
         // Start notifier task
@@ -257,7 +257,7 @@ impl Runtime {
         &self.state.manager
     }
 
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     #[inline(always)]
     pub(crate) fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
         zlock!(self.state.plugins_manager)

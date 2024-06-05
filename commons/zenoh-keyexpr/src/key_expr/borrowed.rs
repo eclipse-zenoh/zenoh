@@ -12,11 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(feature = "internal")]
+use alloc::vec::Vec;
 use alloc::{
     borrow::{Borrow, ToOwned},
     format,
     string::String,
-    vec::Vec,
 };
 use core::{
     convert::{TryFrom, TryInto},
@@ -127,7 +128,6 @@ impl keyexpr {
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
     #[cfg(feature = "internal")]
-    #[cfg(feature = "unstable")]
     pub fn is_wild(&self) -> bool {
         self.is_wild_impl()
     }
@@ -169,11 +169,7 @@ impl keyexpr {
     ///     keyexpr::new("dem$*").unwrap().get_nonwild_prefix());
     /// ```
     #[cfg(feature = "internal")]
-    #[cfg(feature = "unstable")]
     pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
-        self.get_nonwild_prefix_impl()
-    }
-    fn get_nonwild_prefix_impl(&self) -> Option<&keyexpr> {
         match self.0.find('*') {
             Some(i) => match self.0[..i].rfind('/') {
                 Some(j) => unsafe { Some(keyexpr::from_str_unchecked(&self.0[..j])) },
@@ -238,11 +234,7 @@ impl keyexpr {
     /// );
     /// ```
     #[cfg(feature = "internal")]
-    #[cfg(feature = "unstable")]
     pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
-        self.strip_prefix_impl(prefix)
-    }
-    fn strip_prefix_impl(&self, prefix: &Self) -> Vec<&keyexpr> {
         let mut result = alloc::vec![];
         'chunks: for i in (0..=self.len()).rev() {
             if if i == self.len() {
@@ -309,7 +301,6 @@ impl keyexpr {
     }
 
     #[cfg(feature = "internal")]
-    #[cfg(feature = "unstable")]
     pub const fn chunks(&self) -> Chunks {
         self.chunks_impl()
     }
