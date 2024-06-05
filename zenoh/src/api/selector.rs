@@ -73,6 +73,7 @@ pub struct Selector<'a> {
     pub(crate) parameters: Parameters<'a>,
 }
 
+#[zenoh_macros::unstable]
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
     /// Builds a new selector
