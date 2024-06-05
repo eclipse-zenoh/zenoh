@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::time::{SystemTime, UNIX_EPOCH};
+
 use zenoh_protocol::core::{Timestamp, TimestampId};
 
 /// Generates a [`Timestamp`] with [`TimestampId`] and current system time
