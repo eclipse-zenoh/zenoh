@@ -406,6 +406,7 @@ compile_error!(
     "The shared-memory support is unstable. The `unstable` feature must be enabled to use `shared-memory`."
 );
 
+#[zenoh_macros::unstable]
 #[cfg(feature = "shared-memory")]
 pub mod shm {
     pub use zenoh_shm::api::{
