@@ -2224,7 +2224,7 @@ impl Primitives for Session {
                         };
                         let replier_id = match e.ext_sinfo {
                             Some(info) => info.id.zid,
-                            None => zenoh_protocol::core::ZenohId::rand().into(),
+                            None => zenoh_protocol::core::ZenohId::rand(),
                         };
                         let new_reply = Reply {
                             replier_id,
@@ -2351,7 +2351,7 @@ impl Primitives for Session {
                         );
                         let new_reply = Reply {
                             result: Ok(sample),
-                            replier_id: zenoh_protocol::core::ZenohId::rand().into(), // TODO
+                            replier_id: zenoh_protocol::core::ZenohId::rand(), // TODO
                         };
                         let callback =
                             match query.reception_mode {

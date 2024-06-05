@@ -696,7 +696,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
 
         let iack_in = SendInitAckIn {
             mine_version: manager.config.version,
-            mine_zid: manager.config.zid.into(),
+            mine_zid: manager.config.zid,
             mine_whatami: manager.config.whatami,
             other_zid: isyn_out.other_zid,
             other_whatami: isyn_out.other_whatami,
@@ -714,7 +714,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
 
     // Create the OpenAck but not send it yet
     let oack_in = SendOpenAckIn {
-        mine_zid: manager.config.zid.into(),
+        mine_zid: manager.config.zid,
         mine_lease: manager.config.unicast.lease,
         other_zid: osyn_out.other_zid,
     };

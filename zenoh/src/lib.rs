@@ -372,7 +372,6 @@ pub mod internal {
     pub use zenoh_task::{TaskController, TerminatableTask};
     pub use zenoh_util::{zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
 
-    pub use crate::api::encoding::EncodingInternals;
     /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
     /// reading and writing data.
     pub mod buffers {
