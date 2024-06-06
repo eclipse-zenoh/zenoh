@@ -77,6 +77,12 @@ impl From<ZenohId> for zenoh_protocol::core::ZenohId {
     }
 }
 
+impl From<ZenohId> for uhlc::ID {
+    fn from(zid: ZenohId) -> Self {
+        zid.0.into()
+    }
+}
+
 impl FromStr for ZenohId {
     type Err = zenoh_result::Error;
 

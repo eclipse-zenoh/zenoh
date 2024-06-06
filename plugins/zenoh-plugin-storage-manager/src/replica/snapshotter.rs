@@ -24,12 +24,14 @@ use async_std::{
 };
 use flume::Receiver;
 use futures::join;
-use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp};
+use zenoh::{config::ZenohId, key_expr::OwnedKeyExpr, time::Timestamp};
 use zenoh_backend_traits::config::ReplicaConfig;
 
 use super::{Digest, DigestConfig, LogEntry};
 
 pub struct Snapshotter {
+    // session id for timestamp generation
+    id: ZenohId,
     // channel to get updates from the storage
     storage_update: Receiver<(OwnedKeyExpr, Timestamp)>,
     // configuration parameters of the replica
@@ -55,6 +57,7 @@ pub struct ReplicationInfo {
 impl Snapshotter {
     // Initialize the snapshot parameters, logs and digest
     pub async fn new(
+        id: ZenohId,
         rx_sample: Receiver<(OwnedKeyExpr, Timestamp)>,
         initial_entries: &Vec<(OwnedKeyExpr, Timestamp)>,
         replica_config: &ReplicaConfig,
@@ -63,10 +66,12 @@ impl Snapshotter {
         // from initial entries, populate the log - stable and volatile
         // compute digest
         let (last_snapshot_time, last_interval) = Snapshotter::compute_snapshot_params(
+            id,
             replica_config.propagation_delay,
             replica_config.delta,
         );
         let snapshotter = Snapshotter {
+            id,
             storage_update: rx_sample,
             replica_config: replica_config.clone(),
             content: ReplicationInfo {
@@ -126,6 +131,7 @@ impl Snapshotter {
             let mut last_snapshot_time = self.content.last_snapshot_time.write().await;
             let mut last_interval = self.content.last_interval.write().await;
             let (time, interval) = Snapshotter::compute_snapshot_params(
+                self.id,
                 self.replica_config.propagation_delay,
                 self.replica_config.delta,
             );
@@ -139,10 +145,11 @@ impl Snapshotter {
 
     // Compute latest snapshot time and latest interval with respect to the current time
     pub fn compute_snapshot_params(
+        id: ZenohId,
         propagation_delay: Duration,
         delta: Duration,
     ) -> (Timestamp, u64) {
-        let now = zenoh::time::new_reception_timestamp();
+        let now = zenoh::time::new_timestamp(id);
         let latest_interval = (now
             .get_time()
             .to_system_time()
@@ -199,7 +206,7 @@ impl Snapshotter {
 
     // Create digest from the stable log at startup
     async fn initialize_digest(&self) {
-        let now = zenoh::time::new_reception_timestamp();
+        let now = zenoh::time::new_timestamp(self.id);
         let replica_data = &self.content;
         let log_locked = replica_data.stable_log.read().await;
         let latest_interval = replica_data.last_interval.read().await;

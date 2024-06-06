@@ -114,6 +114,9 @@ impl Replica {
             }
         };
 
+        // Zid of session for generating timestamps
+        let zid = session.zid();
+
         let replica = Replica {
             name: name.to_string(),
             session,
@@ -121,7 +124,6 @@ impl Replica {
             replica_config: storage_config.replica_config.clone().unwrap(),
             digests_published: RwLock::new(HashSet::new()),
         };
-
         // Create channels for communication between components
         // channel to queue digests to be aligned
         let (tx_digest, rx_digest) = flume::unbounded();
@@ -132,7 +134,7 @@ impl Replica {
 
         let config = replica.replica_config.clone();
         // snapshotter
-        let snapshotter = Arc::new(Snapshotter::new(rx_log, &startup_entries, &config).await);
+        let snapshotter = Arc::new(Snapshotter::new(zid, rx_log, &startup_entries, &config).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment

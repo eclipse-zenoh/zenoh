@@ -202,6 +202,12 @@ impl From<&ZenohId> for uhlc::ID {
     }
 }
 
+impl From<ZenohId> for uhlc::ID {
+    fn from(zid: ZenohId) -> Self {
+        zid.0
+    }
+}
+
 impl From<ZenohId> for OwnedKeyExpr {
     fn from(zid: ZenohId) -> Self {
         // SAFETY: zid.to_string() returns an stringified hexadecimal
