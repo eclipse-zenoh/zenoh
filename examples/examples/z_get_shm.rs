@@ -31,7 +31,7 @@ const N: usize = 10;
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let (mut config, selector, mut value, target, timeout) = parse_args();
 

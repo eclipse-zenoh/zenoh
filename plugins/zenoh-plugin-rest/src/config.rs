@@ -31,6 +31,7 @@ pub struct Config {
     __path__: Option<Vec<String>>,
     __required__: Option<bool>,
     __config__: Option<String>,
+    __plugin__: Option<String>,
 }
 
 impl From<&Config> for serde_json::Value {

@@ -271,7 +271,7 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
 pub type EntityId = u32;
 
 /// The global unique id of a zenoh entity.
-#[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub struct EntityGlobalId {
     pub zid: ZenohId,
     pub eid: EntityId,
