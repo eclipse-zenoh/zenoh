@@ -84,7 +84,7 @@ async fn test_liveliness_querying_subscriber_clique() {
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Delete);
-    assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_2);
+    assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
