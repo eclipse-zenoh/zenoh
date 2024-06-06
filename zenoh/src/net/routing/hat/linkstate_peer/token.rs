@@ -526,6 +526,50 @@ fn forget_client_token(
     }
 }
 
+pub(super) fn token_remove_node(tables: &mut Tables, node: &ZenohId) {
+    for mut res in hat!(tables)
+        .peer_tokens
+        .iter()
+        .filter(|res| res_hat!(res).peer_tokens.contains(node))
+        .cloned()
+        .collect::<Vec<Arc<Resource>>>()
+    {
+        unregister_peer_token(tables, &mut res, node);
+        Resource::clean(&mut res)
+    }
+}
+
+pub(super) fn token_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeIndex>]) {
+    // propagate tokens to new childs
+    for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
+        if !tree_childs.is_empty() {
+            let net = hat!(tables).peers_net.as_ref().unwrap();
+            let tree_idx = NodeIndex::new(tree_sid);
+            if net.graph.contains_node(tree_idx) {
+                let tree_id = net.graph[tree_idx].zid;
+
+                let tokens_res = &hat!(tables).peer_tokens;
+
+                for res in tokens_res {
+                    let tokens = &res_hat!(res).peer_tokens;
+                    for token in tokens {
+                        if *token == tree_id {
+                            send_sourced_token_to_net_childs(
+                                tables,
+                                net,
+                                tree_childs,
+                                res,
+                                None,
+                                tree_sid as NodeId,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl HatTokenTrait for HatCode {
     fn declare_token_interest(
         &self,

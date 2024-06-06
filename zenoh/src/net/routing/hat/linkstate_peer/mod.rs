@@ -24,6 +24,7 @@ use std::{
     time::Duration,
 };
 
+use token::token_remove_node;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -158,6 +159,7 @@ impl HatTables {
                     tracing::trace!("Compute routes");
                     pubsub::pubsub_tree_change(&mut tables, &new_childs);
                     queries::queries_tree_change(&mut tables, &new_childs);
+                    token::token_tree_change(&mut tables, &new_childs);
 
                     tracing::trace!("Computations completed");
                     hat_mut!(tables).peers_trees_task = None;
@@ -379,6 +381,7 @@ impl HatBaseTrait for HatCode {
                             for (_, removed_node) in changes.removed_nodes {
                                 pubsub_remove_node(tables, &removed_node.zid);
                                 queries_remove_node(tables, &removed_node.zid);
+                                token_remove_node(tables, &removed_node.zid);
                             }
 
                             hat_mut!(tables).schedule_compute_trees(tables_ref.clone());
@@ -422,6 +425,7 @@ impl HatBaseTrait for HatCode {
                     {
                         pubsub_remove_node(tables, &removed_node.zid);
                         queries_remove_node(tables, &removed_node.zid);
+                        token_remove_node(tables, &removed_node.zid);
                     }
 
                     hat_mut!(tables).schedule_compute_trees(tables_ref.clone());

@@ -669,6 +669,158 @@ fn forget_client_token(
     }
 }
 
+pub(super) fn token_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
+    match net_type {
+        WhatAmI::Router => {
+            for mut res in hat!(tables)
+                .router_tokens
+                .iter()
+                .filter(|res| res_hat!(res).router_tokens.contains(node))
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>()
+            {
+                unregister_router_token(tables, &mut res, node);
+                Resource::clean(&mut res)
+            }
+        }
+        WhatAmI::Peer => {
+            for mut res in hat!(tables)
+                .peer_tokens
+                .iter()
+                .filter(|res| res_hat!(res).peer_tokens.contains(node))
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>()
+            {
+                unregister_peer_token(tables, &mut res, node);
+                let client_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
+                let peer_tokens = remote_peer_tokens(tables, &res);
+                if !client_tokens && !peer_tokens {
+                    undeclare_router_token(tables, None, &mut res, &tables.zid.clone());
+                }
+                Resource::clean(&mut res)
+            }
+        }
+        _ => (),
+    }
+}
+
+pub(super) fn token_tree_change(
+    tables: &mut Tables,
+    new_childs: &[Vec<NodeIndex>],
+    net_type: WhatAmI,
+) {
+    // propagate tokens to new childs
+    for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
+        if !tree_childs.is_empty() {
+            let net = hat!(tables).get_net(net_type).unwrap();
+            let tree_idx = NodeIndex::new(tree_sid);
+            if net.graph.contains_node(tree_idx) {
+                let tree_id = net.graph[tree_idx].zid;
+
+                let tokens_res = match net_type {
+                    WhatAmI::Router => &hat!(tables).router_tokens,
+                    _ => &hat!(tables).peer_tokens,
+                };
+
+                for res in tokens_res {
+                    let tokens = match net_type {
+                        WhatAmI::Router => &res_hat!(res).router_tokens,
+                        _ => &res_hat!(res).peer_tokens,
+                    };
+                    for token in tokens {
+                        if *token == tree_id {
+                            send_sourced_token_to_net_childs(
+                                tables,
+                                net,
+                                tree_childs,
+                                res,
+                                None,
+                                tree_sid as NodeId,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub(super) fn token_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
+    if let Some(src_face) = tables.get_face(zid).cloned() {
+        if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
+            for res in face_hat!(src_face).remote_tokens.values() {
+                let client_tokens = res
+                    .session_ctxs
+                    .values()
+                    .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.token);
+                if !remote_router_tokens(tables, res) && !client_tokens {
+                    for ctx in get_mut_unchecked(&mut res.clone())
+                        .session_ctxs
+                        .values_mut()
+                    {
+                        let dst_face = &mut get_mut_unchecked(ctx).face;
+                        if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
+                            if let Some(id) = face_hat!(dst_face).local_tokens.get(res).cloned() {
+                                let forget = !HatTables::failover_brokering_to(links, dst_face.zid)
+                                    && {
+                                        let ctx_links = hat!(tables)
+                                            .peers_net
+                                            .as_ref()
+                                            .map(|net| net.get_links(dst_face.zid))
+                                            .unwrap_or_else(|| &[]);
+                                        res.session_ctxs.values().any(|ctx2| {
+                                            ctx2.face.whatami == WhatAmI::Peer
+                                                && ctx2.token
+                                                && HatTables::failover_brokering_to(
+                                                    ctx_links,
+                                                    ctx2.face.zid,
+                                                )
+                                        })
+                                    };
+                                if forget {
+                                    dst_face.primitives.send_declare(RoutingContext::with_expr(
+                                        Declare {
+                                            interest_id: None,
+                                            ext_qos: ext::QoSType::DECLARE,
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                                            body: DeclareBody::UndeclareToken(UndeclareToken {
+                                                id,
+                                                ext_wire_expr: WireExprType::null(),
+                                            }),
+                                        },
+                                        res.expr(),
+                                    ));
+
+                                    face_hat_mut!(dst_face).local_tokens.remove(res);
+                                }
+                            } else if HatTables::failover_brokering_to(links, ctx.face.zid) {
+                                let dst_face = &mut get_mut_unchecked(ctx).face;
+                                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
+                                let key_expr = Resource::decl_key(res, dst_face);
+                                dst_face.primitives.send_declare(RoutingContext::with_expr(
+                                    Declare {
+                                        interest_id: None,
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                                        body: DeclareBody::DeclareToken(DeclareToken {
+                                            id,
+                                            wire_expr: key_expr,
+                                        }),
+                                    },
+                                    res.expr(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl HatTokenTrait for HatCode {
     fn declare_token_interest(
         &self,

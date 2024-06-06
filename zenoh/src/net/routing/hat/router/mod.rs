@@ -25,6 +25,7 @@ use std::{
     time::Duration,
 };
 
+use token::{token_linkstate_change, token_remove_node};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -281,6 +282,7 @@ impl HatTables {
                     tracing::trace!("Compute routes");
                     pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
                     queries::queries_tree_change(&mut tables, &new_childs, net_type);
+                    token::token_tree_change(&mut tables, &new_childs, net_type);
 
                     tracing::trace!("Computations completed");
                     match net_type {
@@ -554,6 +556,7 @@ impl HatBaseTrait for HatCode {
                             {
                                 pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Router);
                                 queries_remove_node(tables, &removed_node.zid, WhatAmI::Router);
+                                token_remove_node(tables, &removed_node.zid, WhatAmI::Router);
                             }
 
                             if hat!(tables).full_net(WhatAmI::Peer) {
@@ -581,6 +584,7 @@ impl HatBaseTrait for HatCode {
                                             &removed_node.zid,
                                             WhatAmI::Peer,
                                         );
+                                        token_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
                                     }
 
                                     hat_mut!(tables).shared_nodes = shared_nodes(
@@ -598,6 +602,11 @@ impl HatBaseTrait for HatCode {
                                             &updated_node.links,
                                         );
                                         queries_linkstate_change(
+                                            tables,
+                                            &updated_node.zid,
+                                            &updated_node.links,
+                                        );
+                                        token_linkstate_change(
                                             tables,
                                             &updated_node.zid,
                                             &updated_node.links,
@@ -661,6 +670,7 @@ impl HatBaseTrait for HatCode {
                         {
                             pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Router);
                             queries_remove_node(tables, &removed_node.zid, WhatAmI::Router);
+                            token_remove_node(tables, &removed_node.zid, WhatAmI::Router);
                         }
 
                         if hat!(tables).full_net(WhatAmI::Peer) {
@@ -683,6 +693,7 @@ impl HatBaseTrait for HatCode {
                             {
                                 pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
                                 queries_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
+                                token_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
                             }
 
                             hat_mut!(tables).shared_nodes = shared_nodes(
