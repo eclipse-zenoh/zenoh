@@ -2343,8 +2343,36 @@ impl Primitives for Session {
                             #[cfg(feature = "unstable")]
                             None,
                         );
-                    } else {
-                        tracing::error!("Received UndeclareToken for unkown id: {}", m.id);
+                    } else if m.ext_wire_expr.wire_expr != WireExpr::empty() {
+                        match state
+                            .wireexpr_to_keyexpr(&m.ext_wire_expr.wire_expr, false)
+                            .map(|e| e.into_owned())
+                        {
+                            Ok(key_expr) => {
+                                drop(state);
+
+                                let data_info = DataInfo {
+                                    kind: SampleKind::Delete,
+                                    ..Default::default()
+                                };
+
+                                self.execute_subscriber_callbacks(
+                                    false,
+                                    &key_expr.to_wire(self),
+                                    Some(data_info),
+                                    ZBuf::default(),
+                                    SubscriberKind::LivelinessSubscriber,
+                                    #[cfg(feature = "unstable")]
+                                    None,
+                                );
+                            }
+                            Err(err) => {
+                                tracing::error!(
+                                    "Received UndeclareToken for unkown wire_expr: {}",
+                                    err
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -185,6 +185,28 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                 },
                 res.expr(),
             ));
+        } else if face_hat!(face)
+            .remote_token_interests
+            .values()
+            .any(|si| si.0.as_ref().map(|si| si.matches(res)).unwrap_or(true) && !si.1)
+        {
+            // Token has never been declared on this face.
+            // Send an Undeclare with a one shot generated id and a WireExpr ext.
+            face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareToken(UndeclareToken {
+                        id: face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst),
+                        ext_wire_expr: WireExprType {
+                            wire_expr: Resource::get_best_key(res, "", face.id),
+                        },
+                    }),
+                },
+                res.expr(),
+            ));
         }
         for res in face_hat!(face)
             .local_tokens
@@ -206,6 +228,28 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                             body: DeclareBody::UndeclareToken(UndeclareToken {
                                 id,
                                 ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        res.expr(),
+                    ));
+                } else if face_hat!(face)
+                    .remote_token_interests
+                    .values()
+                    .any(|si| si.0.as_ref().map(|si| si.matches(&res)).unwrap_or(true) && !si.1)
+                {
+                    // Token has never been declared on this face.
+                    // Send an Undeclare with a one shot generated id and a WireExpr ext.
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareToken(UndeclareToken {
+                                id: face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst),
+                                ext_wire_expr: WireExprType {
+                                    wire_expr: Resource::get_best_key(&res, "", face.id),
+                                },
                             }),
                         },
                         res.expr(),
