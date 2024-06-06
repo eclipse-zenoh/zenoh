@@ -144,7 +144,7 @@ impl<'a> Wait for PeersZenohIdBuilder<'a> {
                     s.get_whatami()
                         .ok()
                         .and_then(|what| (what == WhatAmI::Peer).then_some(()))
-                        .and_then(|_| s.get_zid().map(|zid| zid.into()).ok())
+                        .and_then(|_| s.get_zid().map(Into::into).ok())
                 }),
         )
     }
