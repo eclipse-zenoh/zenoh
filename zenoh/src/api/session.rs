@@ -2396,7 +2396,7 @@ impl Primitives for Session {
                     encoding: Some(m.encoding.into()),
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.execute_subscriber_callbacks(
@@ -2415,7 +2415,7 @@ impl Primitives for Session {
                     encoding: None,
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.execute_subscriber_callbacks(
@@ -2557,7 +2557,7 @@ impl Primitives for Session {
                                     encoding: Some(encoding.into()),
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
                                 #[cfg(feature = "unstable")]
@@ -2575,7 +2575,7 @@ impl Primitives for Session {
                                     encoding: None,
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
                                 #[cfg(feature = "unstable")]
