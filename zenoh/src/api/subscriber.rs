@@ -459,7 +459,7 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
-            zid: self.subscriber.session.zid(),
+            zid: self.subscriber.session.zid().into(),
             eid: self.subscriber.state.id,
         }
     }

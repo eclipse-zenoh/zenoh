@@ -28,15 +28,14 @@ use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, Config, Notifier};
+use zenoh_config::{unwrap_or_default, Config, Notifier, ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, ZenohId,
-        EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -56,7 +55,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+#[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
 use zenoh_task::TaskController;
 
@@ -72,7 +71,9 @@ use super::{
     info::SessionInfo,
     key_expr::{KeyExpr, KeyExprInner},
     publisher::{Priority, PublisherState},
-    query::{ConsolidationMode, GetBuilder, QueryConsolidation, QueryState, QueryTarget, Reply},
+    query::{
+        ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply, SessionGetBuilder,
+    },
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::{Selector, TIME_RANGE_KEY},
@@ -729,7 +730,6 @@ impl Session {
                 encoding: Encoding::default(),
             },
             timestamp: None,
-            #[cfg(feature = "unstable")]
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
@@ -765,7 +765,6 @@ impl Session {
             publisher: self.declare_publisher(key_expr),
             kind: PublicationBuilderDelete,
             timestamp: None,
-            #[cfg(feature = "unstable")]
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
@@ -796,7 +795,7 @@ impl Session {
     pub fn get<'a, 'b: 'a, TryIntoSelector>(
         &'a self,
         selector: TryIntoSelector,
-    ) -> GetBuilder<'a, 'b, DefaultHandler>
+    ) -> SessionGetBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoSelector: TryInto<Selector<'b>>,
         <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
@@ -807,7 +806,7 @@ impl Session {
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
-        GetBuilder {
+        SessionGetBuilder {
             session: self,
             selector,
             scope: Ok(None),
@@ -817,7 +816,6 @@ impl Session {
             destination: Locality::default(),
             timeout,
             value: None,
-            #[cfg(feature = "unstable")]
             attachment: None,
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
@@ -841,9 +839,7 @@ impl Session {
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
         config: Config,
-        #[cfg(all(feature = "unstable", feature = "shared-memory"))] shm_clients: Option<
-            Arc<SharedMemoryClientStorage>,
-        >,
+        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<SharedMemoryClientStorage>>,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
@@ -851,7 +847,7 @@ impl Session {
             let aggregated_publishers = config.aggregation().publishers().clone();
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
-            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            #[cfg(feature = "shared-memory")]
             {
                 runtime = runtime.shm_clients(shm_clients);
             }
@@ -1537,7 +1533,7 @@ impl Session {
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
@@ -1709,7 +1705,7 @@ impl Session {
                                 }
                                 (query.callback)(Reply {
                                     result: Err("Timeout".into()),
-                                    replier_id: zid,
+                                    replier_id: zid.into(),
                                 });
                             }
                         }
@@ -1858,7 +1854,7 @@ impl Session {
             key_expr,
             parameters: parameters.to_owned().into(),
             qid,
-            zid,
+            zid: zid.into(),
             primitives: if local {
                 Arc::new(self.clone())
             } else {
@@ -2160,7 +2156,7 @@ impl Primitives for Session {
                     encoding: Some(m.encoding.into()),
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.handle_data(
@@ -2178,7 +2174,7 @@ impl Primitives for Session {
                     encoding: None,
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.handle_data(
@@ -2225,7 +2221,7 @@ impl Primitives for Session {
                         };
                         let replier_id = match e.ext_sinfo {
                             Some(info) => info.id.zid,
-                            None => ZenohId::rand(),
+                            None => zenoh_protocol::core::ZenohId::rand(),
                         };
                         let new_reply = Reply {
                             replier_id,
@@ -2319,7 +2315,7 @@ impl Primitives for Session {
                                     encoding: Some(encoding.into()),
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
                                 #[cfg(feature = "unstable")]
@@ -2337,7 +2333,7 @@ impl Primitives for Session {
                                     encoding: None,
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.id.clone()),
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
                                 #[cfg(feature = "unstable")]
@@ -2352,7 +2348,7 @@ impl Primitives for Session {
                         );
                         let new_reply = Reply {
                             result: Ok(sample),
-                            replier_id: ZenohId::rand(), // TODO
+                            replier_id: zenoh_protocol::core::ZenohId::rand(), // TODO
                         };
                         let callback =
                             match query.reception_mode {
@@ -2713,7 +2709,7 @@ where
 {
     OpenBuilder {
         config,
-        #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+        #[cfg(feature = "shared-memory")]
         shm_clients: None,
     }
 }
@@ -2736,11 +2732,11 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     config: TryIntoConfig,
-    #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+    #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<SharedMemoryClientStorage>>,
 }
 
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+#[cfg(feature = "shared-memory")]
 impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -2772,7 +2768,7 @@ where
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
         Session::new(
             config,
-            #[cfg(all(feature = "unstable", feature = "shared-memory"))]
+            #[cfg(feature = "shared-memory")]
             self.shm_clients,
         )
         .wait()
@@ -2794,8 +2790,7 @@ where
 
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime as the router.
-#[doc(hidden)]
-#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder {
         runtime,
@@ -2807,14 +2802,14 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[doc(hidden)]
-#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 pub struct InitBuilder {
     runtime: Runtime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
     aggregated_publishers: Vec<OwnedKeyExpr>,
 }
 
-#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl InitBuilder {
     #[inline]
     pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
@@ -2829,12 +2824,12 @@ impl InitBuilder {
     }
 }
 
-#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl Resolvable for InitBuilder {
     type To = ZResult<Session>;
 }
 
-#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl Wait for InitBuilder {
     fn wait(self) -> <Self as Resolvable>::To {
         Ok(Session::init(
@@ -2846,7 +2841,7 @@ impl Wait for InitBuilder {
     }
 }
 
-#[zenoh_macros::unstable]
+#[zenoh_macros::internal]
 impl IntoFuture for InitBuilder {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;

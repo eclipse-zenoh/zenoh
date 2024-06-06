@@ -28,10 +28,12 @@ use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
 use zenoh::{
     bytes::{StringOrBase64, ZBytes},
     encoding::Encoding,
+    internal::{
+        plugins::{RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+    },
     key_expr::{keyexpr, KeyExpr},
-    plugins::{RunningPluginTrait, ZenohPlugin},
     query::{QueryConsolidation, Reply},
-    runtime::Runtime,
     sample::{Sample, SampleKind, ValueBuilderTrait},
     selector::{Selector, TIME_RANGE_KEY},
     session::{Session, SessionDeclarations},
@@ -212,12 +214,15 @@ impl ZenohPlugin for RestPlugin {}
 
 impl Plugin for RestPlugin {
     type StartArgs = Runtime;
-    type Instance = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::internal::plugins::RunningPlugin;
     const DEFAULT_NAME: &'static str = "rest";
     const PLUGIN_VERSION: &'static str = plugin_version!();
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<zenoh::plugins::RunningPlugin> {
+    fn start(
+        name: &str,
+        runtime: &Self::StartArgs,
+    ) -> ZResult<zenoh::internal::plugins::RunningPlugin> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
@@ -249,7 +254,7 @@ impl RunningPluginTrait for RunningPlugin {
         &'a self,
         selector: &'a Selector<'a>,
         plugin_status_key: &str,
-    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+    ) -> ZResult<Vec<zenoh::internal::plugins::Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         with_extended_string(&mut key, &["/version"], |key| {
@@ -257,7 +262,7 @@ impl RunningPluginTrait for RunningPlugin {
                 .unwrap()
                 .intersects(selector.key_expr())
             {
-                responses.push(zenoh::plugins::Response::new(
+                responses.push(zenoh::internal::plugins::Response::new(
                     key.clone(),
                     GIT_VERSION.into(),
                 ))
@@ -268,7 +273,7 @@ impl RunningPluginTrait for RunningPlugin {
                 .unwrap()
                 .intersects(selector.key_expr())
             {
-                responses.push(zenoh::plugins::Response::new(
+                responses.push(zenoh::internal::plugins::Response::new(
                     port_key.clone(),
                     (&self.0).into(),
                 ))

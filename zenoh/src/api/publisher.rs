@@ -155,7 +155,7 @@ impl<'a> Publisher<'a> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
-            zid: self.session.zid(),
+            zid: self.session.zid().into(),
             eid: self.id,
         }
     }
@@ -247,7 +247,6 @@ impl<'a> Publisher<'a> {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -272,7 +271,6 @@ impl<'a> Publisher<'a> {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -512,7 +510,6 @@ impl<'a> Sink<Sample> for Publisher<'a> {
             payload,
             kind,
             encoding,
-            #[cfg(feature = "unstable")]
             attachment,
             ..
         } = item.into();
@@ -523,7 +520,6 @@ impl<'a> Sink<Sample> for Publisher<'a> {
             None,
             #[cfg(feature = "unstable")]
             SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment,
         )
     }
@@ -547,7 +543,7 @@ impl Publisher<'_> {
         encoding: Encoding,
         timestamp: Option<uhlc::Timestamp>,
         #[cfg(feature = "unstable")] source_info: SourceInfo,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         tracing::trace!("write({:?}, [...])", &self.key_expr);
         let primitives = zread!(self.session.state)
@@ -571,48 +567,28 @@ impl Publisher<'_> {
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::DEFAULT,
                 payload: match kind {
-                    SampleKind::Put => {
-                        #[allow(unused_mut)]
-                        let mut ext_attachment = None;
+                    SampleKind::Put => PushBody::Put(Put {
+                        timestamp,
+                        encoding: encoding.clone().into(),
                         #[cfg(feature = "unstable")]
-                        {
-                            if let Some(attachment) = attachment.clone() {
-                                ext_attachment = Some(attachment.into());
-                            }
-                        }
-                        PushBody::Put(Put {
-                            timestamp,
-                            encoding: encoding.clone().into(),
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment,
-                            ext_unknown: vec![],
-                            payload: payload.clone().into(),
-                        })
-                    }
-                    SampleKind::Delete => {
-                        #[allow(unused_mut)]
-                        let mut ext_attachment = None;
+                        ext_sinfo: source_info.into(),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_sinfo: None,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        ext_attachment: attachment.clone().map(|a| a.into()),
+                        ext_unknown: vec![],
+                        payload: payload.clone().into(),
+                    }),
+                    SampleKind::Delete => PushBody::Del(Del {
+                        timestamp,
                         #[cfg(feature = "unstable")]
-                        {
-                            if let Some(attachment) = attachment.clone() {
-                                ext_attachment = Some(attachment.into());
-                            }
-                        }
-                        PushBody::Del(Del {
-                            timestamp,
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            ext_attachment,
-                            ext_unknown: vec![],
-                        })
-                    }
+                        ext_sinfo: source_info.into(),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_sinfo: None,
+                        ext_attachment: attachment.clone().map(|a| a.into()),
+                        ext_unknown: vec![],
+                    }),
                 },
             });
         }
@@ -635,7 +611,6 @@ impl Publisher<'_> {
                 &self.key_expr.to_wire(&self.session),
                 Some(data_info),
                 payload.into(),
-                #[cfg(feature = "unstable")]
                 attachment,
             );
         }
@@ -661,11 +636,16 @@ impl Priority {
     /// Default
     pub const DEFAULT: Self = Self::Data;
     /// The lowest Priority
-    pub const MIN: Self = Self::Background;
+    #[zenoh_macros::internal]
+    pub const MIN: Self = Self::MIN_;
+    const MIN_: Self = Self::Background;
     /// The highest Priority
-    pub const MAX: Self = Self::RealTime;
+    #[zenoh_macros::internal]
+    pub const MAX: Self = Self::MAX_;
+    const MAX_: Self = Self::RealTime;
     /// The number of available priorities
-    pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
+    #[zenoh_macros::internal]
+    pub const NUM: usize = 1 + Self::MIN_ as usize - Self::MAX_ as usize;
 }
 
 impl TryFrom<u8> for Priority {
@@ -691,8 +671,8 @@ impl TryFrom<u8> for Priority {
             unknown => bail!(
                 "{} is not a valid priority value. Admitted values are: [{}-{}].",
                 unknown,
-                Self::MAX as u8,
-                Self::MIN as u8
+                Self::MAX_ as u8,
+                Self::MIN_ as u8
             ),
         }
     }

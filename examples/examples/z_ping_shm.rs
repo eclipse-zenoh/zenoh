@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 use zenoh::{
-    buffers::ZSlice,
+    internal::buffers::ZSlice,
     key_expr::keyexpr,
     prelude::*,
     publisher::CongestionControl,
