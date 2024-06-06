@@ -23,12 +23,12 @@ use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     writer::HasWriter,
-    ZBufReader, ZBufWriter, ZSlice,
+    ZBuf, ZBufReader, ZBufWriter, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{core::Properties, zenoh::ext::AttachmentType};
 use zenoh_result::{ZError, ZResult};
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 use zenoh_shm::{
     api::buffer::{
         zshm::{zshm, ZShm},
@@ -36,8 +36,6 @@ use zenoh_shm::{
     },
     SharedMemoryBuf,
 };
-
-use crate::buffers::ZBuf;
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
@@ -1571,7 +1569,7 @@ impl TryFrom<&mut ZBytes> for serde_pickle::Value {
 }
 
 // Shared memory conversion
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl Serialize<ZShm> for ZSerde {
     type Output = ZBytes;
 
@@ -1581,7 +1579,7 @@ impl Serialize<ZShm> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl From<ZShm> for ZBytes {
     fn from(t: ZShm) -> Self {
         ZSerde.serialize(t)
@@ -1589,7 +1587,7 @@ impl From<ZShm> for ZBytes {
 }
 
 // Shared memory conversion
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl Serialize<ZShmMut> for ZSerde {
     type Output = ZBytes;
 
@@ -1599,14 +1597,14 @@ impl Serialize<ZShmMut> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl From<ZShmMut> for ZBytes {
     fn from(t: ZShmMut) -> Self {
         ZSerde.serialize(t)
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> Deserialize<'a, &'a zshm> for ZSerde {
     type Input = &'a ZBytes;
     type Error = ZDeserializeError;
@@ -1623,7 +1621,7 @@ impl<'a> Deserialize<'a, &'a zshm> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> TryFrom<&'a ZBytes> for &'a zshm {
     type Error = ZDeserializeError;
 
@@ -1632,7 +1630,7 @@ impl<'a> TryFrom<&'a ZBytes> for &'a zshm {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zshm {
     type Error = ZDeserializeError;
 
@@ -1641,7 +1639,7 @@ impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zshm {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> Deserialize<'a, &'a mut zshm> for ZSerde {
     type Input = &'a mut ZBytes;
     type Error = ZDeserializeError;
@@ -1658,7 +1656,7 @@ impl<'a> Deserialize<'a, &'a mut zshm> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> Deserialize<'a, &'a mut zshmmut> for ZSerde {
     type Input = &'a mut ZBytes;
     type Error = ZDeserializeError;
@@ -1675,7 +1673,7 @@ impl<'a> Deserialize<'a, &'a mut zshmmut> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zshmmut {
     type Error = ZDeserializeError;
 
@@ -1877,10 +1875,10 @@ mod tests {
 
         use rand::Rng;
         use zenoh_buffers::{ZBuf, ZSlice};
-        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        #[cfg(feature = "shared-memory")]
         use zenoh_core::Wait;
         use zenoh_protocol::core::Properties;
-        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        #[cfg(feature = "shared-memory")]
         use zenoh_shm::api::{
             buffer::zshm::{zshm, ZShm},
             protocol_implementations::posix::{
@@ -1994,7 +1992,7 @@ mod tests {
         basic();
 
         // SHM
-        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        #[cfg(feature = "shared-memory")]
         {
             // create an SHM backend...
             let backend = PosixSharedMemoryProviderBackend::builder()

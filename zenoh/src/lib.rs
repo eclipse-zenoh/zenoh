@@ -116,7 +116,6 @@ pub use {
     crate::{
         config::Config,
         core::{Error, Result},
-        key_expr::{kedefine, keformat, kewrite},
         scouting::scout,
         session::{open, Session},
     },
@@ -135,16 +134,9 @@ pub mod core {
     pub use zenoh_result::Error;
     /// A zenoh result.
     pub use zenoh_result::ZResult as Result;
-}
 
-/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
-/// reading and writing data.
-pub mod buffers {
-    pub use zenoh_buffers::{
-        buffer::SplitBuffer,
-        reader::{HasReader, Reader},
-        ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
-    };
+    /// Zenoh message priority
+    pub use crate::api::publisher::Priority;
 }
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
@@ -178,6 +170,7 @@ pub mod buffers {
 /// [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
 /// as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 pub mod key_expr {
+    #[zenoh_macros::unstable]
     pub mod keyexpr_tree {
         pub use zenoh_keyexpr::keyexpr_tree::{
             impls::KeyedSetProvider,
@@ -185,13 +178,16 @@ pub mod key_expr {
             IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
         };
     }
-    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr, SetIntersectionLevel};
-    pub use zenoh_macros::{kedefine, keformat, kewrite};
+    #[zenoh_macros::unstable]
+    pub use zenoh_keyexpr::SetIntersectionLevel;
+    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 
     pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
     // keyexpr format macro support
+    #[zenoh_macros::unstable]
     pub mod format {
         pub use zenoh_keyexpr::format::*;
+        pub use zenoh_macros::{kedefine, keformat, kewrite};
         pub mod macro_support {
             pub use zenoh_keyexpr::format::macro_support::*;
         }
@@ -200,14 +196,11 @@ pub mod key_expr {
 
 /// Zenoh [`Session`](crate::session::Session) and associated types
 pub mod session {
-    #[zenoh_macros::unstable]
-    #[doc(hidden)]
-    pub use crate::api::session::init;
-    #[zenoh_macros::unstable]
-    #[doc(hidden)]
-    pub use crate::api::session::InitBuilder;
+    #[zenoh_macros::internal]
+    pub use crate::api::session::{init, InitBuilder};
     pub use crate::api::{
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
+        query::SessionGetBuilder,
         session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
     };
 }
@@ -255,9 +248,12 @@ pub mod bytes {
 /// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 pub mod selector {
     pub use zenoh_protocol::core::Properties;
+    #[zenoh_macros::unstable]
     pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
-    pub use crate::api::selector::{Parameters, Selector, TIME_RANGE_KEY};
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::TIME_RANGE_KEY;
+    pub use crate::api::selector::{Parameters, Selector};
 }
 
 /// Subscribing primitives
@@ -289,29 +285,33 @@ pub mod publisher {
             PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
             PublisherDeleteBuilder, PublisherPutBuilder,
         },
-        publisher::{Priority, Publisher, PublisherUndeclaration},
+        publisher::{Publisher, PublisherUndeclaration},
     };
 }
 
-/// Query primitives
+/// Get operation primitives
+pub mod querier {
+    // Later the `Querier` with `get`` operation will be added here, in addition to `Session::get`,
+    // similarly to the `Publisher` with `put` operation and `Session::put`
+}
+
+/// Query and Reply primitives
 pub mod query {
     #[zenoh_macros::unstable]
     pub use crate::api::query::ReplyKeyExpr;
     #[zenoh_macros::unstable]
     pub use crate::api::query::REPLY_KEY_EXPR_ANY_SEL_PARAM;
-    pub use crate::api::query::{
-        ConsolidationMode, GetBuilder, QueryConsolidation, QueryTarget, Reply,
+    #[zenoh_macros::internal]
+    pub use crate::api::queryable::ReplySample;
+    pub use crate::api::{
+        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply},
+        queryable::{Query, ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
     };
 }
 
 /// Queryable primitives
 pub mod queryable {
-    #[zenoh_macros::unstable]
-    pub use crate::api::queryable::ReplySample;
-    pub use crate::api::queryable::{
-        Query, Queryable, QueryableBuilder, QueryableUndeclaration, ReplyBuilder,
-        ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
-    };
+    pub use crate::api::queryable::{Queryable, QueryableBuilder, QueryableUndeclaration};
 }
 
 /// Callback handler trait
@@ -331,7 +331,7 @@ pub mod scouting {
 }
 
 /// Liveliness primitives
-#[cfg(feature = "unstable")]
+#[zenoh_macros::unstable]
 pub mod liveliness {
     pub use crate::api::liveliness::{
         Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
@@ -346,15 +346,6 @@ pub mod time {
     pub use crate::api::time::new_reception_timestamp;
 }
 
-/// Initialize a Session with an existing Runtime.
-/// This operation is used by the plugins to share the same Runtime as the router.
-#[doc(hidden)]
-pub mod runtime {
-    pub use zenoh_runtime::ZRuntime;
-
-    pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
-}
-
 /// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
 pub mod config {
     // pub use zenoh_config::{
@@ -364,15 +355,19 @@ pub mod config {
     pub use zenoh_config::*;
 }
 
-#[doc(hidden)]
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-pub mod plugins {
-    pub use crate::api::plugins::{
-        PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
-    };
-}
+#[cfg(all(feature = "internal", not(feature = "unstable")))]
+compile_error!(
+    "All internal functionality is unstable. The `unstable` feature must be enabled to use `internal`."
+);
+#[cfg(all(
+    feature = "plugins",
+    not(all(feature = "unstable", feature = "internal"))
+))]
+compile_error!(
+    "The plugins support is internal and unstable. The `unstable` and `internal` features must be enabled to use `plugins`."
+);
 
-#[doc(hidden)]
+#[zenoh_macros::internal]
 pub mod internal {
     pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout, ResolveFuture};
     pub use zenoh_result::bail;
@@ -380,10 +375,39 @@ pub mod internal {
     pub use zenoh_task::{TaskController, TerminatableTask};
     pub use zenoh_util::{zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
 
-    pub use crate::api::encoding::EncodingInternals;
+    /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
+    /// reading and writing data.
+    pub mod buffers {
+        pub use zenoh_buffers::{
+            buffer::SplitBuffer,
+            reader::{HasReader, Reader},
+            ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
+        };
+    }
+    /// Initialize a Session with an existing Runtime.
+    /// This operation is used by the plugins to share the same Runtime as the router.
+    #[zenoh_macros::internal]
+    pub mod runtime {
+        pub use zenoh_runtime::ZRuntime;
+
+        pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
+    }
+    /// Plugins support
+    #[cfg(feature = "plugins")]
+    pub mod plugins {
+        pub use crate::api::plugins::{
+            PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
+        };
+    }
 }
 
-#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+#[cfg(all(feature = "shared-memory", not(feature = "unstable")))]
+compile_error!(
+    "The shared-memory support is unstable. The `unstable` feature must be enabled to use `shared-memory`."
+);
+
+#[zenoh_macros::unstable]
+#[cfg(feature = "shared-memory")]
 pub mod shm {
     pub use zenoh_shm::api::{
         buffer::{

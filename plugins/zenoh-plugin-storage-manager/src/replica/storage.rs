@@ -22,9 +22,12 @@ use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
 use zenoh::{
-    buffers::{SplitBuffer, ZBuf},
     core::Result as ZResult,
-    internal::{bail, zenoh_home, Timed, TimedEvent, Timer},
+    internal::{
+        bail,
+        buffers::{SplitBuffer, ZBuf},
+        zenoh_home, Timed, TimedEvent, Timer,
+    },
     key_expr::{
         keyexpr_tree::{
             IKeyExprTree, IKeyExprTreeMut, KeBoxTree, KeyedSetProvider, NonWild, UnknownWildness,
@@ -495,7 +498,7 @@ impl StorageService {
         true
     }
 
-    async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
+    async fn reply_query(&self, query: Result<zenoh::query::Query, flume::RecvError>) {
         let q = match query {
             Ok(q) => q,
             Err(e) => {

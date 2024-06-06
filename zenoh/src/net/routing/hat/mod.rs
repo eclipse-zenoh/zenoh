@@ -20,9 +20,9 @@
 use std::{any::Any, collections::HashMap, sync::Arc};
 
 use zenoh_buffers::ZBuf;
-use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
+use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
-    core::WireExpr,
+    core::{WireExpr, ZenohId},
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
@@ -42,7 +42,7 @@ use super::{
     },
     router::RoutesIndexes,
 };
-use crate::{key_expr::KeyExpr, runtime::Runtime};
+use crate::{key_expr::KeyExpr, net::runtime::Runtime};
 
 mod client;
 mod linkstate_peer;

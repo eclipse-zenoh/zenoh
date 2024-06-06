@@ -71,7 +71,7 @@ async fn test_updates_in_order() {
         )
         .unwrap();
 
-    let runtime = zenoh::runtime::RuntimeBuilder::new(config)
+    let runtime = zenoh::internal::runtime::RuntimeBuilder::new(config)
         .build()
         .await
         .unwrap();
