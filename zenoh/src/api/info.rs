@@ -94,7 +94,7 @@ impl<'a> Wait for RoutersZenohIdBuilder<'a> {
                     s.get_whatami()
                         .ok()
                         .and_then(|what| (what == WhatAmI::Router).then_some(()))
-                        .and_then(|_| s.get_zid().map(Into::<ZenohId>::into).ok())
+                        .and_then(|_| s.get_zid().map(Into::into).ok())
                 }),
         )
     }
