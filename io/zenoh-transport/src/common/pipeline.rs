@@ -674,6 +674,9 @@ impl TransmissionPipelineConsumer {
                 }
             }
 
+            // Since tokio::timeout may not sleep immediately, yield the task first.
+            tokio::task::yield_now().await;
+
             // Wait for the backoff to expire or for a new message
             let _ =
                 tokio::time::timeout(Duration::from_nanos(bo as u64), self.n_out_r.recv_async())
