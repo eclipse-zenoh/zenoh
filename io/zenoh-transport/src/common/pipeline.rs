@@ -49,7 +49,6 @@ use zenoh_protocol::{
 type NanoSeconds = u32;
 
 const RBLEN: usize = QueueSizeConf::MAX;
-const TSLOT: NanoSeconds = 100;
 
 // Inner structure to reuse serialization batches
 struct StageInRefill {
@@ -347,6 +346,7 @@ enum Pull {
 // Inner structure to keep track and signal backoff operations
 #[derive(Clone)]
 struct Backoff {
+    tslot: NanoSeconds,
     retry_time: NanoSeconds,
     last_bytes: BatchSize,
     bytes: Arc<AtomicU16>,
@@ -354,8 +354,9 @@ struct Backoff {
 }
 
 impl Backoff {
-    fn new(bytes: Arc<AtomicU16>, backoff: Arc<AtomicBool>) -> Self {
+    fn new(tslot: NanoSeconds, bytes: Arc<AtomicU16>, backoff: Arc<AtomicBool>) -> Self {
         Self {
+            tslot,
             retry_time: 0,
             last_bytes: 0,
             bytes,
@@ -365,7 +366,7 @@ impl Backoff {
 
     fn next(&mut self) {
         if self.retry_time == 0 {
-            self.retry_time = TSLOT;
+            self.retry_time = self.tslot;
             self.backoff.store(true, Ordering::Relaxed);
         } else {
             match self.retry_time.checked_mul(2) {
@@ -553,7 +554,7 @@ impl TransmissionPipeline {
                 s_in: StageOutIn {
                     s_out_r,
                     current,
-                    backoff: Backoff::new(bytes, backoff),
+                    backoff: Backoff::new(config.backoff.as_nanos() as NanoSeconds, bytes, backoff),
                 },
                 s_ref: StageOutRefill { n_ref_w, s_ref_w },
             });
