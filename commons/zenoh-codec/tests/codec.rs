@@ -363,12 +363,12 @@ fn codec_encoding() {
 fn codec_shm_info() {
     use zenoh_shm::{
         api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
-        watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
+        watchdog::descriptor::Descriptor, ShmBufInfo,
     };
 
-    run!(SharedMemoryBufInfo, {
+    run!(ShmBufInfo, {
         let mut rng = rand::thread_rng();
-        SharedMemoryBufInfo::new(
+        ShmBufInfo::new(
             ChunkDescriptor::new(rng.gen(), rng.gen(), rng.gen()),
             rng.gen(),
             rng.gen(),

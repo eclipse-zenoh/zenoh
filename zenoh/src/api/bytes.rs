@@ -34,7 +34,7 @@ use zenoh_shm::{
         zshm::{zshm, ZShm},
         zshmmut::{zshmmut, ZShmMut},
     },
-    SharedMemoryBuf,
+    ShmBufInner,
 };
 
 /// Trait to encode a type `T` into a [`Value`].
@@ -1613,7 +1613,7 @@ impl<'a> Deserialize<'a, &'a zshm> for ZSerde {
         // A ZShm is expected to have only one slice
         let mut zslices = v.0.zslices();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
                 return Ok(shmb.into());
             }
         }
@@ -1648,7 +1648,7 @@ impl<'a> Deserialize<'a, &'a mut zshm> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
                 return Ok(shmb.into());
             }
         }
@@ -1665,7 +1665,7 @@ impl<'a> Deserialize<'a, &'a mut zshmmut> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
                 return shmb.try_into().map_err(|_| ZDeserializeError);
             }
         }
@@ -1882,10 +1882,9 @@ mod tests {
         use zenoh_shm::api::{
             buffer::zshm::{zshm, ZShm},
             protocol_implementations::posix::{
-                posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-                protocol_id::POSIX_PROTOCOL_ID,
+                posix_shm_provider_backend::PosixShmProviderBackend, protocol_id::POSIX_PROTOCOL_ID,
             },
-            provider::shared_memory_provider::SharedMemoryProviderBuilder,
+            provider::shm_provider::ShmProviderBuilder,
         };
 
         use super::ZBytes;
@@ -1995,13 +1994,13 @@ mod tests {
         #[cfg(feature = "shared-memory")]
         {
             // create an SHM backend...
-            let backend = PosixSharedMemoryProviderBackend::builder()
+            let backend = PosixShmProviderBackend::builder()
                 .with_size(4096)
                 .unwrap()
                 .res()
                 .unwrap();
             // ...and an SHM provider
-            let provider = SharedMemoryProviderBuilder::builder()
+            let provider = ShmProviderBuilder::builder()
                 .protocol_id::<POSIX_PROTOCOL_ID>()
                 .backend(backend)
                 .res();

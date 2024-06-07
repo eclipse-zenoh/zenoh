@@ -27,7 +27,7 @@ use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::GLOBAL_CLIENT_STORAGE;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::reader::SharedMemoryReader;
+use zenoh_shm::reader::ShmReader;
 use zenoh_task::TaskController;
 
 use super::{
@@ -140,12 +140,12 @@ pub struct TransportManagerBuilder {
     tx_threads: usize,
     protocols: Option<Vec<String>>,
     #[cfg(feature = "shared-memory")]
-    shm_reader: Option<SharedMemoryReader>,
+    shm_reader: Option<ShmReader>,
 }
 
 impl TransportManagerBuilder {
     #[cfg(feature = "shared-memory")]
-    pub fn shm_reader(mut self, shm_reader: Option<SharedMemoryReader>) -> Self {
+    pub fn shm_reader(mut self, shm_reader: Option<ShmReader>) -> Self {
         self.shm_reader = shm_reader;
         self
     }
@@ -268,7 +268,7 @@ impl TransportManagerBuilder {
         #[cfg(feature = "shared-memory")]
         let shm_reader = self
             .shm_reader
-            .unwrap_or_else(|| SharedMemoryReader::new(GLOBAL_CLIENT_STORAGE.clone()));
+            .unwrap_or_else(|| ShmReader::new(GLOBAL_CLIENT_STORAGE.clone()));
 
         let unicast = self.unicast.build(
             &mut prng,
@@ -364,7 +364,7 @@ pub struct TransportManager {
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     #[cfg(feature = "shared-memory")]
-    pub(crate) shmr: SharedMemoryReader,
+    pub(crate) shmr: ShmReader,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
     pub(crate) task_controller: TaskController,
@@ -374,7 +374,7 @@ impl TransportManager {
     pub fn new(
         params: TransportManagerParams,
         mut prng: PseudoRng,
-        #[cfg(feature = "shared-memory")] shmr: SharedMemoryReader,
+        #[cfg(feature = "shared-memory")] shmr: ShmReader,
     ) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];

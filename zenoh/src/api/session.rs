@@ -56,7 +56,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
+use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
 use super::{
@@ -839,7 +839,7 @@ impl Session {
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
         config: Config,
-        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<ShmClientStorage>>,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
@@ -2733,7 +2733,7 @@ where
 {
     config: TryIntoConfig,
     #[cfg(feature = "shared-memory")]
-    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+    shm_clients: Option<Arc<ShmClientStorage>>,
 }
 
 #[cfg(feature = "shared-memory")]
@@ -2742,7 +2742,7 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    pub fn with_shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
+    pub fn with_shm_clients(mut self, shm_clients: Arc<ShmClientStorage>) -> Self {
         self.shm_clients = Some(shm_clients);
         self
     }
