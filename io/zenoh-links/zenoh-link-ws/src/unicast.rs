@@ -226,6 +226,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
     fn is_streamed(&self) -> bool {
         false
     }
+
     #[inline(always)]
     fn get_auth_identifier(&self) -> LinkAuthId {
         LinkAuthId::default()

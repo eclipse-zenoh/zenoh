@@ -21,7 +21,6 @@ use tokio::{
 };
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
-//use webpki::anchor_from_trusted_cert;
 use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
@@ -42,7 +41,6 @@ use crate::{
 #[derive(Default, Debug, PartialEq, Eq, Hash)]
 pub struct TlsCommonName(String);
 
-//impl
 pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library
     // NOTE: TlsStream requires &mut for read and write operations. This means
@@ -198,6 +196,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
     fn is_streamed(&self) -> bool {
         true
     }
+
     #[inline(always)]
     fn get_auth_identifier(&self) -> LinkAuthId {
         self.auth_identifier.clone()
@@ -297,7 +296,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             })?;
 
         let (_, tls_conn) = tls_stream.get_ref();
-
         let auth_identifier = get_server_cert_common_name(tls_conn)?;
 
         let tls_stream = TlsStream::Client(tls_stream);
@@ -406,17 +404,18 @@ async fn accept_task(
                             }
                         };
 
+                        // Get TLS auth identifier
+                        let (_, tls_conn) = tls_stream.get_ref();
+                        let auth_identifier = get_client_cert_common_name(tls_conn)?;
+
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
-        let (_, tls_conn) = tls_stream.get_ref();
-        let auth_identifier = get_client_cert_common_name(tls_conn)?;
-        tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
-        // Create the new link object
-        let link = Arc::new(LinkUnicastTls::new(
-            tls_stream,
-            src_addr,
-            dst_addr,
-            auth_identifier.into(),
-        ));
+                        // Create the new link object
+                        let link = Arc::new(LinkUnicastTls::new(
+                            tls_stream,
+                            src_addr,
+                            dst_addr,
+                            auth_identifier.into(),
+                        ));
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
@@ -463,7 +462,7 @@ fn get_server_cert_common_name(tls_conn: &rustls::ClientConnection) -> ZResult<T
     let serv_certs = tls_conn.peer_certificates().unwrap();
     let mut auth_id = TlsAuthId { auth_value: None };
 
-    //need the first certificate in the chain os no need for looping
+    // Need the first certificate in the chain so no need for looping
     if let Some(item) = serv_certs.iter().next() {
         let (_, cert) = X509Certificate::from_der(item.as_ref())?;
         let subject_name = &cert
@@ -484,6 +483,7 @@ fn get_server_cert_common_name(tls_conn: &rustls::ClientConnection) -> ZResult<T
 struct TlsAuthId {
     auth_value: Option<String>,
 }
+
 impl From<TlsAuthId> for LinkAuthId {
     fn from(value: TlsAuthId) -> Self {
         LinkAuthIdBuilder::new()

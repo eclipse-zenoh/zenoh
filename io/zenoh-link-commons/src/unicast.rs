@@ -120,15 +120,15 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
         }
     }
 }
-#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub enum LinkAuthType {
     Tls,
     Quic,
     None,
 }
-#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct LinkAuthId {
     auth_type: LinkAuthType,
     auth_value: Option<String>,
@@ -142,6 +142,7 @@ impl LinkAuthId {
         &self.auth_value
     }
 }
+
 impl Default for LinkAuthId {
     fn default() -> Self {
         LinkAuthId {
@@ -153,9 +154,10 @@ impl Default for LinkAuthId {
 
 #[derive(Debug)]
 pub struct LinkAuthIdBuilder {
-    pub auth_type: LinkAuthType,    //HAS to be provided when building
-    pub auth_value: Option<String>, //actual value added to the above type; is None for None type
+    pub auth_type: LinkAuthType,    // HAS to be provided when building
+    pub auth_value: Option<String>, // actual value added to the above type; is None for None type
 }
+
 impl Default for LinkAuthIdBuilder {
     fn default() -> Self {
         Self::new()

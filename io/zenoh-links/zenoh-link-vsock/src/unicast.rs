@@ -189,6 +189,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     fn is_streamed(&self) -> bool {
         true
     }
+
     #[inline(always)]
     fn get_auth_identifier(&self) -> LinkAuthId {
         LinkAuthId::default()

@@ -24,11 +24,9 @@ impl From<LinkAuthId> for AuthId {
 #[cfg(feature = "auth_usrpwd")]
 impl From<UsrPwdId> for AuthId {
     fn from(user_password_id: UsrPwdId) -> Self {
-        // pub(crate) struct UsrPwdId(pub Option<Vec<u8>>);
         match user_password_id.0 {
             Some(username) => {
-                //do something
-                //convert username from vecu8 to string
+                // Convert username from Vec<u8> to String
                 match std::str::from_utf8(&username) {
                     Ok(name) => AuthId::Username(name.to_owned()),
                     Err(e) => {

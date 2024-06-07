@@ -724,6 +724,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         cookie_nonce: iack_out.cookie_nonce,
     };
     let (mut state, osyn_out) = step!(fsm.recv_open_syn(osyn_in).await);
+
     // Create the OpenAck but not send it yet
     let oack_in = SendOpenAckIn {
         mine_zid: manager.config.zid,

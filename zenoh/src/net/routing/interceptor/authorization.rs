@@ -241,9 +241,8 @@ impl PolicyEnforcer {
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
-            // config validation
+            // Config validation
             let mut validation_err = String::new();
-
             if config_rule.actions.is_empty() {
                 validation_err.push_str("ACL config actions list is empty. ");
             }
@@ -257,7 +256,7 @@ impl PolicyEnforcer {
                 bail!("{}", validation_err);
             }
 
-            //for when at least one is not empty
+            // At least one must not be empty
             let mut subject_validation_err: usize = 0;
             validation_err = String::new();
 
@@ -344,7 +343,7 @@ impl PolicyEnforcer {
         }
         let mut subject_map = SubjectMap::default();
         let mut counter = 1;
-        //starting at 1 since 0 is the init value and should not match anything
+        // Starting at 1 since 0 is the init value and should not match anything
         for rule in policy_rules.iter() {
             if !subject_map.contains_key(&rule.subject) {
                 subject_map.insert(rule.subject.clone(), counter);
@@ -357,10 +356,9 @@ impl PolicyEnforcer {
         })
     }
 
-    /*
-       checks each msg against the ACL ruleset for allow/deny
-    */
-
+    /**
+     * Check each msg against the ACL ruleset for allow/deny
+     */
     pub fn policy_decision_point(
         &self,
         subject: usize,

@@ -42,7 +42,7 @@ pub struct AclEnforcer {
 #[derive(Clone, Debug)]
 pub struct AuthSubject {
     id: usize,
-    name: String, //make Subject
+    name: String,
 }
 
 struct EgressAclEnforcer {
@@ -50,6 +50,7 @@ struct EgressAclEnforcer {
     subject: Vec<AuthSubject>,
     zid: ZenohId,
 }
+
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     subject: Vec<AuthSubject>,
@@ -241,6 +242,7 @@ impl InterceptorTrait for EgressAclEnforcer {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(key_expr.to_string()))
     }
+
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
@@ -360,12 +362,15 @@ impl AclActionMethods for EgressAclEnforcer {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer> {
         self.policy_enforcer.clone()
     }
+
     fn zid(&self) -> ZenohId {
         self.zid
     }
+
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Egress
     }
+
     fn authn_ids(&self) -> Vec<AuthSubject> {
         self.subject.clone()
     }
@@ -375,12 +380,15 @@ impl AclActionMethods for IngressAclEnforcer {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer> {
         self.policy_enforcer.clone()
     }
+
     fn zid(&self) -> ZenohId {
         self.zid
     }
+
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Ingress
     }
+
     fn authn_ids(&self) -> Vec<AuthSubject> {
         self.subject.clone()
     }

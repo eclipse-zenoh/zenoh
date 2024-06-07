@@ -160,6 +160,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     fn is_streamed(&self) -> bool {
         true
     }
+
     #[inline(always)]
     fn get_auth_identifier(&self) -> LinkAuthId {
         self.auth_identifier.clone()
@@ -262,6 +263,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .open_bi()
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
+
         let auth_id = get_cert_common_name(quic_conn.clone())?;
 
         let link = Arc::new(LinkUnicastQuic::new(
@@ -395,11 +397,12 @@ async fn accept_task(
                             }
                         };
 
+                        // Get Quic auth identifier
                         let dst_addr = quic_conn.remote_address();
-                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
-                        // Create the new link object
                         let auth_id = get_cert_common_name(quic_conn.clone())?;
 
+                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
+                        // Create the new link object
                         let link = Arc::new(LinkUnicastQuic::new(
                             quic_conn,
                             src_addr,
@@ -456,6 +459,7 @@ fn get_cert_common_name(conn: quinn::Connection) -> ZResult<QuicAuthId> {
 struct QuicAuthId {
     auth_value: Option<String>,
 }
+
 impl From<QuicAuthId> for LinkAuthId {
     fn from(value: QuicAuthId) -> Self {
         LinkAuthIdBuilder::new()
