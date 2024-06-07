@@ -383,7 +383,7 @@ impl Backoff {
         }
     }
 
-    fn stop(&mut self) {
+    fn reset(&mut self) {
         self.retry_time = 0;
         self.backoff.store(false, Ordering::Relaxed);
     }
@@ -400,7 +400,6 @@ impl StageOutIn {
     #[inline]
     fn try_pull(&mut self) -> Pull {
         if let Some(batch) = self.s_out_r.pull() {
-            self.backoff.stop();
             return Pull::Some(batch);
         }
 
@@ -418,18 +417,15 @@ impl StageOutIn {
                 if let Ok(mut g) = self.current.try_lock() {
                     // First try to pull from stage OUT
                     if let Some(batch) = self.s_out_r.pull() {
-                        self.backoff.stop();
                         return Pull::Some(batch);
                     }
 
                     // An incomplete (non-empty) batch is available in the state IN pipeline.
                     match g.take() {
                         Some(batch) => {
-                            self.backoff.stop();
                             return Pull::Some(batch);
                         }
                         None => {
-                            self.backoff.stop();
                             return Pull::None;
                         }
                     }
@@ -439,7 +435,6 @@ impl StageOutIn {
             std::cmp::Ordering::Less => {
                 // There should be a new batch in Stage OUT
                 if let Some(batch) = self.s_out_r.pull() {
-                    self.backoff.stop();
                     return Pull::Some(batch);
                 }
                 // Go to backoff
@@ -657,6 +652,11 @@ pub(crate) struct TransmissionPipelineConsumer {
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(WBatch, usize)> {
+        // Reset backoff before pulling
+        for queue in self.stage_out.iter_mut() {
+            queue.s_in.backoff.reset();
+        }
+
         while self.active.load(Ordering::Relaxed) {
             // Calculate the backoff maximum
             let mut bo = NanoSeconds::MAX;
@@ -674,13 +674,29 @@ impl TransmissionPipelineConsumer {
                 }
             }
 
-            // Since tokio::timeout may not sleep immediately, yield the task first.
+            // In case of writing many small messages, `recv_async()` will most likely return immedietaly.
+            // While trying to pull from the queue, the stage_in `lock()` will most likely taken, leading to
+            // a spinning behaviour while attempting to take the lock. Yield the current task to avoid
+            // spinning the current task indefinitely.
             tokio::task::yield_now().await;
 
             // Wait for the backoff to expire or for a new message
-            let _ =
+            let res =
                 tokio::time::timeout(Duration::from_nanos(bo as u64), self.n_out_r.recv_async())
                     .await;
+            match res {
+                Ok(Ok(())) => {
+                    // We have received a notification from the channel that some bytes are available, retry to pull.
+                }
+                Ok(Err(_channel_error)) => {
+                    // The channel is closed, we can't be notified anymore. Break the loop and return None.
+                    break;
+                }
+                Err(_timeout) => {
+                    // The backoff timeout expired. Be aware that tokio timeout may not sleep for short duration since
+                    // it has time resolution of 1ms: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
+                }
+            }
         }
         None
     }
