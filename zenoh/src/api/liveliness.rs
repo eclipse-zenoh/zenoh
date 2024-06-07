@@ -743,6 +743,7 @@ where
         self.session
             .query(
                 &self.key_expr?.into(),
+                &"".into(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 QueryTarget::DEFAULT,
                 QueryConsolidation::DEFAULT,

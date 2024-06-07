@@ -31,6 +31,7 @@ use zenoh::{
         runtime::Runtime,
     },
     key_expr::{keyexpr, KeyExpr},
+    parameters::Selector,
     sample::Sample,
     session::SessionDeclarations,
 };
@@ -181,9 +182,9 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
             // on query received by the Queryable
             query = queryable.recv_async() => {
                 let query = query.unwrap();
-                info!("Handling query '{}'", query.selector());
+                info!("Handling query '{}'", Selector::from(&query));
                 for (key_expr, sample) in stored.iter() {
-                    if query.selector().key_expr().intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
+                    if query.key_expr().intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
                         query.reply_sample(sample.clone()).await.unwrap();
                     }
                 }

@@ -33,7 +33,7 @@ use super::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample},
-    selector::Selector,
+    selector::Parameters,
     session::Session,
     value::Value,
 };
@@ -117,7 +117,8 @@ impl From<Reply> for Result<Sample, Value> {
 
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
-    pub(crate) selector: Selector<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) parameters: Parameters<'static>,
     pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
@@ -148,7 +149,7 @@ pub(crate) struct QueryState {
 #[derive(Debug)]
 pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,
-    pub(crate) selector: ZResult<Selector<'b>>,
+    pub(crate) selector: ZResult<(KeyExpr<'b>, Parameters<'b>)>,
     pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
@@ -406,21 +407,19 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
     /// expressions that don't intersect with the query's.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
+        use super::selector::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+
         Self {
-            selector: self.selector.map(|mut s| {
+            selector: self.selector.map(|(key_expr, mut parameters)| {
                 if accept == ReplyKeyExpr::Any {
-                    s.parameters_mut().insert(_REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
+                    parameters.insert(_REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
                 }
-                s
+                (key_expr, parameters)
             }),
             ..self
         }
     }
 }
-
-pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
-#[zenoh_macros::unstable]
-pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -445,10 +444,11 @@ where
 {
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-
+        let (key_expr, parameters) = self.selector?;
         self.session
             .query(
-                &self.selector?,
+                &key_expr,
+                &parameters,
                 &self.scope?,
                 self.target,
                 self.consolidation,

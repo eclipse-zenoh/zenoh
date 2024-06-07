@@ -21,7 +21,7 @@ use zenoh_plugin_trait::{
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_result::ZResult;
 
-use super::selector::Selector;
+use super::key_expr::KeyExpr;
 use crate::net::runtime::Runtime;
 
 zconfigurable! {
@@ -93,9 +93,9 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
     /// Function called on any query on admin space that matches this plugin's sub-part of the admin space.
     /// Thus the plugin can reply its contribution to the global admin space of this zenohd.
     /// Parameters:
-    /// * `selector`: the full selector of the query (usually only key_expr part is used). This selector is
+    /// * `key_expr`: the keyexpr of the query. This keyexpr is
     /// exactly the same as it was requested by user, for example "@/router/ROUTER_ID/plugins/PLUGIN_NAME/some/plugin/info" or "@/router/*/plugins/*/foo/bar".
-    /// But the plugin's [RunningPluginTrait::adminspace_getter] is called only if the selector matches the `plugin_status_key`
+    /// But the plugin's [RunningPluginTrait::adminspace_getter] is called only if the keyexpr matches the `plugin_status_key`
     /// * `plugin_status_key`: the actual path to plugin's status in the admin space. For example "@/router/ROUTER_ID/plugins/PLUGIN_NAME"
     /// Returns value:
     /// * `Ok(Vec<Response>)`: the list of responses to the query. For example if plugins can return information on subleys "foo", "bar", "foo/buzz" and "bar/buzz"
@@ -113,7 +113,7 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
     ///
     fn adminspace_getter<'a>(
         &'a self,
-        _selector: &'a Selector<'a>,
+        _key_expr: &'a KeyExpr<'a>,
         _plugin_status_key: &str,
     ) -> ZResult<Vec<Response>> {
         Ok(Vec::new())

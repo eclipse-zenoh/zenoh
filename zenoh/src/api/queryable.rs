@@ -43,7 +43,7 @@ use super::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample, SampleKind},
-    selector::{Parameters, Selector},
+    selector::Parameters,
     session::{SessionRef, Undeclarable},
     value::Value,
     Id,
@@ -78,15 +78,6 @@ pub struct Query {
 }
 
 impl Query {
-    /// The full [`Selector`] of this Query.
-    #[inline(always)]
-    pub fn selector(&self) -> Selector<'_> {
-        Selector {
-            key_expr: self.inner.key_expr.clone(),
-            parameters: self.inner.parameters.clone(),
-        }
-    }
-
     /// The key selector part of this Query.
     #[inline(always)]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
@@ -238,7 +229,7 @@ impl Query {
     }
     #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        use crate::api::selector::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
         Ok(self
             .parameters()

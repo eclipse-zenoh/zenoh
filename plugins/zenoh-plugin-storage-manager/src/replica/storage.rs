@@ -36,7 +36,6 @@ use zenoh::{
     },
     query::{ConsolidationMode, QueryTarget},
     sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait, ValueBuilderTrait},
-    selector::Selector,
     session::{Session, SessionDeclarations},
     time::{new_timestamp, Timestamp, NTP64},
     value::Value,
@@ -647,7 +646,7 @@ impl StorageService {
             // with `_time=[..]` to get historical data (in case of time-series)
             let replies = match self
                 .session
-                .get(Selector::new(&self.key_expr, "_time=[..]"))
+                .get((&self.key_expr, "_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
                 .await

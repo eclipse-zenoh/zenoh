@@ -17,7 +17,7 @@ use clap::Parser;
 use zenoh::{
     prelude::*,
     query::QueryTarget,
-    selector::Selector,
+    parameters::Selector,
     shm::{
         zshm, BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend,
         SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,

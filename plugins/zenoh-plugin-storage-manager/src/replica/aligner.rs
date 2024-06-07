@@ -22,9 +22,9 @@ use flume::{Receiver, Sender};
 use zenoh::{
     bytes::StringOrBase64,
     key_expr::{KeyExpr, OwnedKeyExpr},
+    parameters::Selector,
     prelude::*,
     sample::{Sample, SampleBuilder},
-    selector::Selector,
     time::Timestamp,
     value::Value,
     Session,
@@ -323,10 +323,8 @@ impl Aligner {
 
     async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
         let mut no_err = true;
-        let selector = Selector::new(
-            KeyExpr::from(&self.digest_key).join(&from).unwrap(),
-            properties,
-        );
+        let keyexpr = KeyExpr::from(&self.digest_key).join(&from).unwrap();
+        let selector = Selector::from((keyexpr, properties));
         tracing::trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         match self

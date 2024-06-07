@@ -19,6 +19,7 @@ use clap::Parser;
 use futures::select;
 use zenoh::{
     key_expr::{keyexpr, KeyExpr},
+    parameters::Selector,
     prelude::*,
     sample::{Sample, SampleKind},
     Config,
@@ -62,9 +63,9 @@ async fn main() {
 
             query = queryable.recv_async() => {
                 let query = query.unwrap();
-                println!(">> [Queryable ] Received Query '{}'", query.selector());
+                println!(">> [Queryable ] Received Query '{}'", Selector::from(&query));
                 for (stored_name, sample) in stored.iter() {
-                    if query.selector().key_expr().intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
+                    if query.key_expr().intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
                         query.reply(sample.key_expr().clone(), sample.payload().clone()).await.unwrap();
                     }
                 }

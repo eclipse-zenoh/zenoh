@@ -20,8 +20,14 @@ use std::{
 
 use async_std::sync::Arc;
 use zenoh::{
-    bytes::StringOrBase64, key_expr::OwnedKeyExpr, prelude::*, sample::Sample, selector::Selector,
-    time::Timestamp, value::Value, Session,
+    bytes::StringOrBase64,
+    key_expr::OwnedKeyExpr,
+    parameters::{Parameters, Selector},
+    prelude::*,
+    sample::Sample,
+    time::Timestamp,
+    value::Value,
+    Session,
 };
 
 use super::{digest::*, Snapshotter};
@@ -85,8 +91,11 @@ impl AlignQueryable {
                     continue;
                 }
             };
-            tracing::trace!("[ALIGN QUERYABLE] Received Query '{}'", query.selector());
-            let diff_required = self.parse_selector(query.selector());
+            tracing::trace!(
+                "[ALIGN QUERYABLE] Received Query '{}'",
+                Selector::from(&query)
+            );
+            let diff_required = self.parse_parameters(query.parameters());
             tracing::trace!(
                 "[ALIGN QUERYABLE] Parsed selector diff_required:{:?}",
                 diff_required
@@ -187,15 +196,14 @@ impl AlignQueryable {
         }
     }
 
-    fn parse_selector(&self, selector: Selector) -> Option<AlignComponent> {
-        let properties = selector.parameters(); // note: this is a hashmap
-        tracing::trace!("[ALIGN QUERYABLE] Properties are: {:?}", properties);
-        if properties.contains_key(super::ERA) {
+    fn parse_parameters(&self, parameters: &Parameters) -> Option<AlignComponent> {
+        tracing::trace!("[ALIGN QUERYABLE] Properties are: {:?}", parameters);
+        if parameters.contains_key(super::ERA) {
             Some(AlignComponent::Era(
-                EraType::from_str(properties.get(super::ERA).unwrap()).unwrap(),
+                EraType::from_str(parameters.get(super::ERA).unwrap()).unwrap(),
             ))
-        } else if properties.contains_key(super::INTERVALS) {
-            let mut intervals = properties.get(super::INTERVALS).unwrap().to_string();
+        } else if parameters.contains_key(super::INTERVALS) {
+            let mut intervals = parameters.get(super::INTERVALS).unwrap().to_string();
             intervals.remove(0);
             intervals.pop();
             Some(AlignComponent::Intervals(
@@ -204,8 +212,8 @@ impl AlignQueryable {
                     .map(|x| x.parse::<u64>().unwrap())
                     .collect::<Vec<u64>>(),
             ))
-        } else if properties.contains_key(super::SUBINTERVALS) {
-            let mut subintervals = properties.get(super::SUBINTERVALS).unwrap().to_string();
+        } else if parameters.contains_key(super::SUBINTERVALS) {
+            let mut subintervals = parameters.get(super::SUBINTERVALS).unwrap().to_string();
             subintervals.remove(0);
             subintervals.pop();
             Some(AlignComponent::Subintervals(
@@ -214,8 +222,8 @@ impl AlignQueryable {
                     .map(|x| x.parse::<u64>().unwrap())
                     .collect::<Vec<u64>>(),
             ))
-        } else if properties.contains_key(super::CONTENTS) {
-            let contents = serde_json::from_str(properties.get(super::CONTENTS).unwrap()).unwrap();
+        } else if parameters.contains_key(super::CONTENTS) {
+            let contents = serde_json::from_str(parameters.get(super::CONTENTS).unwrap()).unwrap();
             Some(AlignComponent::Contents(contents))
         } else {
             None

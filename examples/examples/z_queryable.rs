@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{key_expr::KeyExpr, prelude::*, Config};
+use zenoh::{key_expr::KeyExpr, parameters::Selector, prelude::*, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -44,7 +44,10 @@ async fn main() {
     println!("Press CTRL-C to quit...");
     while let Ok(query) = queryable.recv_async().await {
         match query.value() {
-            None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
+            None => println!(
+                ">> [Queryable ] Received Query '{}'",
+                Selector::from(&query)
+            ),
             Some(value) => {
                 let payload = value
                     .payload()
@@ -52,7 +55,7 @@ async fn main() {
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(
                     ">> [Queryable ] Received Query '{}' with payload '{}'",
-                    query.selector(),
+                    Selector::from(&query),
                     payload
                 )
             }
