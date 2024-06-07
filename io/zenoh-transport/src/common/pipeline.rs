@@ -411,37 +411,26 @@ impl StageOutIn {
         let old_bytes = self.backoff.last_bytes;
         self.backoff.last_bytes = new_bytes;
 
-        match new_bytes.cmp(&old_bytes) {
-            std::cmp::Ordering::Equal => {
-                // No new bytes have been written on the batch, try to pull
-                if let Ok(mut g) = self.current.try_lock() {
-                    // First try to pull from stage OUT
-                    if let Some(batch) = self.s_out_r.pull() {
-                        return Pull::Some(batch);
-                    }
-
-                    // An incomplete (non-empty) batch is available in the state IN pipeline.
-                    match g.take() {
-                        Some(batch) => {
-                            return Pull::Some(batch);
-                        }
-                        None => {
-                            return Pull::None;
-                        }
-                    }
-                }
-                // Go to backoff
-            }
-            std::cmp::Ordering::Less => {
-                // There should be a new batch in Stage OUT
+        if new_bytes == old_bytes {
+            // It seems no new bytes have been written on the batch, try to pull
+            if let Ok(mut g) = self.current.try_lock() {
+                // First try to pull from stage OUT to make sure we are not in the case
+                // where new_bytes == old_bytes are because of two identical serializations
                 if let Some(batch) = self.s_out_r.pull() {
                     return Pull::Some(batch);
                 }
-                // Go to backoff
+
+                // An incomplete (non-empty) batch may be available in the state IN pipeline.
+                match g.take() {
+                    Some(batch) => {
+                        return Pull::Some(batch);
+                    }
+                    None => {
+                        return Pull::None;
+                    }
+                }
             }
-            std::cmp::Ordering::Greater => {
-                // Go to backoff
-            }
+            // Go to backoff
         }
 
         // Do backoff
