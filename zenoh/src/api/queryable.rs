@@ -81,10 +81,7 @@ impl Query {
     /// The full [`Selector`] of this Query.
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
-        Selector {
-            key_expr: self.inner.key_expr.clone(),
-            parameters: self.inner.parameters.clone(),
-        }
+        (&self.inner.key_expr, &self.inner.parameters).into()
     }
 
     /// The key selector part of this Query.

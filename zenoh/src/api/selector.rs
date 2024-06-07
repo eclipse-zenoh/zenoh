@@ -17,19 +17,15 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     ops::{Deref, DerefMut},
-    str::FromStr,
 };
 
-use zenoh_protocol::core::{
-    key_expr::{keyexpr, OwnedKeyExpr},
-    Properties,
-};
+use zenoh_protocol::core::Properties;
 #[cfg(feature = "unstable")]
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use zenoh_util::time_range::TimeRange;
 
-use super::{key_expr::KeyExpr, queryable::Query};
+use super::key_expr::KeyExpr;
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of parameters
@@ -60,77 +56,139 @@ use super::{key_expr::KeyExpr, queryable::Query};
 /// queryables.
 ///
 /// Here are the currently standardized parameters for Zenoh (check the specification page for the exhaustive list):
-/// - `_time`: used to express interest in only values dated within a certain time range, values for
+/// - **`[unstable]`** `_time`: used to express interest in only values dated within a certain time range, values for
 ///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - **`[unstable]`** `_anyke`: used in queries to express interest in replies coming from any key expression. By default, only replies
 ///   whose key expression match query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
-#[non_exhaustive]
+///
+/// The only purpose of this type is to provide a convenient conversion between string representation of selectors and pair of [KeyExpr](crate::prelude::KeyExpr)
+/// and [Parameters](crate::prelude::Parameters).
 #[derive(Clone, PartialEq, Eq)]
-pub struct Selector<'a> {
-    /// The part of this selector identifying which keys should be part of the selection.
-    pub(crate) key_expr: KeyExpr<'a>,
-    /// the part of this selector identifying which values should be part of the selection.
-    pub(crate) parameters: Parameters<'a>,
+pub struct Selector<'a>(SelectorInner<'a>);
+
+#[derive(Clone, PartialEq, Eq)]
+enum SelectorInner<'a> {
+    Raw {
+        key_expr: &'a str,
+        parameters: &'a str,
+    },
+    Ref {
+        key_expr: &'a KeyExpr<'a>,
+        parameters: &'a Parameters<'a>,
+    },
+    Owned {
+        key_expr: KeyExpr<'a>,
+        parameters: Parameters<'a>,
+    },
+}
+
+impl<'a> From<&'a str> for Selector<'a> {
+    fn from(s: &'a str) -> Self {
+        Selector(match s.find('?') {
+            Some(qmark_pos) => {
+                let key_expr = &s[..qmark_pos];
+                let parameters = &s[qmark_pos + 1..];
+                SelectorInner::Raw {
+                    key_expr,
+                    parameters,
+                }
+            }
+            None => SelectorInner::Raw {
+                key_expr: s,
+                parameters: "",
+            },
+        })
+    }
+}
+
+impl<'a> From<(&'a str, &'a str)> for Selector<'a> {
+    fn from((key_expr, parameters): (&'a str, &'a str)) -> Self {
+        Selector(SelectorInner::Raw {
+            key_expr,
+            parameters,
+        })
+    }
+}
+
+impl<'a> From<(&'a KeyExpr<'a>, &'a Parameters<'a>)> for Selector<'a> {
+    fn from((key_expr, parameters): (&'a KeyExpr<'a>, &'a Parameters<'a>)) -> Self {
+        Selector(SelectorInner::Ref {
+            key_expr,
+            parameters,
+        })
+    }
+}
+
+impl<'a, K, P> From<(K, P)> for Selector<'a>
+where
+    K: Into<KeyExpr<'a>>,
+    P: Into<Parameters<'a>>,
+{
+    fn from(value: (K, P)) -> Self {
+        Selector(SelectorInner::Owned {
+            key_expr: value.0.into(),
+            parameters: value.1.into(),
+        })
+    }
+}
+
+impl<'a> From<Selector<'a>> for (ZResult<KeyExpr<'a>>, Parameters<'a>) {
+    fn from(selector: Selector<'a>) -> Self {
+        match selector.0 {
+            SelectorInner::Raw {
+                key_expr,
+                parameters,
+            } => (KeyExpr::try_from(key_expr), Parameters::from(parameters)),
+            SelectorInner::Ref {
+                key_expr,
+                parameters,
+            } => (Ok(key_expr.clone()), parameters.clone()),
+            SelectorInner::Owned {
+                key_expr,
+                parameters,
+            } => (Ok(key_expr), parameters),
+        }
+    }
+}
+
+impl std::fmt::Debug for Selector<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "sel\"{self}\"")
+    }
+}
+
+impl std::fmt::Display for Selector<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let (key_expr, parameters) = match &self.0 {
+            SelectorInner::Raw {
+                key_expr,
+                parameters,
+            } => (*key_expr, *parameters),
+            SelectorInner::Ref {
+                key_expr,
+                parameters,
+            } => (key_expr.as_str(), parameters.as_str()),
+            SelectorInner::Owned {
+                key_expr,
+                parameters,
+            } => (key_expr.as_str(), parameters.as_str()),
+        };
+        write!(f, "{}", key_expr)?;
+        if !parameters.is_empty() {
+            write!(f, "?{}", parameters)?;
+        }
+        Ok(())
+    }
 }
 
 #[zenoh_macros::unstable]
 pub const TIME_RANGE_KEY: &str = "_time";
-impl<'a> Selector<'a> {
-    /// Builds a new selector
-    pub fn new<K, P>(key_expr: K, parameters: P) -> Self
-    where
-        K: Into<KeyExpr<'a>>,
-        P: Into<Parameters<'a>>,
-    {
-        Self {
-            key_expr: key_expr.into(),
-            parameters: parameters.into(),
-        }
-    }
-
-    /// Gets the key-expression.
-    pub fn key_expr(&'a self) -> &KeyExpr<'a> {
-        &self.key_expr
-    }
-
-    /// Gets a reference to selector's [`Parameters`].
-    pub fn parameters(&self) -> &Parameters<'a> {
-        &self.parameters
-    }
-
-    /// Gets a mutable reference to selector's [`Parameters`].
-    pub fn parameters_mut(&mut self) -> &mut Parameters<'a> {
-        &mut self.parameters
-    }
-
-    /// Sets the parameters of this selector. This operation completly overwrites existing [`Parameters`].
-    #[inline(always)]
-    pub fn set_parameters<P>(&mut self, parameters: P)
-    where
-        P: Into<Parameters<'static>>,
-    {
-        self.parameters = parameters.into();
-    }
-
-    /// Create an owned version of this selector with `'static` lifetime.
-    pub fn into_owned(self) -> Selector<'static> {
-        Selector {
-            key_expr: self.key_expr.into_owned(),
-            parameters: self.parameters.into_owned(),
-        }
-    }
-
-    /// Returns this selectors components as a tuple.
-    pub fn split(self) -> (KeyExpr<'a>, Parameters<'a>) {
-        (self.key_expr, self.parameters)
-    }
-}
 
 /// A wrapper type to help decode zenoh selector parameters.
 ///
 /// Most methods will return an Error if duplicates of a same parameter are found, to avoid HTTP Parameter Pollution like vulnerabilities.
 #[repr(transparent)]
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct Parameters<'a>(Properties<'a>);
 
 impl<'a> Deref for Parameters<'a> {
@@ -214,185 +272,63 @@ impl Parameters<'_> {
     }
 }
 
-impl std::fmt::Debug for Selector<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "sel\"{self}\"")
-    }
-}
-
-impl std::fmt::Display for Selector<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.key_expr)?;
-        if !self.parameters.is_empty() {
-            write!(f, "?{}", self.parameters.as_str())?;
-        }
-        Ok(())
-    }
-}
-
-impl<'a> From<&Selector<'a>> for Selector<'a> {
-    fn from(s: &Selector<'a>) -> Self {
-        s.clone()
-    }
-}
-
-impl TryFrom<String> for Selector<'_> {
-    type Error = zenoh_result::Error;
-    fn try_from(mut s: String) -> Result<Self, Self::Error> {
-        match s.find('?') {
-            Some(qmark_position) => {
-                let parameters = s[qmark_position + 1..].to_owned();
-                s.truncate(qmark_position);
-                Ok(Selector::new(KeyExpr::try_from(s)?, parameters))
-            }
-            None => Ok(KeyExpr::try_from(s)?.into()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a str> for Selector<'a> {
-    type Error = zenoh_result::Error;
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-        match s.find('?') {
-            Some(qmark_position) => {
-                let params = &s[qmark_position + 1..];
-                Ok(Selector::new(
-                    KeyExpr::try_from(&s[..qmark_position])?,
-                    params,
-                ))
-            }
-            None => Ok(KeyExpr::try_from(s)?.into()),
-        }
-    }
-}
-impl FromStr for Selector<'static> {
-    type Err = zenoh_result::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.to_owned().try_into()
-    }
-}
-
-impl<'a> TryFrom<&'a String> for Selector<'a> {
-    type Error = zenoh_result::Error;
-    fn try_from(s: &'a String) -> Result<Self, Self::Error> {
-        Self::try_from(s.as_str())
-    }
-}
-
-impl<'a> From<&'a Query> for Selector<'a> {
-    fn from(q: &'a Query) -> Self {
-        Selector {
-            key_expr: q.inner.key_expr.clone(),
-            parameters: q.inner.parameters.clone(),
-        }
-    }
-}
-
-impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
-    fn from(key_selector: &KeyExpr<'a>) -> Self {
-        Self {
-            key_expr: key_selector.clone(),
-            parameters: "".into(),
-        }
-    }
-}
-
-impl<'a> From<&'a keyexpr> for Selector<'a> {
-    fn from(key_selector: &'a keyexpr) -> Self {
-        Self {
-            key_expr: key_selector.into(),
-            parameters: "".into(),
-        }
-    }
-}
-
-impl<'a> From<&'a OwnedKeyExpr> for Selector<'a> {
-    fn from(key_selector: &'a OwnedKeyExpr) -> Self {
-        Self {
-            key_expr: key_selector.into(),
-            parameters: "".into(),
-        }
-    }
-}
-
-impl From<OwnedKeyExpr> for Selector<'static> {
-    fn from(key_selector: OwnedKeyExpr) -> Self {
-        Self {
-            key_expr: key_selector.into(),
-            parameters: "".into(),
-        }
-    }
-}
-
-impl<'a> From<KeyExpr<'a>> for Selector<'a> {
-    fn from(key_selector: KeyExpr<'a>) -> Self {
-        Self {
-            key_expr: key_selector,
-            parameters: "".into(),
-        }
-    }
-}
-
 #[test]
 fn selector_accessors() {
     use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
 
-    for selector in [
+    for s in [
         "hello/there?_timetrick",
         "hello/there?_timetrick;_time",
         "hello/there?_timetrick;_time;_filter",
         "hello/there?_timetrick;_time=[..]",
         "hello/there?_timetrick;_time=[..];_filter",
     ] {
-        let mut selector = Selector::try_from(selector).unwrap();
-        println!("Parameters start: {}", selector.parameters());
-        for i in selector.parameters().iter() {
+        let selector = Selector::from(s);
+        let (Ok(_), mut parameters) = selector.into() else {
+            panic!("Failed to parse selector: {}", s);
+        };
+        println!("Parameters start: {}", parameters);
+        for i in parameters.iter() {
             println!("\t{:?}", i);
         }
 
-        assert_eq!(selector.parameters().get("_timetrick").unwrap(), "");
+        assert_eq!(parameters.get("_timetrick").unwrap(), "");
 
         let time_range = "[now(-2s)..now(2s)]";
         zcondfeat!(
             "unstable",
             {
                 let time_range = time_range.parse().unwrap();
-                selector.parameters_mut().set_time_range(time_range);
-                assert_eq!(
-                    selector.parameters().time_range().unwrap().unwrap(),
-                    time_range
-                );
+                parameters.set_time_range(time_range);
+                assert_eq!(parameters.time_range().unwrap().unwrap(), time_range);
             },
             {
-                selector.parameters_mut().insert(TIME_RANGE_KEY, time_range);
+                parameters.insert(TIME_RANGE_KEY, time_range);
             }
         );
-        assert_eq!(
-            selector.parameters().get(TIME_RANGE_KEY).unwrap(),
-            time_range
-        );
+        assert_eq!(parameters.get(TIME_RANGE_KEY).unwrap(), time_range);
 
-        let hm: HashMap<&str, &str> = HashMap::from(selector.parameters());
+        let hm: HashMap<&str, &str> = HashMap::from(&parameters);
         assert!(hm.contains_key(TIME_RANGE_KEY));
 
-        selector.parameters_mut().insert("_filter", "");
-        assert_eq!(selector.parameters().get("_filter").unwrap(), "");
+        parameters.insert("_filter", "");
+        assert_eq!(parameters.get("_filter").unwrap(), "");
 
-        let hm: HashMap<String, String> = HashMap::from(selector.parameters());
+        let hm: HashMap<String, String> = HashMap::from(&parameters);
         assert!(hm.contains_key(TIME_RANGE_KEY));
 
-        selector.parameters_mut().extend_from_iter(hm.iter());
-        assert_eq!(selector.parameters().get("_filter").unwrap(), "");
+        parameters.extend_from_iter(hm.iter());
+        assert_eq!(parameters.get("_filter").unwrap(), "");
 
-        selector.parameters_mut().insert(ANYKE, "");
+        parameters.insert(ANYKE, "");
 
-        println!("Parameters end: {}", selector.parameters());
-        for i in selector.parameters().iter() {
+        println!("Parameters end: {}", parameters);
+        for i in parameters.iter() {
             println!("\t{:?}", i);
         }
 
         assert_eq!(
-            HashMap::<String, String>::from(selector.parameters()),
+            HashMap::<String, String>::from(parameters),
             HashMap::<String, String>::from(Parameters::from(
                 "_anyke;_filter;_time=[now(-2s)..now(2s)];_timetrick"
             ))

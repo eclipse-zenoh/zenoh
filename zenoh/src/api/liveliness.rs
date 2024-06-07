@@ -29,6 +29,7 @@ use super::{
     key_expr::KeyExpr,
     query::{QueryConsolidation, QueryTarget, Reply},
     sample::{Locality, Sample, SourceInfo},
+    selector::Parameters,
     session::{Session, SessionRef, Undeclarable},
     subscriber::{Subscriber, SubscriberInner},
     Id,
@@ -742,7 +743,8 @@ where
         let (callback, receiver) = self.handler.into_handler();
         self.session
             .query(
-                &self.key_expr?.into(),
+                &self.key_expr?,
+                &Parameters::default(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 QueryTarget::DEFAULT,
                 QueryConsolidation::DEFAULT,
