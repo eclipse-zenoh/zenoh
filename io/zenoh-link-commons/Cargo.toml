@@ -32,7 +32,7 @@ async-trait = { workspace = true }
 base64 = { workspace = true, optional = true }
 flume = { workspace = true }
 futures = { workspace = true }
-rustls = { workspace = true, features = ["ring"]}
+rustls = { workspace = true }
 rustls-webpki = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 tokio = { workspace = true, features = [
