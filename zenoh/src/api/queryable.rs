@@ -21,7 +21,7 @@ use std::{
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
-    core::{CongestionControl, EntityId, WireExpr, ZenohId},
+    core::{CongestionControl, EntityId, Parameters, WireExpr, ZenohId},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
@@ -43,7 +43,7 @@ use super::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample, SampleKind},
-    selector::{Parameters, Selector},
+    selector::Selector,
     session::{SessionRef, Undeclarable},
     value::Value,
     Id,
@@ -81,10 +81,7 @@ impl Query {
     /// The full [`Selector`] of this Query.
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
-        Selector {
-            key_expr: self.inner.key_expr.clone(),
-            parameters: self.inner.parameters.clone(),
-        }
+        Selector::borrowed(&self.inner.key_expr, &self.inner.parameters)
     }
 
     /// The key selector part of this Query.

@@ -33,7 +33,7 @@ use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{tls::WebPkiVerifierAnyServerName, ConfigurationInspector};
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
-    Parameters,
+    ParametersView,
 };
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
@@ -142,7 +142,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             };
         }
 
-        Ok(Parameters::from_iter(ps.drain(..)))
+        Ok(ParametersView::from_iter(ps.drain(..)))
     }
 }
 

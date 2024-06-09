@@ -247,13 +247,15 @@ pub mod bytes {
 
 /// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 pub mod selector {
-    pub use zenoh_protocol::core::Properties;
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::PredefinedParameters;
+    pub use zenoh_protocol::core::Parameters;
     #[zenoh_macros::unstable]
     pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
+    pub use crate::api::selector::Selector;
     #[zenoh_macros::unstable]
     pub use crate::api::selector::TIME_RANGE_KEY;
-    pub use crate::api::selector::{Parameters, Selector};
 }
 
 /// Subscribing primitives

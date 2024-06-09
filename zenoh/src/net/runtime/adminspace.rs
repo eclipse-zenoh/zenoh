@@ -787,7 +787,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
 fn plugins_status(context: &AdminContext, query: Query) {
     use crate::bytes::{Serialize, ZSerde};
 
-    let selector = query.selector();
+    let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
         "@/{}/{}/status/plugins/",
@@ -820,7 +820,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 return;
             }
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                plugin.instance().adminspace_getter(&selector, plugin_key)
+                plugin.instance().adminspace_getter(&key_expr, plugin_key)
             })) {
                 Ok(Ok(responses)) => {
                     for response in responses {

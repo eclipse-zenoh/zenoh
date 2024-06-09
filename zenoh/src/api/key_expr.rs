@@ -358,6 +358,7 @@ impl<'a> From<KeyExpr<'a>> for String {
         }
     }
 }
+
 impl<'a> TryFrom<String> for KeyExpr<'a> {
     type Error = zenoh_result::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {

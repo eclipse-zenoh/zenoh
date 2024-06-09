@@ -16,7 +16,7 @@ use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
 
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
-use super::{locator::*, parameters::Parameters};
+use super::{locator::*, parameters_view::ParametersView};
 
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';
@@ -196,15 +196,15 @@ impl<'a> Metadata<'a> {
     }
 
     pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> + Clone {
-        Parameters::iter(self.0)
+        ParametersView::iter(self.0)
     }
 
     pub fn get(&'a self, k: &str) -> Option<&'a str> {
-        Parameters::get(self.0, k)
+        ParametersView::get(self.0, k)
     }
 
     pub fn values(&'a self, k: &str) -> impl DoubleEndedIterator<Item = &'a str> {
-        Parameters::values(self.0, k)
+        ParametersView::values(self.0, k)
     }
 }
 
@@ -250,7 +250,7 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::from_iter(Parameters::sort(Parameters::join(
+            ParametersView::from_iter(ParametersView::sort(ParametersView::join(
                 self.0.metadata().iter(),
                 iter.map(|(k, v)| (k.borrow(), v.borrow())),
             ))),
@@ -269,7 +269,7 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::insert_sort(self.0.metadata().as_str(), k.borrow(), v.borrow()).0,
+            ParametersView::insert_sort(self.0.metadata().as_str(), k.borrow(), v.borrow()).0,
             self.0.config(),
         )?;
 
@@ -284,7 +284,7 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            Parameters::remove(self.0.metadata().as_str(), k.borrow()).0,
+            ParametersView::remove(self.0.metadata().as_str(), k.borrow()).0,
             self.0.config(),
         )?;
 
@@ -326,15 +326,15 @@ impl<'a> Config<'a> {
     }
 
     pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> + Clone {
-        Parameters::iter(self.0)
+        ParametersView::iter(self.0)
     }
 
     pub fn get(&'a self, k: &str) -> Option<&'a str> {
-        Parameters::get(self.0, k)
+        ParametersView::get(self.0, k)
     }
 
     pub fn values(&'a self, k: &str) -> impl DoubleEndedIterator<Item = &'a str> {
-        Parameters::values(self.0, k)
+        ParametersView::values(self.0, k)
     }
 }
 
@@ -381,7 +381,7 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::from_iter(Parameters::sort(Parameters::join(
+            ParametersView::from_iter(ParametersView::sort(ParametersView::join(
                 self.0.config().iter(),
                 iter.map(|(k, v)| (k.borrow(), v.borrow())),
             ))),
@@ -400,7 +400,7 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::insert_sort(self.0.config().as_str(), k.borrow(), v.borrow()).0,
+            ParametersView::insert_sort(self.0.config().as_str(), k.borrow(), v.borrow()).0,
         )?;
 
         self.0.inner = ep.inner;
@@ -415,7 +415,7 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            Parameters::remove(self.0.config().as_str(), k.borrow()).0,
+            ParametersView::remove(self.0.config().as_str(), k.borrow()).0,
         )?;
 
         self.0.inner = ep.inner;
@@ -577,8 +577,8 @@ impl TryFrom<String> for EndPoint {
             (Some(midx), None) if midx > pidx && !s[midx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
-                Parameters::from_iter_into(
-                    Parameters::sort(Parameters::iter(&s[midx + 1..])),
+                ParametersView::from_iter_into(
+                    ParametersView::sort(ParametersView::iter(&s[midx + 1..])),
                     &mut inner,
                 );
                 Ok(EndPoint { inner })
@@ -587,8 +587,8 @@ impl TryFrom<String> for EndPoint {
             (None, Some(cidx)) if cidx > pidx && !s[cidx + 1..].is_empty() => {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..cidx + 1]); // Includes config separator
-                Parameters::from_iter_into(
-                    Parameters::sort(Parameters::iter(&s[cidx + 1..])),
+                ParametersView::from_iter_into(
+                    ParametersView::sort(ParametersView::iter(&s[cidx + 1..])),
                     &mut inner,
                 );
                 Ok(EndPoint { inner })
@@ -603,14 +603,14 @@ impl TryFrom<String> for EndPoint {
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
 
-                Parameters::from_iter_into(
-                    Parameters::sort(Parameters::iter(&s[midx + 1..cidx])),
+                ParametersView::from_iter_into(
+                    ParametersView::sort(ParametersView::iter(&s[midx + 1..cidx])),
                     &mut inner,
                 );
 
                 inner.push(CONFIG_SEPARATOR);
-                Parameters::from_iter_into(
-                    Parameters::sort(Parameters::iter(&s[cidx + 1..])),
+                ParametersView::from_iter_into(
+                    ParametersView::sort(ParametersView::iter(&s[cidx + 1..])),
                     &mut inner,
                 );
 
@@ -655,11 +655,11 @@ impl EndPoint {
 
         if rng.gen_bool(0.5) {
             endpoint.push(METADATA_SEPARATOR);
-            Parameters::rand(&mut endpoint);
+            ParametersView::rand(&mut endpoint);
         }
         if rng.gen_bool(0.5) {
             endpoint.push(CONFIG_SEPARATOR);
-            Parameters::rand(&mut endpoint);
+            ParametersView::rand(&mut endpoint);
         }
 
         endpoint.parse().unwrap()

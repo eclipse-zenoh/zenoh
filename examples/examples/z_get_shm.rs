@@ -17,7 +17,7 @@ use clap::Parser;
 use zenoh::{
     prelude::*,
     query::QueryTarget,
-    selector::Selector,
+    selector::KeyExpr,
     shm::{
         zshm, BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend,
         SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,
@@ -113,7 +113,7 @@ enum Qt {
 struct Args {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The selection of resources to query
-    selector: Selector<'static>,
+    selector: KeyExpr<'static>,
     /// The value to publish.
     value: Option<String>,
     #[arg(short, long, default_value = "BEST_MATCHING")]
@@ -128,7 +128,7 @@ struct Args {
 
 fn parse_args() -> (
     Config,
-    Selector<'static>,
+    KeyExpr<'static>,
     Option<String>,
     QueryTarget,
     Duration,

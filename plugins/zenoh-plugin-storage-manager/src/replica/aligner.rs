@@ -323,7 +323,7 @@ impl Aligner {
 
     async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
         let mut no_err = true;
-        let selector = Selector::new(
+        let selector = Selector::owned(
             KeyExpr::from(&self.digest_key).join(&from).unwrap(),
             properties,
         );

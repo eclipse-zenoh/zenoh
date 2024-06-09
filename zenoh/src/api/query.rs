@@ -18,9 +18,11 @@ use std::{
     time::Duration,
 };
 
+#[zenoh_macros::unstable]
+use std::borrow::Cow;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::{CongestionControl, ZenohId};
+use zenoh_protocol::core::{CongestionControl, Parameters, ZenohId};
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
@@ -117,11 +119,18 @@ impl From<Reply> for Result<Sample, Value> {
 
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
-    pub(crate) selector: Selector<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) parameters: Parameters<'static>,
     pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<'static, Reply>,
+}
+
+impl QueryState {
+    pub(crate) fn selector(&self) -> Selector {
+        Selector::borrowed(&self.key_expr, &self.parameters)
+    }
 }
 
 /// A builder for initializing a `query`.
@@ -407,12 +416,27 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
-            selector: self.selector.map(|mut s| {
-                if accept == ReplyKeyExpr::Any {
-                    s.parameters_mut().insert(_REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
-                }
-                s
-            }),
+            selector: self.selector.map(
+                |Selector {
+                     key_expr,
+                     parameters,
+                 }| {
+                    if accept == ReplyKeyExpr::Any {
+                        let mut parameters = parameters.into_owned();
+                        parameters.insert(_REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
+                        let parameters = Cow::Owned(parameters);
+                        Selector {
+                            key_expr,
+                            parameters,
+                        }
+                    } else {
+                        Selector {
+                            key_expr,
+                            parameters,
+                        }
+                    }
+                },
+            ),
             ..self
         }
     }
@@ -445,10 +469,14 @@ where
 {
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-
+        let Selector {
+            key_expr,
+            parameters,
+        } = self.selector?;
         self.session
             .query(
-                &self.selector?,
+                &key_expr,
+                &parameters,
                 &self.scope?,
                 self.target,
                 self.consolidation,
