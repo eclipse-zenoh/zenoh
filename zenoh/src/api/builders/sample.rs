@@ -49,7 +49,6 @@ pub trait SampleBuilderTrait {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self;
     /// Attach user-provided data in key-value format
-    #[zenoh_macros::unstable]
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
 
