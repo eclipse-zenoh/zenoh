@@ -18,6 +18,8 @@ use std::{
     sync::Arc,
 };
 
+use super::builders::sample::SampleBuilderTrait;
+use super::bytes::OptionZBytes;
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
@@ -28,10 +30,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
-    super::{
-        builders::sample::SampleBuilderTrait, bytes::OptionZBytes, query::ReplyKeyExpr,
-        sample::SourceInfo,
-    },
+    super::{query::ReplyKeyExpr, sample::SourceInfo},
     zenoh_protocol::core::EntityGlobalId,
 };
 

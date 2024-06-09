@@ -16,7 +16,6 @@ use std::future::{IntoFuture, Ready};
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
-#[cfg(feature = "unstable")]
 use crate::api::bytes::OptionZBytes;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;

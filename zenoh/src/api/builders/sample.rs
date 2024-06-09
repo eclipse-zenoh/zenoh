@@ -17,6 +17,7 @@ use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
 
+use crate::api::bytes::OptionZBytes;
 use crate::api::{
     bytes::ZBytes,
     encoding::Encoding,
@@ -26,7 +27,7 @@ use crate::api::{
     value::Value,
 };
 #[cfg(feature = "unstable")]
-use crate::{api::bytes::OptionZBytes, sample::SourceInfo};
+use crate::sample::SourceInfo;
 
 pub trait QoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.
