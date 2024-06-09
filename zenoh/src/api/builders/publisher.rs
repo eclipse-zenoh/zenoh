@@ -17,14 +17,12 @@ use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
 #[cfg(feature = "unstable")]
-use crate::api::bytes::OptionZBytes;
-#[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::{
     builders::sample::{
         QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
     },
-    bytes::ZBytes,
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     key_expr::KeyExpr,
     publisher::{Priority, Publisher},
@@ -78,7 +76,6 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -157,7 +154,6 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
             ..self
         }
     }
-    #[cfg(feature = "unstable")]
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -191,7 +187,6 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -208,7 +203,6 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -393,7 +387,6 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -408,7 +401,6 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
