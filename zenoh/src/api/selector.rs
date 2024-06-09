@@ -93,6 +93,16 @@ impl<'a> Selector<'a> {
     }
 }
 
+impl<'a, K, P> From<(K, P)> for Selector<'a>
+where
+    K: Into<KeyExpr<'a>>,
+    P: Into<Parameters<'a>>,
+{
+    fn from((key_expr, parameters): (K, P)) -> Self {
+        Self::owned(key_expr, parameters)
+    }
+}
+
 impl<'a> From<Selector<'a>> for (KeyExpr<'a>, Parameters<'a>) {
     fn from(selector: Selector<'a>) -> Self {
         (
