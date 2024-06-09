@@ -18,8 +18,6 @@ use std::{
     sync::Arc,
 };
 
-use super::builders::sample::SampleBuilderTrait;
-use super::bytes::OptionZBytes;
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
@@ -35,8 +33,11 @@ use {
 };
 
 use super::{
-    builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
-    bytes::ZBytes,
+    builders::sample::{
+        QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
+        ValueBuilderTrait,
+    },
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,

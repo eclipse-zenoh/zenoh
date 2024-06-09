@@ -17,9 +17,8 @@ use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
 
-use crate::api::bytes::OptionZBytes;
 use crate::api::{
-    bytes::ZBytes,
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     key_expr::KeyExpr,
     publisher::Priority,

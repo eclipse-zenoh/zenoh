@@ -16,14 +16,13 @@ use std::future::{IntoFuture, Ready};
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
-use crate::api::bytes::OptionZBytes;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::{
     builders::sample::{
         QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
     },
-    bytes::ZBytes,
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     key_expr::KeyExpr,
     publisher::{Priority, Publisher},
