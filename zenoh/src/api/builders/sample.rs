@@ -95,7 +95,6 @@ impl SampleBuilder<SampleBuilderPut> {
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
-                #[cfg(feature = "unstable")]
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderPut>,
@@ -118,7 +117,6 @@ impl SampleBuilder<SampleBuilderDelete> {
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
-                #[cfg(feature = "unstable")]
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderDelete>,
@@ -162,7 +160,6 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
     }
 }
 
-#[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -175,7 +172,6 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
         }
     }
 
-    #[zenoh_macros::unstable]
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {

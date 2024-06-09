@@ -473,7 +473,6 @@ impl Primitives for AdminSpace {
                     }),
                     eid: self.queryable_id,
                     value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
-                    #[cfg(feature = "unstable")]
                     attachment: query.ext_attachment.map(Into::into),
                 };
 
