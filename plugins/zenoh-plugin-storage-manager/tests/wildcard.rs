@@ -16,13 +16,13 @@
 // 1. normal case, just some wild card puts and deletes on existing keys and ensure it works
 // 2. check for dealing with out of order updates
 
-use std::{str::FromStr, thread::sleep};
+use std::{borrow::Cow, str::FromStr, thread::sleep};
 
 // use std::collections::HashMap;
 use async_std::task;
 use zenoh::{
-    bytes::StringOrBase64, internal::zasync_executor_init, prelude::*, query::Reply,
-    sample::Sample, time::Timestamp, Config, Session,
+    internal::zasync_executor_init, prelude::*, query::Reply, sample::Sample, time::Timestamp,
+    Config, Session,
 };
 use zenoh_plugin_trait::Plugin;
 
@@ -113,7 +113,7 @@ async fn test_wild_card_in_order() {
     let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 1);
     assert_eq!(data[0].key_expr().as_str(), "wild/test/a");
-    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "2");
+    assert_eq!(data[0].payload().deserialize::<Cow<str>>().unwrap(), "2");
 
     put_data(
         &session,
@@ -131,8 +131,20 @@ async fn test_wild_card_in_order() {
     assert_eq!(data.len(), 2);
     assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr().as_str()));
     assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr().as_str()));
-    assert!(["2", "3"].contains(&StringOrBase64::from(data[0].payload()).as_str()));
-    assert!(["2", "3"].contains(&StringOrBase64::from(data[1].payload()).as_str()));
+    assert!(["2", "3"].contains(
+        &data[0]
+            .payload()
+            .deserialize::<Cow<str>>()
+            .unwrap()
+            .as_ref()
+    ));
+    assert!(["2", "3"].contains(
+        &data[1]
+            .payload()
+            .deserialize::<Cow<str>>()
+            .unwrap()
+            .as_ref()
+    ));
 
     put_data(
         &session,
@@ -150,8 +162,8 @@ async fn test_wild_card_in_order() {
     assert_eq!(data.len(), 2);
     assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr().as_str()));
     assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr().as_str()));
-    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "4");
-    assert_eq!(StringOrBase64::from(data[1].payload()).as_str(), "4");
+    assert_eq!(data[0].payload().deserialize::<Cow<str>>().unwrap(), "4");
+    assert_eq!(data[1].payload().deserialize::<Cow<str>>().unwrap(), "4");
 
     delete_data(
         &session,

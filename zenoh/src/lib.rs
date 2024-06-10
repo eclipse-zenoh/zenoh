@@ -240,8 +240,8 @@ pub mod encoding {
 /// Payload primitives
 pub mod bytes {
     pub use crate::api::bytes::{
-        Deserialize, OptionZBytes, Serialize, StringOrBase64, ZBytes, ZBytesIterator, ZBytesReader,
-        ZBytesWriter, ZDeserializeError, ZSerde,
+        Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader, ZBytesWriter,
+        ZDeserializeError, ZSerde,
     };
 }
 
