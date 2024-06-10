@@ -34,7 +34,7 @@ use zenoh::{
     },
     key_expr::{keyexpr, KeyExpr},
     query::{QueryConsolidation, Reply},
-    sample::{Sample, SampleKind, ValueBuilderTrait},
+    sample::{Sample, SampleKind},
     selector::{Selector, TIME_RANGE_KEY},
     session::{Session, SessionDeclarations},
     value::Value,
@@ -44,6 +44,7 @@ use zenoh_result::{bail, zerror, ZResult};
 
 mod config;
 pub use config::Config;
+use zenoh::encoding::EncodingBuilderTrait;
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -402,7 +403,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 .content_type()
                 .map(|m| Encoding::from(m.to_string()))
                 .unwrap_or_default();
-            query = query.payload(body).encoding(encoding);
+            query = query.payload(ZBytes::from(body)).encoding(encoding);
         }
         match query.await {
             Ok(receiver) => {

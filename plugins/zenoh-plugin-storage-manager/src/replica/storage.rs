@@ -23,6 +23,7 @@ use flume::{Receiver, Sender};
 use futures::select;
 use zenoh::{
     core::Result as ZResult,
+    encoding::EncodingBuilderTrait,
     internal::{
         bail,
         buffers::{SplitBuffer, ZBuf},
@@ -35,7 +36,7 @@ use zenoh::{
         KeyExpr, OwnedKeyExpr,
     },
     query::{ConsolidationMode, QueryTarget},
-    sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait, ValueBuilderTrait},
+    sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
     selector::Selector,
     session::{Session, SessionDeclarations},
     time::{new_timestamp, Timestamp, NTP64},
