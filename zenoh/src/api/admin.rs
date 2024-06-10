@@ -30,7 +30,7 @@ use super::{
     key_expr::KeyExpr,
     queryable::Query,
     sample::{DataInfo, Locality, SampleKind},
-    session::Session,
+    session::{Session, SessionClone},
 };
 
 macro_rules! ke_for_sure {
@@ -121,11 +121,11 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
 
 #[derive(Clone)]
 pub(crate) struct Handler {
-    pub(crate) session: Arc<Session>,
+    pub(crate) session: Arc<SessionClone>,
 }
 
 impl Handler {
-    pub(crate) fn new(session: Session) -> Self {
+    pub(crate) fn new(session: SessionClone) -> Self {
         Self {
             session: Arc::new(session),
         }
@@ -193,7 +193,7 @@ impl TransportMulticastEventHandler for Handler {
 
 pub(crate) struct PeerHandler {
     pub(crate) expr: WireExpr<'static>,
-    pub(crate) session: Arc<Session>,
+    pub(crate) session: Arc<SessionClone>,
 }
 
 impl TransportPeerEventHandler for PeerHandler {

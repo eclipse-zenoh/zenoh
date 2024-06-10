@@ -531,8 +531,8 @@ impl Session {
     /// ```
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         // ManuallyDrop wrapper prevents the drop code to be executed,
-        // which would lead to a double close
         let session = ManuallyDrop::new(self);
+        // which would lead to a double close
         ResolveFuture::new(async move {
             trace!("close()");
             session
@@ -827,15 +827,25 @@ impl Session {
     }
 }
 
+/// Like a [`Session`], but not closed on drop
+pub(crate) struct SessionClone(ManuallyDrop<Session>);
+
+impl Deref for SessionClone {
+    type Target = Session;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl Session {
-    pub(crate) fn clone(&self) -> Self {
-        Session {
+    pub(crate) fn clone(&self) -> SessionClone {
+        SessionClone(ManuallyDrop::new(Session {
             runtime: self.runtime.clone(),
             state: self.state.clone(),
             id: self.id,
             owns_runtime: self.owns_runtime,
             task_controller: self.task_controller.clone(),
-        }
+        }))
     }
 
     #[allow(clippy::new_ret_no_self)]
@@ -2030,7 +2040,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     }
 }
 
-impl Primitives for Session {
+impl Primitives for SessionClone {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
     }
@@ -2474,7 +2484,7 @@ impl Primitives for Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        let _ = self.clone().close().wait();
+        let _ = ManuallyDrop::into_inner(self.clone().0).close().wait();
     }
 }
 
@@ -2637,7 +2647,7 @@ pub trait SessionDeclarations<'s, 'a> {
     fn info(&'s self) -> SessionInfo<'a>;
 }
 
-impl crate::net::primitives::EPrimitives for Session {
+impl crate::net::primitives::EPrimitives for SessionClone {
     #[inline]
     fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
         (self as &dyn Primitives).send_interest(ctx.msg)
