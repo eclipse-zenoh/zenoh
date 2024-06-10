@@ -235,7 +235,7 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
             .map(|tok_state| LivelinessToken {
                 session,
                 state: tok_state,
-                alive: true,
+                undeclare_on_drop: true,
             })
     }
 }
@@ -291,7 +291,7 @@ pub(crate) struct LivelinessTokenState {
 pub struct LivelinessToken<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<LivelinessTokenState>,
-    pub(crate) alive: bool,
+    undeclare_on_drop: bool,
 }
 
 /// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`](LivelinessToken).
@@ -326,7 +326,8 @@ impl Resolvable for LivelinessTokenUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LivelinessTokenUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.token.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.token.undeclare_on_drop = false;
         self.token.session.undeclare_liveliness(self.token.state.id)
     }
 }
@@ -369,6 +370,16 @@ impl<'a> LivelinessToken<'a> {
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
+
+    /// Keep this liveliness token in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.undeclare_on_drop = false;
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -381,7 +392,7 @@ impl<'a> Undeclarable<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<
 #[zenoh_macros::unstable]
 impl Drop for LivelinessToken<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.undeclare_on_drop {
             let _ = self.session.undeclare_liveliness(self.state.id);
         }
     }
@@ -553,7 +564,7 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
-                    alive: true,
+                    undeclare_on_drop: true,
                 },
                 handler,
             })
