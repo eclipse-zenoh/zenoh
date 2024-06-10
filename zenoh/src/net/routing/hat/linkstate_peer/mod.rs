@@ -24,7 +24,7 @@ use std::{
     time::Duration,
 };
 
-use token::token_remove_node;
+use token::{token_remove_node, undeclare_client_token};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -258,6 +258,8 @@ impl HatBaseTrait for HatCode {
         face_hat_mut!(face).local_subs.clear();
         face_hat_mut!(face).remote_qabl_interests.clear();
         face_hat_mut!(face).local_qabls.clear();
+        face_hat_mut!(face).remote_token_interests.clear();
+        face_hat_mut!(face).local_tokens.clear();
 
         let face = get_mut_unchecked(face);
         for res in face.remote_mappings.values_mut() {
@@ -325,6 +327,17 @@ impl HatBaseTrait for HatCode {
                     .disable_query_routes();
                 qabls_matches.push(res);
             }
+        }
+
+        for (_id, mut res) in face
+            .hat
+            .downcast_mut::<HatFace>()
+            .unwrap()
+            .remote_tokens
+            .drain()
+        {
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            undeclare_client_token(&mut wtables, &mut face_clone, &mut res);
         }
         drop(wtables);
 

@@ -23,7 +23,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use token::token_new_face;
+use token::{token_new_face, undeclare_client_token};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
@@ -128,6 +128,8 @@ impl HatBaseTrait for HatCode {
         face_hat_mut!(face).remote_sub_interests.clear();
         face_hat_mut!(face).local_subs.clear();
         face_hat_mut!(face).local_qabls.clear();
+        face_hat_mut!(face).remote_token_interests.clear();
+        face_hat_mut!(face).local_tokens.clear();
 
         let face = get_mut_unchecked(face);
         for res in face.remote_mappings.values_mut() {
@@ -195,6 +197,17 @@ impl HatBaseTrait for HatCode {
                     .disable_query_routes();
                 qabls_matches.push(res);
             }
+        }
+
+        for (_id, mut res) in face
+            .hat
+            .downcast_mut::<HatFace>()
+            .unwrap()
+            .remote_tokens
+            .drain()
+        {
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            undeclare_client_token(&mut wtables, &mut face_clone, &mut res);
         }
         drop(wtables);
 
