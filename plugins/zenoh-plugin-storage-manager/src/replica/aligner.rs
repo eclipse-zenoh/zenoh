@@ -13,6 +13,7 @@
 //
 
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     str,
 };
@@ -20,7 +21,6 @@ use std::{
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use zenoh::{
-    bytes::StringOrBase64,
     key_expr::{KeyExpr, OwnedKeyExpr},
     prelude::*,
     sample::{Sample, SampleBuilder},
@@ -216,15 +216,21 @@ impl Aligner {
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
             // expecting sample.payload to be a vec of intervals with their checksum
             for each in reply_content {
-                match serde_json::from_str(&StringOrBase64::from(each.payload())) {
-                    Ok((i, c)) => {
-                        other_intervals.insert(i, c);
-                    }
+                match each.payload().deserialize::<Cow<str>>() {
+                    Ok(s) => match serde_json::from_str(&s) {
+                        Ok((i, c)) => {
+                            other_intervals.insert(i, c);
+                        }
+                        Err(e) => {
+                            tracing::error!("[ALIGNER] Error decoding reply: {}", e);
+                            no_err = false;
+                        }
+                    },
                     Err(e) => {
                         tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
                     }
-                };
+                }
             }
             (other_intervals, no_err)
         } else {
@@ -262,15 +268,21 @@ impl Aligner {
                 let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
-                    match serde_json::from_str(&StringOrBase64::from(each.payload())) {
-                        Ok((i, c)) => {
-                            other_subintervals.insert(i, c);
-                        }
+                    match each.payload().deserialize::<Cow<str>>() {
+                        Ok(s) => match serde_json::from_str(&s) {
+                            Ok((i, c)) => {
+                                other_subintervals.insert(i, c);
+                            }
+                            Err(e) => {
+                                tracing::error!("[ALIGNER] Error decoding reply: {}", e);
+                                no_err = false;
+                            }
+                        },
                         Err(e) => {
                             tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                             no_err = false;
                         }
-                    };
+                    }
                 }
                 (other_subintervals, no_err)
             };
@@ -303,15 +315,21 @@ impl Aligner {
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
-                match serde_json::from_str(&StringOrBase64::from(each.payload())) {
-                    Ok((i, c)) => {
-                        other_content.insert(i, c);
-                    }
+                match each.payload().deserialize::<Cow<str>>() {
+                    Ok(s) => match serde_json::from_str(&s) {
+                        Ok((i, c)) => {
+                            other_content.insert(i, c);
+                        }
+                        Err(e) => {
+                            tracing::error!("[ALIGNER] Error decoding reply: {}", e);
+                            no_err = false;
+                        }
+                    },
                     Err(e) => {
                         tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
                     }
-                };
+                }
             }
             // get subintervals diff
             let result = this.get_full_content_diff(other_content);
@@ -343,7 +361,10 @@ impl Aligner {
                             tracing::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",
                                 sample.key_expr().as_str(),
-                                StringOrBase64::from(sample.payload())
+                                sample
+                                    .payload()
+                                    .deserialize::<Cow<str>>()
+                                    .unwrap_or(Cow::Borrowed("invalid"))
                             );
                             return_val.push(sample);
                         }

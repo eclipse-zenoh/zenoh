@@ -15,9 +15,9 @@
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
-    str,
-    str::FromStr,
+    str::{self, FromStr},
     time::{Duration, SystemTime},
 };
 
@@ -44,9 +44,7 @@ pub use aligner::Aligner;
 pub use digest::{Digest, DigestConfig, EraType, LogEntry};
 pub use snapshotter::Snapshotter;
 pub use storage::{ReplicationService, StorageService};
-use zenoh::{
-    bytes::StringOrBase64, key_expr::OwnedKeyExpr, sample::Locality, time::Timestamp, Session,
-};
+use zenoh::{key_expr::OwnedKeyExpr, sample::Locality, time::Timestamp, Session};
 
 const ERA: &str = "era";
 const INTERVALS: &str = "intervals";
@@ -227,21 +225,29 @@ impl Replica {
             };
             let from = &sample.key_expr().as_str()
                 [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
-            tracing::trace!(
-                "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
-                from,
-                sample.kind(),
-                sample.key_expr().as_str(),
-                StringOrBase64::from(sample.payload())
-            );
-            let digest: Digest = match serde_json::from_str(&StringOrBase64::from(sample.payload()))
-            {
-                Ok(digest) => digest,
+
+            let digest: Digest = match sample.payload().deserialize::<Cow<str>>() {
+                Ok(s) => match serde_json::from_str(&s) {
+                    Ok(digest) => digest,
+                    Err(e) => {
+                        tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
+                        continue;
+                    }
+                },
                 Err(e) => {
                     tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
                     continue;
                 }
             };
+
+            tracing::trace!(
+                "[DIGEST_SUB] From {} Received {} ('{}': '{:?}')",
+                from,
+                sample.kind(),
+                sample.key_expr().as_str(),
+                digest,
+            );
+
             let ts = digest.timestamp;
             let to_be_processed = self
                 .processing_needed(
@@ -260,7 +266,7 @@ impl Replica {
                         tracing::error!("[DIGEST_SUB] Error sending digest to aligner: {}", e)
                     }
                 }
-            };
+            }
             received.insert(from.to_string(), ts);
         }
     }

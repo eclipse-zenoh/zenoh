@@ -14,7 +14,7 @@
 
 //! ZBytes primitives.
 use std::{
-    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref, str::Utf8Error,
+    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, str::Utf8Error,
     string::FromUtf8Error, sync::Arc,
 };
 
@@ -1803,53 +1803,6 @@ where
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
-    }
-}
-
-// For convenience to always convert a Value in the examples
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StringOrBase64 {
-    String(String),
-    Base64(String),
-}
-
-impl StringOrBase64 {
-    pub fn into_string(self) -> String {
-        match self {
-            StringOrBase64::String(s) | StringOrBase64::Base64(s) => s,
-        }
-    }
-}
-
-impl Deref for StringOrBase64 {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::String(s) | Self::Base64(s) => s,
-        }
-    }
-}
-
-impl std::fmt::Display for StringOrBase64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self)
-    }
-}
-
-impl From<&ZBytes> for StringOrBase64 {
-    fn from(v: &ZBytes) -> Self {
-        use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
-        match v.deserialize::<String>() {
-            Ok(s) => StringOrBase64::String(s),
-            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.into::<Vec<u8>>())),
-        }
-    }
-}
-
-impl From<&mut ZBytes> for StringOrBase64 {
-    fn from(v: &mut ZBytes) -> Self {
-        StringOrBase64::from(&*v)
     }
 }
 
