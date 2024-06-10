@@ -66,7 +66,14 @@ pub(crate) fn declare_subscription(
                     (res, wtables)
                 };
 
-            hat_code.declare_subscription(&mut wtables, face, &mut res, sub_info, node_id);
+            hat_code.declare_subscription(
+                &mut wtables,
+                face,
+                &mut res,
+                sub_info,
+                node_id,
+                &mut |p, m| p.send_declare(m),
+            );
 
             disable_matches_data_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -105,7 +112,13 @@ pub(crate) fn undeclare_subscription(
                 drop(rtables);
                 let mut wtables = zwrite!(tables.tables);
 
-                hat_code.undeclare_subscription(&mut wtables, face, &mut res, node_id);
+                hat_code.undeclare_subscription(
+                    &mut wtables,
+                    face,
+                    &mut res,
+                    node_id,
+                    &mut |p, m| p.send_declare(m),
+                );
 
                 disable_matches_data_routes(&mut wtables, &mut res);
                 drop(wtables);

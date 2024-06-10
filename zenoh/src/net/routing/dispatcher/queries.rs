@@ -85,7 +85,14 @@ pub(crate) fn declare_queryable(
                     (res, wtables)
                 };
 
-            hat_code.declare_queryable(&mut wtables, face, &mut res, qabl_info, node_id);
+            hat_code.declare_queryable(
+                &mut wtables,
+                face,
+                &mut res,
+                qabl_info,
+                node_id,
+                &mut |p, m| p.send_declare(m),
+            );
 
             disable_matches_query_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -120,7 +127,9 @@ pub(crate) fn undeclare_queryable(
                 drop(rtables);
                 let mut wtables = zwrite!(tables.tables);
 
-                hat_code.undeclare_queryable(&mut wtables, face, &mut res, node_id);
+                hat_code.undeclare_queryable(&mut wtables, face, &mut res, node_id, &mut |p, m| {
+                    p.send_declare(m)
+                });
 
                 disable_matches_query_routes(&mut wtables, &mut res);
                 drop(wtables);

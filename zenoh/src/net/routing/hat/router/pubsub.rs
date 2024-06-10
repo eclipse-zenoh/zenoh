@@ -19,7 +19,7 @@ use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::hat::{HatPubSubTrait, Sources};
+use crate::net::routing::hat::{HatPubSubTrait, SendDeclare, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use petgraph::graph::NodeIndex;
@@ -86,6 +86,7 @@ fn propagate_simple_subscription_to(
     sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     full_peer_net: bool,
+    send_declare: &mut SendDeclare,
 ) {
     if (src_face.id != dst_face.id
         || (dst_face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)))
@@ -101,19 +102,22 @@ fn propagate_simple_subscription_to(
     {
         face_hat_mut!(dst_face).local_subs.insert(res.clone());
         let key_expr = Resource::decl_key(res, dst_face);
-        dst_face.primitives.send_declare(RoutingContext::with_expr(
-            Declare {
-                ext_qos: ext::QoSType::declare_default(),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                    id: 0, // @TODO use proper SubscriberId (#703)
-                    wire_expr: key_expr,
-                    ext_info: *sub_info,
-                }),
-            },
-            res.expr(),
-        ));
+        send_declare(
+            &dst_face.primitives,
+            RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                        id: 0, // @TODO use proper SubscriberId (#703)
+                        wire_expr: key_expr,
+                        ext_info: *sub_info,
+                    }),
+                },
+                res.expr(),
+            ),
+        );
     }
 }
 
@@ -122,6 +126,7 @@ fn propagate_simple_subscription(
     res: &Arc<Resource>,
     sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
+    send_declare: &mut SendDeclare,
 ) {
     let full_peer_net = hat!(tables).full_net(WhatAmI::Peer);
     for mut dst_face in tables
@@ -137,6 +142,7 @@ fn propagate_simple_subscription(
             sub_info,
             src_face,
             full_peer_net,
+            send_declare,
         );
     }
 }
@@ -185,6 +191,7 @@ fn register_router_subscription(
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
     router: ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
     if !res_hat!(res).router_subs.contains(&router) {
         // Register router subscription
@@ -207,7 +214,7 @@ fn register_router_subscription(
     }
 
     // Propagate subscription to clients
-    propagate_simple_subscription(tables, res, sub_info, face);
+    propagate_simple_subscription(tables, res, sub_info, face, send_declare);
 }
 
 fn declare_router_subscription(
@@ -216,8 +223,9 @@ fn declare_router_subscription(
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
     router: ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
-    register_router_subscription(tables, face, res, sub_info, router);
+    register_router_subscription(tables, face, res, sub_info, router, send_declare);
 }
 
 fn register_peer_subscription(
@@ -246,12 +254,13 @@ fn declare_peer_subscription(
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
     peer: ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
     register_peer_subscription(tables, face, res, sub_info, peer);
     let mut propa_sub_info = *sub_info;
     propa_sub_info.mode = Mode::Push;
     let zid = tables.zid;
-    register_router_subscription(tables, face, res, &propa_sub_info, zid);
+    register_router_subscription(tables, face, res, &propa_sub_info, zid, send_declare);
 }
 
 fn register_client_subscription(
@@ -300,12 +309,13 @@ fn declare_client_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
+    send_declare: &mut SendDeclare,
 ) {
     register_client_subscription(tables, face, res, sub_info);
     let mut propa_sub_info = *sub_info;
     propa_sub_info.mode = Mode::Push;
     let zid = tables.zid;
-    register_router_subscription(tables, face, res, &propa_sub_info, zid);
+    register_router_subscription(tables, face, res, &propa_sub_info, zid, send_declare);
 }
 
 #[inline]
@@ -380,28 +390,39 @@ fn send_forget_sourced_subscription_to_net_childs(
     }
 }
 
-fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
+fn propagate_forget_simple_subscription(
+    tables: &mut Tables,
+    res: &Arc<Resource>,
+    send_declare: &mut SendDeclare,
+) {
     for face in tables.faces.values_mut() {
         if face_hat!(face).local_subs.contains(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId (#703)
-                        ext_wire_expr: WireExprType { wire_expr },
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id: 0, // @TODO use proper SubscriberId (#703)
+                            ext_wire_expr: WireExprType { wire_expr },
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
             face_hat_mut!(face).local_subs.remove(res);
         }
     }
 }
 
-fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<Resource>) {
+fn propagate_forget_simple_subscription_to_peers(
+    tables: &mut Tables,
+    res: &Arc<Resource>,
+    send_declare: &mut SendDeclare,
+) {
     if !hat!(tables).full_net(WhatAmI::Peer)
         && res_hat!(res).router_subs.len() == 1
         && res_hat!(res).router_subs.contains(&tables.zid)
@@ -423,18 +444,21 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                 })
             {
                 let wire_expr = Resource::get_best_key(res, "", face.id);
-                face.primitives.send_declare(RoutingContext::with_expr(
-                    Declare {
-                        ext_qos: ext::QoSType::declare_default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                            id: 0, // @TODO use proper SubscriberId (#703)
-                            ext_wire_expr: WireExprType { wire_expr },
-                        }),
-                    },
-                    res.expr(),
-                ));
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            ext_qos: ext::QoSType::declare_default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id: 0, // @TODO use proper SubscriberId (#703)
+                                ext_wire_expr: WireExprType { wire_expr },
+                            }),
+                        },
+                        res.expr(),
+                    ),
+                );
 
                 face_hat_mut!(&mut face).local_subs.remove(res);
             }
@@ -478,7 +502,12 @@ fn propagate_forget_sourced_subscription(
     }
 }
 
-fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohId) {
+fn unregister_router_subscription(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    router: &ZenohId,
+    send_declare: &mut SendDeclare,
+) {
     tracing::debug!(
         "Unregister router subscription {} (router: {})",
         res.expr(),
@@ -494,10 +523,10 @@ fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, 
         if hat_mut!(tables).full_net(WhatAmI::Peer) {
             undeclare_peer_subscription(tables, None, res, &tables.zid.clone());
         }
-        propagate_forget_simple_subscription(tables, res);
+        propagate_forget_simple_subscription(tables, res, send_declare);
     }
 
-    propagate_forget_simple_subscription_to_peers(tables, res);
+    propagate_forget_simple_subscription_to_peers(tables, res, send_declare);
 }
 
 fn undeclare_router_subscription(
@@ -505,9 +534,10 @@ fn undeclare_router_subscription(
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     router: &ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
     if res_hat!(res).router_subs.contains(router) {
-        unregister_router_subscription(tables, res, router);
+        unregister_router_subscription(tables, res, router, send_declare);
         propagate_forget_sourced_subscription(tables, res, face, router, WhatAmI::Router);
     }
 }
@@ -517,8 +547,9 @@ fn forget_router_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     router: &ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
-    undeclare_router_subscription(tables, Some(face), res, router);
+    undeclare_router_subscription(tables, Some(face), res, router, send_declare);
 }
 
 fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
@@ -553,13 +584,14 @@ fn forget_peer_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     peer: &ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
     undeclare_peer_subscription(tables, Some(face), res, peer);
     let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
     let peer_subs = remote_peer_subs(tables, res);
     let zid = tables.zid;
     if !client_subs && !peer_subs {
-        undeclare_router_subscription(tables, None, res, &zid);
+        undeclare_router_subscription(tables, None, res, &zid, send_declare);
     }
 }
 
@@ -567,6 +599,7 @@ pub(super) fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
 ) {
     tracing::debug!("Unregister client subscription {} for {}", res.expr(), face);
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
@@ -578,9 +611,9 @@ pub(super) fn undeclare_client_subscription(
     let router_subs = remote_router_subs(tables, res);
     let peer_subs = remote_peer_subs(tables, res);
     if client_subs.is_empty() && !peer_subs {
-        undeclare_router_subscription(tables, None, res, &tables.zid.clone());
+        undeclare_router_subscription(tables, None, res, &tables.zid.clone(), send_declare);
     } else {
-        propagate_forget_simple_subscription_to_peers(tables, res);
+        propagate_forget_simple_subscription_to_peers(tables, res, send_declare);
     }
     if client_subs.len() == 1 && !router_subs && !peer_subs {
         let face = &mut client_subs[0];
@@ -588,18 +621,21 @@ pub(super) fn undeclare_client_subscription(
             && !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS))
         {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId (#703)
-                        ext_wire_expr: WireExprType { wire_expr },
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id: 0, // @TODO use proper SubscriberId (#703)
+                            ext_wire_expr: WireExprType { wire_expr },
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
 
             face_hat_mut!(face).local_subs.remove(res);
         }
@@ -610,11 +646,16 @@ fn forget_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
 ) {
-    undeclare_client_subscription(tables, face, res);
+    undeclare_client_subscription(tables, face, res, send_declare);
 }
 
-pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(super) fn pubsub_new_face(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    send_declare: &mut SendDeclare,
+) {
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
         mode: Mode::Push,
@@ -624,19 +665,22 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         for sub in &hat!(tables).router_subs {
             face_hat_mut!(face).local_subs.insert(sub.clone());
             let key_expr = Resource::decl_key(sub, face);
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId (#703)
-                        wire_expr: key_expr,
-                        ext_info: sub_info,
-                    }),
-                },
-                sub.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id: 0, // @TODO use proper SubscriberId (#703)
+                            wire_expr: key_expr,
+                            ext_info: sub_info,
+                        }),
+                    },
+                    sub.expr(),
+                ),
+            );
         }
     } else if face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
         for sub in &hat!(tables).router_subs {
@@ -651,25 +695,33 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             {
                 face_hat_mut!(face).local_subs.insert(sub.clone());
                 let key_expr = Resource::decl_key(sub, face);
-                face.primitives.send_declare(RoutingContext::with_expr(
-                    Declare {
-                        ext_qos: ext::QoSType::declare_default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                            id: 0, // @TODO use proper SubscriberId (#703)
-                            wire_expr: key_expr,
-                            ext_info: sub_info,
-                        }),
-                    },
-                    sub.expr(),
-                ));
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            ext_qos: ext::QoSType::declare_default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: 0, // @TODO use proper SubscriberId (#703)
+                                wire_expr: key_expr,
+                                ext_info: sub_info,
+                            }),
+                        },
+                        sub.expr(),
+                    ),
+                );
             }
         }
     }
 }
 
-pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
+pub(super) fn pubsub_remove_node(
+    tables: &mut Tables,
+    node: &ZenohId,
+    net_type: WhatAmI,
+    send_declare: &mut SendDeclare,
+) {
     match net_type {
         WhatAmI::Router => {
             for mut res in hat!(tables)
@@ -679,7 +731,7 @@ pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: 
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                unregister_router_subscription(tables, &mut res, node);
+                unregister_router_subscription(tables, &mut res, node, send_declare);
 
                 update_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
@@ -697,7 +749,13 @@ pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: 
                 let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
                 let peer_subs = remote_peer_subs(tables, &res);
                 if !client_subs && !peer_subs {
-                    undeclare_router_subscription(tables, None, &mut res, &tables.zid.clone());
+                    undeclare_router_subscription(
+                        tables,
+                        None,
+                        &mut res,
+                        &tables.zid.clone(),
+                        send_declare,
+                    );
                 }
 
                 update_matches_data_routes(tables, &mut res);
@@ -757,7 +815,12 @@ pub(super) fn pubsub_tree_change(
     update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
-pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
+pub(super) fn pubsub_linkstate_change(
+    tables: &mut Tables,
+    zid: &ZenohId,
+    links: &[ZenohId],
+    send_declare: &mut SendDeclare,
+) {
     if let Some(src_face) = tables.get_face(zid).cloned() {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
             for res in &face_hat!(src_face).remote_subs {
@@ -791,20 +854,23 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                     };
                                 if forget {
                                     let wire_expr = Resource::get_best_key(res, "", dst_face.id);
-                                    dst_face.primitives.send_declare(RoutingContext::with_expr(
-                                        Declare {
-                                            ext_qos: ext::QoSType::declare_default(),
-                                            ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::default(),
-                                            body: DeclareBody::UndeclareSubscriber(
-                                                UndeclareSubscriber {
-                                                    id: 0, // @TODO use proper SubscriberId (#703)
-                                                    ext_wire_expr: WireExprType { wire_expr },
-                                                },
-                                            ),
-                                        },
-                                        res.expr(),
-                                    ));
+                                    send_declare(
+                                        &dst_face.primitives,
+                                        RoutingContext::with_expr(
+                                            Declare {
+                                                ext_qos: ext::QoSType::declare_default(),
+                                                ext_tstamp: None,
+                                                ext_nodeid: ext::NodeIdType::default(),
+                                                body: DeclareBody::UndeclareSubscriber(
+                                                    UndeclareSubscriber {
+                                                        id: 0, // @TODO use proper SubscriberId (#703)
+                                                        ext_wire_expr: WireExprType { wire_expr },
+                                                    },
+                                                ),
+                                            },
+                                            res.expr(),
+                                        ),
+                                    );
 
                                     face_hat_mut!(dst_face).local_subs.remove(res);
                                 }
@@ -816,19 +882,24 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                     reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
                                     mode: Mode::Push,
                                 };
-                                dst_face.primitives.send_declare(RoutingContext::with_expr(
-                                    Declare {
-                                        ext_qos: ext::QoSType::declare_default(),
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                            id: 0, // @TODO use proper SubscriberId (#703)
-                                            wire_expr: key_expr,
-                                            ext_info: sub_info,
-                                        }),
-                                    },
-                                    res.expr(),
-                                ));
+                                send_declare(
+                                    &dst_face.primitives,
+                                    RoutingContext::with_expr(
+                                        Declare {
+                                            ext_qos: ext::QoSType::declare_default(),
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::default(),
+                                            body: DeclareBody::DeclareSubscriber(
+                                                DeclareSubscriber {
+                                                    id: 0, // @TODO use proper SubscriberId (#703)
+                                                    wire_expr: key_expr,
+                                                    ext_info: sub_info,
+                                                },
+                                            ),
+                                        },
+                                        res.expr(),
+                                    ),
+                                );
                             }
                         }
                     }
@@ -879,23 +950,24 @@ impl HatPubSubTrait for HatCode {
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) {
         match face.whatami {
             WhatAmI::Router => {
                 if let Some(router) = get_router(tables, face, node_id) {
-                    declare_router_subscription(tables, face, res, sub_info, router)
+                    declare_router_subscription(tables, face, res, sub_info, router, send_declare)
                 }
             }
             WhatAmI::Peer => {
                 if hat!(tables).full_net(WhatAmI::Peer) {
                     if let Some(peer) = get_peer(tables, face, node_id) {
-                        declare_peer_subscription(tables, face, res, sub_info, peer)
+                        declare_peer_subscription(tables, face, res, sub_info, peer, send_declare)
                     }
                 } else {
-                    declare_client_subscription(tables, face, res, sub_info)
+                    declare_client_subscription(tables, face, res, sub_info, send_declare)
                 }
             }
-            _ => declare_client_subscription(tables, face, res, sub_info),
+            _ => declare_client_subscription(tables, face, res, sub_info, send_declare),
         }
     }
 
@@ -905,23 +977,24 @@ impl HatPubSubTrait for HatCode {
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) {
         match face.whatami {
             WhatAmI::Router => {
                 if let Some(router) = get_router(tables, face, node_id) {
-                    forget_router_subscription(tables, face, res, &router)
+                    forget_router_subscription(tables, face, res, &router, send_declare)
                 }
             }
             WhatAmI::Peer => {
                 if hat!(tables).full_net(WhatAmI::Peer) {
                     if let Some(peer) = get_peer(tables, face, node_id) {
-                        forget_peer_subscription(tables, face, res, &peer)
+                        forget_peer_subscription(tables, face, res, &peer, send_declare)
                     }
                 } else {
-                    forget_client_subscription(tables, face, res)
+                    forget_client_subscription(tables, face, res, send_declare)
                 }
             }
-            _ => forget_client_subscription(tables, face, res),
+            _ => forget_client_subscription(tables, face, res, send_declare),
         }
     }
 

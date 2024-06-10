@@ -23,6 +23,7 @@ use super::{
         tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
     },
     router::RoutesIndexes,
+    RoutingContext,
 };
 use crate::runtime::Runtime;
 use std::{any::Any, sync::Arc};
@@ -32,7 +33,7 @@ use zenoh_protocol::{
     core::WireExpr,
     network::{
         declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
-        Oam,
+        Declare, Oam,
     },
 };
 use zenoh_result::ZResult;
@@ -64,6 +65,9 @@ impl Sources {
     }
 }
 
+pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>, RoutingContext<Declare>)
+    + 'a;
+
 pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
 
 pub(crate) trait HatBaseTrait {
@@ -80,6 +84,7 @@ pub(crate) trait HatBaseTrait {
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
         face: &mut Face,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn new_transport_unicast_face(
@@ -88,6 +93,7 @@ pub(crate) trait HatBaseTrait {
         tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn handle_oam(
@@ -96,6 +102,7 @@ pub(crate) trait HatBaseTrait {
         tables_ref: &Arc<TablesLock>,
         oam: Oam,
         transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn map_routing_context(
@@ -122,9 +129,15 @@ pub(crate) trait HatBaseTrait {
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
-    fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>);
+    fn close_face(
+        &self,
+        tables: &TablesLock,
+        face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    );
 }
 
 pub(crate) trait HatPubSubTrait {
@@ -135,6 +148,7 @@ pub(crate) trait HatPubSubTrait {
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     );
     fn undeclare_subscription(
         &self,
@@ -142,6 +156,7 @@ pub(crate) trait HatPubSubTrait {
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     );
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
@@ -165,6 +180,7 @@ pub(crate) trait HatQueriesTrait {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfo,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     );
     fn undeclare_queryable(
         &self,
@@ -172,6 +188,7 @@ pub(crate) trait HatQueriesTrait {
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     );
 
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;

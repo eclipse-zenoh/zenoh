@@ -102,7 +102,9 @@ impl Router {
             state: newface,
         };
         ctrl_lock
-            .new_local_face(&mut tables, &self.tables, &mut face)
+            .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m| {
+                p.send_declare(m)
+            })
             .unwrap();
         drop(tables);
         drop(ctrl_lock);
@@ -157,7 +159,13 @@ impl Router {
 
         let _ = mux.face.set(Face::downgrade(&face));
 
-        ctrl_lock.new_transport_unicast_face(&mut tables, &self.tables, &mut face, &transport)?;
+        ctrl_lock.new_transport_unicast_face(
+            &mut tables,
+            &self.tables,
+            &mut face,
+            &transport,
+            &mut |p, m| p.send_declare(m),
+        )?;
 
         Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
     }

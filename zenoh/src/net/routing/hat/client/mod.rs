@@ -36,7 +36,7 @@ use super::{
         face::FaceState,
         tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
     },
-    HatBaseTrait, HatTrait,
+    HatBaseTrait, HatTrait, SendDeclare,
 };
 use std::{
     any::Any,
@@ -97,9 +97,10 @@ impl HatBaseTrait for HatCode {
         tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
         face: &mut Face,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        pubsub_new_face(tables, &mut face.state);
-        queries_new_face(tables, &mut face.state);
+        pubsub_new_face(tables, &mut face.state, send_declare);
+        queries_new_face(tables, &mut face.state, send_declare);
         Ok(())
     }
 
@@ -109,13 +110,19 @@ impl HatBaseTrait for HatCode {
         _tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         _transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        pubsub_new_face(tables, &mut face.state);
-        queries_new_face(tables, &mut face.state);
+        pubsub_new_face(tables, &mut face.state, send_declare);
+        queries_new_face(tables, &mut face.state, send_declare);
         Ok(())
     }
 
-    fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {
+    fn close_face(
+        &self,
+        tables: &TablesLock,
+        face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    ) {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
         let face = get_mut_unchecked(face);
@@ -139,7 +146,7 @@ impl HatBaseTrait for HatCode {
             .drain()
         {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
+            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -167,7 +174,7 @@ impl HatBaseTrait for HatCode {
             .drain()
         {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
+            undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -229,6 +236,7 @@ impl HatBaseTrait for HatCode {
         _tables_ref: &Arc<TablesLock>,
         _oam: Oam,
         _transport: &TransportUnicast,
+        _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         Ok(())
     }
@@ -248,6 +256,7 @@ impl HatBaseTrait for HatCode {
         _tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
         _transport: &TransportUnicast,
+        _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         Ok(())
     }

@@ -174,7 +174,7 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
             tracing::debug!("Close {}", face);
             face.task_controller.terminate_all(Duration::from_secs(10));
             finalize_pending_queries(tables, &mut face);
-            zlock!(tables.ctrl_lock).close_face(tables, &mut face);
+            zlock!(tables.ctrl_lock).close_face(tables, &mut face, &mut |p, m| p.send_declare(m));
         }
         None => tracing::error!("Face already closed!"),
     }

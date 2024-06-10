@@ -17,7 +17,7 @@ use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::{HatQueriesTrait, Sources};
+use crate::net::routing::hat::{HatQueriesTrait, SendDeclare, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
@@ -79,6 +79,7 @@ fn propagate_simple_queryable(
     tables: &mut Tables,
     res: &Arc<Resource>,
     src_face: Option<&mut Arc<FaceState>>,
+    send_declare: &mut SendDeclare,
 ) {
     let faces = tables.faces.values().cloned();
     for mut dst_face in faces {
@@ -94,19 +95,22 @@ fn propagate_simple_queryable(
                 .local_qabls
                 .insert(res.clone(), info);
             let key_expr = Resource::decl_key(res, &mut dst_face);
-            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id: 0, // @TODO use proper QueryableId (#703)
-                        wire_expr: key_expr,
-                        ext_info: info,
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                            id: 0, // @TODO use proper QueryableId (#703)
+                            wire_expr: key_expr,
+                            ext_info: info,
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
         }
     }
 }
@@ -143,9 +147,10 @@ fn declare_client_queryable(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfo,
+    send_declare: &mut SendDeclare,
 ) {
     register_client_queryable(tables, face, res, qabl_info);
-    propagate_simple_queryable(tables, res, Some(face));
+    propagate_simple_queryable(tables, res, Some(face), send_declare);
 }
 
 #[inline]
@@ -162,22 +167,29 @@ fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
         .collect()
 }
 
-fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
+fn propagate_forget_simple_queryable(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
+) {
     for face in tables.faces.values_mut() {
         if face_hat!(face).local_qabls.contains_key(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // @TODO use proper QueryableId (#703)
-                        ext_wire_expr: WireExprType { wire_expr },
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id: 0, // @TODO use proper QueryableId (#703)
+                            ext_wire_expr: WireExprType { wire_expr },
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
 
             face_hat_mut!(face).local_qabls.remove(res);
         }
@@ -188,6 +200,7 @@ pub(super) fn undeclare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
 ) {
     tracing::debug!("Unregister client queryable {} for {}", res.expr(), face);
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
@@ -199,26 +212,29 @@ pub(super) fn undeclare_client_queryable(
 
     let mut client_qabls = client_qabls(res);
     if client_qabls.is_empty() {
-        propagate_forget_simple_queryable(tables, res);
+        propagate_forget_simple_queryable(tables, res, send_declare);
     } else {
-        propagate_simple_queryable(tables, res, None);
+        propagate_simple_queryable(tables, res, None, send_declare);
     }
     if client_qabls.len() == 1 {
         let face = &mut client_qabls[0];
         if face_hat!(face).local_qabls.contains_key(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // @TODO use proper QueryableId (#703)
-                        ext_wire_expr: WireExprType { wire_expr },
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id: 0, // @TODO use proper QueryableId (#703)
+                            ext_wire_expr: WireExprType { wire_expr },
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
 
             face_hat_mut!(face).local_qabls.remove(res);
         }
@@ -229,11 +245,16 @@ fn forget_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
 ) {
-    undeclare_client_queryable(tables, face, res);
+    undeclare_client_queryable(tables, face, res, send_declare);
 }
 
-pub(super) fn queries_new_face(tables: &mut Tables, _face: &mut Arc<FaceState>) {
+pub(super) fn queries_new_face(
+    tables: &mut Tables,
+    _face: &mut Arc<FaceState>,
+    send_declare: &mut SendDeclare,
+) {
     for face in tables
         .faces
         .values()
@@ -241,7 +262,7 @@ pub(super) fn queries_new_face(tables: &mut Tables, _face: &mut Arc<FaceState>) 
         .collect::<Vec<Arc<FaceState>>>()
     {
         for qabl in face_hat!(face).remote_qabls.iter() {
-            propagate_simple_queryable(tables, qabl, Some(&mut face.clone()));
+            propagate_simple_queryable(tables, qabl, Some(&mut face.clone()), send_declare);
         }
     }
 }
@@ -258,8 +279,9 @@ impl HatQueriesTrait for HatCode {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfo,
         _node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) {
-        declare_client_queryable(tables, face, res, qabl_info);
+        declare_client_queryable(tables, face, res, qabl_info, send_declare);
     }
 
     fn undeclare_queryable(
@@ -268,8 +290,9 @@ impl HatQueriesTrait for HatCode {
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         _node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) {
-        forget_client_queryable(tables, face, res);
+        forget_client_queryable(tables, face, res, send_declare);
     }
 
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
