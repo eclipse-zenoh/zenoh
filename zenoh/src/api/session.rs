@@ -2484,6 +2484,7 @@ impl Primitives for SessionClone {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        // Use clone inner session, as it will be rewrapped in ManuallyDrop inside Session::close
         let _ = ManuallyDrop::into_inner(self.clone().0).close().wait();
     }
 }
