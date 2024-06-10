@@ -97,23 +97,41 @@ pub(crate) fn undeclare_token(
     expr: &ext::WireExprType,
     node_id: NodeId,
 ) {
-    let res = if expr.wire_expr.is_empty() {
-        None
+    let (res, mut wtables) = if expr.wire_expr.is_empty() {
+        (None, zwrite!(tables.tables))
     } else {
         let rtables = zread!(tables.tables);
-        match rtables.get_mapping(face, &expr.wire_expr.scope, expr.wire_expr.mapping) {
-            Some(prefix) => match Resource::get_resource(prefix, expr.wire_expr.suffix.as_ref()) {
-                Some(res) => Some(res),
-                None => {
-                    tracing::error!(
-                        "{} Undeclare unknown token {}{}!",
-                        face,
-                        prefix.expr(),
-                        expr.wire_expr.suffix
-                    );
-                    return;
+        match rtables
+            .get_mapping(face, &expr.wire_expr.scope, expr.wire_expr.mapping)
+            .cloned()
+        {
+            Some(mut prefix) => {
+                match Resource::get_resource(&prefix, expr.wire_expr.suffix.as_ref()) {
+                    Some(res) => {
+                        drop(rtables);
+                        (Some(res), zwrite!(tables.tables))
+                    }
+                    None => {
+                        // Here we create a Resource that will immediately be removed after treatment
+                        // TODO this could be improved
+                        let mut fullexpr = prefix.expr();
+                        fullexpr.push_str(expr.wire_expr.suffix.as_ref());
+                        let mut matches = keyexpr::new(fullexpr.as_str())
+                            .map(|ke| Resource::get_matches(&rtables, ke))
+                            .unwrap_or_default();
+                        drop(rtables);
+                        let mut wtables = zwrite!(tables.tables);
+                        let mut res = Resource::make_resource(
+                            &mut wtables,
+                            &mut prefix,
+                            expr.wire_expr.suffix.as_ref(),
+                        );
+                        matches.push(Arc::downgrade(&res));
+                        Resource::match_resource(&wtables, &mut res, matches);
+                        (Some(res), wtables)
+                    }
                 }
-            },
+            }
             None => {
                 tracing::error!(
                     "{} Undeclare liveliness token with unknown scope {}",
@@ -125,7 +143,6 @@ pub(crate) fn undeclare_token(
         }
     };
 
-    let mut wtables = zwrite!(tables.tables);
     if let Some(res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id) {
         tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
     } else {
