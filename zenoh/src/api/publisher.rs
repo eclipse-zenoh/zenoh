@@ -338,7 +338,6 @@ impl<'a> Publisher<'a> {
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Borrow(self),
-            background: false,
             handler: DefaultHandler::default(),
         }
     }
@@ -451,7 +450,6 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Shared(self.clone()),
-            background: false,
             handler: DefaultHandler::default(),
         }
     }
@@ -775,7 +773,6 @@ impl MatchingStatus {
 #[derive(Debug)]
 pub struct MatchingListenerBuilder<'a, Handler> {
     pub(crate) publisher: PublisherRef<'a>,
-    pub(crate) background: bool,
     pub handler: Handler,
 }
 
@@ -812,12 +809,10 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     {
         let MatchingListenerBuilder {
             publisher,
-            background,
             handler: _,
         } = self;
         MatchingListenerBuilder {
             publisher,
-            background,
             handler: callback,
         }
     }
@@ -884,14 +879,9 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     {
         let MatchingListenerBuilder {
             publisher,
-            background,
             handler: _,
         } = self;
-        MatchingListenerBuilder {
-            publisher,
-            background,
-            handler,
-        }
+        MatchingListenerBuilder { publisher, handler }
     }
 }
 
