@@ -638,10 +638,13 @@ impl From<&str> for Encoding {
         }
 
         // Everything before `;` may be mapped to a known id
-        let (id, schema) = t.split_once(Encoding::SCHEMA_SEP).unwrap_or((t, ""));
+        let (id, mut schema) = t.split_once(Encoding::SCHEMA_SEP).unwrap_or((t, ""));
         if let Some(id) = Encoding::STR_TO_ID.get(id).copied() {
             inner.id = id;
-        };
+        // if id is not recognized, e.g. `t == "my_encoding"`, put it in the schema
+        } else {
+            schema = t;
+        }
         if !schema.is_empty() {
             inner.schema = Some(ZSlice::from(schema.to_string().into_bytes()));
         }
