@@ -87,14 +87,15 @@ use super::{
     liveliness::{Liveliness, LivelinessTokenState},
     publisher::Publisher,
     publisher::{MatchingListenerState, MatchingStatus},
-    query::_REPLY_KEY_EXPR_ANY_SEL_PARAM,
     sample::SourceInfo,
-    selector::TIME_RANGE_KEY,
 };
-use crate::net::{
-    primitives::Primitives,
-    routing::dispatcher::face::Face,
-    runtime::{Runtime, RuntimeBuilder},
+use crate::{
+    api::selector::PredefinedParameters,
+    net::{
+        primitives::Primitives,
+        routing::dispatcher::face::Face,
+        runtime::{Runtime, RuntimeBuilder},
+    },
 };
 
 zconfigurable! {
@@ -1672,7 +1673,7 @@ impl Session {
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
             ConsolidationMode::Auto => {
-                if parameters.contains_key(TIME_RANGE_KEY) {
+                if parameters.time_range().is_none() {
                     ConsolidationMode::None
                 } else {
                     ConsolidationMode::Latest
@@ -2223,11 +2224,8 @@ impl Primitives for Session {
                 };
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        let c = zcondfeat!(
-                            "unstable",
-                            !query.parameters.contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM),
-                            true
-                        );
+                        let c =
+                            zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
                         if c && !query.key_expr.intersects(&key_expr) {
                             tracing::warn!(
                                 "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",

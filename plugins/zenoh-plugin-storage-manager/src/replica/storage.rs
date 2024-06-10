@@ -36,7 +36,6 @@ use zenoh::{
     },
     query::{ConsolidationMode, QueryTarget},
     sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait, ValueBuilderTrait},
-    selector::Selector,
     session::{Session, SessionDeclarations},
     time::{new_timestamp, Timestamp, NTP64},
     value::Value,

@@ -28,6 +28,7 @@ mod _prelude {
     #[zenoh_macros::unstable]
     pub use crate::api::publisher::PublisherDeclarations;
     pub use crate::{
+        api::selector::PredefinedParameters,
         api::{
             builders::sample::{
                 QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,

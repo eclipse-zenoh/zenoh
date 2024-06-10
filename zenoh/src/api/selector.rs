@@ -68,9 +68,6 @@ pub struct Selector<'a> {
     pub parameters: Cow<'a, Parameters<'a>>,
 }
 
-#[zenoh_macros::unstable]
-pub const TIME_RANGE_KEY: &str = "_time";
-
 impl<'a> Selector<'a> {
     /// Builds a new selector which owns keyexpr and parameters
     pub fn owned<K, P>(key_expr: K, parameters: P) -> Self
@@ -120,32 +117,49 @@ impl<'a> From<&'a Selector<'a>> for (&'a KeyExpr<'a>, &'a Parameters<'a>) {
 
 #[zenoh_macros::unstable]
 pub trait PredefinedParameters {
+    const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
     const TIME_RANGE_KEY: &'static str = "_time";
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T);
+    /// Sets parameter allowing to querier to reply to this request even
+    /// it the requested key expression does not match the reply key expression.
+    /// TODO: add example
+    fn set_reply_key_expr_any(&mut self);
     /// Extracts the standardized `_time` argument from the selector parameters.
-    fn time_range(&self) -> ZResult<Option<TimeRange>>;
+    /// Returns `None` if the `_time` argument is not present or `Some` with the result of parsing the `_time` argument
+    /// if it is present.
+    fn time_range(&self) -> Option<ZResult<TimeRange>>;
+    /// Returns true if `_anyke` parameter is present in the selector parameters
+    fn reply_key_expr_any(&self) -> bool;
 }
 
-#[zenoh_macros::unstable]
 impl PredefinedParameters for Parameters<'_> {
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
         let mut time_range: Option<TimeRange> = time_range.into();
         match time_range.take() {
-            Some(tr) => self.insert(TIME_RANGE_KEY, format!("{}", tr)),
-            None => self.remove(TIME_RANGE_KEY),
+            Some(tr) => self.insert(Self::TIME_RANGE_KEY, format!("{}", tr)),
+            None => self.remove(Self::TIME_RANGE_KEY),
         };
+    }
+
+    /// Sets parameter allowing to querier to reply to this request even
+    /// it the requested key expression does not match the reply key expression.
+    fn set_reply_key_expr_any(&mut self) {
+        self.insert(Self::REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
     }
 
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
-    fn time_range(&self) -> ZResult<Option<TimeRange>> {
-        match self.get(TIME_RANGE_KEY) {
-            Some(tr) => Ok(Some(tr.parse()?)),
-            None => Ok(None),
-        }
+    fn time_range(&self) -> Option<ZResult<TimeRange>> {
+        self.get(Self::TIME_RANGE_KEY)
+            .map(|tr| tr.parse().map_err(Into::into))
+    }
+
+    /// Returns true if `_anyke` parameter is present in the selector parameters
+    fn reply_key_expr_any(&self) -> bool {
+        self.contains_key(Self::REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }
 }
 
@@ -270,7 +284,6 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 
 #[test]
 fn selector_accessors() {
-    use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
     use std::collections::HashMap;
 
     for s in [
@@ -293,6 +306,9 @@ fn selector_accessors() {
         }
 
         assert_eq!(parameters.get("_timetrick").unwrap(), "");
+
+        const TIME_RANGE_KEY: &str = Parameters::TIME_RANGE_KEY;
+        const ANYKE: &str = Parameters::REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
         let time_range = "[now(-2s)..now(2s)]";
         zcondfeat!(

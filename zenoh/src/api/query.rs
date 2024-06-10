@@ -35,7 +35,7 @@ use super::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample},
-    selector::Selector,
+    selector::{PredefinedParameters, Selector},
     session::Session,
     value::Value,
 };
@@ -423,7 +423,7 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
                  }| {
                     if accept == ReplyKeyExpr::Any {
                         let mut parameters = parameters.into_owned();
-                        parameters.insert(_REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
+                        parameters.set_reply_key_expr_any();
                         let parameters = Cow::Owned(parameters);
                         Selector {
                             key_expr,
@@ -441,10 +441,6 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
         }
     }
 }
-
-pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
-#[zenoh_macros::unstable]
-pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
