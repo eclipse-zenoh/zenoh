@@ -346,7 +346,7 @@ impl Aligner {
                                 sample
                                     .payload()
                                     .deserialize::<Cow<str>>()
-                                    .unwrap_or(Cow::Borrowed("invalid"))
+                                    .unwrap_or(Cow::Borrowed("<malformed>"))
                             );
                             return_val.push(sample);
                         }
