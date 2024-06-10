@@ -226,14 +226,8 @@ impl Replica {
             let from = &sample.key_expr().as_str()
                 [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
 
-            let digest: Digest = match sample.payload().deserialize::<Cow<str>>() {
-                Ok(s) => match serde_json::from_str(&s) {
-                    Ok(digest) => digest,
-                    Err(e) => {
-                        tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
-                        continue;
-                    }
-                },
+            let digest: Digest = match serde_json::from_reader(sample.payload().reader()) {
+                Ok(digest) => digest,
                 Err(e) => {
                     tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
                     continue;

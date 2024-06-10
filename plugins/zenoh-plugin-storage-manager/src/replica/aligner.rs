@@ -216,16 +216,10 @@ impl Aligner {
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
             // expecting sample.payload to be a vec of intervals with their checksum
             for each in reply_content {
-                match each.payload().deserialize::<Cow<str>>() {
-                    Ok(s) => match serde_json::from_str(&s) {
-                        Ok((i, c)) => {
-                            other_intervals.insert(i, c);
-                        }
-                        Err(e) => {
-                            tracing::error!("[ALIGNER] Error decoding reply: {}", e);
-                            no_err = false;
-                        }
-                    },
+                match serde_json::from_reader(each.payload().reader()) {
+                    Ok((i, c)) => {
+                        other_intervals.insert(i, c);
+                    }
                     Err(e) => {
                         tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
@@ -268,16 +262,10 @@ impl Aligner {
                 let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
-                    match each.payload().deserialize::<Cow<str>>() {
-                        Ok(s) => match serde_json::from_str(&s) {
-                            Ok((i, c)) => {
-                                other_subintervals.insert(i, c);
-                            }
-                            Err(e) => {
-                                tracing::error!("[ALIGNER] Error decoding reply: {}", e);
-                                no_err = false;
-                            }
-                        },
+                    match serde_json::from_reader(each.payload().reader()) {
+                        Ok((i, c)) => {
+                            other_subintervals.insert(i, c);
+                        }
                         Err(e) => {
                             tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                             no_err = false;
@@ -315,16 +303,10 @@ impl Aligner {
             let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
-                match each.payload().deserialize::<Cow<str>>() {
-                    Ok(s) => match serde_json::from_str(&s) {
-                        Ok((i, c)) => {
-                            other_content.insert(i, c);
-                        }
-                        Err(e) => {
-                            tracing::error!("[ALIGNER] Error decoding reply: {}", e);
-                            no_err = false;
-                        }
-                    },
+                match serde_json::from_reader(each.payload().reader()) {
+                    Ok((i, c)) => {
+                        other_content.insert(i, c);
+                    }
                     Err(e) => {
                         tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
