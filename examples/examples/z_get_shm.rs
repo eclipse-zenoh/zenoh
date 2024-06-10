@@ -19,8 +19,8 @@ use zenoh::{
     query::QueryTarget,
     selector::Selector,
     shm::{
-        zshm, BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend,
-        SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,
+        zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
+        POSIX_PROTOCOL_ID,
     },
     Config,
 };
@@ -45,14 +45,14 @@ async fn main() {
 
     println!("Creating POSIX SHM provider...");
     // create an SHM backend...
-    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
         .with_size(N * 1024)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -69,7 +69,7 @@ async fn main() {
 
     let content = value
         .take()
-        .unwrap_or_else(|| "Get from SharedMemory Rust!".to_string());
+        .unwrap_or_else(|| "Get from SHM Rust!".to_string());
     sbuf[0..content.len()].copy_from_slice(content.as_bytes());
 
     println!("Sending Query '{selector}'...");
@@ -87,7 +87,7 @@ async fn main() {
                 print!(">> Received ('{}': ", sample.key_expr().as_str());
                 match sample.payload().deserialize::<&zshm>() {
                     Ok(payload) => println!("'{}')", String::from_utf8_lossy(payload),),
-                    Err(e) => println!("'Not a SharedMemoryBuf: {:?}')", e),
+                    Err(e) => println!("'Not a ShmBufInner: {:?}')", e),
                 }
             }
             Err(err) => {

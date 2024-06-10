@@ -16,21 +16,21 @@ use zenoh::{
     bytes::ZBytes,
     prelude::*,
     shm::{
-        zshm, zshmmut, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, ZShm,
-        ZShmMut, POSIX_PROTOCOL_ID,
+        zshm, zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut,
+        POSIX_PROTOCOL_ID,
     },
 };
 
 #[test]
 fn shm_bytes_single_buf() {
     // create an SHM backend...
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    let backend = PosixShmProviderBackend::builder()
         .with_size(4096)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();

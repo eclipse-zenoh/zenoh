@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod posix_shared_memory_client;
-pub mod posix_shared_memory_provider_backend;
+pub mod posix_shm_client;
+pub mod posix_shm_provider_backend;
 pub mod protocol_id;
 
-pub(crate) mod posix_shared_memory_segment;
+pub(crate) mod posix_shm_segment;

@@ -414,30 +414,27 @@ pub mod shm {
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
         },
-        client::{
-            shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
-        },
-        client_storage::{SharedMemoryClientStorage, GLOBAL_CLIENT_STORAGE},
+        client::{shm_client::ShmClient, shm_segment::ShmSegment},
+        client_storage::{ShmClientStorage, GLOBAL_CLIENT_STORAGE},
         common::types::{ChunkID, ProtocolID, SegmentID},
         protocol_implementations::posix::{
-            posix_shared_memory_client::PosixSharedMemoryClient,
-            posix_shared_memory_provider_backend::{
-                LayoutedPosixSharedMemoryProviderBackendBuilder, PosixSharedMemoryProviderBackend,
-                PosixSharedMemoryProviderBackendBuilder,
+            posix_shm_client::PosixShmClient,
+            posix_shm_provider_backend::{
+                LayoutedPosixShmProviderBackendBuilder, PosixShmProviderBackend,
+                PosixShmProviderBackendBuilder,
             },
             protocol_id::POSIX_PROTOCOL_ID,
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
-            shared_memory_provider::{
+            shm_provider::{
                 AllocBuilder, AllocBuilder2, AllocLayout, AllocLayoutSizedBuilder, AllocPolicy,
                 AsyncAllocPolicy, BlockOn, DeallocEldest, DeallocOptimal, DeallocYoungest,
                 Deallocate, Defragment, DynamicProtocolID, ForceDeallocPolicy, GarbageCollect,
-                JustAlloc, ProtocolIDSource, SharedMemoryProvider, SharedMemoryProviderBuilder,
-                SharedMemoryProviderBuilderBackendID, SharedMemoryProviderBuilderID,
-                StaticProtocolID,
+                JustAlloc, ProtocolIDSource, ShmProvider, ShmProviderBuilder,
+                ShmProviderBuilderBackendID, ShmProviderBuilderID, StaticProtocolID,
             },
-            shared_memory_provider_backend::SharedMemoryProviderBackend,
+            shm_provider_backend::ShmProviderBackend,
             types::{
                 AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
                 MemoryLayout, ZAllocError, ZLayoutAllocError, ZLayoutError,
