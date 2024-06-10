@@ -16,8 +16,7 @@
 // 1. normal case, just some wild card puts and deletes on existing keys and ensure it works
 // 2. check for dealing with out of order updates
 
-use std::borrow::Cow;
-use std::{str::FromStr, thread::sleep};
+use std::{borrow::Cow, str::FromStr, thread::sleep};
 
 // use std::collections::HashMap;
 use async_std::task;
