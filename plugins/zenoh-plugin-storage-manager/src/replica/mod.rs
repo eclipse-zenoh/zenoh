@@ -15,7 +15,6 @@
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     str::{self, FromStr},
     time::{Duration, SystemTime},
