@@ -16,6 +16,7 @@ use std::{
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
+    mem::ManuallyDrop,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -894,7 +895,6 @@ where
                 listener: MatchingListenerInner {
                     publisher: self.publisher,
                     state: listener_state,
-                    alive: true,
                 },
                 receiver,
             })
@@ -939,7 +939,6 @@ impl std::fmt::Debug for MatchingListenerState {
 pub(crate) struct MatchingListenerInner<'a> {
     pub(crate) publisher: PublisherRef<'a>,
     pub(crate) state: std::sync::Arc<MatchingListenerState>,
-    pub(crate) alive: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -953,7 +952,9 @@ impl<'a> MatchingListenerInner<'a> {
 #[zenoh_macros::unstable]
 impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListenerInner<'a> {
     fn undeclare_inner(self, _: ()) -> MatchingListenerUndeclaration<'a> {
-        MatchingListenerUndeclaration { subscriber: self }
+        MatchingListenerUndeclaration {
+            subscriber: ManuallyDrop::new(self),
+        }
     }
 }
 
@@ -1033,7 +1034,7 @@ impl<Receiver> std::ops::DerefMut for MatchingListener<'_, Receiver> {
 
 #[zenoh_macros::unstable]
 pub struct MatchingListenerUndeclaration<'a> {
-    subscriber: MatchingListenerInner<'a>,
+    subscriber: ManuallyDrop<MatchingListenerInner<'a>>,
 }
 
 #[zenoh_macros::unstable]
@@ -1043,8 +1044,7 @@ impl Resolvable for MatchingListenerUndeclaration<'_> {
 
 #[zenoh_macros::unstable]
 impl Wait for MatchingListenerUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        self.subscriber.alive = false;
+    fn wait(self) -> <Self as Resolvable>::To {
         self.subscriber
             .publisher
             .session
@@ -1065,12 +1065,10 @@ impl IntoFuture for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Drop for MatchingListenerInner<'_> {
     fn drop(&mut self) {
-        if self.alive {
-            let _ = self
-                .publisher
-                .session
-                .undeclare_matches_listener_inner(self.state.id);
-        }
+        let _ = self
+            .publisher
+            .session
+            .undeclare_matches_listener_inner(self.state.id);
     }
 }
 

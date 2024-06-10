@@ -15,6 +15,7 @@
 use std::{
     convert::TryInto,
     future::{IntoFuture, Ready},
+    mem::ManuallyDrop,
     sync::Arc,
     time::Duration,
 };
@@ -235,7 +236,6 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
             .map(|tok_state| LivelinessToken {
                 session,
                 state: tok_state,
-                alive: true,
             })
     }
 }
@@ -291,7 +291,6 @@ pub(crate) struct LivelinessTokenState {
 pub struct LivelinessToken<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<LivelinessTokenState>,
-    pub(crate) alive: bool,
 }
 
 /// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`](LivelinessToken).
@@ -315,7 +314,7 @@ pub struct LivelinessToken<'a> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 pub struct LivelinessTokenUndeclaration<'a> {
-    token: LivelinessToken<'a>,
+    token: ManuallyDrop<LivelinessToken<'a>>,
 }
 
 #[zenoh_macros::unstable]
@@ -325,8 +324,7 @@ impl Resolvable for LivelinessTokenUndeclaration<'_> {
 
 #[zenoh_macros::unstable]
 impl Wait for LivelinessTokenUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        self.token.alive = false;
+    fn wait(self) -> <Self as Resolvable>::To {
         self.token.session.undeclare_liveliness(self.token.state.id)
     }
 }
@@ -374,16 +372,16 @@ impl<'a> LivelinessToken<'a> {
 #[zenoh_macros::unstable]
 impl<'a> Undeclarable<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<'a> {
     fn undeclare_inner(self, _: ()) -> LivelinessTokenUndeclaration<'a> {
-        LivelinessTokenUndeclaration { token: self }
+        LivelinessTokenUndeclaration {
+            token: ManuallyDrop::new(self),
+        }
     }
 }
 
 #[zenoh_macros::unstable]
 impl Drop for LivelinessToken<'_> {
     fn drop(&mut self) {
-        if self.alive {
-            let _ = self.session.undeclare_liveliness(self.state.id);
-        }
+        let _ = self.session.undeclare_liveliness(self.state.id);
     }
 }
 
@@ -553,7 +551,6 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
-                    alive: true,
                 },
                 handler,
             })

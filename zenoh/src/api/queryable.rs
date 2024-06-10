@@ -14,6 +14,7 @@
 use std::{
     fmt,
     future::{IntoFuture, Ready},
+    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -611,12 +612,13 @@ impl fmt::Debug for QueryableState {
 pub(crate) struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
-    pub(crate) alive: bool,
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
     fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
-        QueryableUndeclaration { queryable: self }
+        QueryableUndeclaration {
+            queryable: ManuallyDrop::new(self),
+        }
     }
 }
 
@@ -635,7 +637,7 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableUndeclaration<'a> {
-    queryable: CallbackQueryable<'a>,
+    queryable: ManuallyDrop<CallbackQueryable<'a>>,
 }
 
 impl Resolvable for QueryableUndeclaration<'_> {
@@ -643,8 +645,7 @@ impl Resolvable for QueryableUndeclaration<'_> {
 }
 
 impl Wait for QueryableUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        self.queryable.alive = false;
+    fn wait(self) -> <Self as Resolvable>::To {
         self.queryable
             .session
             .close_queryable(self.queryable.state.id)
@@ -662,9 +663,7 @@ impl<'a> IntoFuture for QueryableUndeclaration<'a> {
 
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
-        if self.alive {
-            let _ = self.session.close_queryable(self.state.id);
-        }
+        let _ = self.session.close_queryable(self.state.id);
     }
 }
 
@@ -944,7 +943,6 @@ where
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
-                    alive: true,
                 },
                 handler: receiver,
             })

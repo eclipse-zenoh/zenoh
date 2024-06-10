@@ -16,6 +16,7 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt,
     future::{IntoFuture, Ready},
+    mem::ManuallyDrop,
     ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
@@ -404,7 +405,6 @@ pub struct Session {
     pub(crate) runtime: Runtime,
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
-    pub(crate) alive: bool,
     owns_runtime: bool,
     task_controller: TaskController,
 }
@@ -426,7 +426,6 @@ impl Session {
                 runtime: runtime.clone(),
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
-                alive: true,
                 owns_runtime: false,
                 task_controller: TaskController::default(),
             };
@@ -530,20 +529,22 @@ impl Session {
     /// session.close().await.unwrap();
     /// # }
     /// ```
-    pub fn close(mut self) -> impl Resolve<ZResult<()>> {
+    pub fn close(self) -> impl Resolve<ZResult<()>> {
+        let session = ManuallyDrop::new(self);
         ResolveFuture::new(async move {
             trace!("close()");
-            self.task_controller.terminate_all(Duration::from_secs(10));
-            if self.owns_runtime {
-                self.runtime.close().await?;
+            session
+                .task_controller
+                .terminate_all(Duration::from_secs(10));
+            if session.owns_runtime {
+                session.runtime.close().await?;
             }
-            let mut state = zwrite!(self.state);
+            let mut state = zwrite!(session.state);
             // clean up to break cyclic references from self.state to itself
             let primitives = state.primitives.take();
             state.queryables.clear();
             drop(state);
             primitives.as_ref().unwrap().send_close();
-            self.alive = false;
             Ok(())
         })
     }
@@ -830,7 +831,6 @@ impl Session {
             runtime: self.runtime.clone(),
             state: self.state.clone(),
             id: self.id,
-            alive: false,
             owns_runtime: self.owns_runtime,
             task_controller: self.task_controller.clone(),
         }
@@ -2472,9 +2472,7 @@ impl Primitives for Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        if self.alive {
-            let _ = self.clone().close().wait();
-        }
+        let _ = self.clone().close().wait();
     }
 }
 

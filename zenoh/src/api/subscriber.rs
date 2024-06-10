@@ -15,6 +15,7 @@
 use std::{
     fmt,
     future::{IntoFuture, Ready},
+    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -78,7 +79,6 @@ impl fmt::Debug for SubscriberState {
 pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
-    pub(crate) alive: bool,
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -111,7 +111,9 @@ impl<'a> SubscriberInner<'a> {
 
 impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
     fn undeclare_inner(self, _: ()) -> SubscriberUndeclaration<'a> {
-        SubscriberUndeclaration { subscriber: self }
+        SubscriberUndeclaration {
+            subscriber: ManuallyDrop::new(self),
+        }
     }
 }
 
@@ -133,7 +135,7 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberUndeclaration<'a> {
-    subscriber: SubscriberInner<'a>,
+    subscriber: ManuallyDrop<SubscriberInner<'a>>,
 }
 
 impl Resolvable for SubscriberUndeclaration<'_> {
@@ -141,8 +143,7 @@ impl Resolvable for SubscriberUndeclaration<'_> {
 }
 
 impl Wait for SubscriberUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        self.subscriber.alive = false;
+    fn wait(self) -> <Self as Resolvable>::To {
         self.subscriber
             .session
             .undeclare_subscriber_inner(self.subscriber.state.id)
@@ -160,9 +161,7 @@ impl IntoFuture for SubscriberUndeclaration<'_> {
 
 impl Drop for SubscriberInner<'_> {
     fn drop(&mut self) {
-        if self.alive {
-            let _ = self.session.undeclare_subscriber_inner(self.state.id);
-        }
+        let _ = self.session.undeclare_subscriber_inner(self.state.id);
     }
 }
 
@@ -387,7 +386,6 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
-                    alive: true,
                 },
                 handler: receiver,
             })
