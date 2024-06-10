@@ -443,7 +443,9 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
 
 impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
     fn undeclare_inner(self, _: ()) -> PublisherUndeclaration<'a> {
-        PublisherUndeclaration { publisher: self }
+        PublisherUndeclaration {
+            publisher: ManuallyDrop::new(self),
+        }
     }
 }
 
@@ -462,7 +464,7 @@ impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct PublisherUndeclaration<'a> {
-    publisher: Publisher<'a>,
+    publisher: ManuallyDrop<Publisher<'a>>,
 }
 
 impl Resolvable for PublisherUndeclaration<'_> {
@@ -470,13 +472,10 @@ impl Resolvable for PublisherUndeclaration<'_> {
 }
 
 impl Wait for PublisherUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        let Publisher {
-            session, id: eid, ..
-        } = &self.publisher;
-        session.undeclare_publisher_inner(*eid)?;
-        self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
-        Ok(())
+    fn wait(self) -> <Self as Resolvable>::To {
+        self.publisher
+            .session
+            .undeclare_publisher_inner(self.publisher.id)
     }
 }
 
@@ -491,9 +490,7 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
-        if !self.key_expr.is_empty() {
-            let _ = self.session.undeclare_publisher_inner(self.id);
-        }
+        let _ = self.session.undeclare_publisher_inner(self.id);
     }
 }
 
