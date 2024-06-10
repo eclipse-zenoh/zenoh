@@ -324,10 +324,7 @@ pub mod handlers {
 
 /// Scouting primitives
 pub mod scouting {
-    /// A zenoh Hello message.
-    pub use zenoh_protocol::scouting::Hello;
-
-    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
+    pub use crate::api::scouting::{Hello, scout, Scout, ScoutBuilder};
 }
 
 /// Liveliness primitives
