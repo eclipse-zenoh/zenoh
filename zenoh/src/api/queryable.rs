@@ -612,6 +612,7 @@ impl fmt::Debug for QueryableState {
 pub(crate) struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
+    background: bool,
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
@@ -665,7 +666,9 @@ impl<'a> IntoFuture for QueryableUndeclaration<'a> {
 
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
-        let _ = self.session.close_queryable(self.state.id);
+        if !self.background {
+            let _ = self.session.close_queryable(self.state.id);
+        }
     }
 }
 
@@ -900,8 +903,8 @@ impl<'a, Handler> Queryable<'a, Handler> {
     /// Make the queryable run in background, until the session is closed.
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn background(self) {
-        std::mem::forget(self);
+    pub fn background(mut self) {
+        self.queryable.background = true;
     }
 }
 
@@ -952,6 +955,7 @@ where
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
+                    background: false,
                 },
                 handler: receiver,
             })

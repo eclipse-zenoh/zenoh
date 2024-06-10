@@ -553,6 +553,7 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
+                    background: false,
                 },
                 handler,
             })

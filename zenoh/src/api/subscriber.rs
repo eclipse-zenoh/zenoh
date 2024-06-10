@@ -79,6 +79,7 @@ impl fmt::Debug for SubscriberState {
 pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
+    pub(crate) background: bool,
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -163,7 +164,9 @@ impl IntoFuture for SubscriberUndeclaration<'_> {
 
 impl Drop for SubscriberInner<'_> {
     fn drop(&mut self) {
-        let _ = self.session.undeclare_subscriber_inner(self.state.id);
+        if !self.background {
+            let _ = self.session.undeclare_subscriber_inner(self.state.id);
+        }
     }
 }
 
@@ -388,6 +391,7 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
+                    background: false,
                 },
                 handler: receiver,
             })
@@ -509,8 +513,8 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// Make the subscriber run in background, until the session is closed.
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn background(self) {
-        std::mem::forget(self);
+    pub fn background(mut self) {
+        self.subscriber.background = false;
     }
 }
 

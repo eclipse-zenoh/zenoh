@@ -912,6 +912,7 @@ where
             listener: MatchingListenerInner {
                 publisher: self.publisher,
                 state,
+                background: false,
             },
             receiver,
         })
@@ -956,6 +957,7 @@ impl std::fmt::Debug for MatchingListenerState {
 pub(crate) struct MatchingListenerInner<'a> {
     pub(crate) publisher: PublisherRef<'a>,
     pub(crate) state: std::sync::Arc<MatchingListenerState>,
+    background: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -1029,8 +1031,8 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     /// Make the matching listener run in background, until the publisher is undeclared.
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn background(self) {
-        std::mem::forget(self);
+    pub fn background(mut self) {
+        self.listener.background = true;
     }
 }
 
@@ -1092,11 +1094,13 @@ impl IntoFuture for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Drop for MatchingListenerInner<'_> {
     fn drop(&mut self) {
-        zlock!(self.publisher.matching_listeners).remove(&self.state.id);
-        let _ = self
-            .publisher
-            .session
-            .undeclare_matches_listener_inner(self.state.id);
+        if !self.background {
+            zlock!(self.publisher.matching_listeners).remove(&self.state.id);
+            let _ = self
+                .publisher
+                .session
+                .undeclare_matches_listener_inner(self.state.id);
+        }
     }
 }
 
