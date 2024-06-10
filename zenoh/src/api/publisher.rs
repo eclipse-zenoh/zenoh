@@ -13,11 +13,13 @@
 //
 
 use std::{
+    collections::HashSet,
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
     mem::ManuallyDrop,
     pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
@@ -134,6 +136,7 @@ pub struct Publisher<'a> {
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
     pub(crate) destination: Locality,
+    pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
 }
 
 impl<'a> Publisher<'a> {
@@ -160,8 +163,15 @@ impl<'a> Publisher<'a> {
         }
     }
 
+    #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
+    }
+
+    #[inline]
+    /// Get the `congestion_control` applied when routing the data.
+    pub fn congestion_control(&self) -> CongestionControl {
+        self.congestion_control
     }
 
     /// Change the `congestion_control` to apply when routing the data.
@@ -170,18 +180,16 @@ impl<'a> Publisher<'a> {
         self.congestion_control = congestion_control;
     }
 
+    /// Get the priority of the written data.
+    #[inline]
+    pub fn priority(&self) -> Priority {
+        self.priority
+    }
+
     /// Change the priority of the written data.
     #[inline]
     pub fn set_priority(&mut self, priority: Priority) {
         self.priority = priority;
-    }
-
-    /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn set_allowed_destination(&mut self, destination: Locality) {
-        self.destination = destination;
     }
 
     /// Consumes the given `Publisher`, returning a thread-safe reference-counting
@@ -330,6 +338,7 @@ impl<'a> Publisher<'a> {
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Borrow(self),
+            background: false,
             handler: DefaultHandler::default(),
         }
     }
@@ -349,6 +358,13 @@ impl<'a> Publisher<'a> {
     /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
+    }
+
+    fn undeclare_matching_listeners(&self) -> ZResult<()> {
+        for id in zlock!(self.matching_listeners).drain() {
+            self.session.undeclare_matches_listener_inner(id)?
+        }
+        Ok(())
     }
 }
 
@@ -435,6 +451,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler> {
         MatchingListenerBuilder {
             publisher: PublisherRef::Shared(self.clone()),
+            background: false,
             handler: DefaultHandler::default(),
         }
     }
@@ -474,6 +491,7 @@ impl Resolvable for PublisherUndeclaration<'_> {
 
 impl Wait for PublisherUndeclaration<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
+        self.publisher.undeclare_matching_listeners()?;
         self.publisher
             .session
             .undeclare_publisher_inner(self.publisher.id)
@@ -491,6 +509,7 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
+        let _ = self.undeclare_matching_listeners();
         let _ = self.session.undeclare_publisher_inner(self.id);
     }
 }
@@ -756,6 +775,7 @@ impl MatchingStatus {
 #[derive(Debug)]
 pub struct MatchingListenerBuilder<'a, Handler> {
     pub(crate) publisher: PublisherRef<'a>,
+    pub(crate) background: bool,
     pub handler: Handler,
 }
 
@@ -792,10 +812,12 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     {
         let MatchingListenerBuilder {
             publisher,
+            background,
             handler: _,
         } = self;
         MatchingListenerBuilder {
             publisher,
+            background,
             handler: callback,
         }
     }
@@ -862,9 +884,14 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     {
         let MatchingListenerBuilder {
             publisher,
+            background,
             handler: _,
         } = self;
-        MatchingListenerBuilder { publisher, handler }
+        MatchingListenerBuilder {
+            publisher,
+            background,
+            handler,
+        }
     }
 }
 
@@ -886,16 +913,18 @@ where
     #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-        self.publisher
+        let state = self
+            .publisher
             .session
-            .declare_matches_listener_inner(&self.publisher, callback)
-            .map(|listener_state| MatchingListener {
-                listener: MatchingListenerInner {
-                    publisher: self.publisher,
-                    state: listener_state,
-                },
-                receiver,
-            })
+            .declare_matches_listener_inner(&self.publisher, callback)?;
+        zlock!(self.publisher.matching_listeners).insert(state.id);
+        Ok(MatchingListener {
+            listener: MatchingListenerInner {
+                publisher: self.publisher,
+                state,
+            },
+            receiver,
+        })
     }
 }
 
@@ -1006,6 +1035,13 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
         self.listener.undeclare()
     }
+
+    /// Make the matching listener run in background, until the publisher is undeclared.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(self) {
+        std::mem::forget(self);
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -1045,6 +1081,7 @@ impl Resolvable for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Wait for MatchingListenerUndeclaration<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
+        zlock!(self.subscriber.publisher.matching_listeners).remove(&self.subscriber.state.id);
         self.subscriber
             .publisher
             .session
@@ -1065,6 +1102,7 @@ impl IntoFuture for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Drop for MatchingListenerInner<'_> {
     fn drop(&mut self) {
+        zlock!(self.publisher.matching_listeners).remove(&self.state.id);
         let _ = self
             .publisher
             .session

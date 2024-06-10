@@ -505,6 +505,13 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         self.subscriber.undeclare()
     }
+
+    /// Make the subscriber run in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(self) {
+        std::mem::forget(self);
+    }
 }
 
 impl<'a, T> Undeclarable<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> {

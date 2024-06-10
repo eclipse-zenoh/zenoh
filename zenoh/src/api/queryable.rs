@@ -896,6 +896,13 @@ impl<'a, Handler> Queryable<'a, Handler> {
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
+
+    /// Make the queryable run in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(self) {
+        std::mem::forget(self);
+    }
 }
 
 impl<'a, T> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {

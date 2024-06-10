@@ -535,6 +535,24 @@ impl Session {
         // which would lead to a double close
         ResolveFuture::new(async move {
             trace!("close()");
+            let mut publishers = Vec::new();
+            let mut queryables = Vec::new();
+            let mut subscribers = Vec::new();
+            {
+                let state = zread!(session.state);
+                publishers.extend(state.publishers.keys());
+                queryables.extend(state.queryables.keys());
+                subscribers.extend(state.subscribers.keys());
+            }
+            for id in publishers {
+                session.undeclare_publisher_inner(id)?;
+            }
+            for id in queryables {
+                session.close_queryable(id)?;
+            }
+            for id in subscribers {
+                session.undeclare_subscriber_inner(id)?;
+            }
             session
                 .task_controller
                 .terminate_all(Duration::from_secs(10));
@@ -542,7 +560,7 @@ impl Session {
                 session.runtime.close().await?;
             }
             let mut state = zwrite!(session.state);
-            // clean up to break cyclic references from self.state to itself
+            // clean up to break cyclic references from session.state to itself
             let primitives = state.primitives.take();
             state.queryables.clear();
             drop(state);
