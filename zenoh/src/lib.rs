@@ -324,7 +324,7 @@ pub mod handlers {
 
 /// Scouting primitives
 pub mod scouting {
-    pub use crate::api::scouting::{Hello, scout, Scout, ScoutBuilder};
+    pub use crate::api::scouting::{scout, Hello, Scout, ScoutBuilder};
 }
 
 /// Liveliness primitives

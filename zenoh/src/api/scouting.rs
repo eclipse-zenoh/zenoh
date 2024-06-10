@@ -60,7 +60,6 @@ impl fmt::Display for Hello {
     }
 }
 
-
 /// A builder for initializing a [`Scout`].
 ///
 /// # Examples
