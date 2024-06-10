@@ -148,11 +148,11 @@ impl HatTables {
                     let mut tables = zwrite!(tables_ref.tables);
 
                     tracing::trace!("Compute trees");
-                    let new_childs = hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees();
+                    let new_children = hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees();
 
                     tracing::trace!("Compute routes");
-                    pubsub::pubsub_tree_change(&mut tables, &new_childs);
-                    queries::queries_tree_change(&mut tables, &new_childs);
+                    pubsub::pubsub_tree_change(&mut tables, &new_children);
+                    queries::queries_tree_change(&mut tables, &new_children);
 
                     tracing::trace!("Computations completed");
                     hat_mut!(tables).peers_trees_task = None;

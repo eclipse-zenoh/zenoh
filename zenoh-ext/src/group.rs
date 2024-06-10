@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! To manage groups and group memeberships
+//! To manage groups and group memberships
 
 use flume::{Receiver, Sender};
 use futures::prelude::*;

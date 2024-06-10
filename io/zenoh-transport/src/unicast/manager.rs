@@ -95,7 +95,7 @@ pub struct TransportManagerParamsUnicast {
 pub struct TransportManagerBuilderUnicast {
     // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
     //       set the actual keep_alive timeout to one fourth of the lease time.
-    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continuous connectivity
     //       check which considers a link as failed when no messages are received in 3.5 times the
     //       target interval.
     pub(super) lease: Duration,

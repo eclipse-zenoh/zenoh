@@ -86,8 +86,8 @@ impl Eq for TimedEvent {}
 impl Ord for TimedEvent {
     fn cmp(&self, other: &Self) -> ComparisonOrdering {
         // The usual cmp is defined as: self.when.cmp(&other.when)
-        // This would make the events odered from largets to the smallest in the heap.
-        // However, we want the events to be ordered from the smallets to the largest.
+        // This would make the events ordered from largest to the smallest in the heap.
+        // However, we want the events to be ordered from the smallest to the largest.
         // As a consequence of this, we swap the comparison terms, converting the heap
         // from a max-heap into a min-heap.
         other.when.cmp(&self.when)

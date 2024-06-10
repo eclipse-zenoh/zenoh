@@ -24,7 +24,7 @@ const COMMENT_PREFIX: char = '#';
 
 /// A map of key/value (String,String) properties.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
-/// and `=` as separator between a key and its value. Keys and values are trimed.
+/// and `=` as separator between a key and its value. Keys and values are trimmed.
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct Properties(HashMap<String, String>);

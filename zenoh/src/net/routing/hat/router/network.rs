@@ -100,7 +100,7 @@ pub(super) struct Changes {
 #[derive(Clone)]
 pub(super) struct Tree {
     pub(super) parent: Option<NodeIndex>,
-    pub(super) childs: Vec<NodeIndex>,
+    pub(super) children: Vec<NodeIndex>,
     pub(super) directions: Vec<Option<NodeIndex>>,
 }
 
@@ -151,7 +151,7 @@ impl Network {
             links: VecMap::new(),
             trees: vec![Tree {
                 parent: None,
-                childs: vec![],
+                children: vec![],
                 directions: vec![None],
             }],
             distances: vec![0.0],
@@ -893,12 +893,13 @@ impl Network {
         let indexes = self.graph.node_indices().collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
 
-        let old_childs: Vec<Vec<NodeIndex>> = self.trees.iter().map(|t| t.childs.clone()).collect();
+        let old_children: Vec<Vec<NodeIndex>> =
+            self.trees.iter().map(|t| t.children.clone()).collect();
 
         self.trees.clear();
         self.trees.resize_with(max_idx.index() + 1, || Tree {
             parent: None,
-            childs: vec![],
+            children: vec![],
             directions: vec![],
         });
 
@@ -932,7 +933,7 @@ impl Network {
             for idx in &indexes {
                 if let Some(parent_idx) = paths.predecessors[idx.index()] {
                     if parent_idx == self.idx {
-                        self.trees[tree_root_idx.index()].childs.push(*idx);
+                        self.trees[tree_root_idx.index()].children.push(*idx);
                     }
                 }
             }
@@ -970,23 +971,23 @@ impl Network {
             }
         }
 
-        let mut new_childs = Vec::with_capacity(self.trees.len());
-        new_childs.resize(self.trees.len(), vec![]);
+        let mut new_children = Vec::with_capacity(self.trees.len());
+        new_children.resize(self.trees.len(), vec![]);
 
-        for i in 0..new_childs.len() {
-            new_childs[i] = if i < old_childs.len() {
+        for i in 0..new_children.len() {
+            new_children[i] = if i < old_children.len() {
                 self.trees[i]
-                    .childs
+                    .children
                     .iter()
-                    .filter(|idx| !old_childs[i].contains(idx))
+                    .filter(|idx| !old_children[i].contains(idx))
                     .cloned()
                     .collect()
             } else {
-                self.trees[i].childs.clone()
+                self.trees[i].children.clone()
             };
         }
 
-        new_childs
+        new_children
     }
 
     #[inline]

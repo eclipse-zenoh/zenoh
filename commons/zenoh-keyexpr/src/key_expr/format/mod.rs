@@ -23,7 +23,7 @@
 //! ## The format syntax
 //! KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formmats support "specification" chunks.
 //! These chunks must follow the one of the following syntaxes: `${id:pattern}`, `${id:pattern#default}`, `$#{id:pattern}#`, or `$#{id:pattern#default}#`, where:
-//! - `id` is the chunk identifer: it cannot contain the `:` character, and is used to name the chunk in accessors.
+//! - `id` is the chunk identifier: it cannot contain the `:` character, and is used to name the chunk in accessors.
 //! - `pattern` must be a valid KE (and therefore cannot contain `#`) and defines the range of values that the chunk may adopt.
 //! - `default` (optional) is used as the chunk value when formatting if the builder wasn't supplied with a value for `id`.
 //!
@@ -73,7 +73,7 @@ use support::{IterativeConstructor, Spec};
 /// ## The format syntax
 /// KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formmats support "specification" chunks.
 /// These chunks must follow the one of the following syntaxes: `${id:pattern}`, `${id:pattern#default}`, `$#{id:pattern}#`, or `$#{id:pattern#default}#`, where:
-/// - `id` is the chunk identifer: it cannot contain the `:` character, and is used to name the chunk in accessors.
+/// - `id` is the chunk identifier: it cannot contain the `:` character, and is used to name the chunk in accessors.
 /// - `pattern` must be a valid KE (and therefore cannot contain `#`) and defines the range of values that the chunk may adopt.
 /// - `default` (optional) is used as the chunk value when formatting if the builder wasn't supplied with a value for `id`.
 ///

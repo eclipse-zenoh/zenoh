@@ -250,7 +250,7 @@ impl StageIn {
             // Treat all messages as non-droppable once we start fragmenting
             batch = zgetbatch_rets!(true, tch.sn.set(sn).unwrap());
 
-            // Serialize the message fragmnet
+            // Serialize the message fragment
             match batch.encode((&mut reader, &mut fragment)) {
                 Ok(_) => {
                     // Update the SN

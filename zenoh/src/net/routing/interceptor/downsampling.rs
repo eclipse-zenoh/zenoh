@@ -149,11 +149,11 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 return None;
                             }
                         } else {
-                            tracing::debug!("unxpected cache ID {}", id);
+                            tracing::debug!("unexpected cache ID {}", id);
                         }
                     }
                 } else {
-                    tracing::debug!("unxpected cache type {:?}", ctx.full_expr());
+                    tracing::debug!("unexpected cache type {:?}", ctx.full_expr());
                 }
             }
         }

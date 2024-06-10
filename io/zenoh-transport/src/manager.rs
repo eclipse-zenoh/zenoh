@@ -74,7 +74,7 @@ use zenoh_task::TaskController;
 ///         .lease(Duration::from_secs(1))
 ///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
-///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports
+///         .accept_pending(10) // Set to 10 the number of simultaneous pending incoming transports
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);

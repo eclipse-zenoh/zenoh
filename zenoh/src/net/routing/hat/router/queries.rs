@@ -188,16 +188,16 @@ fn local_qabl_info(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) 
 }
 
 #[inline]
-fn send_sourced_queryable_to_net_childs(
+fn send_sourced_queryable_to_net_children(
     tables: &Tables,
     net: &Network,
-    childs: &[NodeIndex],
+    children: &[NodeIndex],
     res: &Arc<Resource>,
     qabl_info: &QueryableInfo,
     src_face: Option<&mut Arc<FaceState>>,
     routing_context: NodeId,
 ) {
-    for child in childs {
+    for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
@@ -285,10 +285,10 @@ fn propagate_sourced_queryable(
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
-                send_sourced_queryable_to_net_childs(
+                send_sourced_queryable_to_net_children(
                     tables,
                     net,
-                    &net.trees[tree_sid.index()].childs,
+                    &net.trees[tree_sid.index()].children,
                     res,
                     qabl_info,
                     src_face,
@@ -471,15 +471,15 @@ fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn send_forget_sourced_queryable_to_net_childs(
+fn send_forget_sourced_queryable_to_net_children(
     tables: &Tables,
     net: &Network,
-    childs: &[NodeIndex],
+    children: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
     routing_context: NodeId,
 ) {
-    for child in childs {
+    for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
@@ -584,10 +584,10 @@ fn propagate_forget_sourced_queryable(
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
-                send_forget_sourced_queryable_to_net_childs(
+                send_forget_sourced_queryable_to_net_children(
                     tables,
                     net,
-                    &net.trees[tree_sid.index()].childs,
+                    &net.trees[tree_sid.index()].children,
                     res,
                     src_face,
                     tree_sid.index() as NodeId,
@@ -932,12 +932,12 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
 
 pub(super) fn queries_tree_change(
     tables: &mut Tables,
-    new_childs: &[Vec<NodeIndex>],
+    new_children: &[Vec<NodeIndex>],
     net_type: WhatAmI,
 ) {
-    // propagate qabls to new childs
-    for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
-        if !tree_childs.is_empty() {
+    // propagate qabls to new children
+    for (tree_sid, tree_children) in new_children.iter().enumerate() {
+        if !tree_children.is_empty() {
             let net = hat!(tables).get_net(net_type).unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
@@ -954,10 +954,10 @@ pub(super) fn queries_tree_change(
                         _ => &res_hat!(res).peer_qabls,
                     };
                     if let Some(qabl_info) = qabls.get(&tree_id) {
-                        send_sourced_queryable_to_net_childs(
+                        send_sourced_queryable_to_net_children(
                             tables,
                             net,
-                            tree_childs,
+                            tree_children,
                             res,
                             qabl_info,
                             None,

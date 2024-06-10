@@ -81,12 +81,12 @@ impl Invitation {
     }
 
     async fn expect(expected_suffix: u32, pipe: &mut PipeR) -> ZResult<()> {
-        let recived_suffix = Self::receive(pipe).await?;
-        if recived_suffix != expected_suffix {
+        let received_suffix = Self::receive(pipe).await?;
+        if received_suffix != expected_suffix {
             bail!(
                 "Suffix mismatch: expected {} got {}",
                 expected_suffix,
-                recived_suffix
+                received_suffix
             )
         }
         Ok(())
@@ -244,7 +244,7 @@ async fn handle_incoming_connections(
     // read invitation from the request channel
     let suffix = Invitation::receive(request_channel).await?;
 
-    // gererate uplink and downlink names
+    // generate uplink and downlink names
     let (dedicated_downlink_path, dedicated_uplink_path) =
         get_dedicated_pipe_names(path_downlink, path_uplink, suffix);
 
@@ -252,10 +252,10 @@ async fn handle_incoming_connections(
     let mut dedicated_downlink = PipeW::new(&dedicated_downlink_path).await?;
     let mut dedicated_uplink = PipeR::new(&dedicated_uplink_path, access_mode).await?;
 
-    // confirm over the dedicated chanel
+    // confirm over the dedicated channel
     Invitation::confirm(suffix, &mut dedicated_downlink).await?;
 
-    // got confirmation over the dedicated chanel
+    // got confirmation over the dedicated channel
     Invitation::expect(suffix, &mut dedicated_uplink).await?;
 
     // create Locators
@@ -353,7 +353,7 @@ async fn create_pipe(
     // generate random suffix
     let suffix: u32 = rand::thread_rng().gen();
 
-    // gererate uplink and downlink names
+    // generate uplink and downlink names
     let (path_downlink, path_uplink) = get_dedicated_pipe_names(path_downlink, path_uplink, suffix);
 
     // try create uplink and downlink pipes to ensure that the selected suffix is available
@@ -390,7 +390,7 @@ impl UnicastPipeClient {
         // listener owns the request channel, so failure of this call means that there is nobody listening on the provided endpoint
         let mut request_channel = PipeW::new(&path_uplink).await?;
 
-        // create dedicated channel prerequisities. The creation code also ensures that nobody else would use the same channel concurrently
+        // create dedicated channel prerequisites. The creation code also ensures that nobody else would use the same channel concurrently
         let (
             mut dedicated_downlink,
             dedicated_suffix,
@@ -398,10 +398,10 @@ impl UnicastPipeClient {
             dedicated_uplink_path,
         ) = dedicate_pipe(&path_uplink, &path_downlink, access_mode).await?;
 
-        // invite the listener to our dedicated channel over the requet channel
+        // invite the listener to our dedicated channel over the request channel
         Invitation::send(dedicated_suffix, &mut request_channel).await?;
 
-        // read responce that should be sent over the dedicated channel, confirming that everything is OK
+        // read response that should be sent over the dedicated channel, confirming that everything is OK
         // on the listener's side and it is already working with the dedicated channel
         Invitation::expect(dedicated_suffix, &mut dedicated_downlink).await?;
 

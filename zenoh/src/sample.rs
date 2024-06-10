@@ -55,7 +55,7 @@ pub(crate) struct DataInfo {
     pub qos: QoS,
 }
 
-/// Informations on the source of a zenoh [`Sample`].
+/// Information on the source of a zenoh [`Sample`].
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
@@ -565,7 +565,7 @@ impl QoS {
         self
     }
 
-    /// Sets express flag vlaue.
+    /// Sets express flag value.
     pub fn with_express(mut self, is_express: bool) -> Self {
         self.inner.set_is_express(is_express);
         self

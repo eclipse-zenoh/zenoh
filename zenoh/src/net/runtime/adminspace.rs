@@ -620,7 +620,7 @@ fn metrics(context: &AdminContext, query: Query) {
     .unwrap();
     #[allow(unused_mut)]
     let mut metrics = format!(
-        r#"# HELP zenoh_build Informations about zenoh.
+        r#"# HELP zenoh_build Information about zenoh.
 # TYPE zenoh_build gauge
 zenoh_build{{version="{}"}} 1
 "#,

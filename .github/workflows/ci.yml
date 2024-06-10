@@ -133,6 +133,16 @@ jobs:
         run: ci/valgrind-check/run.sh
         shell: bash
 
+  typos:
+    name: Typos Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone this repository 
+        uses: actions/checkout@v4
+
+      - name: Check spelling
+        uses: crate-ci/typos@master
+
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
   # from branches where specific status checks have passed. These checks are
@@ -141,7 +151,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test, valgrind]
+    needs: [check, test, valgrind, typos]
     if: always()
     steps:
       - name: Check whether all jobs pass
