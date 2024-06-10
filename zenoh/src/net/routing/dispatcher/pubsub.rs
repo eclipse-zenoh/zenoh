@@ -14,7 +14,7 @@
 use super::face::FaceState;
 use super::resource::{DataRoutes, Direction, PullCaches, Resource};
 use super::tables::{NodeId, Route, RoutingExpr, Tables, TablesLock};
-use crate::net::routing::hat::HatTrait;
+use crate::net::routing::hat::{HatTrait, SendDeclare};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -37,6 +37,7 @@ pub(crate) fn declare_subscription(
     expr: &WireExpr,
     sub_info: &SubscriberInfo,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     tracing::debug!("Declare subscription {}", face);
     let rtables = zread!(tables.tables);
@@ -72,7 +73,7 @@ pub(crate) fn declare_subscription(
                 &mut res,
                 sub_info,
                 node_id,
-                &mut |p, m| p.send_declare(m),
+                send_declare,
             );
 
             disable_matches_data_routes(&mut wtables, &mut res);
@@ -103,6 +104,7 @@ pub(crate) fn undeclare_subscription(
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     tracing::debug!("Undeclare subscription {}", face);
     let rtables = zread!(tables.tables);
@@ -117,7 +119,7 @@ pub(crate) fn undeclare_subscription(
                     face,
                     &mut res,
                     node_id,
-                    &mut |p, m| p.send_declare(m),
+                    send_declare,
                 );
 
                 disable_matches_data_routes(&mut wtables, &mut res);

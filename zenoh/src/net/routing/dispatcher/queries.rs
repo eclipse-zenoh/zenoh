@@ -15,7 +15,7 @@ use super::face::FaceState;
 use super::resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource};
 use super::tables::NodeId;
 use super::tables::{RoutingExpr, Tables, TablesLock};
-use crate::net::routing::hat::HatTrait;
+use crate::net::routing::hat::{HatTrait, SendDeclare};
 use crate::net::routing::RoutingContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -56,6 +56,7 @@ pub(crate) fn declare_queryable(
     expr: &WireExpr,
     qabl_info: &QueryableInfo,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     tracing::debug!("Register queryable {}", face);
     let rtables = zread!(tables.tables);
@@ -91,7 +92,7 @@ pub(crate) fn declare_queryable(
                 &mut res,
                 qabl_info,
                 node_id,
-                &mut |p, m| p.send_declare(m),
+                send_declare,
             );
 
             disable_matches_query_routes(&mut wtables, &mut res);
@@ -119,6 +120,7 @@ pub(crate) fn undeclare_queryable(
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
     match rtables.get_mapping(face, &expr.scope, expr.mapping) {
@@ -127,9 +129,7 @@ pub(crate) fn undeclare_queryable(
                 drop(rtables);
                 let mut wtables = zwrite!(tables.tables);
 
-                hat_code.undeclare_queryable(&mut wtables, face, &mut res, node_id, &mut |p, m| {
-                    p.send_declare(m)
-                });
+                hat_code.undeclare_queryable(&mut wtables, face, &mut res, node_id, send_declare);
 
                 disable_matches_query_routes(&mut wtables, &mut res);
                 drop(wtables);
