@@ -28,16 +28,16 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
-    super::{
-        builders::sample::SampleBuilderTrait, bytes::OptionZBytes, query::ReplyKeyExpr,
-        sample::SourceInfo,
-    },
+    super::{query::ReplyKeyExpr, sample::SourceInfo},
     zenoh_protocol::core::EntityGlobalId,
 };
 
 use super::{
-    builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
-    bytes::ZBytes,
+    builders::sample::{
+        QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
+        ValueBuilderTrait,
+    },
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
@@ -325,7 +325,6 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-#[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();

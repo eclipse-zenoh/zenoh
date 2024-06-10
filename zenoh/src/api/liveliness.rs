@@ -750,7 +750,6 @@ where
                 Locality::default(),
                 self.timeout,
                 None,
-                #[cfg(feature = "unstable")]
                 None,
                 SourceInfo::empty(),
                 callback,
