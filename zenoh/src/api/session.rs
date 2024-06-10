@@ -16,7 +16,6 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt,
     future::{IntoFuture, Ready},
-    mem::ManuallyDrop,
     ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
@@ -405,6 +404,7 @@ pub struct Session {
     pub(crate) runtime: Runtime,
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
+    close_on_drop: bool,
     owns_runtime: bool,
     task_controller: TaskController,
 }
@@ -426,6 +426,7 @@ impl Session {
                 runtime: runtime.clone(),
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
+                close_on_drop: true,
                 owns_runtime: false,
                 task_controller: TaskController::default(),
             };
@@ -529,38 +530,17 @@ impl Session {
     /// session.close().await.unwrap();
     /// # }
     /// ```
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
-        // ManuallyDrop wrapper prevents the drop code to be executed,
-        let session = ManuallyDrop::new(self);
-        // which would lead to a double close
+    pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
-            let mut publishers = Vec::new();
-            let mut queryables = Vec::new();
-            let mut subscribers = Vec::new();
-            {
-                let state = zread!(session.state);
-                publishers.extend(state.publishers.keys());
-                queryables.extend(state.queryables.keys());
-                subscribers.extend(state.subscribers.keys());
+            // set the flag first to avoid double panic if this function panic
+            self.close_on_drop = false;
+            self.task_controller.terminate_all(Duration::from_secs(10));
+            if self.owns_runtime {
+                self.runtime.close().await?;
             }
-            for id in publishers {
-                session.undeclare_publisher_inner(id)?;
-            }
-            for id in queryables {
-                session.close_queryable(id)?;
-            }
-            for id in subscribers {
-                session.undeclare_subscriber_inner(id)?;
-            }
-            session
-                .task_controller
-                .terminate_all(Duration::from_secs(10));
-            if session.owns_runtime {
-                session.runtime.close().await?;
-            }
-            let mut state = zwrite!(session.state);
-            // clean up to break cyclic references from session.state to itself
+            let mut state = zwrite!(self.state);
+            // clean up to break cyclic references from self.state to itself
             let primitives = state.primitives.take();
             state.queryables.clear();
             drop(state);
@@ -845,25 +825,16 @@ impl Session {
     }
 }
 
-/// Like a [`Session`], but not closed on drop
-pub(crate) struct SessionClone(ManuallyDrop<Session>);
-
-impl Deref for SessionClone {
-    type Target = Session;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl Session {
-    pub(crate) fn clone(&self) -> SessionClone {
-        SessionClone(ManuallyDrop::new(Session {
+    pub(crate) fn clone(&self) -> Self {
+        Self {
             runtime: self.runtime.clone(),
             state: self.state.clone(),
             id: self.id,
+            close_on_drop: false,
             owns_runtime: self.owns_runtime,
             task_controller: self.task_controller.clone(),
-        }))
+        }
     }
 
     #[allow(clippy::new_ret_no_self)]
@@ -2058,7 +2029,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     }
 }
 
-impl Primitives for SessionClone {
+impl Primitives for Session {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
     }
@@ -2502,8 +2473,9 @@ impl Primitives for SessionClone {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        // Use clone inner session, as it will be rewrapped in ManuallyDrop inside Session::close
-        let _ = ManuallyDrop::into_inner(self.clone().0).close().wait();
+        if self.close_on_drop {
+            let _ = self.clone().close().wait();
+        }
     }
 }
 
@@ -2666,7 +2638,7 @@ pub trait SessionDeclarations<'s, 'a> {
     fn info(&'s self) -> SessionInfo<'a>;
 }
 
-impl crate::net::primitives::EPrimitives for SessionClone {
+impl crate::net::primitives::EPrimitives for Session {
     #[inline]
     fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
         (self as &dyn Primitives).send_interest(ctx.msg)

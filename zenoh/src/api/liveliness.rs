@@ -15,7 +15,6 @@
 use std::{
     convert::TryInto,
     future::{IntoFuture, Ready},
-    mem::ManuallyDrop,
     sync::Arc,
     time::Duration,
 };
@@ -236,6 +235,7 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
             .map(|tok_state| LivelinessToken {
                 session,
                 state: tok_state,
+                undeclare_on_drop: true,
             })
     }
 }
@@ -291,6 +291,7 @@ pub(crate) struct LivelinessTokenState {
 pub struct LivelinessToken<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<LivelinessTokenState>,
+    undeclare_on_drop: bool,
 }
 
 /// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`](LivelinessToken).
@@ -314,9 +315,7 @@ pub struct LivelinessToken<'a> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 pub struct LivelinessTokenUndeclaration<'a> {
-    // ManuallyDrop wrapper prevents the drop code to be executed,
-    // which would lead to a double undeclaration
-    token: ManuallyDrop<LivelinessToken<'a>>,
+    token: LivelinessToken<'a>,
 }
 
 #[zenoh_macros::unstable]
@@ -326,7 +325,9 @@ impl Resolvable for LivelinessTokenUndeclaration<'_> {
 
 #[zenoh_macros::unstable]
 impl Wait for LivelinessTokenUndeclaration<'_> {
-    fn wait(self) -> <Self as Resolvable>::To {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        // set the flag first to avoid double panic if this function panic
+        self.token.undeclare_on_drop = false;
         self.token.session.undeclare_liveliness(self.token.state.id)
     }
 }
@@ -369,21 +370,31 @@ impl<'a> LivelinessToken<'a> {
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
+
+    /// Keep this liveliness token in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.undeclare_on_drop = false;
+    }
 }
 
 #[zenoh_macros::unstable]
 impl<'a> Undeclarable<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<'a> {
     fn undeclare_inner(self, _: ()) -> LivelinessTokenUndeclaration<'a> {
-        LivelinessTokenUndeclaration {
-            token: ManuallyDrop::new(self),
-        }
+        LivelinessTokenUndeclaration { token: self }
     }
 }
 
 #[zenoh_macros::unstable]
 impl Drop for LivelinessToken<'_> {
     fn drop(&mut self) {
-        let _ = self.session.undeclare_liveliness(self.state.id);
+        if self.undeclare_on_drop {
+            let _ = self.session.undeclare_liveliness(self.state.id);
+        }
     }
 }
 
@@ -553,7 +564,7 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
-                    background: false,
+                    undeclare_on_drop: true,
                 },
                 handler,
             })

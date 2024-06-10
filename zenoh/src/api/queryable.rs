@@ -14,7 +14,6 @@
 use std::{
     fmt,
     future::{IntoFuture, Ready},
-    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -612,14 +611,12 @@ impl fmt::Debug for QueryableState {
 pub(crate) struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
-    background: bool,
+    undeclare_on_drop: bool,
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
     fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
-        QueryableUndeclaration {
-            queryable: ManuallyDrop::new(self),
-        }
+        QueryableUndeclaration { queryable: self }
     }
 }
 
@@ -638,9 +635,7 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableUndeclaration<'a> {
-    // ManuallyDrop wrapper prevents the drop code to be executed,
-    // which would lead to a double undeclaration
-    queryable: ManuallyDrop<CallbackQueryable<'a>>,
+    queryable: CallbackQueryable<'a>,
 }
 
 impl Resolvable for QueryableUndeclaration<'_> {
@@ -648,7 +643,9 @@ impl Resolvable for QueryableUndeclaration<'_> {
 }
 
 impl Wait for QueryableUndeclaration<'_> {
-    fn wait(self) -> <Self as Resolvable>::To {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        // set the flag first to avoid double panic if this function panic
+        self.queryable.undeclare_on_drop = false;
         self.queryable
             .session
             .close_queryable(self.queryable.state.id)
@@ -666,7 +663,7 @@ impl<'a> IntoFuture for QueryableUndeclaration<'a> {
 
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
-        if !self.background {
+        if self.undeclare_on_drop {
             let _ = self.session.close_queryable(self.state.id);
         }
     }
@@ -904,7 +901,10 @@ impl<'a, Handler> Queryable<'a, Handler> {
     #[inline]
     #[zenoh_macros::unstable]
     pub fn background(mut self) {
-        self.queryable.background = true;
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.queryable.undeclare_on_drop = false;
     }
 }
 
@@ -955,7 +955,7 @@ where
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
-                    background: false,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })

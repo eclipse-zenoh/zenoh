@@ -17,7 +17,6 @@ use std::{
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
-    mem::ManuallyDrop,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -137,6 +136,7 @@ pub struct Publisher<'a> {
     pub(crate) is_express: bool,
     pub(crate) destination: Locality,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a> Publisher<'a> {
@@ -457,9 +457,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
 
 impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
     fn undeclare_inner(self, _: ()) -> PublisherUndeclaration<'a> {
-        PublisherUndeclaration {
-            publisher: ManuallyDrop::new(self),
-        }
+        PublisherUndeclaration { publisher: self }
     }
 }
 
@@ -478,9 +476,7 @@ impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct PublisherUndeclaration<'a> {
-    // ManuallyDrop wrapper prevents the drop code to be executed,
-    // which would lead to a double undeclaration
-    publisher: ManuallyDrop<Publisher<'a>>,
+    publisher: Publisher<'a>,
 }
 
 impl Resolvable for PublisherUndeclaration<'_> {
@@ -488,7 +484,9 @@ impl Resolvable for PublisherUndeclaration<'_> {
 }
 
 impl Wait for PublisherUndeclaration<'_> {
-    fn wait(self) -> <Self as Resolvable>::To {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        // set the flag first to avoid double panic if this function panic
+        self.publisher.undeclare_on_drop = false;
         self.publisher.undeclare_matching_listeners()?;
         self.publisher
             .session
@@ -507,8 +505,10 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
-        let _ = self.undeclare_matching_listeners();
-        let _ = self.session.undeclare_publisher_inner(self.id);
+        if self.undeclare_on_drop {
+            let _ = self.undeclare_matching_listeners();
+            let _ = self.session.undeclare_publisher_inner(self.id);
+        }
     }
 }
 
@@ -912,7 +912,7 @@ where
             listener: MatchingListenerInner {
                 publisher: self.publisher,
                 state,
-                background: false,
+                undeclare_on_drop: true,
             },
             receiver,
         })
@@ -957,7 +957,7 @@ impl std::fmt::Debug for MatchingListenerState {
 pub(crate) struct MatchingListenerInner<'a> {
     pub(crate) publisher: PublisherRef<'a>,
     pub(crate) state: std::sync::Arc<MatchingListenerState>,
-    background: bool,
+    undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -971,9 +971,7 @@ impl<'a> MatchingListenerInner<'a> {
 #[zenoh_macros::unstable]
 impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListenerInner<'a> {
     fn undeclare_inner(self, _: ()) -> MatchingListenerUndeclaration<'a> {
-        MatchingListenerUndeclaration {
-            subscriber: ManuallyDrop::new(self),
-        }
+        MatchingListenerUndeclaration { subscriber: self }
     }
 }
 
@@ -1032,7 +1030,8 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     #[inline]
     #[zenoh_macros::unstable]
     pub fn background(mut self) {
-        self.listener.background = true;
+        // The matching listener will be undeclared as part of publisher undeclaration.
+        self.listener.undeclare_on_drop = false;
     }
 }
 
@@ -1060,9 +1059,7 @@ impl<Receiver> std::ops::DerefMut for MatchingListener<'_, Receiver> {
 
 #[zenoh_macros::unstable]
 pub struct MatchingListenerUndeclaration<'a> {
-    // ManuallyDrop wrapper prevents the drop code to be executed,
-    // which would lead to a double undeclaration
-    subscriber: ManuallyDrop<MatchingListenerInner<'a>>,
+    subscriber: MatchingListenerInner<'a>,
 }
 
 #[zenoh_macros::unstable]
@@ -1072,7 +1069,9 @@ impl Resolvable for MatchingListenerUndeclaration<'_> {
 
 #[zenoh_macros::unstable]
 impl Wait for MatchingListenerUndeclaration<'_> {
-    fn wait(self) -> <Self as Resolvable>::To {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        // set the flag first to avoid double panic if this function panic
+        self.subscriber.undeclare_on_drop = false;
         zlock!(self.subscriber.publisher.matching_listeners).remove(&self.subscriber.state.id);
         self.subscriber
             .publisher
@@ -1094,7 +1093,7 @@ impl IntoFuture for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Drop for MatchingListenerInner<'_> {
     fn drop(&mut self) {
-        if !self.background {
+        if self.undeclare_on_drop {
             zlock!(self.publisher.matching_listeners).remove(&self.state.id);
             let _ = self
                 .publisher

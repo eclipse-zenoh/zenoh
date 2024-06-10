@@ -15,7 +15,6 @@
 use std::{
     fmt,
     future::{IntoFuture, Ready},
-    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -79,7 +78,7 @@ impl fmt::Debug for SubscriberState {
 pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
-    pub(crate) background: bool,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -112,9 +111,7 @@ impl<'a> SubscriberInner<'a> {
 
 impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
     fn undeclare_inner(self, _: ()) -> SubscriberUndeclaration<'a> {
-        SubscriberUndeclaration {
-            subscriber: ManuallyDrop::new(self),
-        }
+        SubscriberUndeclaration { subscriber: self }
     }
 }
 
@@ -136,9 +133,7 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberUndeclaration<'a> {
-    // ManuallyDrop wrapper prevents the drop code to be executed,
-    // which would lead to a double undeclaration
-    subscriber: ManuallyDrop<SubscriberInner<'a>>,
+    subscriber: SubscriberInner<'a>,
 }
 
 impl Resolvable for SubscriberUndeclaration<'_> {
@@ -146,7 +141,9 @@ impl Resolvable for SubscriberUndeclaration<'_> {
 }
 
 impl Wait for SubscriberUndeclaration<'_> {
-    fn wait(self) -> <Self as Resolvable>::To {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        // set the flag first to avoid double panic if this function panic
+        self.subscriber.undeclare_on_drop = false;
         self.subscriber
             .session
             .undeclare_subscriber_inner(self.subscriber.state.id)
@@ -164,7 +161,7 @@ impl IntoFuture for SubscriberUndeclaration<'_> {
 
 impl Drop for SubscriberInner<'_> {
     fn drop(&mut self) {
-        if !self.background {
+        if self.undeclare_on_drop {
             let _ = self.session.undeclare_subscriber_inner(self.state.id);
         }
     }
@@ -391,7 +388,7 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
-                    background: false,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })
@@ -514,7 +511,10 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     #[inline]
     #[zenoh_macros::unstable]
     pub fn background(mut self) {
-        self.subscriber.background = false;
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.subscriber.undeclare_on_drop = false;
     }
 }
 
