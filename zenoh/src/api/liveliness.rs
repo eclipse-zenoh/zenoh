@@ -314,6 +314,8 @@ pub struct LivelinessToken<'a> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 pub struct LivelinessTokenUndeclaration<'a> {
+    // ManuallyDrop wrapper prevents the drop code to be executed,
+    // which would lead to a double undeclaration
     token: ManuallyDrop<LivelinessToken<'a>>,
 }
 

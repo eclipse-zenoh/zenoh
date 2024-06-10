@@ -23,7 +23,6 @@ use std::{
 
 use futures::Sink;
 use zenoh_core::{zread, Resolvable, Resolve, Wait};
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::CongestionControl,
     network::{push::ext, Push},
@@ -464,6 +463,8 @@ impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct PublisherUndeclaration<'a> {
+    // ManuallyDrop wrapper prevents the drop code to be executed,
+    // which would lead to a double undeclaration
     publisher: ManuallyDrop<Publisher<'a>>,
 }
 
@@ -1031,6 +1032,8 @@ impl<Receiver> std::ops::DerefMut for MatchingListener<'_, Receiver> {
 
 #[zenoh_macros::unstable]
 pub struct MatchingListenerUndeclaration<'a> {
+    // ManuallyDrop wrapper prevents the drop code to be executed,
+    // which would lead to a double undeclaration
     subscriber: ManuallyDrop<MatchingListenerInner<'a>>,
 }
 

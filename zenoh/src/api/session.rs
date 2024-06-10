@@ -530,6 +530,8 @@ impl Session {
     /// # }
     /// ```
     pub fn close(self) -> impl Resolve<ZResult<()>> {
+        // ManuallyDrop wrapper prevents the drop code to be executed,
+        // which would lead to a double close
         let session = ManuallyDrop::new(self);
         ResolveFuture::new(async move {
             trace!("close()");

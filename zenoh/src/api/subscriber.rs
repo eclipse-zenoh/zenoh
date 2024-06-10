@@ -135,6 +135,8 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberUndeclaration<'a> {
+    // ManuallyDrop wrapper prevents the drop code to be executed,
+    // which would lead to a double undeclaration
     subscriber: ManuallyDrop<SubscriberInner<'a>>,
 }
 

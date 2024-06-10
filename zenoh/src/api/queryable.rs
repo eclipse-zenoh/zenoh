@@ -637,6 +637,8 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableUndeclaration<'a> {
+    // ManuallyDrop wrapper prevents the drop code to be executed,
+    // which would lead to a double undeclaration
     queryable: ManuallyDrop<CallbackQueryable<'a>>,
 }
 
