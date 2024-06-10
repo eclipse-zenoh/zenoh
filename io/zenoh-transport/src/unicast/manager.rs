@@ -444,7 +444,7 @@ impl TransportManager {
         }
 
         // Add the link to the transport
-        let (start_tx_rx, ack) = transport
+        let (start_tx, start_rx, ack) = transport
             .add_link(link, other_initial_sn, other_lease)
             .await
             .map_err(InitTransportError::Link)?;
@@ -456,10 +456,12 @@ impl TransportManager {
             .await
             .map_err(|e| InitTransportError::Transport((e, c_t, close::reason::GENERIC)))?;
 
+        start_tx();
+
         // notify transport's callback interface that there is a new link
         Self::notify_new_link_unicast(&transport, c_link);
 
-        start_tx_rx();
+        start_rx();
 
         Ok(transport)
     }
@@ -548,7 +550,8 @@ impl TransportManager {
         };
 
         // Add the link to the transport
-        let (start_tx_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await {
+        let (start_tx, start_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await
+        {
             Ok(val) => val,
             Err(e) => {
                 let _ = t.close(e.2).await;
@@ -575,6 +578,8 @@ impl TransportManager {
         guard.insert(config.zid, t.clone());
         drop(guard);
 
+        start_tx();
+
         // Notify manager's interface that there is a new transport
         transport_error!(
             self.notify_new_transport_unicast(&t),
@@ -584,7 +589,7 @@ impl TransportManager {
         // Notify transport's callback interface that there is a new link
         Self::notify_new_link_unicast(&t, c_link);
 
-        start_tx_rx();
+        start_rx();
 
         zcondfeat!(
             "shared-memory",

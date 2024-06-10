@@ -246,17 +246,19 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         drop(guard);
 
         // create a callback to start the link
-        let start_link = Box::new(move || {
+        let start_tx = Box::new(move || {
             // start keepalive task
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
             self.start_keepalive(keep_alive);
+        });
 
+        let start_rx = Box::new(move || {
             // start RX task
             self.internal_start_rx(other_lease);
         });
 
-        Ok((start_link, ack))
+        Ok((start_tx, start_rx, ack))
     }
 
     /*************************************/
