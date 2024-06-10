@@ -144,8 +144,14 @@ jobs:
         uses: crate-ci/typos@master
 
   msrvs:
-    name: MSRV checks
-    runs-on: ubuntu-latest
+    name: MSRV checks on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    # NOTE: It is necessary to run the check-msrv action on multiple platforms since a crate's MSRV
+    # depends on the target it's compiled for.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
     steps:
       - name: Clone this repository
         uses: actions/checkout@v4
