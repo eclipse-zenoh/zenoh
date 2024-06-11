@@ -133,6 +133,16 @@ pub trait PredefinedParameters {
     fn reply_key_expr_any(&self) -> bool;
 }
 
+#[cfg(not(feature = "unstable"))]
+pub(crate) trait PredefinedParameters {
+    const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
+    const TIME_RANGE_KEY: &'static str = "_time";
+    fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T);
+    fn set_reply_key_expr_any(&mut self);
+    fn time_range(&self) -> Option<ZResult<TimeRange>>;
+    fn reply_key_expr_any(&self) -> bool;
+}
+
 impl PredefinedParameters for Parameters<'_> {
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {

@@ -28,7 +28,6 @@ mod _prelude {
     #[zenoh_macros::unstable]
     pub use crate::api::publisher::PublisherDeclarations;
     pub use crate::{
-        api::selector::PredefinedParameters,
         api::{
             builders::sample::{
                 QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
@@ -38,6 +37,8 @@ mod _prelude {
         config::ValidatedMap,
         core::{Error as ZError, Resolvable, Resolve, Result as ZResult},
     };
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::PredefinedParameters;
 }
 
 pub use _prelude::*;
