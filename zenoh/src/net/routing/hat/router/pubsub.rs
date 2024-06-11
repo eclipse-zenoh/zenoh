@@ -868,7 +868,7 @@ impl HatPubSubTrait for HatCode {
                 "Received Interest with aggregate=true from peer {}. Not supported!",
                 face.zid
             );
-            aggregate = true;
+            aggregate = false;
         }
         if mode.current() {
             let interest_id = (!mode.future()).then_some(id);

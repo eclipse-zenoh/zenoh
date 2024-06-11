@@ -1044,7 +1044,7 @@ impl HatQueriesTrait for HatCode {
                 "Received Interest with aggregate=true from peer {}. Not supported!",
                 face.zid
             );
-            aggregate = true;
+            aggregate = false;
         }
         if mode.current() && face.whatami == WhatAmI::Client {
             let interest_id = (!mode.future()).then_some(id);
