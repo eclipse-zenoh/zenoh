@@ -11,16 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::convert::TryFrom;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use zenoh_protocol::core::{Timestamp, TimestampId};
 
-/// Generates a reception [`Timestamp`] with id=0x01.
-/// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
-/// that doesn't contain any timestamp.
-pub fn new_reception_timestamp() -> Timestamp {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(now.into(), TimestampId::try_from([1]).unwrap())
+/// Generates a [`Timestamp`] with [`TimestampId`] and current system time
+/// The [`TimestampId`] can be taken from session id returned by [`SessionInfo::zid()`](crate::api::info::SessionInfo::zid).
+pub fn new_timestamp<T: Into<TimestampId>>(id: T) -> Timestamp {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
+    Timestamp::new(now, id.into())
 }

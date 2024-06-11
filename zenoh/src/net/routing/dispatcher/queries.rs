@@ -474,6 +474,8 @@ impl Timed for QueryCleanup {
                 &self.tables,
                 &mut face,
                 self.qid,
+                response::ext::QoSType::RESPONSE,
+                None,
                 ext_respid,
                 WireExpr::empty(),
                 ResponseBody::Err(zenoh::Err {
@@ -610,6 +612,8 @@ pub fn route_query(
     face: &Arc<FaceState>,
     expr: &WireExpr,
     qid: RequestId,
+    ext_qos: ext::QoSType,
+    ext_tstamp: Option<ext::TimestampType>,
     ext_target: TargetType,
     ext_budget: Option<BudgetType>,
     ext_timeout: Option<TimeoutType>,
@@ -686,8 +690,8 @@ pub fn route_query(
                             Request {
                                 id: *qid,
                                 wire_expr: key_expr.into(),
-                                ext_qos: ext::QoSType::REQUEST,
-                                ext_tstamp: None,
+                                ext_qos,
+                                ext_tstamp,
                                 ext_nodeid: ext::NodeIdType { node_id: *context },
                                 ext_target,
                                 ext_budget,
@@ -734,10 +738,13 @@ pub fn route_query(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_response(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
     qid: RequestId,
+    ext_qos: ext::QoSType,
+    ext_tstamp: Option<ext::TimestampType>,
     ext_respid: Option<ResponderIdType>,
     key_expr: WireExpr,
     body: ResponseBody,
@@ -772,8 +779,8 @@ pub(crate) fn route_send_response(
                         rid: query.src_qid,
                         wire_expr: key_expr.to_owned(),
                         payload: body,
-                        ext_qos: response::ext::QoSType::RESPONSE,
-                        ext_tstamp: None,
+                        ext_qos,
+                        ext_tstamp,
                         ext_respid,
                     },
                     "".to_string(), // @TODO provide the proper key expression of the response for interceptors

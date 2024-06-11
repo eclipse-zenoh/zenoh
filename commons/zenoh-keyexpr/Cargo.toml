@@ -26,6 +26,8 @@ description = "Internal crate for zenoh."
 [features]
 default = ["std"]
 std = ["zenoh-result/std", "dep:schemars"]
+internal = []
+unstable = []
 
 [dependencies]
 keyed-set = { workspace = true }

@@ -12,16 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Debug, sync::atomic::AtomicPtr};
+use std::{fmt::Debug, sync::Arc};
 
 use zenoh_result::ZResult;
 
-use crate::api::common::types::ChunkID;
+use super::shm_segment::ShmSegment;
+use crate::api::common::types::SegmentID;
 
-/// SharedMemorySegment - RAII interface to interact with particular shared memory segment
+/// ShmClient - client factory implementation for particular shared memory protocol
 #[zenoh_macros::unstable_doc]
-pub trait SharedMemorySegment: Debug + Send + Sync {
-    /// Obtain the actual region of memory identified by it's id
+pub trait ShmClient: Debug + Send + Sync {
+    /// Attach to particular shared memory segment
     #[zenoh_macros::unstable_doc]
-    fn map(&self, chunk: ChunkID) -> ZResult<AtomicPtr<u8>>;
+    fn attach(&self, segment: SegmentID) -> ZResult<Arc<dyn ShmSegment>>;
 }

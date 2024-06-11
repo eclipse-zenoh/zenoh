@@ -12,5 +12,5 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod shared_memory_client;
-pub mod shared_memory_segment;
+pub mod shm_client;
+pub mod shm_segment;

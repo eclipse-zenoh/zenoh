@@ -5186,6 +5186,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tracing",
+ "uhlc",
  "validated_struct",
  "zenoh-core",
  "zenoh-protocol",

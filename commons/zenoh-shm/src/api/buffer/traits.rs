@@ -15,10 +15,10 @@
 use std::ops::{Deref, DerefMut};
 
 #[zenoh_macros::unstable_doc]
-pub trait SHMBuf: Deref<Target = [u8]> + AsRef<[u8]> {
+pub trait ShmBuf: Deref<Target = [u8]> + AsRef<[u8]> {
     #[zenoh_macros::unstable_doc]
     fn is_valid(&self) -> bool;
 }
 
 #[zenoh_macros::unstable_doc]
-pub trait SHMBufMut: SHMBuf + DerefMut + AsMut<[u8]> {}
+pub trait ShmBufMut: ShmBuf + DerefMut + AsMut<[u8]> {}

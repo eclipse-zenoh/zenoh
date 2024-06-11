@@ -18,7 +18,7 @@ use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
 
 use crate::api::{
-    bytes::ZBytes,
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     key_expr::KeyExpr,
     publisher::Priority,
@@ -26,7 +26,7 @@ use crate::api::{
     value::Value,
 };
 #[cfg(feature = "unstable")]
-use crate::{api::bytes::OptionZBytes, sample::SourceInfo};
+use crate::sample::SourceInfo;
 
 pub trait QoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.
@@ -49,7 +49,6 @@ pub trait SampleBuilderTrait {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self;
     /// Attach user-provided data in key-value format
-    #[zenoh_macros::unstable]
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
 
@@ -95,7 +94,6 @@ impl SampleBuilder<SampleBuilderPut> {
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
-                #[cfg(feature = "unstable")]
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderPut>,
@@ -118,7 +116,6 @@ impl SampleBuilder<SampleBuilderDelete> {
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
-                #[cfg(feature = "unstable")]
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderDelete>,
@@ -162,7 +159,6 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
     }
 }
 
-#[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -175,7 +171,6 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
         }
     }
 
-    #[zenoh_macros::unstable]
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {

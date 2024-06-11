@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    borrow::Cow,
     cmp::Ordering,
     collections::{BTreeSet, HashMap, HashSet},
     str,
@@ -20,8 +21,8 @@ use std::{
 
 use async_std::sync::Arc;
 use zenoh::{
-    bytes::StringOrBase64, key_expr::OwnedKeyExpr, prelude::*, sample::Sample, selector::Selector,
-    time::Timestamp, value::Value, Session,
+    key_expr::OwnedKeyExpr, prelude::*, sample::Sample, selector::Selector, time::Timestamp,
+    value::Value, Session,
 };
 
 use super::{digest::*, Snapshotter};
@@ -234,8 +235,11 @@ impl AlignQueryable {
                     tracing::trace!(
                         "[ALIGN QUERYABLE] Received ('{}': '{}' @ {:?})",
                         sample.key_expr().as_str(),
-                        StringOrBase64::from(sample.payload()),
-                        sample.timestamp()
+                        sample
+                            .payload()
+                            .deserialize::<Cow<str>>()
+                            .unwrap_or(Cow::Borrowed("<malformed>")),
+                        sample.timestamp(),
                     );
                     if let Some(timestamp) = sample.timestamp() {
                         match timestamp.cmp(&logentry.timestamp) {

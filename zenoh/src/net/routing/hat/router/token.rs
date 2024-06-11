@@ -15,12 +15,14 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use petgraph::graph::NodeIndex;
-use zenoh_config::{WhatAmI, ZenohId};
-use zenoh_protocol::network::{
-    declare::{common::ext::WireExprType, TokenId},
-    ext,
-    interest::{InterestId, InterestMode},
-    Declare, DeclareBody, DeclareFinal, DeclareToken, UndeclareToken,
+use zenoh_protocol::{
+    core::{WhatAmI, ZenohId},
+    network::{
+        declare::{common::ext::WireExprType, TokenId},
+        ext,
+        interest::{InterestId, InterestMode},
+        Declare, DeclareBody, DeclareFinal, DeclareToken, UndeclareToken,
+    },
 };
 use zenoh_sync::get_mut_unchecked;
 

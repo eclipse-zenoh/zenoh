@@ -46,6 +46,12 @@ pub mod imsg {
         byte
     }
 
+    pub const fn set_bitfield(mut byte: u8, value: u8, mask: u8) -> u8 {
+        byte = unset_flag(byte, mask);
+        byte |= value;
+        byte
+    }
+
     pub const fn has_option(options: u64, flag: u64) -> bool {
         options & flag != 0
     }

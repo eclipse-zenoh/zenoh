@@ -20,16 +20,16 @@ use std::{
 
 use zenoh_buffers::{ZBuf, ZSlice};
 
-use super::{traits::SHMBuf, zshmmut::zshmmut};
-use crate::SharedMemoryBuf;
+use super::{traits::ShmBuf, zshmmut::zshmmut};
+use crate::ShmBufInner;
 
 /// An immutable SHM buffer
 #[zenoh_macros::unstable_doc]
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ZShm(pub(crate) SharedMemoryBuf);
+pub struct ZShm(pub(crate) ShmBufInner);
 
-impl SHMBuf for ZShm {
+impl ShmBuf for ZShm {
     fn is_valid(&self) -> bool {
         self.0.is_valid()
     }
@@ -44,7 +44,7 @@ impl PartialEq<&zshm> for ZShm {
 impl Borrow<zshm> for ZShm {
     fn borrow(&self) -> &zshm {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -52,7 +52,7 @@ impl Borrow<zshm> for ZShm {
 impl BorrowMut<zshm> for ZShm {
     fn borrow_mut(&mut self) -> &mut zshm {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -71,8 +71,8 @@ impl AsRef<[u8]> for ZShm {
     }
 }
 
-impl From<SharedMemoryBuf> for ZShm {
-    fn from(value: SharedMemoryBuf) -> Self {
+impl From<ShmBufInner> for ZShm {
+    fn from(value: ShmBufInner) -> Self {
         Self(value)
     }
 }
@@ -96,7 +96,7 @@ impl TryFrom<&mut ZShm> for &mut zshmmut {
         match value.0.is_unique() && value.0.is_valid() {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-                // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+                // to ShmBufInner type, so it is safe to transmute them in any direction
                 Ok(unsafe { core::mem::transmute(value) })
             }
             false => Err(()),
@@ -139,18 +139,18 @@ impl DerefMut for zshm {
     }
 }
 
-impl From<&SharedMemoryBuf> for &zshm {
-    fn from(value: &SharedMemoryBuf) -> Self {
+impl From<&ShmBufInner> for &zshm {
+    fn from(value: &ShmBufInner) -> Self {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(value) }
     }
 }
 
-impl From<&mut SharedMemoryBuf> for &mut zshm {
-    fn from(value: &mut SharedMemoryBuf) -> Self {
+impl From<&mut ShmBufInner> for &mut zshm {
+    fn from(value: &mut ShmBufInner) -> Self {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(value) }
     }
 }
@@ -162,7 +162,7 @@ impl TryFrom<&mut zshm> for &mut zshmmut {
         match value.0 .0.is_unique() && value.0 .0.is_valid() {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-                // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+                // to ShmBufInner type, so it is safe to transmute them in any direction
                 Ok(unsafe { core::mem::transmute(value) })
             }
             false => Err(()),

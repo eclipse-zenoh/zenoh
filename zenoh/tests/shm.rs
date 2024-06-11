@@ -26,8 +26,7 @@ use zenoh::{
     prelude::*,
     publisher::CongestionControl,
     shm::{
-        BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder,
-        POSIX_PROTOCOL_ID,
+        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     subscriber::Reliability,
     Session,
@@ -117,13 +116,13 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         tokio::time::sleep(SLEEP).await;
 
         // create SHM backend...
-        let backend = PosixSharedMemoryProviderBackend::builder()
+        let backend = PosixShmProviderBackend::builder()
             .with_size(size * MSG_COUNT / 10)
             .unwrap()
             .res()
             .unwrap();
         // ...and SHM provider
-        let shm01 = SharedMemoryProviderBuilder::builder()
+        let shm01 = ShmProviderBuilder::builder()
             .protocol_id::<POSIX_PROTOCOL_ID>()
             .backend(backend)
             .res();

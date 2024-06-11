@@ -274,7 +274,7 @@ pub mod ext {
         }
 
         pub fn set_priority(&mut self, priority: Priority) {
-            self.inner = imsg::set_flag(self.inner, priority as u8);
+            self.inner = imsg::set_bitfield(self.inner, priority as u8, Self::P_MASK);
         }
 
         pub const fn get_priority(&self) -> Priority {

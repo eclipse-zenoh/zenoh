@@ -169,7 +169,6 @@ impl TransportMulticastEventHandler for Handler {
                     Some(info),
                     serde_json::to_vec(&peer).unwrap().into(),
                     SubscriberKind::Subscriber,
-                    #[cfg(feature = "unstable")]
                     None,
                 );
                 Ok(Arc::new(PeerHandler {
@@ -219,7 +218,6 @@ impl TransportPeerEventHandler for PeerHandler {
             Some(info),
             serde_json::to_vec(&link).unwrap().into(),
             SubscriberKind::Subscriber,
-            #[cfg(feature = "unstable")]
             None,
         );
     }
@@ -240,7 +238,6 @@ impl TransportPeerEventHandler for PeerHandler {
             Some(info),
             vec![0u8; 0].into(),
             SubscriberKind::Subscriber,
-            #[cfg(feature = "unstable")]
             None,
         );
     }
@@ -258,7 +255,6 @@ impl TransportPeerEventHandler for PeerHandler {
             Some(info),
             vec![0u8; 0].into(),
             SubscriberKind::Subscriber,
-            #[cfg(feature = "unstable")]
             None,
         );
     }

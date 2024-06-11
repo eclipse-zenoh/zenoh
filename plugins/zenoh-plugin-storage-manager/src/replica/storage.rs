@@ -22,9 +22,12 @@ use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
 use zenoh::{
-    buffers::{SplitBuffer, ZBuf},
     core::Result as ZResult,
-    internal::{bail, zenoh_home, Timed, TimedEvent, Timer},
+    internal::{
+        bail,
+        buffers::{SplitBuffer, ZBuf},
+        zenoh_home, Timed, TimedEvent, Timer,
+    },
     key_expr::{
         keyexpr_tree::{
             IKeyExprTree, IKeyExprTreeMut, KeBoxTree, KeyedSetProvider, NonWild, UnknownWildness,
@@ -35,7 +38,7 @@ use zenoh::{
     sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait, ValueBuilderTrait},
     selector::Selector,
     session::{Session, SessionDeclarations},
-    time::{new_reception_timestamp, Timestamp, NTP64},
+    time::{new_timestamp, Timestamp, NTP64},
     value::Value,
 };
 use zenoh_backend_traits::{
@@ -146,6 +149,9 @@ impl StorageService {
         );
         t.add_async(gc).await;
 
+        // get session id for timestamp generation
+        let zid = self.session.info().zid().await;
+
         // subscribe on key_expr
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
             Ok(storage_sub) => storage_sub,
@@ -235,7 +241,7 @@ impl StorageService {
                                 continue;
                             }
                         };
-                        let timestamp = sample.timestamp().cloned().unwrap_or(new_reception_timestamp());
+                        let timestamp = sample.timestamp().cloned().unwrap_or(new_timestamp(zid));
                         let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
                         self.process_sample(sample).await;
                     },
@@ -495,7 +501,7 @@ impl StorageService {
         true
     }
 
-    async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
+    async fn reply_query(&self, query: Result<zenoh::query::Query, flume::RecvError>) {
         let q = match query {
             Ok(q) => q,
             Err(e) => {

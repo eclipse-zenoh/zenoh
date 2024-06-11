@@ -20,7 +20,7 @@ use std::{
 };
 
 #[cfg(feature = "unstable")]
-use zenoh::runtime::{Runtime, RuntimeBuilder};
+use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::{
     config, internal::ztimeout, key_expr::KeyExpr, prelude::*, publisher::CongestionControl,
     sample::SampleKind, subscriber::Reliability, Session,

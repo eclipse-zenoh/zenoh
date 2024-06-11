@@ -13,16 +13,17 @@
 //
 
 use std::{
+    collections::HashSet,
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
 use futures::Sink;
 use zenoh_core::{zread, Resolvable, Resolve, Wait};
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::CongestionControl,
     network::{push::ext, Push},
@@ -137,6 +138,8 @@ pub struct Publisher<'a> {
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
     pub(crate) destination: Locality,
+    pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a> Publisher<'a> {
@@ -158,13 +161,20 @@ impl<'a> Publisher<'a> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
-            zid: self.session.zid(),
+            zid: self.session.zid().into(),
             eid: self.id,
         }
     }
 
+    #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
+    }
+
+    #[inline]
+    /// Get the `congestion_control` applied when routing the data.
+    pub fn congestion_control(&self) -> CongestionControl {
+        self.congestion_control
     }
 
     /// Change the `congestion_control` to apply when routing the data.
@@ -173,18 +183,16 @@ impl<'a> Publisher<'a> {
         self.congestion_control = congestion_control;
     }
 
+    /// Get the priority of the written data.
+    #[inline]
+    pub fn priority(&self) -> Priority {
+        self.priority
+    }
+
     /// Change the priority of the written data.
     #[inline]
     pub fn set_priority(&mut self, priority: Priority) {
         self.priority = priority;
-    }
-
-    /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn set_allowed_destination(&mut self, destination: Locality) {
-        self.destination = destination;
     }
 
     /// Consumes the given `Publisher`, returning a thread-safe reference-counting
@@ -250,7 +258,6 @@ impl<'a> Publisher<'a> {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -275,7 +282,6 @@ impl<'a> Publisher<'a> {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -354,6 +360,13 @@ impl<'a> Publisher<'a> {
     /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
+    }
+
+    fn undeclare_matching_listeners(&self) -> ZResult<()> {
+        for id in zlock!(self.matching_listeners).drain() {
+            self.session.undeclare_matches_listener_inner(id)?
+        }
+        Ok(())
     }
 }
 
@@ -475,12 +488,12 @@ impl Resolvable for PublisherUndeclaration<'_> {
 
 impl Wait for PublisherUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        let Publisher {
-            session, id: eid, ..
-        } = &self.publisher;
-        session.undeclare_publisher_inner(*eid)?;
-        self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
-        Ok(())
+        // set the flag first to avoid double panic if this function panic
+        self.publisher.undeclare_on_drop = false;
+        self.publisher.undeclare_matching_listeners()?;
+        self.publisher
+            .session
+            .undeclare_publisher_inner(self.publisher.id)
     }
 }
 
@@ -495,7 +508,8 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
-        if !self.key_expr.is_empty() {
+        if self.undeclare_on_drop {
+            let _ = self.undeclare_matching_listeners();
             let _ = self.session.undeclare_publisher_inner(self.id);
         }
     }
@@ -515,7 +529,6 @@ impl<'a> Sink<Sample> for Publisher<'a> {
             payload,
             kind,
             encoding,
-            #[cfg(feature = "unstable")]
             attachment,
             ..
         } = item.into();
@@ -526,7 +539,6 @@ impl<'a> Sink<Sample> for Publisher<'a> {
             None,
             #[cfg(feature = "unstable")]
             SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment,
         )
     }
@@ -550,7 +562,7 @@ impl Publisher<'_> {
         encoding: Encoding,
         timestamp: Option<uhlc::Timestamp>,
         #[cfg(feature = "unstable")] source_info: SourceInfo,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         tracing::trace!("write({:?}, [...])", &self.key_expr);
         let primitives = zread!(self.session.state)
@@ -574,48 +586,28 @@ impl Publisher<'_> {
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::DEFAULT,
                 payload: match kind {
-                    SampleKind::Put => {
-                        #[allow(unused_mut)]
-                        let mut ext_attachment = None;
+                    SampleKind::Put => PushBody::Put(Put {
+                        timestamp,
+                        encoding: encoding.clone().into(),
                         #[cfg(feature = "unstable")]
-                        {
-                            if let Some(attachment) = attachment.clone() {
-                                ext_attachment = Some(attachment.into());
-                            }
-                        }
-                        PushBody::Put(Put {
-                            timestamp,
-                            encoding: encoding.clone().into(),
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment,
-                            ext_unknown: vec![],
-                            payload: payload.clone().into(),
-                        })
-                    }
-                    SampleKind::Delete => {
-                        #[allow(unused_mut)]
-                        let mut ext_attachment = None;
+                        ext_sinfo: source_info.into(),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_sinfo: None,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        ext_attachment: attachment.clone().map(|a| a.into()),
+                        ext_unknown: vec![],
+                        payload: payload.clone().into(),
+                    }),
+                    SampleKind::Delete => PushBody::Del(Del {
+                        timestamp,
                         #[cfg(feature = "unstable")]
-                        {
-                            if let Some(attachment) = attachment.clone() {
-                                ext_attachment = Some(attachment.into());
-                            }
-                        }
-                        PushBody::Del(Del {
-                            timestamp,
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            ext_attachment,
-                            ext_unknown: vec![],
-                        })
-                    }
+                        ext_sinfo: source_info.into(),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_sinfo: None,
+                        ext_attachment: attachment.clone().map(|a| a.into()),
+                        ext_unknown: vec![],
+                    }),
                 },
             });
         }
@@ -639,7 +631,6 @@ impl Publisher<'_> {
                 Some(data_info),
                 payload.into(),
                 SubscriberKind::Subscriber,
-                #[cfg(feature = "unstable")]
                 attachment,
             );
         }
@@ -665,11 +656,16 @@ impl Priority {
     /// Default
     pub const DEFAULT: Self = Self::Data;
     /// The lowest Priority
-    pub const MIN: Self = Self::Background;
+    #[zenoh_macros::internal]
+    pub const MIN: Self = Self::MIN_;
+    const MIN_: Self = Self::Background;
     /// The highest Priority
-    pub const MAX: Self = Self::RealTime;
+    #[zenoh_macros::internal]
+    pub const MAX: Self = Self::MAX_;
+    const MAX_: Self = Self::RealTime;
     /// The number of available priorities
-    pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
+    #[zenoh_macros::internal]
+    pub const NUM: usize = 1 + Self::MIN_ as usize - Self::MAX_ as usize;
 }
 
 impl TryFrom<u8> for Priority {
@@ -695,8 +691,8 @@ impl TryFrom<u8> for Priority {
             unknown => bail!(
                 "{} is not a valid priority value. Admitted values are: [{}-{}].",
                 unknown,
-                Self::MAX as u8,
-                Self::MIN as u8
+                Self::MAX_ as u8,
+                Self::MIN_ as u8
             ),
         }
     }
@@ -911,17 +907,19 @@ where
     #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-        self.publisher
+        let state = self
+            .publisher
             .session
-            .declare_matches_listener_inner(&self.publisher, callback)
-            .map(|listener_state| MatchingListener {
-                listener: MatchingListenerInner {
-                    publisher: self.publisher,
-                    state: listener_state,
-                    alive: true,
-                },
-                receiver,
-            })
+            .declare_matches_listener_inner(&self.publisher, callback)?;
+        zlock!(self.publisher.matching_listeners).insert(state.id);
+        Ok(MatchingListener {
+            listener: MatchingListenerInner {
+                publisher: self.publisher,
+                state,
+                undeclare_on_drop: true,
+            },
+            receiver,
+        })
     }
 }
 
@@ -963,7 +961,7 @@ impl std::fmt::Debug for MatchingListenerState {
 pub(crate) struct MatchingListenerInner<'a> {
     pub(crate) publisher: PublisherRef<'a>,
     pub(crate) state: std::sync::Arc<MatchingListenerState>,
-    pub(crate) alive: bool,
+    undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -1031,6 +1029,14 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
         self.listener.undeclare()
     }
+
+    /// Make the matching listener run in background, until the publisher is undeclared.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // The matching listener will be undeclared as part of publisher undeclaration.
+        self.listener.undeclare_on_drop = false;
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -1068,7 +1074,9 @@ impl Resolvable for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Wait for MatchingListenerUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.subscriber.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.subscriber.undeclare_on_drop = false;
+        zlock!(self.subscriber.publisher.matching_listeners).remove(&self.subscriber.state.id);
         self.subscriber
             .publisher
             .session
@@ -1089,7 +1097,8 @@ impl IntoFuture for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Drop for MatchingListenerInner<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.undeclare_on_drop {
+            zlock!(self.publisher.matching_listeners).remove(&self.state.id);
             let _ = self
                 .publisher
                 .session

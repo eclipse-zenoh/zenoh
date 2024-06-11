@@ -28,16 +28,16 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
-    super::{
-        builders::sample::SampleBuilderTrait, bytes::OptionZBytes, query::ReplyKeyExpr,
-        sample::SourceInfo,
-    },
+    super::{query::ReplyKeyExpr, sample::SourceInfo},
     zenoh_protocol::core::EntityGlobalId,
 };
 
 use super::{
-    builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
-    bytes::ZBytes,
+    builders::sample::{
+        QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
+        ValueBuilderTrait,
+    },
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
@@ -74,7 +74,6 @@ pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
     pub(crate) eid: EntityId,
     pub(crate) value: Option<Value>,
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -131,13 +130,11 @@ impl Query {
     }
 
     /// This Query's attachment.
-    #[zenoh_macros::unstable]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
     /// This Query's attachment.
-    #[zenoh_macros::unstable]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
     }
@@ -149,8 +146,7 @@ impl Query {
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     /// This api is for internal use only.
     #[inline(always)]
-    #[cfg(feature = "unstable")]
-    #[doc(hidden)]
+    #[zenoh_macros::internal]
     pub fn reply_sample(&self, sample: Sample) -> ReplySample<'_> {
         ReplySample {
             query: self,
@@ -185,7 +181,6 @@ impl Query {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -225,7 +220,6 @@ impl Query {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -272,21 +266,25 @@ impl fmt::Display for Query {
     }
 }
 
+#[zenoh_macros::internal]
 pub struct ReplySample<'a> {
     query: &'a Query,
     sample: Sample,
 }
 
+#[zenoh_macros::internal]
 impl Resolvable for ReplySample<'_> {
     type To = ZResult<()>;
 }
 
+#[zenoh_macros::internal]
 impl Wait for ReplySample<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.query._reply_sample(self.sample)
     }
 }
 
+#[zenoh_macros::internal]
 impl IntoFuture for ReplySample<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
@@ -313,11 +311,8 @@ pub struct ReplyBuilder<'a, 'b, T> {
     kind: T,
     timestamp: Option<Timestamp>,
     qos: QoSBuilder,
-
     #[cfg(feature = "unstable")]
     source_info: SourceInfo,
-
-    #[cfg(feature = "unstable")]
     attachment: Option<ZBytes>,
 }
 
@@ -330,9 +325,7 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-#[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
-    #[cfg(feature = "unstable")]
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -409,7 +402,6 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
             .qos(self.qos.into());
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
-        #[cfg(feature = "unstable")]
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -423,7 +415,6 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
             .qos(self.qos.into());
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
-        #[cfg(feature = "unstable")]
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -460,20 +451,14 @@ impl Query {
                         ext_sinfo,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
-                        #[cfg(feature = "unstable")]
                         ext_attachment: sample.attachment.map(|a| a.into()),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_attachment: None,
                         ext_unknown: vec![],
                         payload: sample.payload.into(),
                     }),
                     SampleKind::Delete => ReplyBody::Del(Del {
                         timestamp: sample.timestamp,
                         ext_sinfo,
-                        #[cfg(feature = "unstable")]
                         ext_attachment: sample.attachment.map(|a| a.into()),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_attachment: None,
                         ext_unknown: vec![],
                     }),
                 },
@@ -625,7 +610,7 @@ impl fmt::Debug for QueryableState {
 pub(crate) struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
-    pub(crate) alive: bool,
+    undeclare_on_drop: bool,
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
@@ -658,7 +643,8 @@ impl Resolvable for QueryableUndeclaration<'_> {
 
 impl Wait for QueryableUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.queryable.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.queryable.undeclare_on_drop = false;
         self.queryable
             .session
             .close_queryable(self.queryable.state.id)
@@ -676,7 +662,7 @@ impl<'a> IntoFuture for QueryableUndeclaration<'a> {
 
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.undeclare_on_drop {
             let _ = self.session.close_queryable(self.state.id);
         }
     }
@@ -886,7 +872,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
-            zid: self.queryable.session.zid(),
+            zid: self.queryable.session.zid().into(),
             eid: self.queryable.state.id,
         }
     }
@@ -908,6 +894,16 @@ impl<'a, Handler> Queryable<'a, Handler> {
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
+    }
+
+    /// Make the queryable run in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.queryable.undeclare_on_drop = false;
     }
 }
 
@@ -958,7 +954,7 @@ where
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
-                    alive: true,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })

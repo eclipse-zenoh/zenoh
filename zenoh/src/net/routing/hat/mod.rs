@@ -19,14 +19,17 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::{any::Any, collections::HashMap, sync::Arc};
 
-use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
-use zenoh_protocol::network::{
-    declare::{
-        queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
-        SubscriberId, TokenId,
+use zenoh_config::{unwrap_or_default, Config, WhatAmI};
+use zenoh_protocol::{
+    core::ZenohId,
+    network::{
+        declare::{
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+            SubscriberId, TokenId,
+        },
+        interest::{InterestId, InterestMode},
+        Oam,
     },
-    interest::{InterestId, InterestMode},
-    Oam,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
@@ -38,7 +41,7 @@ use super::{
     },
     router::RoutesIndexes,
 };
-use crate::{key_expr::KeyExpr, runtime::Runtime};
+use crate::{key_expr::KeyExpr, net::runtime::Runtime};
 
 mod client;
 mod linkstate_peer;

@@ -78,8 +78,8 @@ impl fmt::Debug for SubscriberState {
 pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
-    pub(crate) alive: bool,
     pub(crate) kind: SubscriberKind,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -143,7 +143,8 @@ impl Resolvable for SubscriberUndeclaration<'_> {
 
 impl Wait for SubscriberUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.subscriber.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.subscriber.undeclare_on_drop = false;
         self.subscriber
             .session
             .undeclare_subscriber_inner(self.subscriber.state.id, self.subscriber.kind)
@@ -161,7 +162,7 @@ impl IntoFuture for SubscriberUndeclaration<'_> {
 
 impl Drop for SubscriberInner<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.undeclare_on_drop {
             let _ = self
                 .session
                 .undeclare_subscriber_inner(self.state.id, self.kind);
@@ -390,8 +391,8 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
-                    alive: true,
                     kind: SubscriberKind::Subscriber,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })
@@ -463,7 +464,7 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalId {
-            zid: self.subscriber.session.zid(),
+            zid: self.subscriber.session.zid().into(),
             eid: self.subscriber.state.id,
         }
     }
@@ -508,6 +509,16 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         self.subscriber.undeclare()
+    }
+
+    /// Make the subscriber run in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.subscriber.undeclare_on_drop = false;
     }
 }
 

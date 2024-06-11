@@ -12,14 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh::shm::{
-    AllocAlignment, MemoryLayout, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder,
-    POSIX_PROTOCOL_ID,
+    AllocAlignment, MemoryLayout, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
 };
 
 fn main() {
     // Construct an SHM backend
     let backend = {
-        // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
+        // NOTE: code in this block is a specific PosixShmProviderBackend API.
 
         // Total amount of shared memory to allocate
         let size = 4096;
@@ -33,14 +32,14 @@ fn main() {
         let provider_layout = MemoryLayout::new(size, provider_alignment).unwrap();
 
         // Build a provider backend
-        PosixSharedMemoryProviderBackend::builder()
+        PosixShmProviderBackend::builder()
             .with_layout(provider_layout)
             .res()
             .unwrap()
     };
 
     // Construct an SHM provider for particular backend and POSIX_PROTOCOL_ID
-    let _shared_memory_provider = SharedMemoryProviderBuilder::builder()
+    let _shm_provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();

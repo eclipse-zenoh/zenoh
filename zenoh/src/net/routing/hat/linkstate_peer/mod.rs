@@ -25,9 +25,10 @@ use std::{
 };
 
 use token::{token_remove_node, undeclare_client_token};
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     common::ZExtBody,
+    core::ZenohId,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
         interest::InterestId,
