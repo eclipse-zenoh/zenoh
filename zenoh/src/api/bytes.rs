@@ -1992,7 +1992,7 @@ mod tests {
         let p = ZBytes::from_iter(v.iter());
         println!("Deserialize:\t{:?}\n", p);
         for (i, t) in p.iter::<usize>().enumerate() {
-            assert_eq!(i, t);
+            assert_eq!(i, t.unwrap());
         }
 
         let mut v = vec![[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
@@ -2000,10 +2000,10 @@ mod tests {
         let p = ZBytes::from_iter(v.drain(..));
         println!("Deserialize:\t{:?}\n", p);
         let mut iter = p.iter::<[u8; 4]>();
-        assert_eq!(iter.next().unwrap(), [0, 1, 2, 3]);
-        assert_eq!(iter.next().unwrap(), [4, 5, 6, 7]);
-        assert_eq!(iter.next().unwrap(), [8, 9, 10, 11]);
-        assert_eq!(iter.next().unwrap(), [12, 13, 14, 15]);
+        assert_eq!(iter.next().unwrap().unwrap(), [0, 1, 2, 3]);
+        assert_eq!(iter.next().unwrap().unwrap(), [4, 5, 6, 7]);
+        assert_eq!(iter.next().unwrap().unwrap(), [8, 9, 10, 11]);
+        assert_eq!(iter.next().unwrap().unwrap(), [12, 13, 14, 15]);
         assert!(iter.next().is_none());
 
         use std::collections::HashMap;
@@ -2013,7 +2013,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, usize)>());
+        let o = HashMap::from_iter(p.iter::<(usize, usize)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
@@ -2022,7 +2022,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
@@ -2031,7 +2031,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, ZSlice> = HashMap::new();
@@ -2040,7 +2040,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, ZSlice)>());
+        let o = HashMap::from_iter(p.iter::<(usize, ZSlice)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, ZBuf> = HashMap::new();
@@ -2049,7 +2049,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, ZBuf)>());
+        let o = HashMap::from_iter(p.iter::<(usize, ZBuf)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
@@ -2058,7 +2058,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().iter().map(|(k, v)| (k, Cow::from(v))));
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<String, String> = HashMap::new();
@@ -2067,7 +2067,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.iter());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(String, String)>());
+        let o = HashMap::from_iter(p.iter::<(String, String)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<Cow<'static, str>, Cow<'static, str>> = HashMap::new();
@@ -2076,7 +2076,10 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.iter());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(Cow<'static, str>, Cow<'static, str>)>());
+        let o = HashMap::from_iter(
+            p.iter::<(Cow<'static, str>, Cow<'static, str>)>()
+                .map(Result::unwrap),
+        );
         assert_eq!(hm, o);
     }
 }
