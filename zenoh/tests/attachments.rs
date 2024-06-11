@@ -21,10 +21,15 @@ fn attachment_pubsub() {
         .declare_subscriber("test/attachment")
         .callback(|sample| {
             println!("{}", sample.payload().deserialize::<String>().unwrap());
-            for (k, v) in sample.attachment().unwrap().iter::<(
-                [u8; std::mem::size_of::<usize>()],
-                [u8; std::mem::size_of::<usize>()],
-            )>() {
+            for (k, v) in sample
+                .attachment()
+                .unwrap()
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
             }
         })
@@ -69,10 +74,13 @@ fn attachment_queries() {
 
             let attachment = query.attachment().unwrap();
             println!("Query attachment: {:?}", attachment);
-            for (k, v) in attachment.iter::<(
-                [u8; std::mem::size_of::<usize>()],
-                [u8; std::mem::size_of::<usize>()],
-            )>() {
+            for (k, v) in attachment
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v));
             }
 
@@ -87,6 +95,7 @@ fn attachment_queries() {
                             [u8; std::mem::size_of::<usize>()],
                             [u8; std::mem::size_of::<usize>()],
                         )>()
+                        .map(Result::unwrap)
                         .map(|(k, _)| (k, k)),
                 ))
                 .wait()
@@ -111,10 +120,15 @@ fn attachment_queries() {
             .unwrap();
         while let Ok(reply) = get.recv() {
             let response = reply.result().unwrap();
-            for (k, v) in response.attachment().unwrap().iter::<(
-                [u8; std::mem::size_of::<usize>()],
-                [u8; std::mem::size_of::<usize>()],
-            )>() {
+            for (k, v) in response
+                .attachment()
+                .unwrap()
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert_eq!(k, v)
             }
         }
