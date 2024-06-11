@@ -360,7 +360,8 @@ impl<'a> Publisher<'a> {
     }
 
     fn undeclare_matching_listeners(&self) -> ZResult<()> {
-        for id in zlock!(self.matching_listeners).drain() {
+        let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
+        for id in ids {
             self.session.undeclare_matches_listener_inner(id)?
         }
         Ok(())
