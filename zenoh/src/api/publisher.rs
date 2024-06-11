@@ -35,6 +35,7 @@ use {
     crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
     crate::api::sample::SourceInfo,
     zenoh_protocol::core::EntityGlobalId,
+    zenoh_protocol::core::EntityGlobalIdInner,
 };
 
 use super::{
@@ -157,10 +158,11 @@ impl<'a> Publisher<'a> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
-        EntityGlobalId {
+        EntityGlobalIdInner {
             zid: self.session.zid().into(),
             eid: self.id,
         }
+        .into()
     }
 
     #[inline]

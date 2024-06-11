@@ -319,12 +319,12 @@ pub type EntityId = u32;
 
 /// The global unique id of a zenoh entity.
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
-pub struct EntityGlobalId {
+pub struct EntityGlobalIdInner {
     pub zid: ZenohIdInner,
     pub eid: EntityId,
 }
 
-impl EntityGlobalId {
+impl EntityGlobalIdInner {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -334,6 +334,27 @@ impl EntityGlobalId {
         }
     }
 }
+
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
+#[repr(transparent)]
+pub struct EntityGlobalId(EntityGlobalIdInner);
+
+impl EntityGlobalId {
+    pub fn zid(&self) -> ZenohIdInner {
+        self.0.zid
+    }
+
+    pub fn eid(&self) -> EntityId {
+        self.0.eid
+    }
+}
+
+impl From<EntityGlobalIdInner> for EntityGlobalId {
+    fn from(id: EntityGlobalIdInner) -> Self {
+        Self(id)
+    }
+}
+
 
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]

@@ -26,7 +26,7 @@ use zenoh_buffers::{
 use zenoh_protocol::common::{iext, ZExtUnit};
 use zenoh_protocol::{
     common::{imsg, ZExtZBufHeader},
-    core::{Encoding, EntityGlobalId, EntityId, ZenohIdInner},
+    core::{Encoding, EntityGlobalIdInner, EntityId, ZenohIdInner},
     zenoh::{ext, id, PushBody, RequestBody, ResponseBody},
 };
 
@@ -193,7 +193,7 @@ where
 
         Ok((
             ext::SourceInfoType {
-                id: EntityGlobalId { zid, eid },
+                id: EntityGlobalIdInner { zid, eid },
                 sn,
             },
             more,

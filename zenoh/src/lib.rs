@@ -207,6 +207,8 @@ pub mod session {
 
 /// Tools to access information about the current zenoh [`Session`](crate::Session).
 pub mod info {
+    pub use zenoh_protocol::core::EntityGlobalId;
+    pub use zenoh_protocol::core::EntityId;
     pub use crate::api::info::{
         PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder,
     };

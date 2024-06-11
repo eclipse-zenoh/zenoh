@@ -18,7 +18,7 @@ use std::{convert::TryFrom, fmt};
 #[cfg(feature = "unstable")]
 use serde::Serialize;
 use zenoh_protocol::{
-    core::{CongestionControl, EntityGlobalId, Timestamp},
+    core::{CongestionControl, EntityGlobalIdInner, Timestamp},
     network::declare::ext::QoSType,
 };
 
@@ -52,7 +52,7 @@ pub(crate) struct DataInfo {
     pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    pub source_id: Option<EntityGlobalId>,
+    pub source_id: Option<EntityGlobalIdInner>,
     pub source_sn: Option<SourceSn>,
     pub qos: QoS,
 }
@@ -137,7 +137,7 @@ impl DataInfoIntoSample for Option<DataInfo> {
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
     /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
-    pub source_id: Option<EntityGlobalId>,
+    pub source_id: Option<EntityGlobalIdInner>,
     /// The sequence number of the [`Sample`] from the source.
     pub source_sn: Option<SourceSn>,
 }

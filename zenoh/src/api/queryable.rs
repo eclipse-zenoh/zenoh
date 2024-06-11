@@ -29,7 +29,7 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
     super::{query::ReplyKeyExpr, sample::SourceInfo},
-    zenoh_protocol::core::EntityGlobalId,
+    zenoh_protocol::core::EntityGlobalIdInner,
 };
 
 use super::{
@@ -870,8 +870,8 @@ impl<'a, Handler> Queryable<'a, Handler> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn id(&self) -> EntityGlobalId {
-        EntityGlobalId {
+    pub fn id(&self) -> EntityGlobalIdInner {
+        EntityGlobalIdInner {
             zid: self.queryable.session.zid().into(),
             eid: self.queryable.state.id,
         }
