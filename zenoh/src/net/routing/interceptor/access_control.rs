@@ -143,7 +143,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                         .then_some(ingress_interceptor),
                     self.enforcer
                         .interface_enabled
-                        .ingress
+                        .egress
                         .then_some(egress_interceptor),
                 )
             }
