@@ -45,7 +45,7 @@ use crate::multicast::manager::{
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol::core::{ZenohId, Resolution, Field, Bits, WhatAmI, whatami};
+/// use zenoh_protocol::core::{ZenohIdInner, Resolution, Field, Bits, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_result::ZResult;
 ///
@@ -85,7 +85,7 @@ use crate::multicast::manager::{
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
 /// let manager = TransportManager::builder()
-///         .zid(ZenohId::rand())
+///         .zid(ZenohIdInner::rand().into())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .resolution(resolution)         // Use a sequence number resolution of 128
