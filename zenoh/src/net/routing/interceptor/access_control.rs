@@ -136,15 +136,16 @@ impl InterceptorFactoryTrait for AclEnforcer {
                     zid,
                     subject: authn_ids,
                 });
-                match (
-                    self.enforcer.interface_enabled.ingress,
-                    self.enforcer.interface_enabled.egress,
-                ) {
-                    (true, true) => (Some(ingress_interceptor), Some(egress_interceptor)),
-                    (true, false) => (Some(ingress_interceptor), None),
-                    (false, true) => (None, Some(egress_interceptor)),
-                    (false, false) => (None, None),
-                }
+                (
+                    self.enforcer
+                        .interface_enabled
+                        .ingress
+                        .then_some(ingress_interceptor),
+                    self.enforcer
+                        .interface_enabled
+                        .ingress
+                        .then_some(egress_interceptor),
+                )
             }
             Err(e) => {
                 tracing::error!("Failed to get zid with error :{}", e);
