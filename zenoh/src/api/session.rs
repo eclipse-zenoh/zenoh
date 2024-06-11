@@ -2657,7 +2657,7 @@ impl crate::net::primitives::EPrimitives for Session {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::str::FromStr;
-/// use zenoh::{config::ZenohId, prelude::*};
+/// use zenoh::{info::ZenohId, prelude::*};
 ///
 /// let mut config = zenoh::config::peer();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());

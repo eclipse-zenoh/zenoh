@@ -207,6 +207,7 @@ pub mod session {
 
 /// Tools to access information about the current zenoh [`Session`](crate::Session).
 pub mod info {
+    pub use zenoh_protocol::core::ZenohId;
     pub use zenoh_protocol::core::EntityGlobalId;
     pub use zenoh_protocol::core::EntityId;
     pub use crate::api::info::{
@@ -348,7 +349,6 @@ pub mod time {
 
 /// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
 pub mod config {
-    pub use zenoh_protocol::core::ZenohId;
     // pub use zenoh_config::{
     //     client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
     //     PluginLoad, ValidatedMap, ZenohId,

@@ -24,7 +24,7 @@ use async_std::{
 };
 use flume::Receiver;
 use futures::join;
-use zenoh::{config::ZenohId, key_expr::OwnedKeyExpr, time::Timestamp};
+use zenoh::{info::ZenohId, key_expr::OwnedKeyExpr, time::Timestamp};
 use zenoh_backend_traits::config::ReplicaConfig;
 
 use super::{Digest, DigestConfig, LogEntry};
