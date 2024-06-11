@@ -125,9 +125,9 @@ use async_trait::async_trait;
 use const_format::concatcp;
 use zenoh::{
     core::Result as ZResult,
+    internal::Value,
     key_expr::{keyexpr, OwnedKeyExpr},
     time::Timestamp,
-    value::Value,
 };
 use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, StructVersion};
 use zenoh_util::concat_enabled_features;

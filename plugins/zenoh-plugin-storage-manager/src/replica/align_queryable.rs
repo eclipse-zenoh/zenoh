@@ -21,8 +21,8 @@ use std::{
 
 use async_std::sync::Arc;
 use zenoh::{
-    key_expr::OwnedKeyExpr, prelude::*, sample::Sample, selector::Selector, time::Timestamp,
-    value::Value, Session,
+    internal::Value, key_expr::OwnedKeyExpr, prelude::*, sample::Sample, selector::Selector,
+    time::Timestamp, Session,
 };
 
 use super::{digest::*, Snapshotter};
