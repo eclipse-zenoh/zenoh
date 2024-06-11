@@ -415,30 +415,21 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
     /// expressions that don't intersect with the query's.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
-        Self {
-            selector: self.selector.map(
-                |Selector {
-                     key_expr,
-                     parameters,
-                 }| {
-                    if accept == ReplyKeyExpr::Any {
-                        let mut parameters = parameters.into_owned();
-                        parameters.set_reply_key_expr_any();
-                        let parameters = Cow::Owned(parameters);
-                        Selector {
-                            key_expr,
-                            parameters,
-                        }
-                    } else {
-                        Selector {
-                            key_expr,
-                            parameters,
-                        }
-                    }
-                },
-            ),
-            ..self
+        if accept == ReplyKeyExpr::Any {
+            if let Ok(Selector {
+                key_expr,
+                mut parameters,
+            }) = self.selector
+            {
+                parameters.to_mut().set_reply_key_expr_any();
+                let selector = Ok(Selector {
+                    key_expr,
+                    parameters,
+                });
+                return Self { selector, ..self };
+            }
         }
+        self
     }
 }
 
