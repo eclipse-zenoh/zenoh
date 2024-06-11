@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::vec::Vec;
-use std::fmt;
+use core::fmt;
 
 use crate::core::{Locator, WhatAmI, ZenohIdInner};
 
