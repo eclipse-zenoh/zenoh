@@ -490,18 +490,12 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         }
 
         // Extension Auth
-        #[allow(unused_mut, unused_assignments)]
         #[cfg(feature = "auth_usrpwd")]
-        let mut user_password_id = UsrPwdId(None);
-
-        #[cfg(feature = "auth_usrpwd")]
-        {
-            user_password_id = self
-                .ext_auth
-                .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
-                .await
-                .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-        }
+        let user_password_id = self
+            .ext_auth
+            .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
