@@ -34,7 +34,9 @@ use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, Reso
 use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
-        key_expr::{keyexpr, OwnedKeyExpr}, AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, ZenohId, EMPTY_EXPR_ID
+        key_expr::{keyexpr, OwnedKeyExpr},
+        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, ZenohId,
+        EMPTY_EXPR_ID,
     },
     network::{
         self,

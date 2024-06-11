@@ -207,9 +207,8 @@ pub mod session {
 
 /// Tools to access information about the current zenoh [`Session`](crate::Session).
 pub mod info {
-    pub use zenoh_protocol::core::ZenohId;
-    pub use zenoh_protocol::core::EntityGlobalId;
-    pub use zenoh_protocol::core::EntityId;
+    pub use zenoh_protocol::core::{EntityGlobalId, EntityId, ZenohId};
+
     pub use crate::api::info::{
         PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder,
     };
@@ -328,6 +327,7 @@ pub mod handlers {
 /// Scouting primitives
 pub mod scouting {
     pub use zenoh_protocol::scouting::hello::Hello;
+
     pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
 }
 

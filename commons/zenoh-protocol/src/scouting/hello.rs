@@ -13,6 +13,7 @@
 //
 use alloc::vec::Vec;
 use std::fmt;
+
 use crate::core::{Locator, WhatAmI, ZenohIdInner};
 
 /// # Hello message
@@ -165,4 +166,3 @@ impl fmt::Display for Hello {
             .finish()
     }
 }
-

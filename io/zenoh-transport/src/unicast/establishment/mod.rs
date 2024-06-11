@@ -101,7 +101,11 @@ pub trait AcceptFsm {
 /*************************************/
 /*           FUNCTIONS               */
 /*************************************/
-pub(super) fn compute_sn(zid1: ZenohIdInner, zid2: ZenohIdInner, resolution: Resolution) -> TransportSn {
+pub(super) fn compute_sn(
+    zid1: ZenohIdInner,
+    zid2: ZenohIdInner,
+    resolution: Resolution,
+) -> TransportSn {
     // Create a random yet deterministic initial_sn.
     // In case of multilink it's important that the same initial_sn is used for every connection attempt.
     // Instead of storing the state everywhere, we make sure that the we always compute the same initial_sn.

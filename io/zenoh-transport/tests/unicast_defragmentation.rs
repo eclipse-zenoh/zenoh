@@ -16,7 +16,8 @@ use std::{convert::TryFrom, sync::Arc, time::Duration};
 use zenoh_core::ztimeout;
 use zenoh_protocol::{
     core::{
-        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohIdInner,
+        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI,
+        ZenohIdInner,
     },
     network::{
         push::{

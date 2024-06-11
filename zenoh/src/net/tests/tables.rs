@@ -22,7 +22,8 @@ use zenoh_config::Config;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdInner, EMPTY_EXPR_ID,
+        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdInner,
+        EMPTY_EXPR_ID,
     },
     network::{
         declare::subscriber::ext::SubscriberInfo, ext, Declare, DeclareBody, DeclareKeyExpr,

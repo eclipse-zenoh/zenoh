@@ -30,7 +30,8 @@ mod tests {
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
-            Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohIdInner,
+            Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI,
+            ZenohIdInner,
         },
         network::{
             push::{

@@ -523,7 +523,11 @@ fn propagate_forget_sourced_subscription(
     }
 }
 
-fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohIdInner) {
+fn unregister_router_subscription(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    router: &ZenohIdInner,
+) {
     res_hat_mut!(res).router_subs.retain(|sub| sub != router);
 
     if res_hat!(res).router_subs.is_empty() {
@@ -771,7 +775,11 @@ pub(super) fn pubsub_tree_change(
     update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
-pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohIdInner, links: &[ZenohIdInner]) {
+pub(super) fn pubsub_linkstate_change(
+    tables: &mut Tables,
+    zid: &ZenohIdInner,
+    links: &[ZenohIdInner],
+) {
     if let Some(src_face) = tables.get_face(zid).cloned() {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
             for res in face_hat!(src_face).remote_subs.values() {

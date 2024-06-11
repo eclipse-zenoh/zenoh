@@ -640,7 +640,11 @@ fn propagate_forget_sourced_queryable(
     }
 }
 
-fn unregister_router_queryable(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohIdInner) {
+fn unregister_router_queryable(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    router: &ZenohIdInner,
+) {
     res_hat_mut!(res).router_qabls.remove(router);
 
     if res_hat!(res).router_qabls.is_empty() {
@@ -857,7 +861,11 @@ pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohIdInner, net_
     }
 }
 
-pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohIdInner, links: &[ZenohIdInner]) {
+pub(super) fn queries_linkstate_change(
+    tables: &mut Tables,
+    zid: &ZenohIdInner,
+    links: &[ZenohIdInner],
+) {
     if let Some(src_face) = tables.get_face(zid) {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
             for res in face_hat!(src_face).remote_qabls.values() {

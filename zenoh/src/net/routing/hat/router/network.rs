@@ -349,7 +349,11 @@ impl Network {
         self.graph.update_edge(idx1, idx2, weight);
     }
 
-    pub(super) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohIdInner) -> Changes {
+    pub(super) fn link_states(
+        &mut self,
+        link_states: Vec<LinkState>,
+        src: ZenohIdInner,
+    ) -> Changes {
         tracing::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
 
         let graph = &self.graph;

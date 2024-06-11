@@ -17,7 +17,6 @@ use alloc::{
     format,
     string::{String, ToString},
 };
-use serde::{Deserialize, Serialize};
 use core::{
     convert::{From, TryFrom, TryInto},
     fmt,
@@ -25,6 +24,7 @@ use core::{
     str::FromStr,
 };
 
+use serde::{Deserialize, Serialize};
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
@@ -130,8 +130,6 @@ impl FromStr for ZenohId {
         ZenohIdInner::from_str(s).map(|zid| zid.into())
     }
 }
-
-
 
 // Mimics uhlc::SizeError,
 #[derive(Debug, Clone, Copy)]
@@ -285,7 +283,10 @@ impl<'de> serde::Deserialize<'de> for ZenohIdInner {
             type Value = ZenohIdInner;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str(&format!("An hex string of 1-{} bytes", ZenohIdInner::MAX_SIZE))
+                formatter.write_str(&format!(
+                    "An hex string of 1-{} bytes",
+                    ZenohIdInner::MAX_SIZE
+                ))
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -354,7 +355,6 @@ impl From<EntityGlobalIdInner> for EntityGlobalId {
         Self(id)
     }
 }
-
 
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
