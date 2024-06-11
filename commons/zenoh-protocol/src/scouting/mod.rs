@@ -14,7 +14,7 @@
 pub mod hello;
 pub mod scout;
 
-pub use hello::Hello;
+pub use hello::HelloInner;
 pub use scout::Scout;
 
 pub mod id {
@@ -27,7 +27,7 @@ pub mod id {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScoutingBody {
     Scout(Scout),
-    Hello(Hello),
+    Hello(HelloInner),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,7 +46,7 @@ impl ScoutingMessage {
 
         match rng.gen_range(0..2) {
             0 => ScoutingBody::Scout(Scout::rand()),
-            1 => ScoutingBody::Hello(Hello::rand()),
+            1 => ScoutingBody::Hello(HelloInner::rand()),
             _ => unreachable!(),
         }
         .into()
@@ -69,8 +69,8 @@ impl From<Scout> for ScoutingMessage {
     }
 }
 
-impl From<Hello> for ScoutingMessage {
-    fn from(hello: Hello) -> Self {
+impl From<HelloInner> for ScoutingMessage {
+    fn from(hello: HelloInner) -> Self {
         ScoutingBody::Hello(hello).into()
     }
 }

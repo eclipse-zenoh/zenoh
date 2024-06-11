@@ -33,7 +33,7 @@ use zenoh_config::{
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohIdInner},
-    scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
+    scouting::{HelloInner, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -829,7 +829,7 @@ impl Runtime {
         mcast_addr: &SocketAddr,
         f: F,
     ) where
-        F: Fn(Hello) -> Fut + std::marker::Send + std::marker::Sync + Clone,
+        F: Fn(HelloInner) -> Fut + std::marker::Send + std::marker::Sync + Clone,
         Fut: Future<Output = Loop> + std::marker::Send,
         Self: Sized,
     {
@@ -1104,7 +1104,7 @@ impl Runtime {
                         let codec = Zenoh080::new();
 
                         let zid = self.manager().zid();
-                        let hello: ScoutingMessage = Hello {
+                        let hello: ScoutingMessage = HelloInner {
                             version: zenoh_protocol::VERSION,
                             whatami: self.whatami(),
                             zid,

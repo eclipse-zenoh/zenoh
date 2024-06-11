@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::vec::Vec;
-
+use std::fmt;
 use crate::core::{Locator, WhatAmI, ZenohIdInner};
 
 /// # Hello message
@@ -99,14 +99,14 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hello {
+pub struct HelloInner {
     pub version: u8,
     pub whatami: WhatAmI,
     pub zid: ZenohIdInner,
     pub locators: Vec<Locator>,
 }
 
-impl Hello {
+impl HelloInner {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -129,3 +129,40 @@ impl Hello {
         }
     }
 }
+
+/// A zenoh Hello message.
+pub struct Hello(HelloInner);
+
+impl Hello {
+    /// Get the locators of this Hello message.
+    pub fn locators(&self) -> &[Locator] {
+        &self.0.locators
+    }
+
+    /// Get the zenoh id of this Hello message.
+    pub fn zid(&self) -> ZenohIdInner {
+        self.0.zid
+    }
+
+    /// Get the whatami of this Hello message.
+    pub fn whatami(&self) -> WhatAmI {
+        self.0.whatami
+    }
+}
+
+impl From<HelloInner> for Hello {
+    fn from(inner: HelloInner) -> Self {
+        Hello(inner)
+    }
+}
+
+impl fmt::Display for Hello {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Hello")
+            .field("zid", &self.zid())
+            .field("whatami", &self.whatami())
+            .field("locators", &self.locators())
+            .finish()
+    }
+}
+

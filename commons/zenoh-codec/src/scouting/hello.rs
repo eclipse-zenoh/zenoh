@@ -21,21 +21,21 @@ use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
     core::{Locator, WhatAmI, ZenohIdInner},
     scouting::{
-        hello::{flag, Hello},
+        hello::{flag, HelloInner},
         id,
     },
 };
 
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
-impl<W> WCodec<&Hello, &mut W> for Zenoh080
+impl<W> WCodec<&HelloInner, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &Hello) -> Self::Output {
-        let Hello {
+    fn write(self, writer: &mut W, x: &HelloInner) -> Self::Output {
+        let HelloInner {
             version,
             whatami,
             zid,
@@ -73,26 +73,26 @@ where
     }
 }
 
-impl<R> RCodec<Hello, &mut R> for Zenoh080
+impl<R> RCodec<HelloInner, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Hello, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<HelloInner, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Hello, &mut R> for Zenoh080Header
+impl<R> RCodec<HelloInner, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Hello, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<HelloInner, Self::Error> {
         if imsg::mid(self.header) != id::HELLO {
             return Err(DidntRead);
         }
@@ -124,7 +124,7 @@ where
             has_extensions = more;
         }
 
-        Ok(Hello {
+        Ok(HelloInner {
             version,
             zid,
             whatami,

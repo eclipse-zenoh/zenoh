@@ -447,7 +447,7 @@ fn codec_scout() {
 
 #[test]
 fn codec_hello() {
-    run!(Hello, Hello::rand());
+    run!(HelloInner, HelloInner::rand());
 }
 
 #[test]
