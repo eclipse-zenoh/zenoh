@@ -572,8 +572,6 @@ impl<'a> AcceptFsm for &'a AuthFsm<'a> {
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Auth>);
 
-    #[cfg(not(feature = "auth_usrpwd"))]
-    type RecvOpenSynOut = ();
     #[cfg(feature = "auth_usrpwd")]
     type RecvOpenSynOut = UsrPwdId;
 
