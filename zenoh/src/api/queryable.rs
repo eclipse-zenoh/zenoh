@@ -605,7 +605,7 @@ impl fmt::Debug for QueryableState {
 pub(crate) struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
-    pub(crate) alive: bool,
+    undeclare_on_drop: bool,
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
@@ -638,7 +638,8 @@ impl Resolvable for QueryableUndeclaration<'_> {
 
 impl Wait for QueryableUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.queryable.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.queryable.undeclare_on_drop = false;
         self.queryable
             .session
             .close_queryable(self.queryable.state.id)
@@ -656,7 +657,7 @@ impl<'a> IntoFuture for QueryableUndeclaration<'a> {
 
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.undeclare_on_drop {
             let _ = self.session.close_queryable(self.state.id);
         }
     }
@@ -889,6 +890,16 @@ impl<'a, Handler> Queryable<'a, Handler> {
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
+
+    /// Make the queryable run in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.queryable.undeclare_on_drop = false;
+    }
 }
 
 impl<'a, T> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
@@ -938,7 +949,7 @@ where
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
-                    alive: true,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })

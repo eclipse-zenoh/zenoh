@@ -17,7 +17,7 @@ use zenoh_buffers::{
 };
 use zenoh_shm::{
     api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
-    watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
+    watchdog::descriptor::Descriptor, ShmBufInfo,
 };
 
 use crate::{RCodec, WCodec, Zenoh080};
@@ -62,14 +62,14 @@ where
     }
 }
 
-impl<W> WCodec<&SharedMemoryBufInfo, &mut W> for Zenoh080
+impl<W> WCodec<&ShmBufInfo, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &SharedMemoryBufInfo) -> Self::Output {
-        let SharedMemoryBufInfo {
+    fn write(self, writer: &mut W, x: &ShmBufInfo) -> Self::Output {
+        let ShmBufInfo {
             data_descriptor,
             shm_protocol,
             data_len,
@@ -138,13 +138,13 @@ where
     }
 }
 
-impl<R> RCodec<SharedMemoryBufInfo, &mut R> for Zenoh080
+impl<R> RCodec<ShmBufInfo, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<SharedMemoryBufInfo, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<ShmBufInfo, Self::Error> {
         let data_descriptor = self.read(&mut *reader)?;
         let shm_protocol = self.read(&mut *reader)?;
         let data_len = self.read(&mut *reader)?;
@@ -152,7 +152,7 @@ where
         let header_descriptor = self.read(&mut *reader)?;
         let generation = self.read(&mut *reader)?;
 
-        let shm_info = SharedMemoryBufInfo::new(
+        let shm_info = ShmBufInfo::new(
             data_descriptor,
             shm_protocol,
             data_len,

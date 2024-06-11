@@ -16,23 +16,21 @@ use std::sync::Arc;
 
 use zenoh_result::ZResult;
 
-use super::posix_shared_memory_segment::PosixSharedMemorySegment;
+use super::posix_shm_segment::PosixShmSegment;
 use crate::api::{
-    client::{
-        shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
-    },
+    client::{shm_client::ShmClient, shm_segment::ShmSegment},
     common::types::SegmentID,
 };
 
 /// Client factory implementation for particular shared memory protocol
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
-pub struct PosixSharedMemoryClient;
+pub struct PosixShmClient;
 
-impl SharedMemoryClient for PosixSharedMemoryClient {
+impl ShmClient for PosixShmClient {
     /// Attach to particular shared memory segment
     #[zenoh_macros::unstable_doc]
-    fn attach(&self, segment: SegmentID) -> ZResult<Arc<dyn SharedMemorySegment>> {
-        Ok(Arc::new(PosixSharedMemorySegment::open(segment)?))
+    fn attach(&self, segment: SegmentID) -> ZResult<Arc<dyn ShmSegment>> {
+        Ok(Arc::new(PosixShmSegment::open(segment)?))
     }
 }

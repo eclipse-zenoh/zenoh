@@ -45,9 +45,9 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
+use zenoh_shm::api::client_storage::ShmClientStorage;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::reader::SharedMemoryReader;
+use zenoh_shm::reader::ShmReader;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
 use zenoh_transport::{
@@ -98,7 +98,7 @@ pub struct RuntimeBuilder {
     #[cfg(feature = "plugins")]
     plugins_manager: Option<PluginsManager>,
     #[cfg(feature = "shared-memory")]
-    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+    shm_clients: Option<Arc<ShmClientStorage>>,
 }
 
 impl RuntimeBuilder {
@@ -119,7 +119,7 @@ impl RuntimeBuilder {
     }
 
     #[cfg(feature = "shared-memory")]
-    pub fn shm_clients(mut self, shm_clients: Option<Arc<SharedMemoryClientStorage>>) -> Self {
+    pub fn shm_clients(mut self, shm_clients: Option<Arc<ShmClientStorage>>) -> Self {
         self.shm_clients = shm_clients;
         self
     }
@@ -157,7 +157,7 @@ impl RuntimeBuilder {
         #[cfg(feature = "unstable")]
         let transport_manager = zcondfeat!(
             "shared-memory",
-            transport_manager.shm_reader(shm_clients.map(SharedMemoryReader::new)),
+            transport_manager.shm_reader(shm_clients.map(ShmReader::new)),
             transport_manager
         )
         .build(handler.clone())?;

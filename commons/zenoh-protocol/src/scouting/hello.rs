@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::vec::Vec;
-use core::fmt;
 
 use crate::core::{Locator, WhatAmI, ZenohId};
 
@@ -105,16 +104,6 @@ pub struct Hello {
     pub whatami: WhatAmI,
     pub zid: ZenohId,
     pub locators: Vec<Locator>,
-}
-
-impl fmt::Display for Hello {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Hello")
-            .field("zid", &self.zid)
-            .field("whatami", &self.whatami)
-            .field("locators", &self.locators)
-            .finish()
-    }
 }
 
 impl Hello {

@@ -16,8 +16,8 @@ use zenoh::{
     key_expr::KeyExpr,
     prelude::*,
     shm::{
-        zshm, BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend,
-        SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,
+        zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
+        POSIX_PROTOCOL_ID,
     },
     Config,
 };
@@ -42,14 +42,14 @@ async fn main() {
 
     println!("Creating POSIX SHM provider...");
     // create an SHM backend...
-    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
         .with_size(N * 1024)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -71,7 +71,7 @@ async fn main() {
         if let Some(payload) = query.payload() {
             match payload.deserialize::<&zshm>() {
                 Ok(payload) => print!(": '{}'", String::from_utf8_lossy(payload)),
-                Err(e) => print!(": 'Not a SharedMemoryBuf: {:?}'", e),
+                Err(e) => print!(": 'Not a ShmBufInner: {:?}'", e),
             }
         }
         println!(")");
@@ -105,7 +105,7 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-queryable")]
     /// The key expression matching queries to reply to.
     key: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Queryable from SharedMemory Rust!")]
+    #[arg(short, long, default_value = "Queryable from SHM Rust!")]
     /// The value to reply to queries.
     value: String,
     #[arg(long)]

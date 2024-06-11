@@ -57,7 +57,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::client_storage::SharedMemoryClientStorage;
+use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
 use super::{
@@ -408,7 +408,7 @@ pub struct Session {
     pub(crate) runtime: Runtime,
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
-    pub(crate) alive: bool,
+    close_on_drop: bool,
     owns_runtime: bool,
     task_controller: TaskController,
 }
@@ -430,7 +430,7 @@ impl Session {
                 runtime: runtime.clone(),
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
-                alive: true,
+                close_on_drop: true,
                 owns_runtime: false,
                 task_controller: TaskController::default(),
             };
@@ -537,6 +537,8 @@ impl Session {
     pub fn close(mut self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
+            // set the flag first to avoid double panic if this function panic
+            self.close_on_drop = false;
             self.task_controller.terminate_all(Duration::from_secs(10));
             if self.owns_runtime {
                 self.runtime.close().await?;
@@ -547,7 +549,6 @@ impl Session {
             state.queryables.clear();
             drop(state);
             primitives.as_ref().unwrap().send_close();
-            self.alive = false;
             Ok(())
         })
     }
@@ -830,11 +831,11 @@ impl Session {
 
 impl Session {
     pub(crate) fn clone(&self) -> Self {
-        Session {
+        Self {
             runtime: self.runtime.clone(),
             state: self.state.clone(),
             id: self.id,
-            alive: false,
+            close_on_drop: false,
             owns_runtime: self.owns_runtime,
             task_controller: self.task_controller.clone(),
         }
@@ -843,7 +844,7 @@ impl Session {
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
         config: Config,
-        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+        #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<ShmClientStorage>>,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
@@ -2437,7 +2438,7 @@ impl Primitives for Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        if self.alive {
+        if self.close_on_drop {
             let _ = self.clone().close().wait();
         }
     }
@@ -2698,7 +2699,7 @@ where
 {
     config: TryIntoConfig,
     #[cfg(feature = "shared-memory")]
-    shm_clients: Option<Arc<SharedMemoryClientStorage>>,
+    shm_clients: Option<Arc<ShmClientStorage>>,
 }
 
 #[cfg(feature = "shared-memory")]
@@ -2707,7 +2708,7 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    pub fn with_shm_clients(mut self, shm_clients: Arc<SharedMemoryClientStorage>) -> Self {
+    pub fn with_shm_clients(mut self, shm_clients: Arc<ShmClientStorage>) -> Self {
         self.shm_clients = Some(shm_clients);
         self
     }

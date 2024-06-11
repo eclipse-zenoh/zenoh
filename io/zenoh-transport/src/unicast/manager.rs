@@ -24,7 +24,7 @@ use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionUnicastConf;
 #[cfg(feature = "shared-memory")]
-use zenoh_config::SharedMemoryConf;
+use zenoh_config::ShmConf;
 use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
 use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
@@ -35,7 +35,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::reader::SharedMemoryReader;
+use zenoh_shm::reader::ShmReader;
 
 #[cfg(feature = "shared-memory")]
 use super::establishment::ext::shm::AuthUnicast;
@@ -216,7 +216,7 @@ impl TransportManagerBuilderUnicast {
     pub fn build(
         self,
         #[allow(unused)] prng: &mut PseudoRng, // Required for #[cfg(feature = "transport_multilink")]
-        #[cfg(feature = "shared-memory")] shm_reader: &SharedMemoryReader,
+        #[cfg(feature = "shared-memory")] shm_reader: &ShmReader,
     ) -> ZResult<TransportManagerParamsUnicast> {
         if self.is_qos && self.is_lowlatency {
             bail!("'qos' and 'lowlatency' options are incompatible");
@@ -267,7 +267,7 @@ impl Default for TransportManagerBuilderUnicast {
         let link_tx = LinkTxConf::default();
         let qos = QoSUnicastConf::default();
         #[cfg(feature = "shared-memory")]
-        let shm = SharedMemoryConf::default();
+        let shm = ShmConf::default();
         #[cfg(feature = "transport_compression")]
         let compression = CompressionUnicastConf::default();
 

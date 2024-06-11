@@ -26,7 +26,7 @@ use http_types::Method;
 use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
 use zenoh::{
-    bytes::{StringOrBase64, ZBytes},
+    bytes::ZBytes,
     encoding::Encoding,
     internal::{
         plugins::{RunningPluginTrait, ZenohPlugin},
@@ -76,11 +76,11 @@ fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
                     payload
                         .deserialize::<serde_json::Value>()
                         .unwrap_or_else(|_| {
-                            serde_json::Value::String(StringOrBase64::from(payload).into_string())
+                            serde_json::Value::String(base64_encode(&Cow::from(payload)))
                         })
                 }
                 // otherwise convert to JSON string
-                _ => serde_json::Value::String(StringOrBase64::from(payload).into_string()),
+                _ => serde_json::Value::String(base64_encode(&Cow::from(payload))),
             }
         }
     }

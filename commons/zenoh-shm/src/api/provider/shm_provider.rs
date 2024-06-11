@@ -27,7 +27,7 @@ use zenoh_result::ZResult;
 
 use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
-    shared_memory_provider_backend::SharedMemoryProviderBackend,
+    shm_provider_backend::ShmProviderBackend,
     types::{
         AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult, MemoryLayout,
         ZAllocError, ZLayoutAllocError, ZLayoutError,
@@ -46,7 +46,7 @@ use crate::{
         storage::GLOBAL_STORAGE,
         validator::GLOBAL_VALIDATOR,
     },
-    SharedMemoryBuf, SharedMemoryBufInfo,
+    ShmBufInfo, ShmBufInner,
 };
 
 #[derive(Debug)]
@@ -73,25 +73,25 @@ impl BusyChunk {
 struct AllocData<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     size: usize,
     alignment: AllocAlignment,
-    provider: &'a SharedMemoryProvider<IDSource, Backend>,
+    provider: &'a ShmProvider<IDSource, Backend>,
 }
 
 #[zenoh_macros::unstable_doc]
 pub struct AllocLayoutSizedBuilder<'a, IDSource, Backend>(AllocData<'a, IDSource, Backend>)
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend;
+    Backend: ShmProviderBackend;
 
 impl<'a, IDSource, Backend> AllocLayoutSizedBuilder<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
-    fn new(provider: &'a SharedMemoryProvider<IDSource, Backend>, size: usize) -> Self {
+    fn new(provider: &'a ShmProvider<IDSource, Backend>, size: usize) -> Self {
         Self(AllocData {
             provider,
             size,
@@ -129,7 +129,7 @@ where
 impl<'a, IDSource, Backend> Resolvable for AllocLayoutSizedBuilder<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     type To = BufLayoutAllocResult;
 }
@@ -138,7 +138,7 @@ where
 impl<'a, IDSource, Backend> Wait for AllocLayoutSizedBuilder<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     fn wait(self) -> <Self as Resolvable>::To {
         let builder = AllocBuilder2::<'a, IDSource, Backend, JustAlloc> {
@@ -151,23 +151,23 @@ where
 
 /// A layout for allocations.
 /// This is a pre-calculated layout suitable for making series of similar allocations
-/// adopted for particular SharedMemoryProvider
+/// adopted for particular ShmProvider
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct AllocLayout<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     size: usize,
     provider_layout: MemoryLayout,
-    provider: &'a SharedMemoryProvider<IDSource, Backend>,
+    provider: &'a ShmProvider<IDSource, Backend>,
 }
 
 impl<'a, IDSource, Backend> AllocLayout<'a, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     /// Allocate the new buffer with this layout
     #[zenoh_macros::unstable_doc]
@@ -204,8 +204,8 @@ where
 /// Trait for deallocation policies.
 #[zenoh_macros::unstable_doc]
 pub trait ForceDeallocPolicy {
-    fn dealloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+    fn dealloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> bool;
 }
 
@@ -213,8 +213,8 @@ pub trait ForceDeallocPolicy {
 #[zenoh_macros::unstable_doc]
 pub struct DeallocOptimal;
 impl ForceDeallocPolicy for DeallocOptimal {
-    fn dealloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+    fn dealloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> bool {
         let mut guard = provider.busy_list.lock().unwrap();
         let chunk_to_dealloc = match guard.remove(1) {
@@ -235,8 +235,8 @@ impl ForceDeallocPolicy for DeallocOptimal {
 #[zenoh_macros::unstable_doc]
 pub struct DeallocYoungest;
 impl ForceDeallocPolicy for DeallocYoungest {
-    fn dealloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+    fn dealloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> bool {
         match provider.busy_list.lock().unwrap().pop_back() {
             Some(val) => {
@@ -252,8 +252,8 @@ impl ForceDeallocPolicy for DeallocYoungest {
 #[zenoh_macros::unstable_doc]
 pub struct DeallocEldest;
 impl ForceDeallocPolicy for DeallocEldest {
-    fn dealloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+    fn dealloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> bool {
         match provider.busy_list.lock().unwrap().pop_front() {
             Some(val) => {
@@ -268,9 +268,9 @@ impl ForceDeallocPolicy for DeallocEldest {
 /// Trait for allocation policies
 #[zenoh_macros::unstable_doc]
 pub trait AllocPolicy {
-    fn alloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
+    fn alloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         layout: &MemoryLayout,
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult;
 }
 
@@ -278,9 +278,9 @@ pub trait AllocPolicy {
 #[zenoh_macros::unstable_doc]
 #[async_trait]
 pub trait AsyncAllocPolicy: Send {
-    async fn alloc_async<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend + Sync>(
+    async fn alloc_async<IDSource: ProtocolIDSource, Backend: ShmProviderBackend + Sync>(
         layout: &MemoryLayout,
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult;
 }
 
@@ -288,9 +288,9 @@ pub trait AsyncAllocPolicy: Send {
 #[zenoh_macros::unstable_doc]
 pub struct JustAlloc;
 impl AllocPolicy for JustAlloc {
-    fn alloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
+    fn alloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         layout: &MemoryLayout,
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult {
         provider.backend.alloc(layout)
     }
@@ -313,9 +313,9 @@ where
     InnerPolicy: AllocPolicy,
     AltPolicy: AllocPolicy,
 {
-    fn alloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
+    fn alloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         layout: &MemoryLayout,
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult {
         let result = InnerPolicy::alloc(layout, provider);
         if let Err(ZAllocError::OutOfMemory) = result {
@@ -345,9 +345,9 @@ where
     InnerPolicy: AllocPolicy,
     AltPolicy: AllocPolicy,
 {
-    fn alloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
+    fn alloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         layout: &MemoryLayout,
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult {
         let result = InnerPolicy::alloc(layout, provider);
         if let Err(ZAllocError::NeedDefragment) = result {
@@ -384,9 +384,9 @@ where
     AltPolicy: AllocPolicy,
     DeallocatePolicy: ForceDeallocPolicy,
 {
-    fn alloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
+    fn alloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         layout: &MemoryLayout,
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult {
         let mut result = InnerPolicy::alloc(layout, provider);
         for _ in 0..N {
@@ -422,12 +422,9 @@ impl<InnerPolicy> AsyncAllocPolicy for BlockOn<InnerPolicy>
 where
     InnerPolicy: AllocPolicy + Send,
 {
-    async fn alloc_async<
-        IDSource: ProtocolIDSource,
-        Backend: SharedMemoryProviderBackend + Sync,
-    >(
+    async fn alloc_async<IDSource: ProtocolIDSource, Backend: ShmProviderBackend + Sync>(
         layout: &MemoryLayout,
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult {
         loop {
             match InnerPolicy::alloc(layout, provider) {
@@ -446,9 +443,9 @@ impl<InnerPolicy> AllocPolicy for BlockOn<InnerPolicy>
 where
     InnerPolicy: AllocPolicy,
 {
-    fn alloc<IDSource: ProtocolIDSource, Backend: SharedMemoryProviderBackend>(
+    fn alloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         layout: &MemoryLayout,
-        provider: &SharedMemoryProvider<IDSource, Backend>,
+        provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult {
         loop {
             match InnerPolicy::alloc(layout, provider) {
@@ -469,14 +466,14 @@ where
     'a,
     Policy: AllocPolicy,
     IDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 > {
-    provider: &'a SharedMemoryProvider<IDSource, Backend>,
-    allocations: lockfree::map::Map<std::ptr::NonNull<u8>, SharedMemoryBuf>,
+    provider: &'a ShmProvider<IDSource, Backend>,
+    allocations: lockfree::map::Map<std::ptr::NonNull<u8>, ShmBufInner>,
     _phantom: PhantomData<Policy>,
 }
 
-impl<'a, Policy: AllocPolicy, IDSource, Backend: SharedMemoryProviderBackend>
+impl<'a, Policy: AllocPolicy, IDSource, Backend: ShmProviderBackend>
     ShmAllocator<'a, Policy, IDSource, Backend>
 {
     fn allocate(&self, layout: std::alloc::Layout) -> BufAllocResult {
@@ -490,7 +487,7 @@ impl<'a, Policy: AllocPolicy, IDSource, Backend: SharedMemoryProviderBackend>
     }
 }
 
-unsafe impl<'a, Policy: AllocPolicy, IDSource, Backend: SharedMemoryProviderBackend>
+unsafe impl<'a, Policy: AllocPolicy, IDSource, Backend: ShmProviderBackend>
     allocator_api2::alloc::Allocator for ShmAllocator<'a, Policy, IDSource, Backend>
 {
     fn allocate(
@@ -520,7 +517,7 @@ unsafe impl<'a, Policy: AllocPolicy, IDSource, Backend: SharedMemoryProviderBack
 pub struct AllocBuilder2<
     'a,
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
     Policy = JustAlloc,
 > {
     data: AllocData<'a, IDSource, Backend>,
@@ -531,7 +528,7 @@ pub struct AllocBuilder2<
 impl<'a, IDSource, Backend, Policy> AllocBuilder2<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
@@ -546,7 +543,7 @@ where
 impl<'a, IDSource, Backend, Policy> Resolvable for AllocBuilder2<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     type To = BufLayoutAllocResult;
 }
@@ -555,7 +552,7 @@ where
 impl<'a, IDSource, Backend, Policy> Wait for AllocBuilder2<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
     Policy: AllocPolicy,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -573,7 +570,7 @@ where
 impl<'a, IDSource, Backend, Policy> IntoFuture for AllocBuilder2<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend + Sync,
+    Backend: ShmProviderBackend + Sync,
     Policy: AsyncAllocPolicy,
 {
     type Output = <Self as Resolvable>::To;
@@ -599,7 +596,7 @@ where
 pub struct AllocBuilder<
     'a,
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
     Policy = JustAlloc,
 > {
     layout: &'a AllocLayout<'a, IDSource, Backend>,
@@ -610,7 +607,7 @@ pub struct AllocBuilder<
 impl<'a, IDSource, Backend, Policy> AllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
@@ -625,7 +622,7 @@ where
 impl<'a, IDSource, Backend, Policy> Resolvable for AllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     type To = BufAllocResult;
 }
@@ -634,7 +631,7 @@ where
 impl<'a, IDSource, Backend, Policy> Wait for AllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
     Policy: AllocPolicy,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -648,7 +645,7 @@ where
 impl<'a, IDSource, Backend, Policy> IntoFuture for AllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend + Sync,
+    Backend: ShmProviderBackend + Sync,
     Policy: AsyncAllocPolicy,
 {
     type Output = <Self as Resolvable>::To;
@@ -668,9 +665,9 @@ where
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct SharedMemoryProviderBuilder;
-impl SharedMemoryProviderBuilder {
-    /// Get the builder to construct SharedMemoryProvider
+pub struct ShmProviderBuilder;
+impl ShmProviderBuilder {
+    /// Get the builder to construct ShmProvider
     #[zenoh_macros::unstable_doc]
     pub fn builder() -> Self {
         Self
@@ -678,38 +675,33 @@ impl SharedMemoryProviderBuilder {
 
     /// Set compile-time-evaluated protocol ID (preferred)
     #[zenoh_macros::unstable_doc]
-    pub fn protocol_id<const ID: ProtocolID>(
-        self,
-    ) -> SharedMemoryProviderBuilderID<StaticProtocolID<ID>> {
-        SharedMemoryProviderBuilderID::<StaticProtocolID<ID>> {
+    pub fn protocol_id<const ID: ProtocolID>(self) -> ShmProviderBuilderID<StaticProtocolID<ID>> {
+        ShmProviderBuilderID::<StaticProtocolID<ID>> {
             id: StaticProtocolID,
         }
     }
 
     /// Set runtime-evaluated protocol ID
     #[zenoh_macros::unstable_doc]
-    pub fn dynamic_protocol_id(
-        self,
-        id: ProtocolID,
-    ) -> SharedMemoryProviderBuilderID<DynamicProtocolID> {
-        SharedMemoryProviderBuilderID::<DynamicProtocolID> {
+    pub fn dynamic_protocol_id(self, id: ProtocolID) -> ShmProviderBuilderID<DynamicProtocolID> {
+        ShmProviderBuilderID::<DynamicProtocolID> {
             id: DynamicProtocolID::new(id),
         }
     }
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct SharedMemoryProviderBuilderID<IDSource: ProtocolIDSource> {
+pub struct ShmProviderBuilderID<IDSource: ProtocolIDSource> {
     id: IDSource,
 }
-impl<IDSource: ProtocolIDSource> SharedMemoryProviderBuilderID<IDSource> {
+impl<IDSource: ProtocolIDSource> ShmProviderBuilderID<IDSource> {
     /// Set the backend
     #[zenoh_macros::unstable_doc]
-    pub fn backend<Backend: SharedMemoryProviderBackend>(
+    pub fn backend<Backend: ShmProviderBackend>(
         self,
         backend: Backend,
-    ) -> SharedMemoryProviderBuilderBackendID<IDSource, Backend> {
-        SharedMemoryProviderBuilderBackendID {
+    ) -> ShmProviderBuilderBackendID<IDSource, Backend> {
+        ShmProviderBuilderBackendID {
             backend,
             id: self.id,
         }
@@ -717,34 +709,34 @@ impl<IDSource: ProtocolIDSource> SharedMemoryProviderBuilderID<IDSource> {
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct SharedMemoryProviderBuilderBackendID<IDSource, Backend>
+pub struct ShmProviderBuilderBackendID<IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     backend: Backend,
     id: IDSource,
 }
-impl<IDSource, Backend> SharedMemoryProviderBuilderBackendID<IDSource, Backend>
+impl<IDSource, Backend> ShmProviderBuilderBackendID<IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
-    /// build SharedMemoryProvider
+    /// build ShmProvider
     #[zenoh_macros::unstable_doc]
-    pub fn res(self) -> SharedMemoryProvider<IDSource, Backend> {
-        SharedMemoryProvider::new(self.backend, self.id)
+    pub fn res(self) -> ShmProvider<IDSource, Backend> {
+        ShmProvider::new(self.backend, self.id)
     }
 }
 
-/// Trait to create ProtocolID sources for SharedMemoryProvider
+/// Trait to create ProtocolID sources for ShmProvider
 #[zenoh_macros::unstable_doc]
 pub trait ProtocolIDSource: Send + Sync {
     fn id(&self) -> ProtocolID;
 }
 
 /// Static ProtocolID source. This is a recommended API to set ProtocolID
-/// when creating SharedMemoryProvider as the ID value is statically evaluated
+/// when creating ShmProvider as the ID value is statically evaluated
 /// at compile-time and can be optimized.
 #[zenoh_macros::unstable_doc]
 #[derive(Default)]
@@ -756,7 +748,7 @@ impl<const ID: ProtocolID> ProtocolIDSource for StaticProtocolID<ID> {
 }
 
 /// Dynamic ProtocolID source. This is an alternative API to set ProtocolID
-/// when creating SharedMemoryProvider for cases where ProtocolID is unknown
+/// when creating ShmProvider for cases where ProtocolID is unknown
 /// at compile-time.
 #[zenoh_macros::unstable_doc]
 pub struct DynamicProtocolID {
@@ -779,20 +771,20 @@ unsafe impl Sync for DynamicProtocolID {}
 /// A generalized interface for shared memory data sources
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
-pub struct SharedMemoryProvider<IDSource, Backend>
+pub struct ShmProvider<IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     backend: Backend,
     busy_list: Mutex<VecDeque<BusyChunk>>,
     id: IDSource,
 }
 
-impl<IDSource, Backend> SharedMemoryProvider<IDSource, Backend>
+impl<IDSource, Backend> ShmProvider<IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     /// Rich interface for making allocations
     #[zenoh_macros::unstable_doc]
@@ -814,7 +806,7 @@ where
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
 
-        // wrap everything to SharedMemoryBuf
+        // wrap everything to ShmBufInner
         let wrapped = self.wrap(
             chunk,
             len,
@@ -863,10 +855,10 @@ where
 }
 
 // PRIVATE impls
-impl<IDSource, Backend> SharedMemoryProvider<IDSource, Backend>
+impl<IDSource, Backend> ShmProvider<IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend,
+    Backend: ShmProviderBackend,
 {
     fn new(backend: Backend, id: IDSource) -> Self {
         Self {
@@ -891,7 +883,7 @@ where
         // and it is necessary to handle that properly and pass this len to corresponding free(...)
         let chunk = Policy::alloc(layout, self)?;
 
-        // wrap allocated chunk to SharedMemoryBuf
+        // wrap allocated chunk to ShmBufInner
         let wrapped = self.wrap(
             chunk,
             size,
@@ -926,7 +918,7 @@ where
         allocated_header: AllocatedHeaderDescriptor,
         allocated_watchdog: AllocatedWatchdog,
         confirmed_watchdog: ConfirmedDescriptor,
-    ) -> SharedMemoryBuf {
+    ) -> ShmBufInner {
         let header = allocated_header.descriptor.clone();
         let descriptor = Descriptor::from(&allocated_watchdog.descriptor);
 
@@ -943,7 +935,7 @@ where
         );
 
         // Create buffer's info
-        let info = SharedMemoryBufInfo::new(
+        let info = ShmBufInfo::new(
             chunk.descriptor.clone(),
             self.id.id(),
             len,
@@ -953,7 +945,7 @@ where
         );
 
         // Create buffer
-        let shmb = SharedMemoryBuf {
+        let shmb = ShmBufInner {
             header,
             buf: chunk.data,
             info,
@@ -972,10 +964,10 @@ where
 }
 
 // PRIVATE impls for Sync backend
-impl<IDSource, Backend> SharedMemoryProvider<IDSource, Backend>
+impl<IDSource, Backend> ShmProvider<IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
-    Backend: SharedMemoryProviderBackend + Sync,
+    Backend: ShmProviderBackend + Sync,
 {
     async fn alloc_inner_async<Policy>(
         &self,
@@ -996,7 +988,7 @@ where
         // and it is necessary to handle that properly and pass this len to corresponding free(...)
         let chunk = Policy::alloc_async(backend_layout, self).await?;
 
-        // wrap allocated chunk to SharedMemoryBuf
+        // wrap allocated chunk to ShmBufInner
         let wrapped = self.wrap(
             chunk,
             size,

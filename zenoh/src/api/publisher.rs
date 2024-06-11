@@ -13,16 +13,17 @@
 //
 
 use std::{
+    collections::HashSet,
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
 use futures::Sink;
 use zenoh_core::{zread, Resolvable, Resolve, Wait};
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::CongestionControl,
     network::{push::ext, Push},
@@ -134,6 +135,8 @@ pub struct Publisher<'a> {
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
     pub(crate) destination: Locality,
+    pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a> Publisher<'a> {
@@ -160,8 +163,15 @@ impl<'a> Publisher<'a> {
         }
     }
 
+    #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
+    }
+
+    #[inline]
+    /// Get the `congestion_control` applied when routing the data.
+    pub fn congestion_control(&self) -> CongestionControl {
+        self.congestion_control
     }
 
     /// Change the `congestion_control` to apply when routing the data.
@@ -170,18 +180,16 @@ impl<'a> Publisher<'a> {
         self.congestion_control = congestion_control;
     }
 
+    /// Get the priority of the written data.
+    #[inline]
+    pub fn priority(&self) -> Priority {
+        self.priority
+    }
+
     /// Change the priority of the written data.
     #[inline]
     pub fn set_priority(&mut self, priority: Priority) {
         self.priority = priority;
-    }
-
-    /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn set_allowed_destination(&mut self, destination: Locality) {
-        self.destination = destination;
     }
 
     /// Consumes the given `Publisher`, returning a thread-safe reference-counting
@@ -350,6 +358,14 @@ impl<'a> Publisher<'a> {
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
+
+    fn undeclare_matching_listeners(&self) -> ZResult<()> {
+        let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
+        for id in ids {
+            self.session.undeclare_matches_listener_inner(id)?
+        }
+        Ok(())
+    }
 }
 
 /// Functions to create zenoh entities with `'static` lifetime.
@@ -470,12 +486,12 @@ impl Resolvable for PublisherUndeclaration<'_> {
 
 impl Wait for PublisherUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        let Publisher {
-            session, id: eid, ..
-        } = &self.publisher;
-        session.undeclare_publisher_inner(*eid)?;
-        self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
-        Ok(())
+        // set the flag first to avoid double panic if this function panic
+        self.publisher.undeclare_on_drop = false;
+        self.publisher.undeclare_matching_listeners()?;
+        self.publisher
+            .session
+            .undeclare_publisher_inner(self.publisher.id)
     }
 }
 
@@ -490,7 +506,8 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
-        if !self.key_expr.is_empty() {
+        if self.undeclare_on_drop {
+            let _ = self.undeclare_matching_listeners();
             let _ = self.session.undeclare_publisher_inner(self.id);
         }
     }
@@ -887,17 +904,19 @@ where
     #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-        self.publisher
+        let state = self
+            .publisher
             .session
-            .declare_matches_listener_inner(&self.publisher, callback)
-            .map(|listener_state| MatchingListener {
-                listener: MatchingListenerInner {
-                    publisher: self.publisher,
-                    state: listener_state,
-                    alive: true,
-                },
-                receiver,
-            })
+            .declare_matches_listener_inner(&self.publisher, callback)?;
+        zlock!(self.publisher.matching_listeners).insert(state.id);
+        Ok(MatchingListener {
+            listener: MatchingListenerInner {
+                publisher: self.publisher,
+                state,
+                undeclare_on_drop: true,
+            },
+            receiver,
+        })
     }
 }
 
@@ -939,7 +958,7 @@ impl std::fmt::Debug for MatchingListenerState {
 pub(crate) struct MatchingListenerInner<'a> {
     pub(crate) publisher: PublisherRef<'a>,
     pub(crate) state: std::sync::Arc<MatchingListenerState>,
-    pub(crate) alive: bool,
+    undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -1007,6 +1026,14 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
         self.listener.undeclare()
     }
+
+    /// Make the matching listener run in background, until the publisher is undeclared.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // The matching listener will be undeclared as part of publisher undeclaration.
+        self.listener.undeclare_on_drop = false;
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -1044,7 +1071,9 @@ impl Resolvable for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Wait for MatchingListenerUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.subscriber.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.subscriber.undeclare_on_drop = false;
+        zlock!(self.subscriber.publisher.matching_listeners).remove(&self.subscriber.state.id);
         self.subscriber
             .publisher
             .session
@@ -1065,7 +1094,8 @@ impl IntoFuture for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Drop for MatchingListenerInner<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.undeclare_on_drop {
+            zlock!(self.publisher.matching_listeners).remove(&self.state.id);
             let _ = self
                 .publisher
                 .session

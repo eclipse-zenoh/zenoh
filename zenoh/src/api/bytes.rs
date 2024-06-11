@@ -14,7 +14,7 @@
 
 //! ZBytes primitives.
 use std::{
-    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref, str::Utf8Error,
+    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, str::Utf8Error,
     string::FromUtf8Error, sync::Arc,
 };
 
@@ -34,7 +34,7 @@ use zenoh_shm::{
         zshm::{zshm, ZShm},
         zshmmut::{zshmmut, ZShmMut},
     },
-    SharedMemoryBuf,
+    ShmBufInner,
 };
 
 /// Trait to encode a type `T` into a [`Value`].
@@ -1613,7 +1613,7 @@ impl<'a> Deserialize<'a, &'a zshm> for ZSerde {
         // A ZShm is expected to have only one slice
         let mut zslices = v.0.zslices();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
                 return Ok(shmb.into());
             }
         }
@@ -1648,7 +1648,7 @@ impl<'a> Deserialize<'a, &'a mut zshm> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
                 return Ok(shmb.into());
             }
         }
@@ -1665,7 +1665,7 @@ impl<'a> Deserialize<'a, &'a mut zshmmut> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
                 return shmb.try_into().map_err(|_| ZDeserializeError);
             }
         }
@@ -1806,53 +1806,6 @@ where
     }
 }
 
-// For convenience to always convert a Value in the examples
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StringOrBase64 {
-    String(String),
-    Base64(String),
-}
-
-impl StringOrBase64 {
-    pub fn into_string(self) -> String {
-        match self {
-            StringOrBase64::String(s) | StringOrBase64::Base64(s) => s,
-        }
-    }
-}
-
-impl Deref for StringOrBase64 {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::String(s) | Self::Base64(s) => s,
-        }
-    }
-}
-
-impl std::fmt::Display for StringOrBase64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self)
-    }
-}
-
-impl From<&ZBytes> for StringOrBase64 {
-    fn from(v: &ZBytes) -> Self {
-        use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
-        match v.deserialize::<String>() {
-            Ok(s) => StringOrBase64::String(s),
-            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.into::<Vec<u8>>())),
-        }
-    }
-}
-
-impl From<&mut ZBytes> for StringOrBase64 {
-    fn from(v: &mut ZBytes) -> Self {
-        StringOrBase64::from(&*v)
-    }
-}
-
 // Protocol attachment extension
 impl<const ID: u8> From<ZBytes> for AttachmentType<ID> {
     fn from(this: ZBytes) -> Self {
@@ -1882,10 +1835,9 @@ mod tests {
         use zenoh_shm::api::{
             buffer::zshm::{zshm, ZShm},
             protocol_implementations::posix::{
-                posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-                protocol_id::POSIX_PROTOCOL_ID,
+                posix_shm_provider_backend::PosixShmProviderBackend, protocol_id::POSIX_PROTOCOL_ID,
             },
-            provider::shared_memory_provider::SharedMemoryProviderBuilder,
+            provider::shm_provider::ShmProviderBuilder,
         };
 
         use super::ZBytes;
@@ -1995,13 +1947,13 @@ mod tests {
         #[cfg(feature = "shared-memory")]
         {
             // create an SHM backend...
-            let backend = PosixSharedMemoryProviderBackend::builder()
+            let backend = PosixShmProviderBackend::builder()
                 .with_size(4096)
                 .unwrap()
                 .res()
                 .unwrap();
             // ...and an SHM provider
-            let provider = SharedMemoryProviderBuilder::builder()
+            let provider = ShmProviderBuilder::builder()
                 .protocol_id::<POSIX_PROTOCOL_ID>()
                 .backend(backend)
                 .res();

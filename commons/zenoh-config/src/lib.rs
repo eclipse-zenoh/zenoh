@@ -488,7 +488,7 @@ validated_struct::validator! {
                 },
             },
             pub shared_memory:
-            SharedMemoryConf {
+            ShmConf {
                 /// Whether shared memory is enabled or not.
                 /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
                 /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting

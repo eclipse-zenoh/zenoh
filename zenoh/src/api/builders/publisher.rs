@@ -314,6 +314,8 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             priority: self.priority,
             is_express: self.is_express,
             destination: self.destination,
+            matching_listeners: Default::default(),
+            undeclare_on_drop: true,
         })
     }
 }
@@ -365,6 +367,8 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
                 priority: self.priority,
                 is_express: self.is_express,
                 destination: self.destination,
+                matching_listeners: Default::default(),
+                undeclare_on_drop: true,
             })
     }
 }
