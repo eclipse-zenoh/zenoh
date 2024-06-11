@@ -20,7 +20,7 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_protocol::{
-    core::{Resolution, WhatAmI, ZenohId},
+    core::{Resolution, WhatAmI, ZenohIdInner},
     transport::BatchSize,
 };
 
@@ -28,7 +28,7 @@ use crate::unicast::establishment::ext;
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Cookie {
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdInner,
     pub(crate) whatami: WhatAmI,
     pub(crate) resolution: Resolution,
     pub(crate) batch_size: BatchSize,
@@ -82,7 +82,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Cookie, Self::Error> {
-        let zid: ZenohId = self.read(&mut *reader)?;
+        let zid: ZenohIdInner = self.read(&mut *reader)?;
         let wai: u8 = self.read(&mut *reader)?;
         let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
         let resolution: u8 = self.read(&mut *reader)?;
@@ -173,7 +173,7 @@ impl Cookie {
         let mut rng = rand::thread_rng();
 
         Self {
-            zid: ZenohId::default(),
+            zid: ZenohIdInner::default(),
             whatami: WhatAmI::rand(),
             resolution: Resolution::rand(),
             batch_size: rng.gen(),

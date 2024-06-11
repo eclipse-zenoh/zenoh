@@ -22,7 +22,7 @@ use zenoh_config::Config;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohId, EMPTY_EXPR_ID,
+        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdInner, EMPTY_EXPR_ID,
     },
     network::{
         declare::subscriber::ext::SubscriberInfo, ext, Declare, DeclareBody, DeclareKeyExpr,
@@ -43,7 +43,7 @@ use crate::net::{
 fn base_test() {
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdInner::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -139,7 +139,7 @@ fn match_test() {
 
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdInner::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -179,7 +179,7 @@ fn match_test() {
 fn multisub_test() {
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdInner::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -248,7 +248,7 @@ fn multisub_test() {
 async fn clean_test() {
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdInner::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -568,7 +568,7 @@ impl EPrimitives for ClientPrimitives {
 fn client_test() {
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdInner::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,

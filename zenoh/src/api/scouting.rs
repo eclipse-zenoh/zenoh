@@ -40,7 +40,7 @@ impl Hello {
     }
 
     /// Get the zenoh id of this Hello message.
-    pub fn zid(&self) -> zenoh_protocol::core::ZenohId {
+    pub fn zid(&self) -> zenoh_protocol::core::ZenohIdInner {
         self.0.zid
     }
 

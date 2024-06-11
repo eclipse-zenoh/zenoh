@@ -17,7 +17,7 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::{Timestamp, ZenohId};
+use zenoh_protocol::core::{Timestamp, ZenohIdInner};
 
 use crate::{LCodec, RCodec, WCodec, Zenoh080};
 
@@ -53,7 +53,7 @@ where
         if size > (uhlc::ID::MAX_SIZE) {
             return Err(DidntRead);
         }
-        let mut id = [0_u8; ZenohId::MAX_SIZE];
+        let mut id = [0_u8; ZenohIdInner::MAX_SIZE];
         reader.read_exact(&mut id[..size])?;
 
         let time = uhlc::NTP64(time);

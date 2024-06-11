@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{whatami::WhatAmIMatcher, ZenohId};
+use crate::core::{whatami::WhatAmIMatcher, ZenohIdInner};
 
 /// # Scout message
 ///
@@ -75,7 +75,7 @@ pub mod flag {
 pub struct Scout {
     pub version: u8,
     pub what: WhatAmIMatcher,
-    pub zid: Option<ZenohId>,
+    pub zid: Option<ZenohIdInner>,
 }
 
 impl Scout {
@@ -87,7 +87,7 @@ impl Scout {
 
         let version: u8 = rng.gen();
         let what = WhatAmIMatcher::rand();
-        let zid = rng.gen_bool(0.5).then_some(ZenohId::rand());
+        let zid = rng.gen_bool(0.5).then_some(ZenohIdInner::rand());
         Self { version, what, zid }
     }
 }

@@ -17,70 +17,70 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::ZenohId;
+use zenoh_protocol::core::ZenohIdInner;
 
 use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Length};
 
-impl LCodec<&ZenohId> for Zenoh080 {
-    fn w_len(self, x: &ZenohId) -> usize {
+impl LCodec<&ZenohIdInner> for Zenoh080 {
+    fn w_len(self, x: &ZenohIdInner) -> usize {
         x.size()
     }
 }
 
-impl<W> WCodec<&ZenohId, &mut W> for Zenoh080
+impl<W> WCodec<&ZenohIdInner, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &ZenohId) -> Self::Output {
+    fn write(self, writer: &mut W, x: &ZenohIdInner) -> Self::Output {
         self.write(&mut *writer, &x.to_le_bytes()[..x.size()])
     }
 }
 
-impl<R> RCodec<ZenohId, &mut R> for Zenoh080
+impl<R> RCodec<ZenohIdInner, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZenohId, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<ZenohIdInner, Self::Error> {
         let size: usize = self.read(&mut *reader)?;
-        if size > ZenohId::MAX_SIZE {
+        if size > ZenohIdInner::MAX_SIZE {
             return Err(DidntRead);
         }
-        let mut id = [0; ZenohId::MAX_SIZE];
+        let mut id = [0; ZenohIdInner::MAX_SIZE];
         reader.read_exact(&mut id[..size])?;
-        ZenohId::try_from(&id[..size]).map_err(|_| DidntRead)
+        ZenohIdInner::try_from(&id[..size]).map_err(|_| DidntRead)
     }
 }
 
-impl<W> WCodec<&ZenohId, &mut W> for Zenoh080Length
+impl<W> WCodec<&ZenohIdInner, &mut W> for Zenoh080Length
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &ZenohId) -> Self::Output {
-        if self.length > ZenohId::MAX_SIZE {
+    fn write(self, writer: &mut W, x: &ZenohIdInner) -> Self::Output {
+        if self.length > ZenohIdInner::MAX_SIZE {
             return Err(DidntWrite);
         }
         writer.write_exact(&x.to_le_bytes()[..x.size()])
     }
 }
 
-impl<R> RCodec<ZenohId, &mut R> for Zenoh080Length
+impl<R> RCodec<ZenohIdInner, &mut R> for Zenoh080Length
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZenohId, Self::Error> {
-        if self.length > ZenohId::MAX_SIZE {
+    fn read(self, reader: &mut R) -> Result<ZenohIdInner, Self::Error> {
+        if self.length > ZenohIdInner::MAX_SIZE {
             return Err(DidntRead);
         }
-        let mut id = [0; ZenohId::MAX_SIZE];
+        let mut id = [0; ZenohIdInner::MAX_SIZE];
         reader.read_exact(&mut id[..self.length])?;
-        ZenohId::try_from(&id[..self.length]).map_err(|_| DidntRead)
+        ZenohIdInner::try_from(&id[..self.length]).map_err(|_| DidntRead)
     }
 }

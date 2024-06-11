@@ -21,7 +21,7 @@ use std::{
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
-    core::{CongestionControl, EntityId, WireExpr, ZenohId},
+    core::{CongestionControl, EntityId, WireExpr, ZenohIdInner},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
@@ -54,7 +54,7 @@ pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) parameters: Parameters<'static>,
     pub(crate) qid: RequestId,
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdInner,
     pub(crate) primitives: Arc<dyn Primitives>,
 }
 

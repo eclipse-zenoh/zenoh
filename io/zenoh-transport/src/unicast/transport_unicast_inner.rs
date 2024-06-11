@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use tokio::sync::MutexGuard as AsyncMutexGuard;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::{WhatAmI, ZenohIdInner},
     network::NetworkMessage,
     transport::TransportSn,
 };
@@ -52,7 +52,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
 
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool>;
-    fn get_zid(&self) -> ZenohId;
+    fn get_zid(&self) -> ZenohIdInner;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
     fn get_links(&self) -> Vec<Link>;

@@ -14,7 +14,7 @@
 use core::time::Duration;
 
 use crate::{
-    core::{Priority, Resolution, WhatAmI, ZenohId},
+    core::{Priority, Resolution, WhatAmI, ZenohIdInner},
     transport::{BatchSize, PrioritySn},
 };
 
@@ -105,7 +105,7 @@ pub mod flag {
 pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub zid: ZenohId,
+    pub zid: ZenohIdInner,
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub lease: Duration,
@@ -142,7 +142,7 @@ impl Join {
 
         let version: u8 = rng.gen();
         let whatami = WhatAmI::rand();
-        let zid = ZenohId::default();
+        let zid = ZenohIdInner::default();
         let resolution = Resolution::rand();
         let batch_size: BatchSize = rng.gen();
         let lease = if rng.gen_bool(0.5) {

@@ -27,7 +27,7 @@ use std::{
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     common::ZExtBody,
-    core::ZenohId,
+    core::ZenohIdInner,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
         interest::InterestId,
@@ -463,9 +463,9 @@ impl HatBaseTrait for HatCode {
 }
 
 struct HatContext {
-    router_subs: HashSet<ZenohId>,
-    peer_subs: HashSet<ZenohId>,
-    peer_qabls: HashMap<ZenohId, QueryableInfoType>,
+    router_subs: HashSet<ZenohIdInner>,
+    peer_subs: HashSet<ZenohIdInner>,
+    peer_qabls: HashMap<ZenohIdInner, QueryableInfoType>,
 }
 
 impl HatContext {
@@ -504,7 +504,7 @@ impl HatFace {
     }
 }
 
-fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohId> {
+fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohIdInner> {
     match hat!(tables)
         .peers_net
         .as_ref()

@@ -36,11 +36,10 @@ use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::ZenohId;
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI},
+    core::{Locator, WhatAmI, ZenohId},
     network::NetworkMessage,
 };
 use zenoh_result::{bail, ZResult};

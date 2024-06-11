@@ -22,7 +22,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::{WhatAmI, ZenohIdInner},
     network::NetworkMessage,
     transport::{close, Close, TransportBodyLowLatency, TransportMessageLowLatency, TransportSn},
 };
@@ -183,7 +183,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         vec![]
     }
 
-    fn get_zid(&self) -> ZenohId {
+    fn get_zid(&self) -> ZenohIdInner {
         self.config.zid
     }
 

@@ -16,7 +16,7 @@ use std::{convert::TryFrom, sync::Arc, time::Duration};
 use zenoh_core::ztimeout;
 use zenoh_protocol::{
     core::{
-        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohIdInner,
     },
     network::{
         push::{
@@ -37,8 +37,8 @@ const MSG_DEFRAG_BUF: usize = 128_000;
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
-    let client_id = ZenohId::try_from([1]).unwrap();
-    let router_id = ZenohId::try_from([2]).unwrap();
+    let client_id = ZenohIdInner::try_from([1]).unwrap();
+    let router_id = ZenohIdInner::try_from([2]).unwrap();
 
     // Create the router transport manager
     let router_manager = TransportManager::builder()

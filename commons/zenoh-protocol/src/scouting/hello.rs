@@ -13,7 +13,7 @@
 //
 use alloc::vec::Vec;
 
-use crate::core::{Locator, WhatAmI, ZenohId};
+use crate::core::{Locator, WhatAmI, ZenohIdInner};
 
 /// # Hello message
 ///
@@ -102,7 +102,7 @@ pub mod flag {
 pub struct Hello {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub zid: ZenohId,
+    pub zid: ZenohIdInner,
     pub locators: Vec<Locator>,
 }
 
@@ -114,7 +114,7 @@ impl Hello {
         let mut rng = rand::thread_rng();
 
         let version: u8 = rng.gen();
-        let zid = ZenohId::default();
+        let zid = ZenohIdInner::default();
         let whatami = WhatAmI::rand();
         let locators = if rng.gen_bool(0.5) {
             Vec::from_iter((1..5).map(|_| Locator::rand()))

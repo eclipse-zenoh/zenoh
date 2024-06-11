@@ -27,7 +27,7 @@ mod tests {
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdInner},
         network::{
             push::ext::{NodeIdType, QoSType},
             NetworkBody, NetworkMessage, Push,

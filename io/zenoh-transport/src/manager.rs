@@ -19,7 +19,7 @@ use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
-    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohId},
+    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohIdInner},
     transport::BatchSize,
     VERSION,
 };
@@ -96,7 +96,7 @@ use crate::multicast::manager::{
 
 pub struct TransportManagerConfig {
     pub version: u8,
-    pub zid: ZenohId,
+    pub zid: ZenohIdInner,
     pub whatami: WhatAmI,
     pub resolution: Resolution,
     pub batch_size: BatchSize,
@@ -125,7 +125,7 @@ pub struct TransportManagerParams {
 
 pub struct TransportManagerBuilder {
     version: u8,
-    zid: ZenohId,
+    zid: ZenohIdInner,
     whatami: WhatAmI,
     resolution: Resolution,
     batch_size: BatchSize,
@@ -150,7 +150,7 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn zid(mut self, zid: ZenohId) -> Self {
+    pub fn zid(mut self, zid: ZenohIdInner) -> Self {
         self.zid = zid;
         self
     }
@@ -335,7 +335,7 @@ impl Default for TransportManagerBuilder {
         let wait_before_drop = *queue.congestion_control().wait_before_drop();
         Self {
             version: VERSION,
-            zid: ZenohId::rand(),
+            zid: ZenohIdInner::rand(),
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
@@ -424,7 +424,7 @@ impl TransportManager {
         TransportManagerBuilder::default()
     }
 
-    pub fn zid(&self) -> ZenohId {
+    pub fn zid(&self) -> ZenohIdInner {
         self.config.zid
     }
 

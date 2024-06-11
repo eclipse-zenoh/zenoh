@@ -19,7 +19,7 @@ use serde::{
     Deserialize, Serialize,
 };
 pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
+    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohIdInner,
 };
 
 pub trait ModeDependent<T> {

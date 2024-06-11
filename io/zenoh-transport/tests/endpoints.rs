@@ -16,7 +16,7 @@ use std::{any::Any, convert::TryFrom, sync::Arc, time::Duration};
 use zenoh_core::ztimeout;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::{WhatAmI, ZenohIdInner},
     network::NetworkMessage,
 };
 use zenoh_result::ZResult;
@@ -74,7 +74,7 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .zid(ZenohId::try_from([1]).unwrap())
+        .zid(ZenohIdInner::try_from([1]).unwrap())
         .build(Arc::new(SH))
         .unwrap();
 

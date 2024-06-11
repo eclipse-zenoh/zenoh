@@ -145,12 +145,12 @@ pub struct SourceInfo {
 #[test]
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
-    use zenoh_protocol::core::ZenohId;
+    use zenoh_protocol::core::ZenohIdInner;
 
     use crate::api::sample::{SourceInfo, SourceSn};
 
-    assert_eq!(std::mem::size_of::<ZenohId>(), 16);
-    assert_eq!(std::mem::size_of::<Option<ZenohId>>(), 17);
+    assert_eq!(std::mem::size_of::<ZenohIdInner>(), 16);
+    assert_eq!(std::mem::size_of::<Option<ZenohIdInner>>(), 17);
     assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 16);
     assert_eq!(std::mem::size_of::<SourceInfo>(), 17 + 16 + 7);
 }

@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
-    core::{Locator, WhatAmI, ZenohId},
+    core::{Locator, WhatAmI, ZenohIdInner},
     scouting::{
         hello::{flag, Hello},
         id,
@@ -108,7 +108,7 @@ where
         };
         let length = 1 + ((flags >> 4) as usize);
         let lodec = Zenoh080Length::new(length);
-        let zid: ZenohId = lodec.read(&mut *reader)?;
+        let zid: ZenohIdInner = lodec.read(&mut *reader)?;
 
         let locators = if imsg::has_flag(self.header, flag::L) {
             let locs: Vec<Locator> = self.codec.read(&mut *reader)?;
