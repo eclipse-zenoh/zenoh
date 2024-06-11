@@ -271,9 +271,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         server_crypto.server_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
-        // Install rustls provider
+        // Install ring based rustls CryptoProvider.
         rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
             .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
             .ok();
 
         let quic_config: QuicServerConfig = server_crypto
