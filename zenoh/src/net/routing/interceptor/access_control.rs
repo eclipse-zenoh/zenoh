@@ -87,18 +87,17 @@ impl InterceptorFactoryTrait for AclEnforcer {
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         let mut authn_ids = vec![];
         if let Ok(ids) = transport.get_auth_ids() {
-            let enforcer = self.enforcer.clone();
             for auth_id in ids {
                 match auth_id {
                     AuthId::CertCommonName(name) => {
                         let subject = &Subject::CertCommonName(name.clone());
-                        if let Some(val) = enforcer.subject_map.get(subject) {
+                        if let Some(val) = self.enforcer.subject_map.get(subject) {
                             authn_ids.push(AuthSubject { id: *val, name });
                         }
                     }
                     AuthId::Username(name) => {
                         let subject = &Subject::Username(name.clone());
-                        if let Some(val) = enforcer.subject_map.get(subject) {
+                        if let Some(val) = self.enforcer.subject_map.get(subject) {
                             authn_ids.push(AuthSubject { id: *val, name });
                         }
                     }
@@ -111,10 +110,9 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 match transport.get_links() {
                     Ok(links) => {
                         for link in links {
-                            let enforcer = self.enforcer.clone();
                             for face in link.interfaces {
                                 let subject = &Subject::Interface(face.clone());
-                                if let Some(val) = enforcer.subject_map.get(subject) {
+                                if let Some(val) = self.enforcer.subject_map.get(subject) {
                                     authn_ids.push(AuthSubject {
                                         id: *val,
                                         name: face,
