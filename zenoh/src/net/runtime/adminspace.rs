@@ -819,7 +819,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 return;
             }
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                plugin.instance().adminspace_getter(&key_expr, plugin_key)
+                plugin.instance().adminspace_getter(key_expr, plugin_key)
             })) {
                 Ok(Ok(responses)) => {
                     for response in responses {

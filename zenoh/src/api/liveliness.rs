@@ -756,7 +756,7 @@ where
         let (callback, receiver) = self.handler.into_handler();
         self.session
             .query(
-                &self.key_expr?.into(),
+                &self.key_expr?,
                 &Parameters::default(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 QueryTarget::DEFAULT,
