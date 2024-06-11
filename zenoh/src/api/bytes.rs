@@ -209,10 +209,7 @@ impl std::io::Write for ZBytesWriter<'_> {
 /// Note that [`ZBytes`] contains a serialized version of `T` and iterating over a [`ZBytes`] performs lazy deserialization.
 #[repr(transparent)]
 #[derive(Debug)]
-pub struct ZBytesIterator<'a, T>
-where
-    ZSerde: Deserialize<'a, T>,
-{
+pub struct ZBytesIterator<'a, T> {
     reader: ZBufReader<'a>,
     _t: PhantomData<T>,
 }
@@ -222,7 +219,7 @@ where
     for<'a> ZSerde: Deserialize<'a, T, Input = &'a ZBytes>,
     for<'a> <ZSerde as Deserialize<'a, T>>::Error: Debug,
 {
-    type Item = T;
+    type Item = ZResult<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let codec = Zenoh080::new();
@@ -230,8 +227,10 @@ where
         let kbuf: ZBuf = codec.read(&mut self.reader).ok()?;
         let kpld = ZBytes::new(kbuf);
 
-        let t = ZSerde.deserialize(&kpld).ok()?;
-        Some(t)
+        let result = ZSerde
+            .deserialize(&kpld)
+            .map_err(|err| zerror!("{err:?}").into());
+        Some(result)
     }
 }
 
