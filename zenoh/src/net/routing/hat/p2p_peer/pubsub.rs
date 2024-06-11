@@ -39,7 +39,7 @@ use crate::{
             resource::{NodeId, Resource, SessionContext},
             tables::{Route, RoutingExpr, Tables},
         },
-        hat::{HatPubSubTrait, Sources},
+        hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
         router::{update_data_routes_from, RoutesIndexes},
         RoutingContext, PREFIX_LIVELINESS,
     },
@@ -402,6 +402,119 @@ impl HatPubSubTrait for HatCode {
         mode: InterestMode,
         aggregate: bool,
     ) {
+        if mode.current() && face.whatami == WhatAmI::Client {
+            let interest_id = (!mode.future()).then_some(id);
+            let sub_info = SubscriberInfo {
+                reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
+            };
+            if let Some(res) = res.as_ref() {
+                if aggregate {
+                    if tables.faces.values().any(|src_face| {
+                        src_face.id != face.id
+                            && face_hat!(src_face)
+                                .remote_subs
+                                .values()
+                                .any(|sub| sub.context.is_some() && sub.matches(res))
+                    }) {
+                        let id = if mode.future() {
+                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(face).local_subs.insert((*res).clone(), id);
+                            id
+                        } else {
+                            0
+                        };
+                        let wire_expr = Resource::decl_key(res, face);
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                interest_id,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id,
+                                    wire_expr,
+                                    ext_info: sub_info,
+                                }),
+                            },
+                            res.expr(),
+                        ));
+                    }
+                } else {
+                    for src_face in tables
+                        .faces
+                        .values()
+                        .cloned()
+                        .collect::<Vec<Arc<FaceState>>>()
+                    {
+                        if src_face.id != face.id {
+                            for sub in face_hat!(src_face).remote_subs.values() {
+                                if sub.context.is_some() && sub.matches(res) {
+                                    let id = if mode.future() {
+                                        let id =
+                                            face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                        face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                                        id
+                                    } else {
+                                        0
+                                    };
+                                    let wire_expr = Resource::decl_key(sub, face);
+                                    face.primitives.send_declare(RoutingContext::with_expr(
+                                        Declare {
+                                            interest_id,
+                                            ext_qos: ext::QoSType::DECLARE,
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                                            body: DeclareBody::DeclareSubscriber(
+                                                DeclareSubscriber {
+                                                    id,
+                                                    wire_expr,
+                                                    ext_info: sub_info,
+                                                },
+                                            ),
+                                        },
+                                        sub.expr(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                for src_face in tables
+                    .faces
+                    .values()
+                    .cloned()
+                    .collect::<Vec<Arc<FaceState>>>()
+                {
+                    if src_face.id != face.id {
+                        for sub in face_hat!(src_face).remote_subs.values() {
+                            let id = if mode.future() {
+                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                                id
+                            } else {
+                                0
+                            };
+                            let wire_expr = Resource::decl_key(sub, face);
+                            face.primitives.send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    interest_id,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                        id,
+                                        wire_expr,
+                                        ext_info: sub_info,
+                                    }),
+                                },
+                                sub.expr(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         face_hat_mut!(face)
             .remote_sub_interests
             .insert(id, (res.as_ref().map(|res| (*res).clone()), aggregate));
