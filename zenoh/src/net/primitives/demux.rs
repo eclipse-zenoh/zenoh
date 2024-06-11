@@ -72,6 +72,7 @@ impl TransportPeerEventHandler for DeMux {
             NetworkBody::ResponseFinal(m) => self.face.send_response_final(m),
             NetworkBody::OAM(m) => {
                 if let Some(transport) = self.transport.as_ref() {
+                    let mut declares = vec![];
                     let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
                     let mut tables = zwrite!(self.face.tables.tables);
                     ctrl_lock.handle_oam(
@@ -79,8 +80,13 @@ impl TransportPeerEventHandler for DeMux {
                         &self.face.tables,
                         m,
                         transport,
-                        &mut |p, m| p.send_declare(m),
-                    )?
+                        &mut |p, m| declares.push((p.clone(), m)),
+                    )?;
+                    drop(tables);
+                    drop(ctrl_lock);
+                    for (p, m) in declares {
+                        p.send_declare(m);
+                    }
                 }
             }
         }
@@ -95,11 +101,17 @@ impl TransportPeerEventHandler for DeMux {
     fn closing(&self) {
         self.face.send_close();
         if let Some(transport) = self.transport.as_ref() {
+            let mut declares = vec![];
             let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
             let mut tables = zwrite!(self.face.tables.tables);
             let _ = ctrl_lock.closing(&mut tables, &self.face.tables, transport, &mut |p, m| {
-                p.send_declare(m)
+                declares.push((p.clone(), m))
             });
+            drop(tables);
+            drop(ctrl_lock);
+            for (p, m) in declares {
+                p.send_declare(m);
+            }
         }
     }
 
