@@ -26,7 +26,7 @@ use zenoh_buffers::{
 use zenoh_protocol::common::{iext, ZExtUnit};
 use zenoh_protocol::{
     common::{imsg, ZExtZBufHeader},
-    core::{Encoding, EntityGlobalIdInner, EntityId, ZenohIdInner},
+    core::{Encoding, EntityGlobalIdProto, EntityId, ZenohIdProto},
     zenoh::{ext, id, PushBody, RequestBody, ResponseBody},
 };
 
@@ -186,14 +186,14 @@ where
         let length = 1 + ((flags >> 4) as usize);
 
         let lodec = Zenoh080Length::new(length);
-        let zid: ZenohIdInner = lodec.read(&mut *reader)?;
+        let zid: ZenohIdProto = lodec.read(&mut *reader)?;
 
         let eid: EntityId = self.codec.read(&mut *reader)?;
         let sn: u32 = self.codec.read(&mut *reader)?;
 
         Ok((
             ext::SourceInfoType {
-                id: EntityGlobalIdInner { zid, eid },
+                id: EntityGlobalIdProto { zid, eid },
                 sn,
             },
             more,

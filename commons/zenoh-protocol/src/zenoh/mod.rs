@@ -136,7 +136,7 @@ impl From<Err> for ResponseBody {
 pub mod ext {
     use zenoh_buffers::ZBuf;
 
-    use crate::core::{Encoding, EntityGlobalIdInner};
+    use crate::core::{Encoding, EntityGlobalIdProto};
 
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
@@ -150,7 +150,7 @@ pub mod ext {
     /// +---------------+
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct SourceInfoType<const ID: u8> {
-        pub id: EntityGlobalIdInner,
+        pub id: EntityGlobalIdProto,
         pub sn: u32,
     }
 
@@ -160,7 +160,7 @@ pub mod ext {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
-            let id = EntityGlobalIdInner::rand();
+            let id = EntityGlobalIdProto::rand();
             let sn: u32 = rng.gen();
             Self { id, sn }
         }

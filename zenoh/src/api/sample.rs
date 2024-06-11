@@ -18,7 +18,7 @@ use std::{convert::TryFrom, fmt};
 #[cfg(feature = "unstable")]
 use serde::Serialize;
 use zenoh_protocol::{
-    core::{CongestionControl, EntityGlobalIdInner, Timestamp},
+    core::{CongestionControl, EntityGlobalIdProto, Timestamp},
     network::declare::ext::QoSType,
 };
 
@@ -52,7 +52,7 @@ pub(crate) struct DataInfo {
     pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    pub source_id: Option<EntityGlobalIdInner>,
+    pub source_id: Option<EntityGlobalIdProto>,
     pub source_sn: Option<SourceSn>,
     pub qos: QoS,
 }
@@ -137,7 +137,7 @@ impl DataInfoIntoSample for Option<DataInfo> {
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
     /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
-    pub source_id: Option<EntityGlobalIdInner>,
+    pub source_id: Option<EntityGlobalIdProto>,
     /// The sequence number of the [`Sample`] from the source.
     pub source_sn: Option<SourceSn>,
 }
@@ -145,12 +145,12 @@ pub struct SourceInfo {
 #[test]
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
-    use zenoh_protocol::core::ZenohIdInner;
+    use zenoh_protocol::core::ZenohIdProto;
 
     use crate::api::sample::{SourceInfo, SourceSn};
 
-    assert_eq!(std::mem::size_of::<ZenohIdInner>(), 16);
-    assert_eq!(std::mem::size_of::<Option<ZenohIdInner>>(), 17);
+    assert_eq!(std::mem::size_of::<ZenohIdProto>(), 16);
+    assert_eq!(std::mem::size_of::<Option<ZenohIdProto>>(), 17);
     assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 16);
     assert_eq!(std::mem::size_of::<SourceInfo>(), 17 + 16 + 7);
 }

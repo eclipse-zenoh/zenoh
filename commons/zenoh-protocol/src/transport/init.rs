@@ -14,7 +14,7 @@
 use zenoh_buffers::ZSlice;
 
 use crate::{
-    core::{Resolution, WhatAmI, ZenohIdInner},
+    core::{Resolution, WhatAmI, ZenohIdProto},
     transport::BatchSize,
 };
 
@@ -111,7 +111,7 @@ pub mod flag {
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub zid: ZenohIdInner,
+    pub zid: ZenohIdProto,
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub ext_qos: Option<ext::QoS>,
@@ -167,7 +167,7 @@ impl InitSyn {
 
         let version: u8 = rng.gen();
         let whatami = WhatAmI::rand();
-        let zid = ZenohIdInner::default();
+        let zid = ZenohIdProto::default();
         let resolution = Resolution::rand();
         let batch_size: BatchSize = rng.gen();
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
@@ -199,7 +199,7 @@ impl InitSyn {
 pub struct InitAck {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub zid: ZenohIdInner,
+    pub zid: ZenohIdProto,
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub cookie: ZSlice,
@@ -223,7 +223,7 @@ impl InitAck {
 
         let version: u8 = rng.gen();
         let whatami = WhatAmI::rand();
-        let zid = ZenohIdInner::default();
+        let zid = ZenohIdProto::default();
         let resolution = if rng.gen_bool(0.5) {
             Resolution::default()
         } else {

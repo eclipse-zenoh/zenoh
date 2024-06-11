@@ -27,7 +27,7 @@ mod tests {
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdInner},
+        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
         network::{
             push::ext::{NodeIdType, QoSType},
             NetworkBody, NetworkMessage, Push,
@@ -153,9 +153,9 @@ mod tests {
         println!("Transport SHM [0a]: {endpoint:?}");
 
         // Define client and router IDs
-        let peer_shm01 = ZenohIdInner::try_from([1]).unwrap();
-        let peer_shm02 = ZenohIdInner::try_from([2]).unwrap();
-        let peer_net01 = ZenohIdInner::try_from([3]).unwrap();
+        let peer_shm01 = ZenohIdProto::try_from([1]).unwrap();
+        let peer_shm02 = ZenohIdProto::try_from([2]).unwrap();
+        let peer_net01 = ZenohIdProto::try_from([3]).unwrap();
 
         // create SHM provider
         let backend = PosixShmProviderBackend::builder()

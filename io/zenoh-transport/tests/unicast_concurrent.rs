@@ -24,7 +24,7 @@ use tokio::sync::Barrier;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdInner},
+    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
     network::{
         push::{
             ext::{NodeIdType, QoSType},
@@ -108,8 +108,8 @@ impl TransportPeerEventHandler for MHPeer {
 
 async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
     /* [Peers] */
-    let peer_id01 = ZenohIdInner::try_from([2]).unwrap();
-    let peer_id02 = ZenohIdInner::try_from([3]).unwrap();
+    let peer_id01 = ZenohIdProto::try_from([2]).unwrap();
+    let peer_id02 = ZenohIdProto::try_from([3]).unwrap();
 
     // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new());

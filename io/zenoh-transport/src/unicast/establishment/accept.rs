@@ -22,7 +22,7 @@ use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    core::{Field, Resolution, WhatAmI, ZenohIdInner},
+    core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size,
         close::{self, Close},
@@ -80,7 +80,7 @@ struct RecvInitSynIn {
     mine_version: u8,
 }
 struct RecvInitSynOut {
-    other_zid: ZenohIdInner,
+    other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
@@ -89,9 +89,9 @@ struct RecvInitSynOut {
 // InitAck
 struct SendInitAckIn {
     mine_version: u8,
-    mine_zid: ZenohIdInner,
+    mine_zid: ZenohIdProto,
     mine_whatami: WhatAmI,
-    other_zid: ZenohIdInner,
+    other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
@@ -107,7 +107,7 @@ struct RecvOpenSynIn {
     cookie_nonce: u64,
 }
 struct RecvOpenSynOut {
-    other_zid: ZenohIdInner,
+    other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
     other_lease: Duration,
     other_initial_sn: TransportSn,
@@ -115,9 +115,9 @@ struct RecvOpenSynOut {
 
 // OpenAck
 struct SendOpenAckIn {
-    mine_zid: ZenohIdInner,
+    mine_zid: ZenohIdProto,
     mine_lease: Duration,
-    other_zid: ZenohIdInner,
+    other_zid: ZenohIdProto,
 }
 struct SendOpenAckOut {
     open_ack: OpenAck,

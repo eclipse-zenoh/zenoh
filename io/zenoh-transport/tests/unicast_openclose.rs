@@ -15,7 +15,7 @@ use std::{convert::TryFrom, sync::Arc, time::Duration};
 
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
-use zenoh_protocol::core::{WhatAmI, ZenohIdInner};
+use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
 use zenoh_transport::{
     multicast::TransportMulticast,
@@ -90,7 +90,7 @@ async fn openclose_transport(
     lowlatency_transport: bool,
 ) {
     /* [ROUTER] */
-    let router_id = ZenohIdInner::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([1]).unwrap();
 
     let router_handler = Arc::new(SHRouterOpenClose);
     // Create the router transport manager
@@ -110,8 +110,8 @@ async fn openclose_transport(
         .unwrap();
 
     /* [CLIENT] */
-    let client01_id = ZenohIdInner::try_from([2]).unwrap();
-    let client02_id = ZenohIdInner::try_from([3]).unwrap();
+    let client01_id = ZenohIdProto::try_from([2]).unwrap();
+    let client02_id = ZenohIdProto::try_from([3]).unwrap();
 
     // Create the transport transport manager for the first client
     let unicast = make_transport_manager_builder(

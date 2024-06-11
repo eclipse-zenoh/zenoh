@@ -19,23 +19,23 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
-    core::{Locator, WhatAmI, ZenohIdInner},
+    core::{Locator, WhatAmI, ZenohIdProto},
     scouting::{
-        hello::{flag, HelloInner},
+        hello::{flag, HelloProto},
         id,
     },
 };
 
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
-impl<W> WCodec<&HelloInner, &mut W> for Zenoh080
+impl<W> WCodec<&HelloProto, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &HelloInner) -> Self::Output {
-        let HelloInner {
+    fn write(self, writer: &mut W, x: &HelloProto) -> Self::Output {
+        let HelloProto {
             version,
             whatami,
             zid,
@@ -73,26 +73,26 @@ where
     }
 }
 
-impl<R> RCodec<HelloInner, &mut R> for Zenoh080
+impl<R> RCodec<HelloProto, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<HelloInner, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<HelloProto, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<HelloInner, &mut R> for Zenoh080Header
+impl<R> RCodec<HelloProto, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<HelloInner, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<HelloProto, Self::Error> {
         if imsg::mid(self.header) != id::HELLO {
             return Err(DidntRead);
         }
@@ -108,7 +108,7 @@ where
         };
         let length = 1 + ((flags >> 4) as usize);
         let lodec = Zenoh080Length::new(length);
-        let zid: ZenohIdInner = lodec.read(&mut *reader)?;
+        let zid: ZenohIdProto = lodec.read(&mut *reader)?;
 
         let locators = if imsg::has_flag(self.header, flag::L) {
             let locs: Vec<Locator> = self.codec.read(&mut *reader)?;
@@ -124,7 +124,7 @@ where
             has_extensions = more;
         }
 
-        Ok(HelloInner {
+        Ok(HelloProto {
             version,
             zid,
             whatami,

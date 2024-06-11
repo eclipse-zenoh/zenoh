@@ -22,7 +22,7 @@ use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{Parameters, ZenohIdInner},
+    core::{Parameters, ZenohIdProto},
     transport::close,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -266,7 +266,7 @@ impl TransportManager {
         super::establishment::open_link(self, link).await
     }
 
-    pub async fn get_transport_multicast(&self, zid: &ZenohIdInner) -> Option<TransportMulticast> {
+    pub async fn get_transport_multicast(&self, zid: &ZenohIdProto) -> Option<TransportMulticast> {
         for t in zasynclock!(self.state.multicast.transports).values() {
             if t.get_peers().iter().any(|p| p.zid == *zid) {
                 return Some(t.into());

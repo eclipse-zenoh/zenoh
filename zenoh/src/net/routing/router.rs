@@ -18,7 +18,7 @@ use std::{
 
 use uhlc::HLC;
 use zenoh_config::Config;
-use zenoh_protocol::core::{WhatAmI, ZenohIdInner};
+use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
@@ -45,7 +45,7 @@ pub struct Router {
 
 impl Router {
     pub fn new(
-        zid: ZenohIdInner,
+        zid: ZenohIdProto,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
@@ -176,7 +176,7 @@ impl Router {
         let mux = Arc::new(McastMux::new(transport.clone(), interceptor));
         let face = FaceState::new(
             fid,
-            ZenohIdInner::from_str("1").unwrap(),
+            ZenohIdProto::from_str("1").unwrap(),
             WhatAmI::Peer,
             #[cfg(feature = "stats")]
             None,

@@ -16,7 +16,7 @@ use std::{any::Any, convert::TryFrom, iter::FromIterator, sync::Arc, time::Durat
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{EndPoint, ZenohIdInner},
+    core::{EndPoint, ZenohIdProto},
     network::NetworkMessage,
 };
 use zenoh_result::ZResult;
@@ -68,7 +68,7 @@ impl TransportPeerEventHandler for SCRouter {
 
 async fn run(endpoints: &[EndPoint]) {
     // Define client and router IDs
-    let router_id = ZenohIdInner::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([1]).unwrap();
 
     // Create the router transport manager
     println!(">>> Transport Whitelist [1a1]");

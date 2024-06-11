@@ -26,7 +26,7 @@ use zenoh_protocol::{
             include::{Includer, DEFAULT_INCLUDER},
             OwnedKeyExpr,
         },
-        WhatAmI, WireExpr, ZenohIdInner,
+        WhatAmI, WireExpr, ZenohIdProto,
     },
     network::{
         declare::{
@@ -286,7 +286,7 @@ fn propagate_sourced_queryable(
     res: &Arc<Resource>,
     qabl_info: &QueryableInfoType,
     src_face: Option<&mut Arc<FaceState>>,
-    source: &ZenohIdInner,
+    source: &ZenohIdProto,
     net_type: WhatAmI,
 ) {
     let net = hat!(tables).get_net(net_type).unwrap();
@@ -324,7 +324,7 @@ fn register_router_queryable(
     mut face: Option<&mut Arc<FaceState>>,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfoType,
-    router: ZenohIdInner,
+    router: ZenohIdProto,
 ) {
     let current_info = res_hat!(res).router_qabls.get(&router);
     if current_info.is_none() || current_info.unwrap() != qabl_info {
@@ -362,7 +362,7 @@ fn declare_router_queryable(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfoType,
-    router: ZenohIdInner,
+    router: ZenohIdProto,
 ) {
     register_router_queryable(tables, Some(face), res, qabl_info, router);
 }
@@ -372,7 +372,7 @@ fn register_peer_queryable(
     face: Option<&mut Arc<FaceState>>,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfoType,
-    peer: ZenohIdInner,
+    peer: ZenohIdProto,
 ) {
     let current_info = res_hat!(res).peer_qabls.get(&peer);
     if current_info.is_none() || current_info.unwrap() != qabl_info {
@@ -392,7 +392,7 @@ fn declare_peer_queryable(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfoType,
-    peer: ZenohIdInner,
+    peer: ZenohIdProto,
 ) {
     let mut face = Some(face);
     register_peer_queryable(tables, face.as_deref_mut(), res, qabl_info, peer);
@@ -608,7 +608,7 @@ fn propagate_forget_sourced_queryable(
     tables: &mut Tables,
     res: &mut Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohIdInner,
+    source: &ZenohIdProto,
     net_type: WhatAmI,
 ) {
     let net = hat!(tables).get_net(net_type).unwrap();
@@ -643,7 +643,7 @@ fn propagate_forget_sourced_queryable(
 fn unregister_router_queryable(
     tables: &mut Tables,
     res: &mut Arc<Resource>,
-    router: &ZenohIdInner,
+    router: &ZenohIdProto,
 ) {
     res_hat_mut!(res).router_qabls.remove(router);
 
@@ -665,7 +665,7 @@ fn undeclare_router_queryable(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    router: &ZenohIdInner,
+    router: &ZenohIdProto,
 ) {
     if res_hat!(res).router_qabls.contains_key(router) {
         unregister_router_queryable(tables, res, router);
@@ -677,12 +677,12 @@ fn forget_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    router: &ZenohIdInner,
+    router: &ZenohIdProto,
 ) {
     undeclare_router_queryable(tables, Some(face), res, router);
 }
 
-fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdInner) {
+fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
     res_hat_mut!(res).peer_qabls.remove(peer);
 
     if res_hat!(res).peer_qabls.is_empty() {
@@ -696,7 +696,7 @@ fn undeclare_peer_queryable(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    peer: &ZenohIdInner,
+    peer: &ZenohIdProto,
 ) {
     if res_hat!(res).peer_qabls.contains_key(peer) {
         unregister_peer_queryable(tables, res, peer);
@@ -708,7 +708,7 @@ fn forget_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: &ZenohIdInner,
+    peer: &ZenohIdProto,
 ) {
     undeclare_peer_queryable(tables, Some(face), res, peer);
 
@@ -814,7 +814,7 @@ fn forget_client_queryable(
     }
 }
 
-pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohIdInner, net_type: WhatAmI) {
+pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohIdProto, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {
             let mut qabls = vec![];
@@ -863,8 +863,8 @@ pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohIdInner, net_
 
 pub(super) fn queries_linkstate_change(
     tables: &mut Tables,
-    zid: &ZenohIdInner,
-    links: &[ZenohIdInner],
+    zid: &ZenohIdProto,
+    links: &[ZenohIdProto],
 ) {
     if let Some(src_face) = tables.get_face(zid) {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
@@ -998,7 +998,7 @@ fn insert_target_for_qabls(
     tables: &Tables,
     net: &Network,
     source: NodeId,
-    qabls: &HashMap<ZenohIdInner, QueryableInfoType>,
+    qabls: &HashMap<ZenohIdProto, QueryableInfoType>,
     complete: bool,
 ) {
     if net.trees.len() > source as usize {

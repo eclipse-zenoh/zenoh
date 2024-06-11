@@ -31,7 +31,7 @@ mod tests {
     use zenoh_protocol::{
         core::{
             Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI,
-            ZenohIdInner,
+            ZenohIdProto,
         },
         network::{
             push::{
@@ -144,8 +144,8 @@ mod tests {
         endpoint: &EndPoint,
     ) -> (TransportMulticastPeer, TransportMulticastPeer) {
         // Define peer01 and peer02 IDs
-        let peer01_id = ZenohIdInner::try_from([1]).unwrap();
-        let peer02_id = ZenohIdInner::try_from([2]).unwrap();
+        let peer01_id = ZenohIdProto::try_from([1]).unwrap();
+        let peer02_id = ZenohIdProto::try_from([2]).unwrap();
 
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());

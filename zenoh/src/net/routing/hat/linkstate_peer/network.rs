@@ -27,7 +27,7 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{WhatAmI, WhatAmIMatcher, ZenohIdInner},
+    core::{WhatAmI, WhatAmIMatcher, ZenohIdProto},
     network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
 };
 use zenoh_transport::unicast::TransportUnicast;
@@ -48,11 +48,11 @@ struct Details {
 
 #[derive(Clone)]
 pub(super) struct Node {
-    pub(super) zid: ZenohIdInner,
+    pub(super) zid: ZenohIdProto,
     pub(super) whatami: Option<WhatAmI>,
     pub(super) locators: Option<Vec<Locator>>,
     pub(super) sn: u64,
-    pub(super) links: Vec<ZenohIdInner>,
+    pub(super) links: Vec<ZenohIdProto>,
 }
 
 impl std::fmt::Debug for Node {
@@ -63,8 +63,8 @@ impl std::fmt::Debug for Node {
 
 pub(super) struct Link {
     pub(super) transport: TransportUnicast,
-    zid: ZenohIdInner,
-    mappings: VecMap<ZenohIdInner>,
+    zid: ZenohIdProto,
+    mappings: VecMap<ZenohIdProto>,
     local_mappings: VecMap<u64>,
 }
 
@@ -80,12 +80,12 @@ impl Link {
     }
 
     #[inline]
-    pub(super) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohIdInner) {
+    pub(super) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohIdProto) {
         self.mappings.insert(psid.try_into().unwrap(), zid);
     }
 
     #[inline]
-    pub(super) fn get_zid(&self, psid: &u64) -> Option<&ZenohIdInner> {
+    pub(super) fn get_zid(&self, psid: &u64) -> Option<&ZenohIdProto> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
@@ -132,7 +132,7 @@ impl Network {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         name: String,
-        zid: ZenohIdInner,
+        zid: ZenohIdProto,
         runtime: Runtime,
         full_linkstate: bool,
         router_peers_failover_brokering: bool,
@@ -177,7 +177,7 @@ impl Network {
     }
 
     #[inline]
-    pub(super) fn get_idx(&self, zid: &ZenohIdInner) -> Option<NodeIndex> {
+    pub(super) fn get_idx(&self, zid: &ZenohIdProto) -> Option<NodeIndex> {
         self.graph
             .node_indices()
             .find(|idx| self.graph[*idx].zid == *zid)
@@ -189,7 +189,7 @@ impl Network {
     }
 
     #[inline]
-    pub(super) fn get_link_from_zid(&self, zid: &ZenohIdInner) -> Option<&Link> {
+    pub(super) fn get_link_from_zid(&self, zid: &ZenohIdProto) -> Option<&Link> {
         self.links.values().find(|link| link.zid == *zid)
     }
 
@@ -347,7 +347,7 @@ impl Network {
     pub(super) fn link_states(
         &mut self,
         link_states: Vec<LinkState>,
-        src: ZenohIdInner,
+        src: ZenohIdProto,
     ) -> Changes {
         tracing::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
         let strong_runtime = self.runtime.upgrade().unwrap();
@@ -413,7 +413,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .map(|(zid, wai, locs, sn, links)| {
-                let links: Vec<ZenohIdInner> = links
+                let links: Vec<ZenohIdProto> = links
                     .iter()
                     .filter_map(|l| {
                         if let Some(zid) = src_link.get_zid(l) {
@@ -563,7 +563,7 @@ impl Network {
                     }
                 },
             )
-            .collect::<Vec<(Vec<ZenohIdInner>, NodeIndex, bool)>>();
+            .collect::<Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>>();
 
         // Add/remove edges from graph
         let mut reintroduced_nodes = vec![];
@@ -615,7 +615,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
-            .collect::<Vec<(Vec<ZenohIdInner>, NodeIndex, bool)>>();
+            .collect::<Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>>();
 
         if !self.autoconnect.is_empty() {
             // Connect discovered peers
@@ -654,8 +654,8 @@ impl Network {
         #[allow(clippy::type_complexity)] // This is only used here
         if !link_states.is_empty() {
             let (new_idxs, updated_idxs): (
-                Vec<(Vec<ZenohIdInner>, NodeIndex, bool)>,
-                Vec<(Vec<ZenohIdInner>, NodeIndex, bool)>,
+                Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>,
+                Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>,
             ) = link_states.into_iter().partition(|(_, _, new)| *new);
             let new_idxs = new_idxs
                 .into_iter()
@@ -819,7 +819,7 @@ impl Network {
         free_index
     }
 
-    pub(super) fn remove_link(&mut self, zid: &ZenohIdInner) -> Vec<(NodeIndex, Node)> {
+    pub(super) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, Node)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|link| *link != *zid);

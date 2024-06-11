@@ -16,7 +16,7 @@ use std::{any::Any, sync::Arc, time::Duration};
 use zenoh_core::{zasyncwrite, ztimeout};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{EndPoint, WhatAmI, ZenohIdInner},
+    core::{EndPoint, WhatAmI, ZenohIdProto},
     network::NetworkMessage,
 };
 use zenoh_result::ZResult;
@@ -111,7 +111,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     };
 
     // Create the transport transport manager for the client 01
-    let client01_id = ZenohIdInner::try_from([2]).unwrap();
+    let client01_id = ZenohIdProto::try_from([2]).unwrap();
 
     let n = BigUint::from_bytes_le(&[
         0x41, 0x74, 0xc6, 0x40, 0x18, 0x63, 0xbd, 0x59, 0xe6, 0x0d, 0xe9, 0x23, 0x3e, 0x95, 0xca,
@@ -170,7 +170,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         .unwrap();
 
     // Create the transport transport manager for the client 02
-    let client02_id = ZenohIdInner::try_from([3]).unwrap();
+    let client02_id = ZenohIdProto::try_from([3]).unwrap();
 
     let n = BigUint::from_bytes_le(&[
         0xd1, 0x36, 0xcf, 0x94, 0xda, 0x04, 0x7e, 0x9f, 0x53, 0x39, 0xb8, 0x7b, 0x53, 0x3a, 0xe6,
@@ -229,7 +229,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         .unwrap();
 
     // Create the transport transport manager for the client 03 with the same key as client 02
-    let client03_id = ZenohIdInner::try_from([4]).unwrap();
+    let client03_id = ZenohIdProto::try_from([4]).unwrap();
     let mut auth = Auth::empty();
     auth.set_pubkey(Some(AuthPubKey::new(
         client02_pub_key.clone().into(),
@@ -249,7 +249,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         .unwrap();
 
     // Create the router transport manager
-    let router_id = ZenohIdInner::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([1]).unwrap();
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     let n = BigUint::from_bytes_le(&[
         0x31, 0xd1, 0xfc, 0x7e, 0x70, 0x5f, 0xd7, 0xe3, 0xcc, 0xa4, 0xca, 0xcb, 0x38, 0x84, 0x2f,
@@ -414,11 +414,11 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     };
 
     /* [CLIENT] */
-    let client01_id = ZenohIdInner::try_from([2]).unwrap();
+    let client01_id = ZenohIdProto::try_from([2]).unwrap();
     let user01 = "user01".to_string();
     let password01 = "password01".to_string();
 
-    let client02_id = ZenohIdInner::try_from([3]).unwrap();
+    let client02_id = ZenohIdProto::try_from([3]).unwrap();
     let user02 = "invalid".to_string();
     let password02 = "invalid".to_string();
 
@@ -427,7 +427,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     let password03 = "password03".to_string();
 
     /* [ROUTER] */
-    let router_id = ZenohIdInner::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([1]).unwrap();
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router transport manager
     let mut auth_usrpwd_router = AuthUsrPwd::new(None);

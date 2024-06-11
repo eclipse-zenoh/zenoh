@@ -62,9 +62,9 @@ pub use properties::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-pub struct ZenohIdInner(uhlc::ID);
+pub struct ZenohIdProto(uhlc::ID);
 
-impl ZenohIdInner {
+impl ZenohIdProto {
     pub const MAX_SIZE: usize = 16;
 
     #[inline]
@@ -77,8 +77,8 @@ impl ZenohIdInner {
         self.0.to_le_bytes()
     }
 
-    pub fn rand() -> ZenohIdInner {
-        ZenohIdInner(uhlc::ID::rand())
+    pub fn rand() -> ZenohIdProto {
+        ZenohIdProto(uhlc::ID::rand())
     }
 
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
@@ -86,7 +86,7 @@ impl ZenohIdInner {
     }
 }
 
-impl Default for ZenohIdInner {
+impl Default for ZenohIdProto {
     fn default() -> Self {
         Self::rand()
     }
@@ -97,7 +97,7 @@ impl Default for ZenohIdInner {
     Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug, Default,
 )]
 #[repr(transparent)]
-pub struct ZenohId(ZenohIdInner);
+pub struct ZenohId(ZenohIdProto);
 
 impl fmt::Display for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -105,13 +105,13 @@ impl fmt::Display for ZenohId {
     }
 }
 
-impl From<ZenohIdInner> for ZenohId {
-    fn from(id: ZenohIdInner) -> Self {
+impl From<ZenohIdProto> for ZenohId {
+    fn from(id: ZenohIdProto) -> Self {
         Self(id)
     }
 }
 
-impl From<ZenohId> for ZenohIdInner {
+impl From<ZenohId> for ZenohIdProto {
     fn from(id: ZenohId) -> Self {
         id.0
     }
@@ -127,7 +127,7 @@ impl FromStr for ZenohId {
     type Err = zenoh_result::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        ZenohIdInner::from_str(s).map(|zid| zid.into())
+        ZenohIdProto::from_str(s).map(|zid| zid.into())
     }
 }
 
@@ -160,7 +160,7 @@ impl fmt::Display for SizeError {
 
 macro_rules! derive_tryfrom {
     ($T: ty) => {
-        impl TryFrom<$T> for ZenohIdInner {
+        impl TryFrom<$T> for ZenohIdProto {
             type Error = zenoh_result::Error;
             fn try_from(val: $T) -> Result<Self, Self::Error> {
                 match val.try_into() {
@@ -205,7 +205,7 @@ derive_tryfrom!([u8; 16]);
 derive_tryfrom!(&[u8; 16]);
 derive_tryfrom!(&[u8]);
 
-impl FromStr for ZenohIdInner {
+impl FromStr for ZenohIdProto {
     type Err = zenoh_result::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -218,37 +218,37 @@ impl FromStr for ZenohIdInner {
         let u: uhlc::ID = s
             .parse()
             .map_err(|e: uhlc::ParseIDError| zerror!("Invalid id: {} - {}", s, e.cause))?;
-        Ok(ZenohIdInner(u))
+        Ok(ZenohIdProto(u))
     }
 }
 
-impl fmt::Debug for ZenohIdInner {
+impl fmt::Debug for ZenohIdProto {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl fmt::Display for ZenohIdInner {
+impl fmt::Display for ZenohIdProto {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
 
 // A PeerID can be converted into a Timestamp's ID
-impl From<&ZenohIdInner> for uhlc::ID {
-    fn from(zid: &ZenohIdInner) -> Self {
+impl From<&ZenohIdProto> for uhlc::ID {
+    fn from(zid: &ZenohIdProto) -> Self {
         zid.0
     }
 }
 
-impl From<ZenohIdInner> for uhlc::ID {
-    fn from(zid: ZenohIdInner) -> Self {
+impl From<ZenohIdProto> for uhlc::ID {
+    fn from(zid: ZenohIdProto) -> Self {
         zid.0
     }
 }
 
-impl From<ZenohIdInner> for OwnedKeyExpr {
-    fn from(zid: ZenohIdInner) -> Self {
+impl From<ZenohIdProto> for OwnedKeyExpr {
+    fn from(zid: ZenohIdProto) -> Self {
         // SAFETY: zid.to_string() returns an stringified hexadecimal
         // representation of the zid. Therefore, building a OwnedKeyExpr
         // by calling from_string_unchecked() is safe because it is
@@ -257,13 +257,13 @@ impl From<ZenohIdInner> for OwnedKeyExpr {
     }
 }
 
-impl From<&ZenohIdInner> for OwnedKeyExpr {
-    fn from(zid: &ZenohIdInner) -> Self {
+impl From<&ZenohIdProto> for OwnedKeyExpr {
+    fn from(zid: &ZenohIdProto) -> Self {
         (*zid).into()
     }
 }
 
-impl serde::Serialize for ZenohIdInner {
+impl serde::Serialize for ZenohIdProto {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -272,7 +272,7 @@ impl serde::Serialize for ZenohIdInner {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for ZenohIdInner {
+impl<'de> serde::Deserialize<'de> for ZenohIdProto {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -280,12 +280,12 @@ impl<'de> serde::Deserialize<'de> for ZenohIdInner {
         struct ZenohIdVisitor;
 
         impl<'de> serde::de::Visitor<'de> for ZenohIdVisitor {
-            type Value = ZenohIdInner;
+            type Value = ZenohIdProto;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str(&format!(
                     "An hex string of 1-{} bytes",
-                    ZenohIdInner::MAX_SIZE
+                    ZenohIdProto::MAX_SIZE
                 ))
             }
 
@@ -320,17 +320,17 @@ pub type EntityId = u32;
 
 /// The global unique id of a zenoh entity.
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
-pub struct EntityGlobalIdInner {
-    pub zid: ZenohIdInner,
+pub struct EntityGlobalIdProto {
+    pub zid: ZenohIdProto,
     pub eid: EntityId,
 }
 
-impl EntityGlobalIdInner {
+impl EntityGlobalIdProto {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
         Self {
-            zid: ZenohIdInner::rand(),
+            zid: ZenohIdProto::rand(),
             eid: rand::thread_rng().gen(),
         }
     }
@@ -338,10 +338,10 @@ impl EntityGlobalIdInner {
 
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(transparent)]
-pub struct EntityGlobalId(EntityGlobalIdInner);
+pub struct EntityGlobalId(EntityGlobalIdProto);
 
 impl EntityGlobalId {
-    pub fn zid(&self) -> ZenohIdInner {
+    pub fn zid(&self) -> ZenohIdProto {
         self.0.zid
     }
 
@@ -350,8 +350,8 @@ impl EntityGlobalId {
     }
 }
 
-impl From<EntityGlobalIdInner> for EntityGlobalId {
-    fn from(id: EntityGlobalIdInner) -> Self {
+impl From<EntityGlobalIdProto> for EntityGlobalId {
+    fn from(id: EntityGlobalIdProto) -> Self {
         Self(id)
     }
 }

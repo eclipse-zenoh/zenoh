@@ -23,7 +23,7 @@ use sha3::{
     Shake128,
 };
 use zenoh_protocol::{
-    core::{Field, Resolution, ZenohIdInner},
+    core::{Field, Resolution, ZenohIdProto},
     transport::TransportSn,
 };
 
@@ -102,8 +102,8 @@ pub trait AcceptFsm {
 /*           FUNCTIONS               */
 /*************************************/
 pub(super) fn compute_sn(
-    zid1: ZenohIdInner,
-    zid2: ZenohIdInner,
+    zid1: ZenohIdProto,
+    zid2: ZenohIdProto,
     resolution: Resolution,
 ) -> TransportSn {
     // Create a random yet deterministic initial_sn.

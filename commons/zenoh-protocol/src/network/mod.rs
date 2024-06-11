@@ -221,7 +221,7 @@ pub mod ext {
 
     use crate::{
         common::{imsg, ZExtZ64},
-        core::{CongestionControl, EntityId, Priority, ZenohIdInner},
+        core::{CongestionControl, EntityId, Priority, ZenohIdProto},
     };
 
     /// ```text
@@ -366,7 +366,7 @@ pub mod ext {
             let mut rng = rand::thread_rng();
 
             let time = uhlc::NTP64(rng.gen());
-            let id = uhlc::ID::try_from(ZenohIdInner::rand().to_le_bytes()).unwrap();
+            let id = uhlc::ID::try_from(ZenohIdProto::rand().to_le_bytes()).unwrap();
             let timestamp = uhlc::Timestamp::new(time, id);
             Self { timestamp }
         }
@@ -428,7 +428,7 @@ pub mod ext {
     /// +---------------+
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct EntityGlobalIdType<const ID: u8> {
-        pub zid: ZenohIdInner,
+        pub zid: ZenohIdProto,
         pub eid: EntityId,
     }
 
@@ -438,7 +438,7 @@ pub mod ext {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
-            let zid = ZenohIdInner::rand();
+            let zid = ZenohIdProto::rand();
             let eid: EntityId = rng.gen();
             Self { zid, eid }
         }

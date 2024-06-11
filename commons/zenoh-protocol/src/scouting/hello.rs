@@ -14,7 +14,7 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::core::{Locator, WhatAmI, ZenohIdInner};
+use crate::core::{Locator, WhatAmI, ZenohIdProto};
 
 /// # Hello message
 ///
@@ -100,14 +100,14 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HelloInner {
+pub struct HelloProto {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub zid: ZenohIdInner,
+    pub zid: ZenohIdProto,
     pub locators: Vec<Locator>,
 }
 
-impl HelloInner {
+impl HelloProto {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -115,7 +115,7 @@ impl HelloInner {
         let mut rng = rand::thread_rng();
 
         let version: u8 = rng.gen();
-        let zid = ZenohIdInner::default();
+        let zid = ZenohIdProto::default();
         let whatami = WhatAmI::rand();
         let locators = if rng.gen_bool(0.5) {
             Vec::from_iter((1..5).map(|_| Locator::rand()))
@@ -132,7 +132,7 @@ impl HelloInner {
 }
 
 /// A zenoh Hello message.
-pub struct Hello(HelloInner);
+pub struct Hello(HelloProto);
 
 impl Hello {
     /// Get the locators of this Hello message.
@@ -141,7 +141,7 @@ impl Hello {
     }
 
     /// Get the zenoh id of this Hello message.
-    pub fn zid(&self) -> ZenohIdInner {
+    pub fn zid(&self) -> ZenohIdProto {
         self.0.zid
     }
 
@@ -151,8 +151,8 @@ impl Hello {
     }
 }
 
-impl From<HelloInner> for Hello {
-    fn from(inner: HelloInner) -> Self {
+impl From<HelloProto> for Hello {
+    fn from(inner: HelloProto) -> Self {
         Hello(inner)
     }
 }
