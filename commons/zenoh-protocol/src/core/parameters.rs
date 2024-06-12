@@ -12,13 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-/// Module provides an `HashMap<&str, &str>`-like view over a `&str` when `&str` follows the format `a=b;c=d|e;f=g`.
+/// Module provides a set of utility functions whic allows to manipulate  &str` which follows the format `a=b;c=d|e;f=g`.
+/// and structure `Parameters` which provides `HashMap<&str, &str>`-like view over a string of such format.
 ///
 /// `;` is the separator between the key-value `(&str, &str)` elements.
 ///
 /// `=` is the separator between the `&str`-key and `&str`-value
 ///
 /// `|` is the separator between multiple elements of the values.
+
+mod properties;
+pub use properties::Parameters;
 
 pub(super) const LIST_SEPARATOR: char = ';';
 pub(super) const FIELD_SEPARATOR: char = '=';

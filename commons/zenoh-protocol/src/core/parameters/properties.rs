@@ -18,7 +18,8 @@ use alloc::{
 use core::{borrow::Borrow, fmt};
 #[cfg(feature = "std")]
 use std::collections::HashMap;
-use super::{parameters as parameters, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR};
+use super::{FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR};
+use crate::core::parameters;
 
 /// A map of key/value (String,String) properties.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
