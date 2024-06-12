@@ -23,7 +23,7 @@ use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::{zcondfeat, zlock};
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
-    core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
+    core::{Bits, Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{zerror, ZResult};
@@ -251,7 +251,7 @@ impl fmt::Debug for TransportLinkMulticastRx {
 /**************************************/
 pub(super) struct TransportLinkMulticastConfigUniversal {
     pub(super) version: u8,
-    pub(super) zid: ZenohId,
+    pub(super) zid: ZenohIdProto,
     pub(super) whatami: WhatAmI,
     pub(super) lease: Duration,
     pub(super) join_interval: Duration,

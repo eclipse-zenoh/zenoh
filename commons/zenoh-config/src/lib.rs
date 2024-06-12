@@ -15,6 +15,7 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+pub mod wrappers;
 
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
@@ -25,7 +26,6 @@ use std::{
     io::Read,
     net::SocketAddr,
     path::Path,
-    str::FromStr,
     sync::{Arc, Mutex, MutexGuard, Weak},
 };
 
@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
+use wrappers::ZenohId;
 use zenoh_core::zlock;
 pub use zenoh_protocol::core::{
     whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
@@ -51,45 +52,6 @@ pub use mode_dependent::*;
 
 pub mod connection_retry;
 pub use connection_retry::*;
-
-/// The global unique id of a zenoh peer.
-#[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug, Default,
-)]
-#[repr(transparent)]
-pub struct ZenohId(zenoh_protocol::core::ZenohId);
-
-impl fmt::Display for ZenohId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl From<zenoh_protocol::core::ZenohId> for ZenohId {
-    fn from(id: zenoh_protocol::core::ZenohId) -> Self {
-        Self(id)
-    }
-}
-
-impl From<ZenohId> for zenoh_protocol::core::ZenohId {
-    fn from(id: ZenohId) -> Self {
-        id.0
-    }
-}
-
-impl From<ZenohId> for uhlc::ID {
-    fn from(zid: ZenohId) -> Self {
-        zid.0.into()
-    }
-}
-
-impl FromStr for ZenohId {
-    type Err = zenoh_result::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        zenoh_protocol::core::ZenohId::from_str(s).map(|zid| zid.into())
-    }
-}
 
 // Wrappers for secrecy of values
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

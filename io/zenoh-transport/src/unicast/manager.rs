@@ -30,7 +30,7 @@ use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{parameters, ZenohId},
+    core::{parameters, ZenohIdProto},
     transport::{close, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -79,7 +79,7 @@ pub struct TransportManagerStateUnicast {
     // Established listeners
     pub(super) protocols: Arc<AsyncMutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<AsyncMutex<HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>>,
+    pub(super) transports: Arc<AsyncMutex<HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>>,
     // Multilink
     #[cfg(feature = "transport_multilink")]
     pub(super) multilink: Arc<MultiLink>,
@@ -510,7 +510,7 @@ impl TransportManager {
         link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
-        mut guard: AsyncMutexGuard<'_, HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>,
+        mut guard: AsyncMutexGuard<'_, HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>,
     ) -> InitTransportResult {
         macro_rules! link_error {
             ($s:expr, $reason:expr) => {
@@ -707,7 +707,7 @@ impl TransportManager {
         super::establishment::open::open_link(link, self).await
     }
 
-    pub async fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
+    pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
             .get(peer)
             .map(|t| TransportUnicast(Arc::downgrade(t)))
@@ -720,7 +720,7 @@ impl TransportManager {
             .collect()
     }
 
-    pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
+    pub(super) async fn del_transport_unicast(&self, peer: &ZenohIdProto) -> ZResult<()> {
         zasynclock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {

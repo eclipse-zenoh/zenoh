@@ -21,7 +21,7 @@ use std::{
 use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohId},
+    core::{ExprId, WhatAmI, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -61,7 +61,7 @@ impl<'a> RoutingExpr<'a> {
 }
 
 pub struct Tables {
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     pub(crate) face_counter: usize,
     #[allow(dead_code)]
@@ -79,7 +79,7 @@ pub struct Tables {
 
 impl Tables {
     pub fn new(
-        zid: ZenohId,
+        zid: ZenohIdProto,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
@@ -145,7 +145,7 @@ impl Tables {
     }
 
     #[inline]
-    pub(crate) fn get_face(&self, zid: &ZenohId) -> Option<&Arc<FaceState>> {
+    pub(crate) fn get_face(&self, zid: &ZenohIdProto) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.zid == *zid)
     }
 

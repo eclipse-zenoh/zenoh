@@ -28,7 +28,8 @@ mod tests {
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
-            Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+            Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI,
+            ZenohIdProto,
         },
         network::{
             push::ext::{NodeIdType, QoSType},
@@ -168,8 +169,8 @@ mod tests {
         TransportUnicast,
     ) {
         // Define client and router IDs
-        let client_id = ZenohId::try_from([1]).unwrap();
-        let router_id = ZenohId::try_from([2]).unwrap();
+        let client_id = ZenohIdProto::try_from([1]).unwrap();
+        let router_id = ZenohIdProto::try_from([2]).unwrap();
 
         // Create the router transport manager
         let router_handler = Arc::new(SHRouter::default());

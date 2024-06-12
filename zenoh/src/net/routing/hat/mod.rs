@@ -22,7 +22,7 @@ use std::{any::Any, collections::HashMap, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
-    core::{WireExpr, ZenohId},
+    core::{WireExpr, ZenohIdProto},
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
@@ -55,9 +55,9 @@ zconfigurable! {
 
 #[derive(serde::Serialize)]
 pub(crate) struct Sources {
-    routers: Vec<ZenohId>,
-    peers: Vec<ZenohId>,
-    clients: Vec<ZenohId>,
+    routers: Vec<ZenohIdProto>,
+    peers: Vec<ZenohIdProto>,
+    clients: Vec<ZenohIdProto>,
 }
 
 impl Sources {

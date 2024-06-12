@@ -32,7 +32,7 @@ pub use manager::*;
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Bits, WhatAmI, ZenohId},
+    core::{Bits, WhatAmI, ZenohIdProto},
     network::NetworkMessage,
     transport::{close, TransportSn},
 };
@@ -48,7 +48,7 @@ use crate::shm::TransportShmConfig;
 /*************************************/
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TransportConfigUnicast {
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: Bits,
     pub(crate) tx_initial_sn: TransportSn,
@@ -74,7 +74,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_zid(&self) -> ZResult<ZenohId> {
+    pub fn get_zid(&self) -> ZResult<ZenohIdProto> {
         let transport = self.get_inner()?;
         Ok(transport.get_zid())
     }

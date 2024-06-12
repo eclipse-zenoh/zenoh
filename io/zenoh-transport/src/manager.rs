@@ -19,7 +19,7 @@ use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
-    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohId},
+    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::BatchSize,
     VERSION,
 };
@@ -45,7 +45,7 @@ use crate::multicast::manager::{
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol::core::{ZenohId, Resolution, Field, Bits, WhatAmI, whatami};
+/// use zenoh_protocol::core::{ZenohIdProto, Resolution, Field, Bits, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_result::ZResult;
 ///
@@ -85,7 +85,7 @@ use crate::multicast::manager::{
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
 /// let manager = TransportManager::builder()
-///         .zid(ZenohId::rand())
+///         .zid(ZenohIdProto::rand().into())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .resolution(resolution)         // Use a sequence number resolution of 128
@@ -96,7 +96,7 @@ use crate::multicast::manager::{
 
 pub struct TransportManagerConfig {
     pub version: u8,
-    pub zid: ZenohId,
+    pub zid: ZenohIdProto,
     pub whatami: WhatAmI,
     pub resolution: Resolution,
     pub batch_size: BatchSize,
@@ -125,7 +125,7 @@ pub struct TransportManagerParams {
 
 pub struct TransportManagerBuilder {
     version: u8,
-    zid: ZenohId,
+    zid: ZenohIdProto,
     whatami: WhatAmI,
     resolution: Resolution,
     batch_size: BatchSize,
@@ -150,7 +150,7 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn zid(mut self, zid: ZenohId) -> Self {
+    pub fn zid(mut self, zid: ZenohIdProto) -> Self {
         self.zid = zid;
         self
     }
@@ -335,7 +335,7 @@ impl Default for TransportManagerBuilder {
         let wait_before_drop = *queue.congestion_control().wait_before_drop();
         Self {
             version: VERSION,
-            zid: ZenohId::rand(),
+            zid: ZenohIdProto::rand(),
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
@@ -424,7 +424,7 @@ impl TransportManager {
         TransportManagerBuilder::default()
     }
 
-    pub fn zid(&self) -> ZenohId {
+    pub fn zid(&self) -> ZenohIdProto {
         self.config.zid
     }
 

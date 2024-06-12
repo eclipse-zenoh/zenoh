@@ -20,6 +20,7 @@ use std::{
 };
 
 use tokio::net::UdpSocket;
+use zenoh_config::wrappers::Hello;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
@@ -29,36 +30,6 @@ use crate::{
     api::handlers::{locked, Callback, DefaultHandler, IntoHandler},
     net::runtime::{orchestrator::Loop, Runtime},
 };
-
-/// A zenoh Hello message.
-pub struct Hello(zenoh_protocol::scouting::Hello);
-
-impl Hello {
-    /// Get the locators of this Hello message.
-    pub fn locators(&self) -> &[zenoh_protocol::core::Locator] {
-        &self.0.locators
-    }
-
-    /// Get the zenoh id of this Hello message.
-    pub fn zid(&self) -> zenoh_protocol::core::ZenohId {
-        self.0.zid
-    }
-
-    /// Get the whatami of this Hello message.
-    pub fn whatami(&self) -> zenoh_protocol::core::WhatAmI {
-        self.0.whatami
-    }
-}
-
-impl fmt::Display for Hello {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Hello")
-            .field("zid", &self.zid())
-            .field("whatami", &self.whatami())
-            .field("locators", &self.locators())
-            .finish()
-    }
-}
 
 /// A builder for initializing a [`Scout`].
 ///
@@ -354,7 +325,7 @@ fn _scout(
                     let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
                         let callback = callback.clone();
                         async move {
-                            callback(Hello(hello));
+                            callback(hello.into());
                             Loop::Continue
                         }
                     });
