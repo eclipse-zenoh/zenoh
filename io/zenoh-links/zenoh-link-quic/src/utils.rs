@@ -31,7 +31,7 @@ use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::ConfigurationInspector;
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
-    ParametersView,
+    parameters,
 };
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
@@ -140,7 +140,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             };
         }
 
-        Ok(ParametersView::from_iter(ps.drain(..)))
+        Ok(parameters::from_iter(ps.drain(..)))
     }
 }
 

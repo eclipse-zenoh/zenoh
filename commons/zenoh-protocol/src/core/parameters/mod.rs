@@ -19,7 +19,10 @@ use core::{borrow::Borrow, fmt};
 #[cfg(feature = "std")]
 use std::collections::HashMap;
 
-use super::parameters_view::{ParametersView, FIELD_SEPARATOR, LIST_SEPARATOR, VALUE_SEPARATOR};
+// This module contains utility functions for parsing and manipulating &str as set of key=value pairs
+#[allow(clippy::module_inception)]
+mod parameters;
+pub use parameters::*;
 
 /// A map of key/value (String,String) properties.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
@@ -71,7 +74,7 @@ impl<'s> Parameters<'s> {
     where
         K: Borrow<str>,
     {
-        ParametersView::get(self.as_str(), k.borrow()).is_some()
+        parameters::get(self.as_str(), k.borrow()).is_some()
     }
 
     /// Returns a reference to the `&str`-value corresponding to the key.
@@ -79,7 +82,7 @@ impl<'s> Parameters<'s> {
     where
         K: Borrow<str>,
     {
-        ParametersView::get(self.as_str(), k.borrow())
+        parameters::get(self.as_str(), k.borrow())
     }
 
     /// Returns an iterator to the `&str`-values corresponding to the key.
@@ -87,12 +90,12 @@ impl<'s> Parameters<'s> {
     where
         K: Borrow<str>,
     {
-        ParametersView::values(self.as_str(), k.borrow())
+        parameters::values(self.as_str(), k.borrow())
     }
 
     /// Returns an iterator on the key-value pairs as `(&str, &str)`.
     pub fn iter(&'s self) -> impl DoubleEndedIterator<Item = (&'s str, &'s str)> + Clone {
-        ParametersView::iter(self.as_str())
+        parameters::iter(self.as_str())
     }
 
     /// Inserts a key-value pair into the map.
@@ -103,7 +106,7 @@ impl<'s> Parameters<'s> {
         K: Borrow<str>,
         V: Borrow<str>,
     {
-        let (inner, item) = ParametersView::insert(self.as_str(), k.borrow(), v.borrow());
+        let (inner, item) = parameters::insert(self.as_str(), k.borrow(), v.borrow());
         let item = item.map(|i| i.to_string());
         self.0 = Cow::Owned(inner);
         item
@@ -114,7 +117,7 @@ impl<'s> Parameters<'s> {
     where
         K: Borrow<str>,
     {
-        let (inner, item) = ParametersView::remove(self.as_str(), k.borrow());
+        let (inner, item) = parameters::remove(self.as_str(), k.borrow());
         let item = item.map(|i| i.to_string());
         self.0 = Cow::Owned(inner);
         item
@@ -132,7 +135,7 @@ impl<'s> Parameters<'s> {
         K: Borrow<str> + 'e + ?Sized,
         V: Borrow<str> + 'e + ?Sized,
     {
-        let inner = ParametersView::from_iter(ParametersView::join(
+        let inner = parameters::from_iter(parameters::join(
             self.iter(),
             iter.map(|(k, v)| (k.borrow(), v.borrow())),
         ));
@@ -146,7 +149,7 @@ impl<'s> Parameters<'s> {
 
     /// Returns `true`` if all keys are sorted in alphabetical order.
     pub fn is_ordered(&self) -> bool {
-        ParametersView::is_ordered(self.as_str())
+        parameters::is_ordered(self.as_str())
     }
 }
 
@@ -197,7 +200,7 @@ where
 {
     fn from_iter<T: IntoIterator<Item = (&'s K, &'s V)>>(iter: T) -> Self {
         let iter = iter.into_iter();
-        let inner = ParametersView::from_iter(iter.map(|(k, v)| (k.borrow(), v.borrow())));
+        let inner = parameters::from_iter(iter.map(|(k, v)| (k.borrow(), v.borrow())));
         Self(Cow::Owned(inner))
     }
 }
@@ -360,7 +363,7 @@ impl<'s> OrderedProperties<'s> {
 
     fn order(&mut self) {
         if !self.0.is_ordered() {
-            self.0 = Parameters(Cow::Owned(ParametersView::from_iter(ParametersView::sort(
+            self.0 = Parameters(Cow::Owned(parameters::from_iter(parameters::sort(
                 self.iter(),
             ))));
         }
