@@ -15,9 +15,9 @@ use std::time::Duration;
 
 use clap::Parser;
 use zenoh::{
+    key_expr::KeyExpr,
     prelude::*,
     query::QueryTarget,
-    selector::KeyExpr,
     shm::{
         zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
         POSIX_PROTOCOL_ID,

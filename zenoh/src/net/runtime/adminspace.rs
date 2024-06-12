@@ -577,7 +577,6 @@ fn local_data(context: &AdminContext, query: Query) {
         #[cfg(feature = "stats")]
         {
             let stats = query
-                .selector()
                 .parameters()
                 .iter()
                 .any(|(k, v)| k == "_stats" && v != "false");
@@ -611,7 +610,6 @@ fn local_data(context: &AdminContext, query: Query) {
     #[cfg(feature = "stats")]
     {
         let stats = query
-            .selector()
             .parameters()
             .iter()
             .any(|(k, v)| k == "_stats" && v != "false");
