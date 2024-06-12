@@ -15,6 +15,7 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+pub mod wrappers;
 
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
@@ -34,12 +35,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
+use wrappers::ZenohId;
 use zenoh_core::zlock;
 pub use zenoh_protocol::core::{
     whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
 };
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Bits, ZenohId},
+    core::{key_expr::OwnedKeyExpr, Bits},
     transport::{BatchSize, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};

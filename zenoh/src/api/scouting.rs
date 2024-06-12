@@ -20,8 +20,9 @@ use std::{
 };
 
 use tokio::net::UdpSocket;
+use zenoh_config::wrappers::Hello;
 use zenoh_core::{Resolvable, Wait};
-use zenoh_protocol::{core::WhatAmIMatcher, scouting::hello::Hello};
+use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
 use zenoh_task::TerminatableTask;
 

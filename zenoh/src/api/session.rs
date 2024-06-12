@@ -28,15 +28,14 @@ use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, Config, Notifier};
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, ZenohId,
-        EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID,
     },
     network::{
         self,

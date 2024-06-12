@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::vec::Vec;
-use core::fmt;
 
 use crate::core::{Locator, WhatAmI, ZenohIdProto};
 
@@ -128,41 +127,5 @@ impl HelloProto {
             whatami,
             locators,
         }
-    }
-}
-
-/// A zenoh Hello message.
-pub struct Hello(HelloProto);
-
-impl Hello {
-    /// Get the locators of this Hello message.
-    pub fn locators(&self) -> &[Locator] {
-        &self.0.locators
-    }
-
-    /// Get the zenoh id of this Hello message.
-    pub fn zid(&self) -> ZenohIdProto {
-        self.0.zid
-    }
-
-    /// Get the whatami of this Hello message.
-    pub fn whatami(&self) -> WhatAmI {
-        self.0.whatami
-    }
-}
-
-impl From<HelloProto> for Hello {
-    fn from(inner: HelloProto) -> Self {
-        Hello(inner)
-    }
-}
-
-impl fmt::Display for Hello {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Hello")
-            .field("zid", &self.zid())
-            .field("whatami", &self.whatami())
-            .field("locators", &self.locators())
-            .finish()
     }
 }

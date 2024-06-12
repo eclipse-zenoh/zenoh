@@ -23,6 +23,8 @@ use std::{
 };
 
 use futures::Sink;
+#[zenoh_macros::unstable]
+use zenoh_config::wrappers::EntityGlobalId;
 use zenoh_core::{zread, Resolvable, Resolve, Wait};
 use zenoh_protocol::{
     core::CongestionControl,
@@ -34,7 +36,6 @@ use zenoh_result::{Error, ZResult};
 use {
     crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
     crate::api::sample::SourceInfo,
-    zenoh_protocol::core::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 

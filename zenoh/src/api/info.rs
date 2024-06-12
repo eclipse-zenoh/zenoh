@@ -15,8 +15,9 @@
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 use std::future::{IntoFuture, Ready};
 
+use zenoh_config::wrappers::ZenohId;
 use zenoh_core::{Resolvable, Wait};
-use zenoh_protocol::core::{WhatAmI, ZenohId};
+use zenoh_protocol::core::WhatAmI;
 
 use super::session::SessionRef;
 

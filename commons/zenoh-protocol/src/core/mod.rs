@@ -24,7 +24,6 @@ use core::{
     str::FromStr,
 };
 
-use serde::{Deserialize, Serialize};
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
@@ -89,45 +88,6 @@ impl ZenohIdProto {
 impl Default for ZenohIdProto {
     fn default() -> Self {
         Self::rand()
-    }
-}
-
-/// The global unique id of a zenoh peer.
-#[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug, Default,
-)]
-#[repr(transparent)]
-pub struct ZenohId(ZenohIdProto);
-
-impl fmt::Display for ZenohId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl From<ZenohIdProto> for ZenohId {
-    fn from(id: ZenohIdProto) -> Self {
-        Self(id)
-    }
-}
-
-impl From<ZenohId> for ZenohIdProto {
-    fn from(id: ZenohId) -> Self {
-        id.0
-    }
-}
-
-impl From<ZenohId> for uhlc::ID {
-    fn from(zid: ZenohId) -> Self {
-        zid.0.into()
-    }
-}
-
-impl FromStr for ZenohId {
-    type Err = zenoh_result::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        ZenohIdProto::from_str(s).map(|zid| zid.into())
     }
 }
 
@@ -333,26 +293,6 @@ impl EntityGlobalIdProto {
             zid: ZenohIdProto::rand(),
             eid: rand::thread_rng().gen(),
         }
-    }
-}
-
-#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
-#[repr(transparent)]
-pub struct EntityGlobalId(EntityGlobalIdProto);
-
-impl EntityGlobalId {
-    pub fn zid(&self) -> ZenohId {
-        self.0.zid.into()
-    }
-
-    pub fn eid(&self) -> EntityId {
-        self.0.eid
-    }
-}
-
-impl From<EntityGlobalIdProto> for EntityGlobalId {
-    fn from(id: EntityGlobalIdProto) -> Self {
-        Self(id)
     }
 }
 
