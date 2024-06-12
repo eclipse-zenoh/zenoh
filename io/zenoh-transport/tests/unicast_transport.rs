@@ -21,7 +21,7 @@ use std::{
     },
     time::Duration,
 };
-use zenoh_core::ztimeout;
+use zenoh_core::{zcondfeat, ztimeout};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{
@@ -34,11 +34,10 @@ use zenoh_protocol::{
     zenoh::Put,
 };
 use zenoh_result::ZResult;
+use zenoh_transport::unicast::TransportManagerBuilderUnicast;
 use zenoh_transport::{
-    multicast::TransportMulticast,
-    unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
-    TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
-    TransportPeerEventHandler,
+    multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
+    TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
 // These keys and certificates below are purposely generated to run TLS and mTLS tests.
@@ -237,6 +236,49 @@ const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
     feature = "transport_unixsock-stream",
 ))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
+
+fn make_transport_manager_builder(
+    #[cfg(feature = "transport_multilink")] max_links: usize,
+    #[cfg(feature = "shared-memory")] with_shm: bool,
+    lowlatency_transport: bool,
+) -> TransportManagerBuilderUnicast {
+    let transport = make_basic_transport_manager_builder(
+        #[cfg(feature = "shared-memory")]
+        with_shm,
+        lowlatency_transport,
+    );
+
+    zcondfeat!(
+        "transport_multilink",
+        {
+            println!("...with max links: {}...", max_links);
+            transport.max_links(max_links)
+        },
+        transport
+    )
+}
+
+fn make_basic_transport_manager_builder(
+    #[cfg(feature = "shared-memory")] with_shm: bool,
+    lowlatency_transport: bool,
+) -> TransportManagerBuilderUnicast {
+    println!("Create transport manager builder...");
+    let config = zcondfeat!(
+        "shared-memory",
+        {
+            println!("...with SHM...");
+            TransportManager::config_unicast().shm(with_shm)
+        },
+        TransportManager::config_unicast()
+    );
+    if lowlatency_transport {
+        println!("...with LowLatency transport...");
+    }
+    match lowlatency_transport {
+        true => config.lowlatency(true).qos(false),
+        false => config,
+    }
+}
 
 // Transport Handler for the router
 struct SHRouter {

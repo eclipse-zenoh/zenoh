@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "test")]
+
 use std::{convert::TryFrom, sync::Arc, time::Duration};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "test")]
+
 use std::any::Any;
 use std::convert::TryFrom;
 use std::io::Write;

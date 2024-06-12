@@ -114,7 +114,7 @@ impl StateAccept {
         self.is_compression
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "test"))]
     pub(crate) fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();

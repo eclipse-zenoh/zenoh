@@ -54,6 +54,9 @@ jobs:
       - name: Clippy
         run: cargo +stable clippy --all-targets -- --deny warnings
 
+      - name: Clippy no default features
+        run: cargo +stable clippy --all-targets --no-default-features -- --deny warnings
+
       - name: Clippy unstable targets
         run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
 

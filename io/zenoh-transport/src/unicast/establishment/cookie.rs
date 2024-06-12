@@ -162,7 +162,7 @@ where
 }
 
 impl Cookie {
-    #[cfg(test)]
+    #[cfg(all(test, feature = "test"))]
     pub(crate) fn rand() -> Self {
         use rand::Rng;
 
@@ -190,6 +190,7 @@ impl Cookie {
 
 mod tests {
     #[test]
+    #[cfg(all(test, feature = "test"))]
     fn codec_cookie() {
         use super::*;
         use rand::{Rng, SeedableRng};

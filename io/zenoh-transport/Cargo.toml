@@ -45,7 +45,7 @@ transport_compression = []
 transport_unixpipe = ["zenoh-link/transport_unixpipe"]
 transport_vsock= ["zenoh-link/transport_vsock"]
 stats = ["zenoh-protocol/stats"]
-test = []
+test = ["zenoh-protocol/test"]
 unstable = []
 default = ["test", "transport_multilink"]
 

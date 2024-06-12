@@ -208,7 +208,7 @@ impl StateAccept {
         self.pubkey.as_ref().map(|(_, p)| p.clone())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "test"))]
     pub(crate) fn rand() -> Self {
         let mut rng = rand::thread_rng();
         let pubkey = if rng.gen_bool(0.5) {

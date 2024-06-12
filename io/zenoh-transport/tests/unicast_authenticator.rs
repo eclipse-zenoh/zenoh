@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "test")]
+
 use std::{any::Any, sync::Arc, time::Duration};
 use zenoh_core::{zasyncwrite, ztimeout};
 use zenoh_link::Link;

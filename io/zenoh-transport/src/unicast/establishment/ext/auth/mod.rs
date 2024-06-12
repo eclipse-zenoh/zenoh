@@ -168,7 +168,7 @@ pub(crate) struct StateAccept {
 }
 
 impl StateAccept {
-    #[cfg(test)]
+    #[cfg(all(test, feature = "test"))]
     pub(crate) fn rand() -> Self {
         let mut rng = rand::thread_rng();
         Self {
