@@ -498,6 +498,10 @@ async fn accept_read_task(
 
     tracing::trace!("Ready to accept UDP connections on: {:?}", src_addr);
 
+    if src_addr.ip().is_unspecified() {
+        tracing::warn!("Interceptors (e.g. Access Control, Downsampling) are not guaranteed to work on UDP when listening on 0.0.0.0 or [::]. Their usage is discouraged. See https://github.com/eclipse-zenoh/zenoh/issues/1126.");
+    }
+
     loop {
         // Buffers for deserialization
         let mut buff = zenoh_buffers::vec::uninit(UDP_MAX_MTU as usize);
