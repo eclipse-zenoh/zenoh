@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[zenoh_macros::unstable]
-use std::borrow::Cow;
 use std::{
     collections::HashMap,
     future::{IntoFuture, Ready},
