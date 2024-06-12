@@ -189,7 +189,17 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     }
 
     fn get_auth_ids(&self) -> Vec<AuthId> {
-        vec![]
+        // Convert link level auth ids to AuthId
+        #[allow(unused_mut)]
+        let mut auth_ids: Vec<AuthId> = self
+            .get_links()
+            .iter()
+            .map(|l| l.auth_identifier.to_owned().into())
+            .collect();
+        // Convert usrpwd auth id to AuthId
+        #[cfg(feature = "auth_usrpwd")]
+        auth_ids.push(self.config.auth_id.clone().into());
+        auth_ids
     }
 
     fn get_whatami(&self) -> WhatAmI {
