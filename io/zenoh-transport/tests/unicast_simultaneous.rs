@@ -26,7 +26,7 @@ mod tests {
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
         network::{
             push::ext::{NodeIdType, QoSType},
             NetworkMessage, Push,
@@ -47,12 +47,12 @@ mod tests {
 
     // Transport Handler for the router
     struct SHPeer {
-        zid: ZenohId,
+        zid: ZenohIdProto,
         count: Arc<AtomicUsize>,
     }
 
     impl SHPeer {
-        fn new(zid: ZenohId) -> Self {
+        fn new(zid: ZenohIdProto) -> Self {
             Self {
                 zid,
                 count: Arc::new(AtomicUsize::new(0)),
@@ -136,8 +136,8 @@ mod tests {
 
     async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
         /* [Peers] */
-        let peer_id01 = ZenohId::try_from([2]).unwrap();
-        let peer_id02 = ZenohId::try_from([3]).unwrap();
+        let peer_id01 = ZenohIdProto::try_from([2]).unwrap();
+        let peer_id02 = ZenohIdProto::try_from([3]).unwrap();
 
         // Create the peer01 transport manager
         let peer_sh01 = Arc::new(SHPeer::new(peer_id01));

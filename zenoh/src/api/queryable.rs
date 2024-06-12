@@ -21,7 +21,7 @@ use std::{
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
-    core::{CongestionControl, EntityId, WireExpr, ZenohId},
+    core::{CongestionControl, EntityId, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
@@ -29,7 +29,7 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
     super::{query::ReplyKeyExpr, sample::SourceInfo},
-    zenoh_protocol::core::EntityGlobalId,
+    zenoh_protocol::core::EntityGlobalIdProto,
 };
 
 use super::{
@@ -54,7 +54,7 @@ pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) parameters: Parameters<'static>,
     pub(crate) qid: RequestId,
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) primitives: Arc<dyn Primitives>,
 }
 
@@ -870,8 +870,8 @@ impl<'a, Handler> Queryable<'a, Handler> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn id(&self) -> EntityGlobalId {
-        EntityGlobalId {
+    pub fn id(&self) -> EntityGlobalIdProto {
+        EntityGlobalIdProto {
             zid: self.queryable.session.zid().into(),
             eid: self.queryable.state.id,
         }

@@ -28,7 +28,7 @@ use tracing::{error, trace, warn};
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, Config, Notifier, ZenohId};
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{declare::SubscriberId, ext};
@@ -2195,7 +2195,7 @@ impl Primitives for Session {
                         };
                         let replier_id = match e.ext_sinfo {
                             Some(info) => info.id.zid,
-                            None => zenoh_protocol::core::ZenohId::rand(),
+                            None => zenoh_protocol::core::ZenohIdProto::rand(),
                         };
                         let new_reply = Reply {
                             replier_id,
@@ -2313,7 +2313,7 @@ impl Primitives for Session {
                         let sample = info.into_sample(key_expr.into_owned(), payload, attachment);
                         let new_reply = Reply {
                             result: Ok(sample),
-                            replier_id: zenoh_protocol::core::ZenohId::rand(), // TODO
+                            replier_id: zenoh_protocol::core::ZenohIdProto::rand(), // TODO
                         };
                         let callback =
                             match query.reception_mode {
@@ -2658,7 +2658,7 @@ impl crate::net::primitives::EPrimitives for Session {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::str::FromStr;
-/// use zenoh::{config::ZenohId, prelude::*};
+/// use zenoh::{info::ZenohId, prelude::*};
 ///
 /// let mut config = zenoh::config::peer();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());

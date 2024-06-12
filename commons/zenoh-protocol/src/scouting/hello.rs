@@ -13,7 +13,7 @@
 //
 use alloc::vec::Vec;
 
-use crate::core::{Locator, WhatAmI, ZenohId};
+use crate::core::{Locator, WhatAmI, ZenohIdProto};
 
 /// # Hello message
 ///
@@ -99,14 +99,14 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hello {
+pub struct HelloProto {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub zid: ZenohId,
+    pub zid: ZenohIdProto,
     pub locators: Vec<Locator>,
 }
 
-impl Hello {
+impl HelloProto {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -114,7 +114,7 @@ impl Hello {
         let mut rng = rand::thread_rng();
 
         let version: u8 = rng.gen();
-        let zid = ZenohId::default();
+        let zid = ZenohIdProto::default();
         let whatami = WhatAmI::rand();
         let locators = if rng.gen_bool(0.5) {
             Vec::from_iter((1..5).map(|_| Locator::rand()))

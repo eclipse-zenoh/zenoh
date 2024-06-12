@@ -17,7 +17,7 @@ mod tests {
 
     use zenoh_core::ztimeout;
     use zenoh_link::EndPoint;
-    use zenoh_protocol::core::{WhatAmI, ZenohId};
+    use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
     use zenoh_result::ZResult;
     use zenoh_transport::{
         multicast::TransportMulticast, unicast::TransportUnicast, DummyTransportPeerEventHandler,
@@ -77,7 +77,7 @@ mod tests {
 
     async fn multilink_transport(endpoint: &EndPoint) {
         /* [ROUTER] */
-        let router_id = ZenohId::try_from([1]).unwrap();
+        let router_id = ZenohIdProto::try_from([1]).unwrap();
 
         let router_handler = Arc::new(SHRouterOpenClose);
         // Create the router transport manager
@@ -92,8 +92,8 @@ mod tests {
             .unwrap();
 
         /* [CLIENT] */
-        let client01_id = ZenohId::try_from([2]).unwrap();
-        let client02_id = ZenohId::try_from([3]).unwrap();
+        let client01_id = ZenohIdProto::try_from([2]).unwrap();
+        let client02_id = ZenohIdProto::try_from([3]).unwrap();
 
         // Create the transport transport manager for the first client
         let unicast = TransportManager::config_unicast()

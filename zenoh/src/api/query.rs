@@ -20,7 +20,7 @@ use std::{
 
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::{CongestionControl, ZenohId};
+use zenoh_protocol::core::{CongestionControl, ZenohIdProto};
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
@@ -84,7 +84,7 @@ impl Default for QueryConsolidation {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub(crate) result: Result<Sample, Value>,
-    pub(crate) replier_id: ZenohId,
+    pub(crate) replier_id: ZenohIdProto,
 }
 
 impl Reply {
@@ -104,7 +104,7 @@ impl Reply {
     }
 
     /// Gets the id of the zenoh instance that answered this Reply.
-    pub fn replier_id(&self) -> ZenohId {
+    pub fn replier_id(&self) -> ZenohIdProto {
         self.replier_id
     }
 }
