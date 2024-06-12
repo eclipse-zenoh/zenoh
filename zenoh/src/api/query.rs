@@ -93,12 +93,6 @@ impl ReplyError {
         &self.payload
     }
 
-    /// Gets the payload of this ReplyError.
-    #[inline]
-    pub fn payload_mut(&mut self) -> &mut ZBytes {
-        &mut self.payload
-    }
-
     /// Gets the encoding of this ReplyError.
     #[inline]
     pub fn encoding(&self) -> &Encoding {
