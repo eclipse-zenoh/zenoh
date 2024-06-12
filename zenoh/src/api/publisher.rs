@@ -174,22 +174,10 @@ impl<'a> Publisher<'a> {
         self.congestion_control
     }
 
-    /// Change the `congestion_control` to apply when routing the data.
-    #[inline]
-    pub fn set_congestion_control(&mut self, congestion_control: CongestionControl) {
-        self.congestion_control = congestion_control;
-    }
-
     /// Get the priority of the written data.
     #[inline]
     pub fn priority(&self) -> Priority {
         self.priority
-    }
-
-    /// Change the priority of the written data.
-    #[inline]
-    pub fn set_priority(&mut self, priority: Priority) {
-        self.priority = priority;
     }
 
     /// Consumes the given `Publisher`, returning a thread-safe reference-counting
