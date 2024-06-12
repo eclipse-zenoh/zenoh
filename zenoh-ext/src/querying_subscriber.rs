@@ -28,6 +28,7 @@ use zenoh::{
     prelude::Wait,
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
+    selector::Selector,
     session::{SessionDeclarations, SessionRef},
     subscriber::{Reliability, Subscriber},
     time::{new_timestamp, Timestamp},
@@ -43,7 +44,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     pub(crate) key_space: KeySpace,
     pub(crate) reliability: Reliability,
     pub(crate) origin: Locality,
-    pub(crate) query_selector: Option<ZResult<KeyExpr<'b>>>,
+    pub(crate) query_selector: Option<ZResult<Selector<'b>>>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_consolidation: QueryConsolidation,
     pub(crate) query_accept_replies: ReplyKeyExpr,
@@ -178,8 +179,8 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
     #[inline]
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
-        IntoSelector: TryInto<KeyExpr<'b>>,
-        <IntoSelector as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
+        IntoSelector: TryInto<Selector<'b>>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<Error>,
     {
         self.query_selector = Some(query_selector.try_into().map_err(Into::into));
         self
