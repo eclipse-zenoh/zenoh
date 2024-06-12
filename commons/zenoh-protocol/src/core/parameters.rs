@@ -20,7 +20,6 @@
 /// `=` is the separator between the `&str`-key and `&str`-value
 ///
 /// `|` is the separator between multiple elements of the values.
-
 mod properties;
 pub use properties::Parameters;
 
@@ -91,9 +90,7 @@ where
 
 /// Get the a `&str`-value for a `&str`-key according to the parameters format.
 pub fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
-    iter(s)
-        .find(|(key, _)| *key == k)
-        .map(|(_, value)| value)
+    iter(s).find(|(key, _)| *key == k).map(|(_, value)| value)
 }
 
 /// Get the a `&str`-value iterator for a `&str`-key according to the parameters format.

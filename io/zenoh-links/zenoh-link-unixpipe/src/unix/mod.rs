@@ -24,7 +24,7 @@ pub use unicast::*;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::{Locator, parameters};
+use zenoh_protocol::core::{parameters, Locator};
 use zenoh_result::ZResult;
 
 pub const UNIXPIPE_LOCATOR_PREFIX: &str = "unixpipe";
