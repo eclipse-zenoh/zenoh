@@ -21,7 +21,7 @@ use std::{
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
-    core::{CongestionControl, EntityId, WireExpr, ZenohIdProto},
+    core::{CongestionControl, EntityId, Parameters, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
