@@ -150,9 +150,13 @@ impl Clone for Encoding {
         let inner = unsafe { &*self.0.ptr };
         // See `Arc` code
         if inner.rc.fetch_add(1, Ordering::Relaxed) > (isize::MAX as usize) {
+            #[cfg(feature = "std")]
+            std::process::abort();
             // intrinsics::abort is not available on stable rust...
-            // However, this situation should never be encountered in normal program
-            loop {}
+            // However, this situation should never be encountered in normal program, so panic,
+            // hoping than panic handler will abort.
+            #[cfg(not(feature = "std"))]
+            panic!("This program is incredibly degenerate");
         }
         Self(EncodingIdOrPointer { ptr: inner })
     }
