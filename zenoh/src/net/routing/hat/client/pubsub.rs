@@ -19,13 +19,9 @@ use std::{
 
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI},
-    network::{
-        declare::{
-            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-            DeclareSubscriber, SubscriberId, UndeclareSubscriber,
-        },
-        interest::{InterestId, InterestMode, InterestOptions},
-        Interest,
+    network::declare::{
+        common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
+        DeclareSubscriber, SubscriberId, UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -35,7 +31,7 @@ use crate::{
     key_expr::KeyExpr,
     net::routing::{
         dispatcher::{
-            face::{FaceState, InterestState},
+            face::FaceState,
             resource::{NodeId, Resource, SessionContext},
             tables::{Route, RoutingExpr, Tables},
         },
@@ -243,7 +239,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
     };
-    for mut src_face in tables
+    for src_face in tables
         .faces
         .values()
         .cloned()
@@ -252,134 +248,12 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         for sub in face_hat!(src_face).remote_subs.values() {
             propagate_simple_subscription_to(tables, face, sub, &sub_info, &mut src_face.clone());
         }
-        if face.whatami != WhatAmI::Client {
-            for res in face_hat_mut!(&mut src_face).remote_sub_interests.values() {
-                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                let options = InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS;
-                get_mut_unchecked(face).local_interests.insert(
-                    id,
-                    InterestState {
-                        options,
-                        res: res.as_ref().map(|res| (*res).clone()),
-                        finalized: false,
-                    },
-                );
-                let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face));
-                face.primitives.send_interest(RoutingContext::with_expr(
-                    Interest {
-                        id,
-                        mode: InterestMode::CurrentFuture,
-                        options,
-                        wire_expr,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                    },
-                    res.as_ref().map(|res| res.expr()).unwrap_or_default(),
-                ));
-            }
-        }
     }
     // recompute routes
     update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 impl HatPubSubTrait for HatCode {
-    fn declare_sub_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        _aggregate: bool,
-    ) {
-        face_hat_mut!(face)
-            .remote_sub_interests
-            .insert(id, res.as_ref().map(|res| (*res).clone()));
-        for dst_face in tables
-            .faces
-            .values_mut()
-            .filter(|f| f.whatami != WhatAmI::Client)
-        {
-            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-            let options = InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS;
-            get_mut_unchecked(dst_face).local_interests.insert(
-                id,
-                InterestState {
-                    options,
-                    res: res.as_ref().map(|res| (*res).clone()),
-                    finalized: mode == InterestMode::Future,
-                },
-            );
-            let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
-            dst_face.primitives.send_interest(RoutingContext::with_expr(
-                Interest {
-                    id,
-                    mode,
-                    options,
-                    wire_expr,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                },
-                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
-            ));
-        }
-    }
-
-    fn undeclare_sub_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    ) {
-        if let Some(interest) = face_hat_mut!(face).remote_sub_interests.remove(&id) {
-            if !tables.faces.values().any(|f| {
-                f.whatami == WhatAmI::Client
-                    && face_hat!(f)
-                        .remote_sub_interests
-                        .values()
-                        .any(|i| *i == interest)
-            }) {
-                for dst_face in tables
-                    .faces
-                    .values_mut()
-                    .filter(|f| f.whatami != WhatAmI::Client)
-                {
-                    for id in dst_face
-                        .local_interests
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<InterestId>>()
-                    {
-                        let local_interest = dst_face.local_interests.get(&id).unwrap();
-                        if local_interest.options.subscribers() && (local_interest.res == interest)
-                        {
-                            dst_face.primitives.send_interest(RoutingContext::with_expr(
-                                Interest {
-                                    id,
-                                    mode: InterestMode::Final,
-                                    options: InterestOptions::empty(),
-                                    wire_expr: None,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                },
-                                local_interest
-                                    .res
-                                    .as_ref()
-                                    .map(|res| res.expr())
-                                    .unwrap_or_default(),
-                            ));
-                            get_mut_unchecked(dst_face).local_interests.remove(&id);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     fn declare_subscription(
         &self,
         tables: &mut Tables,
