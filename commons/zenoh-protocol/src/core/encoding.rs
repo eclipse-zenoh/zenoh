@@ -11,11 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    alloc, fmt,
+use alloc::alloc;
+use core::{
+    fmt,
     mem::MaybeUninit,
     slice, str,
-    sync::atomic::{AtomicUsize, Ordering, Ordering::Release},
+    sync::{
+        atomic,
+        atomic::{AtomicUsize, Ordering, Ordering::Release},
+    },
 };
 
 pub type EncodingId = u16;
@@ -146,7 +150,9 @@ impl Clone for Encoding {
         let inner = unsafe { &*self.0.ptr };
         // See `Arc` code
         if inner.rc.fetch_add(1, Ordering::Relaxed) > (isize::MAX as usize) {
-            std::process::abort();
+            // intrinsics::abort is not available on stable rust...
+            // However, this situation should never be encountered in normal program
+            loop {}
         }
         Self(EncodingIdOrPointer { ptr: inner })
     }
@@ -184,7 +190,7 @@ impl Drop for Encoding {
             return;
         }
         // See `Arc` code
-        std::sync::atomic::fence(Ordering::Acquire);
+        atomic::fence(Ordering::Acquire);
     }
 }
 

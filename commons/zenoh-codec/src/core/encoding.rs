@@ -73,7 +73,7 @@ where
         let mut encoding = Encoding::new(id);
         if has_schema {
             let zodec = Zenoh080Bounded::<u8>::new();
-            let schema: String = zodec.read(&mut *reader)?;
+            let schema: alloc::string::String = zodec.read(&mut *reader)?;
             encoding = encoding.with_schema(schema);
         }
 
