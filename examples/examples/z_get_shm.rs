@@ -33,7 +33,7 @@ async fn main() {
     // initiate logging
     zenoh::try_init_log_from_env();
 
-    let (mut config, selector, mut value, target, timeout) = parse_args();
+    let (mut config, selector, mut payload, target, timeout) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
@@ -67,7 +67,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let content = value
+    let content = payload
         .take()
         .unwrap_or_else(|| "Get from SHM Rust!".to_string());
     sbuf[0..content.len()].copy_from_slice(content.as_bytes());
@@ -75,7 +75,7 @@ async fn main() {
     println!("Sending Query '{selector}'...");
     let replies = session
         .get(&selector)
-        .value(sbuf)
+        .payload(sbuf)
         .target(target)
         .timeout(timeout)
         .await
@@ -114,8 +114,8 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The selection of resources to query
     selector: Selector<'static>,
-    /// The value to publish.
-    value: Option<String>,
+    /// The payload to publish.
+    payload: Option<String>,
     #[arg(short, long, default_value = "BEST_MATCHING")]
     /// The target queryables of the query.
     target: Qt,
@@ -137,7 +137,7 @@ fn parse_args() -> (
     (
         args.common.into(),
         args.selector,
-        args.value,
+        args.payload,
         match args.target {
             Qt::BestMatching => QueryTarget::BestMatching,
             Qt::All => QueryTarget::All,
