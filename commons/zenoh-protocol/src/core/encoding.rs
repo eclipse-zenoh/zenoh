@@ -24,24 +24,6 @@ use core::{
 
 pub type EncodingId = u16;
 
-#[repr(C)]
-struct EncodingInner {
-    rc: AtomicUsize,
-    schema_length: usize,
-    id: EncodingId,
-    schema: [u8; 0],
-}
-
-union EncodingIdOrPointer {
-    flagged_id: usize,
-    ptr: *const EncodingInner,
-}
-
-// Flag to discriminate union variant.
-// `EncodingInner` has in fact the same alignment as usize, so we can assume that it's not possible
-// to have a pointer with this flag set, which means the union has the (flagged) id variant.
-const ID_ONLY: usize = 1;
-
 /// [`Encoding`] is a metadata that indicates how the data payload should be interpreted.
 /// For wire-efficiency and extensibility purposes, Zenoh defines an [`Encoding`] as
 /// composed of an unsigned integer prefix and a bytes schema. The actual meaning of the
@@ -49,7 +31,30 @@ const ID_ONLY: usize = 1;
 /// impose any encoding mapping and users are free to use any mapping they like.
 /// Nevertheless, it is worth highlighting that Zenoh still provides a default mapping as part
 /// of the API as per user convenience. That mapping has no impact on the Zenoh protocol definition.
-pub struct Encoding(EncodingIdOrPointer);
+pub struct Encoding(EncodingIdOrInner);
+
+/// This union embed either a raw encoding id, or an Arc-like [`EncodingInner`] pointer
+/// Because [`EncodingInner`] has the same alignment as `usize`, the first bit of a valid
+/// `*const EncodingInner` pointer must always be zero. We can then use this bit as the union
+/// discriminant, by shifting the raw encoding id.
+/// A special case is made for id 0, which doesn't need to be shifted because it also corresponds
+/// to an invalid pointer (the null pointer).
+union EncodingIdOrInner {
+    shifted_id: usize,
+    ptr: *const EncodingInner,
+}
+
+/// Flag to discriminate union variant, see [`EncodingIdOrInner`].
+/// If the bit is set, then `EncodingIdOrInner` contains a raw encoding id.
+const RAW_ENCODING_ID: usize = 1;
+
+#[repr(C)]
+struct EncodingInner {
+    rc: AtomicUsize,
+    schema_length: usize,
+    id: EncodingId,
+    schema: [u8; 0],
+}
 
 /// # Encoding field
 ///
@@ -70,9 +75,9 @@ impl Encoding {
     pub const fn new(id: EncodingId) -> Self {
         let mut id = id as usize;
         if id > 0 {
-            id = (id << ID_ONLY) | 1;
+            id = (id << RAW_ENCODING_ID) | 1;
         }
-        Self(EncodingIdOrPointer { flagged_id: id })
+        Self(EncodingIdOrInner { shifted_id: id })
     }
 
     /// Returns a new [`Encoding`] object with default empty prefix ID.
@@ -84,11 +89,11 @@ impl Encoding {
     #[inline]
     pub fn id_and_schema(&self) -> (EncodingId, Option<&str>) {
         // SAFETY: accessing flagged_id is always safe as it is an usize
-        let flagged_id = unsafe { self.0.flagged_id };
+        let flagged_id = unsafe { self.0.shifted_id };
         if flagged_id == 0 {
             return (0, None);
         }
-        if flagged_id & ID_ONLY != 0 {
+        if flagged_id & RAW_ENCODING_ID != 0 {
             return ((flagged_id >> 1) as EncodingId, None);
         }
         // SAFETY: the union doesn't have the id-only flag, so it must be a valid pointer
@@ -103,18 +108,24 @@ impl Encoding {
         (inner.id, Some(schema))
     }
 
+    fn layout(schema_length: usize) -> alloc::Layout {
+        let layout = alloc::Layout::new::<EncodingInner>();
+        layout
+            .extend(alloc::Layout::array::<u8>(schema_length).expect("Overflow"))
+            .expect("Overflow")
+            .0
+    }
+
     pub fn with_schema(&self, schema: impl AsRef<str>) -> Self {
         let schema = schema.as_ref();
         let (id, old_schema) = self.id_and_schema();
         if old_schema.is_some_and(|s| s == schema) {
             return self.clone();
         }
-        let layout = alloc::Layout::new::<EncodingInner>();
-        layout
-            .extend(alloc::Layout::array::<u8>(schema.len()).expect("Overflow"))
-            .expect("Overflow");
         // SAFETY: layout has non-zero-size
-        let inner = unsafe { &mut *(alloc::alloc(layout) as *mut MaybeUninit<EncodingInner>) };
+        let inner = unsafe {
+            &mut *(alloc::alloc(Self::layout(schema.len())) as *mut MaybeUninit<EncodingInner>)
+        };
         inner.write(EncodingInner {
             rc: AtomicUsize::new(1),
             schema_length: schema.len(),
@@ -127,7 +138,7 @@ impl Encoding {
         // by the layout of the schema.
         unsafe { slice::from_raw_parts_mut(inner.schema.as_mut_ptr(), inner.schema_length) }
             .copy_from_slice(schema.as_bytes());
-        Self(EncodingIdOrPointer {
+        Self(EncodingIdOrInner {
             ptr: (inner as *mut EncodingInner).cast_const(),
         })
     }
@@ -142,9 +153,11 @@ impl Default for Encoding {
 impl Clone for Encoding {
     fn clone(&self) -> Self {
         // SAFETY: accessing flagged_id is always safe as it is an usize
-        let flagged_id = unsafe { self.0.flagged_id };
-        if flagged_id == 0 || flagged_id & ID_ONLY != 0 {
-            return Self(EncodingIdOrPointer { flagged_id });
+        let flagged_id = unsafe { self.0.shifted_id };
+        if flagged_id == 0 || flagged_id & RAW_ENCODING_ID != 0 {
+            return Self(EncodingIdOrInner {
+                shifted_id: flagged_id,
+            });
         }
         // SAFETY: the union doesn't have the id-only flag, so it must be a valid pointer
         let inner = unsafe { &*self.0.ptr };
@@ -158,7 +171,7 @@ impl Clone for Encoding {
             #[cfg(not(feature = "std"))]
             panic!("This program is incredibly degenerate");
         }
-        Self(EncodingIdOrPointer { ptr: inner })
+        Self(EncodingIdOrInner { ptr: inner })
     }
 }
 
@@ -183,8 +196,8 @@ impl Eq for Encoding {}
 impl Drop for Encoding {
     fn drop(&mut self) {
         // SAFETY: accessing flagged_id is always safe as it is an usize
-        let flagged_id = unsafe { self.0.flagged_id };
-        if flagged_id == 0 || flagged_id & ID_ONLY != 0 {
+        let flagged_id = unsafe { self.0.shifted_id };
+        if flagged_id == 0 || flagged_id & RAW_ENCODING_ID != 0 {
             return;
         }
         // SAFETY: the union doesn't have the id-only flag, so it must be a valid pointer
@@ -195,6 +208,9 @@ impl Drop for Encoding {
         }
         // See `Arc` code
         atomic::fence(Ordering::Acquire);
+        let layout = Self::layout(inner.schema_length);
+        // SAFETY: inner has been allocated with `alloc::alloc` and the same layout
+        unsafe { alloc::dealloc((inner as *const EncodingInner).cast_mut().cast(), layout) }
     }
 }
 
