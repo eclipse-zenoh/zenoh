@@ -20,7 +20,7 @@ use zenoh_protocol::{core::CongestionControl, network::Mapping};
 use crate::api::sample::SourceInfo;
 use crate::api::{
     builders::sample::{
-        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
     },
     bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
@@ -28,7 +28,6 @@ use crate::api::{
     publisher::{Priority, Publisher},
     sample::{Locality, SampleKind},
     session::SessionRef,
-    value::Value,
 };
 
 pub type SessionPutBuilder<'a, 'b> =
@@ -114,33 +113,13 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
-impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
+impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: PublicationBuilderPut {
                 encoding: encoding.into(),
                 ..self.kind
             },
-            ..self
-        }
-    }
-
-    fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<ZBytes>,
-    {
-        Self {
-            kind: PublicationBuilderPut {
-                payload: payload.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            kind: PublicationBuilderPut { payload, encoding },
             ..self
         }
     }

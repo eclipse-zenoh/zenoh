@@ -67,8 +67,8 @@ fn attachment_queries() {
         .declare_queryable("test/attachment")
         .callback(|query| {
             let s = query
-                .value()
-                .map(|q| q.payload().deserialize::<String>().unwrap())
+                .payload()
+                .map(|p| p.deserialize::<String>().unwrap())
                 .unwrap_or_default();
             println!("Query value: {}", s);
 
@@ -85,10 +85,7 @@ fn attachment_queries() {
             }
 
             query
-                .reply(
-                    query.key_expr().clone(),
-                    query.value().unwrap().payload().clone(),
-                )
+                .reply(query.key_expr().clone(), query.payload().unwrap().clone())
                 .attachment(ZBytes::from_iter(
                     attachment
                         .iter::<(
