@@ -11,11 +11,32 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use core::fmt::Debug;
-
-use zenoh_buffers::ZSlice;
+use std::{
+    alloc, fmt,
+    mem::MaybeUninit,
+    slice, str,
+    sync::atomic::{AtomicUsize, Ordering, Ordering::Release},
+};
 
 pub type EncodingId = u16;
+
+#[repr(C)]
+struct EncodingInner {
+    rc: AtomicUsize,
+    schema_length: usize,
+    id: EncodingId,
+    schema: [u8; 0],
+}
+
+union EncodingIdOrPointer {
+    flagged_id: usize,
+    ptr: *const EncodingInner,
+}
+
+// Flag to discriminate union variant.
+// `EncodingInner` has in fact the same alignment as usize, so we can assume that it's not possible
+// to have a pointer with this flag set, which means the union has the (flagged) id variant.
+const ID_ONLY: usize = 1;
 
 /// [`Encoding`] is a metadata that indicates how the data payload should be interpreted.
 /// For wire-efficiency and extensibility purposes, Zenoh defines an [`Encoding`] as
@@ -24,11 +45,7 @@ pub type EncodingId = u16;
 /// impose any encoding mapping and users are free to use any mapping they like.
 /// Nevertheless, it is worth highlighting that Zenoh still provides a default mapping as part
 /// of the API as per user convenience. That mapping has no impact on the Zenoh protocol definition.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Encoding {
-    pub id: EncodingId,
-    pub schema: Option<ZSlice>,
-}
+pub struct Encoding(EncodingIdOrPointer);
 
 /// # Encoding field
 ///
@@ -45,12 +62,70 @@ pub mod flag {
 }
 
 impl Encoding {
-    /// Returns a new [`Encoding`] object with default empty prefix ID.
-    pub const fn empty() -> Self {
-        Self {
-            id: 0,
-            schema: None,
+    #[inline]
+    pub const fn new(id: EncodingId) -> Self {
+        let mut id = id as usize;
+        if id > 0 {
+            id = (id << ID_ONLY) | 1;
         }
+        Self(EncodingIdOrPointer { flagged_id: id })
+    }
+
+    /// Returns a new [`Encoding`] object with default empty prefix ID.
+    #[inline]
+    pub const fn empty() -> Self {
+        Self::new(0)
+    }
+
+    #[inline]
+    pub fn id_and_schema(&self) -> (EncodingId, Option<&str>) {
+        // SAFETY: accessing flagged_id is always safe as it is an usize
+        let flagged_id = unsafe { self.0.flagged_id };
+        if flagged_id == 0 {
+            return (0, None);
+        }
+        if flagged_id & ID_ONLY != 0 {
+            return ((flagged_id >> 1) as EncodingId, None);
+        }
+        // SAFETY: the union doesn't have the id-only flag, so it must be a valid pointer
+        let inner = unsafe { &*self.0.ptr };
+        // SAFETY: `EncodingInner` was allocated as a DST with a str in place of schema.
+        let schema = unsafe {
+            str::from_utf8_unchecked(slice::from_raw_parts(
+                inner.schema.as_ptr(),
+                inner.schema_length,
+            ))
+        };
+        (inner.id, Some(schema))
+    }
+
+    pub fn with_schema(&self, schema: impl AsRef<str>) -> Self {
+        let schema = schema.as_ref();
+        let (id, old_schema) = self.id_and_schema();
+        if old_schema.is_some_and(|s| s == schema) {
+            return self.clone();
+        }
+        let layout = alloc::Layout::new::<EncodingInner>();
+        layout
+            .extend(alloc::Layout::array::<u8>(schema.len()).expect("Overflow"))
+            .expect("Overflow");
+        // SAFETY: layout has non-zero-size
+        let inner = unsafe { &mut *(alloc::alloc(layout) as *mut MaybeUninit<EncodingInner>) };
+        inner.write(EncodingInner {
+            rc: AtomicUsize::new(1),
+            schema_length: schema.len(),
+            id,
+            schema: [],
+        });
+        // SAFETY: inner has been initialized
+        let inner = unsafe { inner.assume_init_mut() };
+        // SAFETY: `EncodingInner` was allocated as a DST with its layout extended
+        // by the layout of the schema.
+        unsafe { slice::from_raw_parts_mut(inner.schema.as_mut_ptr(), inner.schema_length) }
+            .copy_from_slice(schema.as_bytes());
+        Self(EncodingIdOrPointer {
+            ptr: (inner as *mut EncodingInner).cast_const(),
+        })
     }
 }
 
@@ -59,6 +134,64 @@ impl Default for Encoding {
         Self::empty()
     }
 }
+
+impl Clone for Encoding {
+    fn clone(&self) -> Self {
+        // SAFETY: accessing flagged_id is always safe as it is an usize
+        let flagged_id = unsafe { self.0.flagged_id };
+        if flagged_id == 0 || flagged_id & ID_ONLY != 0 {
+            return Self(EncodingIdOrPointer { flagged_id });
+        }
+        // SAFETY: the union doesn't have the id-only flag, so it must be a valid pointer
+        let inner = unsafe { &*self.0.ptr };
+        // See `Arc` code
+        if inner.rc.fetch_add(1, Ordering::Relaxed) > (isize::MAX as usize) {
+            std::process::abort();
+        }
+        Self(EncodingIdOrPointer { ptr: inner })
+    }
+}
+
+impl fmt::Debug for Encoding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (id, schema) = self.id_and_schema();
+        f.debug_struct("Encoding")
+            .field("id", &id)
+            .field("schema", &schema)
+            .finish()
+    }
+}
+
+impl PartialEq for Encoding {
+    fn eq(&self, other: &Self) -> bool {
+        self.id_and_schema() == other.id_and_schema()
+    }
+}
+
+impl Eq for Encoding {}
+
+impl Drop for Encoding {
+    fn drop(&mut self) {
+        // SAFETY: accessing flagged_id is always safe as it is an usize
+        let flagged_id = unsafe { self.0.flagged_id };
+        if flagged_id == 0 || flagged_id & ID_ONLY != 0 {
+            return;
+        }
+        // SAFETY: the union doesn't have the id-only flag, so it must be a valid pointer
+        let inner = unsafe { &*self.0.ptr };
+        // See `Arc` code
+        if inner.rc.fetch_sub(1, Release) != 1 {
+            return;
+        }
+        // See `Arc` code
+        std::sync::atomic::fence(Ordering::Acquire);
+    }
+}
+
+// SAFETY: Encoding implementation is synchronized with atomic reference counting
+unsafe impl Send for Encoding {}
+// SAFETY: Encoding implementation is synchronized with atomic reference counting
+unsafe impl Sync for Encoding {}
 
 impl Encoding {
     #[cfg(feature = "test")]
@@ -70,10 +203,12 @@ impl Encoding {
 
         let mut rng = rand::thread_rng();
 
-        let id: EncodingId = rng.gen();
-        let schema = rng
-            .gen_bool(0.5)
-            .then_some(ZSlice::rand(rng.gen_range(MIN..MAX)));
-        Encoding { id, schema }
+        let mut encoding = Encoding::new(rng.gen());
+        if rng.gen_bool(0.5) {
+            let len = rng.gen_range(MIN..MAX);
+            let schema: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+            encoding = encoding.with_schema(String::from_utf8_lossy(&schema))
+        }
+        encoding
     }
 }

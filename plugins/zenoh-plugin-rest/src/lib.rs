@@ -65,25 +65,21 @@ pub fn base64_encode(data: &[u8]) -> String {
 }
 
 fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
-    match payload.is_empty() {
-        // If the value is empty return a JSON null
-        true => serde_json::Value::Null,
-        // if it is not check the encoding
-        false => {
-            match encoding {
-                // If it is a JSON try to deserialize as json, if it fails fallback to base64
-                &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
-                    payload
-                        .deserialize::<serde_json::Value>()
-                        .unwrap_or_else(|_| {
-                            serde_json::Value::String(base64_encode(&Cow::from(payload)))
-                        })
-                }
-                // otherwise convert to JSON string
-                _ => serde_json::Value::String(base64_encode(&Cow::from(payload))),
-            }
+    // If the value is empty return a JSON null
+    if payload.is_empty() {
+        return serde_json::Value::Null;
+    }
+    // Check the encoding: if it's a JSON try to deserialize as a Json
+    if encoding == &Encoding::APPLICATION_JSON
+        || encoding == &Encoding::TEXT_JSON
+        || encoding == &Encoding::TEXT_JSON5
+    {
+        if let Ok(value) = payload.deserialize::<serde_json::Value>() {
+            return value;
         }
     }
+    // Fallback to base64 JSON string
+    serde_json::Value::String(base64_encode(&Cow::from(payload)))
 }
 
 fn sample_to_json(sample: &Sample) -> JSONSample {
