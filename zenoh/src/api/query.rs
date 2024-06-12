@@ -12,14 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[zenoh_macros::unstable]
+use std::borrow::Cow;
 use std::{
     collections::HashMap,
     future::{IntoFuture, Ready},
     time::Duration,
 };
 
-#[zenoh_macros::unstable]
-use std::borrow::Cow;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_protocol::core::{CongestionControl, Parameters, ZenohId};
