@@ -124,9 +124,9 @@ pub trait PredefinedParameters {
     /// Sets the parameter allowing to receieve replies from queryables not matching
     /// the requested key expression. This may happen in this scenario:
     /// - we are requesting keyexpr `a/b`.
-    /// - queryable is declared to handle `a/*` requests and contains data for `a/b` and `a/c`. 
+    /// - queryable is declared to handle `a/*` requests and contains data for `a/b` and `a/c`.
     /// - queryable receives our request and sends two replies with data for `a/b` and `a/c`
-    /// 
+    ///
     /// Normally only `a/b` reply would be accepted, but with `_anyke` parameter set, both replies are accepted.
     fn set_reply_key_expr_any(&mut self);
     /// Extracts the standardized `_time` argument from the selector parameters.
