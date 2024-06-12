@@ -28,10 +28,10 @@ use crate::core::parameters;
 ///
 /// Example:
 /// ```
-/// use zenoh_protocol::core::Properties;
+/// use zenoh_protocol::core::Parameters;
 ///
 /// let a = "a=1;b=2;c=3|4|5;d=6";
-/// let p = Properties::from(a);
+/// let p = Parameters::from(a);
 ///
 /// // Retrieve values
 /// assert!(!p.is_empty());
@@ -50,7 +50,7 @@ use crate::core::parameters;
 /// assert!(iter.next().is_none());
 ///
 /// // Create properties from iterators
-/// let pi = Properties::from_iter(vec![("a", "1"), ("b", "2"), ("c", "3|4|5"), ("d", "6")]);
+/// let pi = Parameters::from_iter(vec![("a", "1"), ("b", "2"), ("c", "3|4|5"), ("d", "6")]);
 /// assert_eq!(p, pi);
 /// ```
 #[derive(Clone, PartialEq, Eq, Hash, Default)]
