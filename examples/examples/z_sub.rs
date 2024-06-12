@@ -39,6 +39,7 @@ async fn main() {
             .payload()
             .deserialize::<String>()
             .unwrap_or_else(|e| format!("{}", e));
+
         print!(
             ">> [Subscriber] Received {} ('{}': '{}')",
             sample.kind(),
