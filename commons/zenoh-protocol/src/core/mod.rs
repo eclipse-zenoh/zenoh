@@ -341,8 +341,8 @@ impl EntityGlobalIdProto {
 pub struct EntityGlobalId(EntityGlobalIdProto);
 
 impl EntityGlobalId {
-    pub fn zid(&self) -> ZenohIdProto {
-        self.0.zid
+    pub fn zid(&self) -> ZenohId {
+        self.0.zid.into()
     }
 
     pub fn eid(&self) -> EntityId {
