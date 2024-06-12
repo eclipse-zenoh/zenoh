@@ -372,6 +372,15 @@ async fn accept_task(
             res = accept(&socket) => {
                 match res {
                     Ok((tcp_stream, dst_addr)) => {
+                        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+                        let src_addr =  match tcp_stream.local_addr()  {
+                            Ok(sa) => sa,
+                            Err(e) => {
+                                tracing::debug!("Can not accept TLS connection: {}", e);
+                                continue;
+                            }
+                        };
+
                         // Accept the TLS connection
                         let tls_stream = match acceptor.accept(tcp_stream).await {
                             Ok(stream) => TlsStream::Server(stream),
@@ -381,6 +390,8 @@ async fn accept_task(
                                 continue;
                             }
                         };
+
+
 
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object

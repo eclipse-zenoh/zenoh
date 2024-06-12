@@ -409,6 +409,15 @@ async fn accept_task(
             res = accept(&socket) => {
                 match res {
                     Ok((stream, dst_addr)) => {
+                        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+                        let src_addr =  match stream.local_addr()  {
+                            Ok(sa) => sa,
+                            Err(e) => {
+                                tracing::debug!("Can not accept TCP connection: {}", e);
+                                continue;
+                            }
+                        };
+
                         tracing::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));

@@ -387,7 +387,16 @@ async fn accept_task(
                             }
                         };
 
+                        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+                        let src_addr =  match quic_conn.local_ip()  {
+                            Some(ip) => SocketAddr::new(ip, src_addr.port()),
+                            None => {
+                                tracing::debug!("Can not accept QUIC connection: empty local IP");
+                                continue;
+                            }
+                        };
                         let dst_addr = quic_conn.remote_address();
+
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastQuic::new(
