@@ -11,533 +11,533 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "transport_multilink")]
-mod tests {
-    use std::{convert::TryFrom, sync::Arc, time::Duration};
-    use zenoh_core::ztimeout;
-    use zenoh_link::EndPoint;
-    use zenoh_protocol::core::{WhatAmI, ZenohId};
-    use zenoh_result::ZResult;
-    use zenoh_transport::{
-        multicast::TransportMulticast, unicast::TransportUnicast, DummyTransportPeerEventHandler,
-        TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
-        TransportPeerEventHandler,
-    };
+#![cfg(feature = "transport_multilink")]
 
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_millis(100);
+use std::{convert::TryFrom, sync::Arc, time::Duration};
+use zenoh_core::ztimeout;
+use zenoh_link::EndPoint;
+use zenoh_protocol::core::{WhatAmI, ZenohId};
+use zenoh_result::ZResult;
+use zenoh_transport::{
+    multicast::TransportMulticast, unicast::TransportUnicast, DummyTransportPeerEventHandler,
+    TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
+    TransportPeerEventHandler,
+};
 
-    #[cfg(test)]
-    #[derive(Default)]
-    struct SHRouterOpenClose;
+const TIMEOUT: Duration = Duration::from_secs(60);
+const SLEEP: Duration = Duration::from_millis(100);
 
-    impl TransportEventHandler for SHRouterOpenClose {
-        fn new_unicast(
-            &self,
-            _peer: TransportPeer,
-            _transport: TransportUnicast,
-        ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-            Ok(Arc::new(DummyTransportPeerEventHandler))
-        }
+#[cfg(test)]
+#[derive(Default)]
+struct SHRouterOpenClose;
 
-        fn new_multicast(
-            &self,
-            _transport: TransportMulticast,
-        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-            panic!();
-        }
+impl TransportEventHandler for SHRouterOpenClose {
+    fn new_unicast(
+        &self,
+        _peer: TransportPeer,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 
-    // Transport Handler for the client
-    struct SHClientOpenClose {}
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
+    }
+}
 
-    impl SHClientOpenClose {
-        fn new() -> Self {
-            Self {}
-        }
+// Transport Handler for the client
+struct SHClientOpenClose {}
+
+impl SHClientOpenClose {
+    fn new() -> Self {
+        Self {}
+    }
+}
+
+impl TransportEventHandler for SHClientOpenClose {
+    fn new_unicast(
+        &self,
+        _peer: TransportPeer,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 
-    impl TransportEventHandler for SHClientOpenClose {
-        fn new_unicast(
-            &self,
-            _peer: TransportPeer,
-            _transport: TransportUnicast,
-        ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-            Ok(Arc::new(DummyTransportPeerEventHandler))
-        }
-
-        fn new_multicast(
-            &self,
-            _transport: TransportMulticast,
-        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-            panic!();
-        }
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
+}
 
-    async fn multilink_transport(endpoint: &EndPoint) {
-        /* [ROUTER] */
-        let router_id = ZenohId::try_from([1]).unwrap();
+async fn multilink_transport(endpoint: &EndPoint) {
+    /* [ROUTER] */
+    let router_id = ZenohId::try_from([1]).unwrap();
 
-        let router_handler = Arc::new(SHRouterOpenClose);
-        // Create the router transport manager
-        let unicast = TransportManager::config_unicast()
-            .max_links(2)
-            .max_sessions(2);
-        let router_manager = TransportManager::builder()
-            .whatami(WhatAmI::Router)
-            .zid(router_id)
-            .unicast(unicast)
-            .build(router_handler.clone())
-            .unwrap();
+    let router_handler = Arc::new(SHRouterOpenClose);
+    // Create the router transport manager
+    let unicast = TransportManager::config_unicast()
+        .max_links(2)
+        .max_sessions(2);
+    let router_manager = TransportManager::builder()
+        .whatami(WhatAmI::Router)
+        .zid(router_id)
+        .unicast(unicast)
+        .build(router_handler.clone())
+        .unwrap();
 
-        /* [CLIENT] */
-        let client01_id = ZenohId::try_from([2]).unwrap();
-        let client02_id = ZenohId::try_from([3]).unwrap();
+    /* [CLIENT] */
+    let client01_id = ZenohId::try_from([2]).unwrap();
+    let client02_id = ZenohId::try_from([3]).unwrap();
 
-        // Create the transport transport manager for the first client
-        let unicast = TransportManager::config_unicast()
-            .max_links(2)
-            .max_sessions(1);
-        let client01_manager = TransportManager::builder()
-            .whatami(WhatAmI::Client)
-            .zid(client01_id)
-            .unicast(unicast)
-            .build(Arc::new(SHClientOpenClose::new()))
-            .unwrap();
+    // Create the transport transport manager for the first client
+    let unicast = TransportManager::config_unicast()
+        .max_links(2)
+        .max_sessions(1);
+    let client01_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client01_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
 
-        // Create the transport transport manager for the second client
-        let unicast = TransportManager::config_unicast()
-            .max_links(1)
-            .max_sessions(1);
-        let client02_manager = TransportManager::builder()
-            .whatami(WhatAmI::Client)
-            .zid(client02_id)
-            .unicast(unicast)
-            .build(Arc::new(SHClientOpenClose::new()))
-            .unwrap();
+    // Create the transport transport manager for the second client
+    let unicast = TransportManager::config_unicast()
+        .max_links(1)
+        .max_sessions(1);
+    let client02_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client02_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
 
-        // Create the transport transport manager for the third client spoofing the first
-        let unicast = TransportManager::config_unicast()
-            .max_links(2)
-            .max_sessions(1);
-        let client03_manager = TransportManager::builder()
-            .whatami(WhatAmI::Client)
-            .zid(client01_id)
-            .unicast(unicast)
-            .build(Arc::new(SHClientOpenClose::new()))
-            .unwrap();
+    // Create the transport transport manager for the third client spoofing the first
+    let unicast = TransportManager::config_unicast()
+        .max_links(2)
+        .max_sessions(1);
+    let client03_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client01_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
 
-        /* [1] */
-        println!("\nTransport Open Close [1a1]");
-        // Add the locator on the router
-        let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
-        println!("Transport Open Close [1a1]: {res:?}");
-        assert!(res.is_ok());
-        println!("Transport Open Close [1a2]");
-        let locators = router_manager.get_listeners().await;
-        println!("Transport Open Close [1a2]: {locators:?}");
-        assert_eq!(locators.len(), 1);
+    /* [1] */
+    println!("\nTransport Open Close [1a1]");
+    // Add the locator on the router
+    let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
+    println!("Transport Open Close [1a1]: {res:?}");
+    assert!(res.is_ok());
+    println!("Transport Open Close [1a2]");
+    let locators = router_manager.get_listeners().await;
+    println!("Transport Open Close [1a2]: {locators:?}");
+    assert_eq!(locators.len(), 1);
 
-        // Open a first transport from the client to the router
-        // -> This should be accepted
-        let mut links_num = 1;
+    // Open a first transport from the client to the router
+    // -> This should be accepted
+    let mut links_num = 1;
 
-        println!("Transport Open Close [1c1]");
-        let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
-        println!("Transport Open Close [1c2]: {res:?}");
-        assert!(res.is_ok());
-        let c_ses1 = res.unwrap();
-        println!("Transport Open Close [1d1]");
-        let transports = client01_manager.get_transports_unicast().await;
-        println!("Transport Open Close [1d2]: {transports:?}");
-        assert_eq!(transports.len(), 1);
-        assert_eq!(c_ses1.get_zid().unwrap(), router_id);
-        println!("Transport Open Close [1e1]");
-        let links = c_ses1.get_links().unwrap();
-        println!("Transport Open Close [1e2]: {links:?}");
-        assert_eq!(links.len(), links_num);
+    println!("Transport Open Close [1c1]");
+    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+    println!("Transport Open Close [1c2]: {res:?}");
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+    println!("Transport Open Close [1d1]");
+    let transports = client01_manager.get_transports_unicast().await;
+    println!("Transport Open Close [1d2]: {transports:?}");
+    assert_eq!(transports.len(), 1);
+    assert_eq!(c_ses1.get_zid().unwrap(), router_id);
+    println!("Transport Open Close [1e1]");
+    let links = c_ses1.get_links().unwrap();
+    println!("Transport Open Close [1e2]: {links:?}");
+    assert_eq!(links.len(), links_num);
 
-        // Verify that the transport has been open on the router
-        println!("Transport Open Close [1f1]");
-        ztimeout!(async {
-            loop {
-                let transports = router_manager.get_transports_unicast().await;
-                let s = transports
-                    .iter()
-                    .find(|s| s.get_zid().unwrap() == client01_id);
+    // Verify that the transport has been open on the router
+    println!("Transport Open Close [1f1]");
+    ztimeout!(async {
+        loop {
+            let transports = router_manager.get_transports_unicast().await;
+            let s = transports
+                .iter()
+                .find(|s| s.get_zid().unwrap() == client01_id);
 
-                match s {
-                    Some(s) => {
-                        let links = s.get_links().unwrap();
-                        assert_eq!(links.len(), links_num);
-                        break;
-                    }
-                    None => tokio::time::sleep(SLEEP).await,
-                }
-            }
-        });
-
-        /* [2] */
-        // Open a second transport from the client to the router
-        // -> This should be accepted
-        links_num = 2;
-
-        println!("\nTransport Open Close [2a1]");
-        let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
-        println!("Transport Open Close [2a2]: {res:?}");
-        assert!(res.is_ok());
-        let c_ses2 = res.unwrap();
-        println!("Transport Open Close [2b1]");
-        let transports = client01_manager.get_transports_unicast().await;
-        println!("Transport Open Close [2b2]: {transports:?}");
-        assert_eq!(transports.len(), 1);
-        assert_eq!(c_ses2.get_zid().unwrap(), router_id);
-        println!("Transport Open Close [2c1]");
-        let links = c_ses2.get_links().unwrap();
-        println!("Transport Open Close [2c2]: {links:?}");
-        assert_eq!(links.len(), links_num);
-        assert_eq!(c_ses2, c_ses1);
-
-        // Verify that the transport has been open on the router
-        println!("Transport Open Close [2d1]");
-        ztimeout!(async {
-            loop {
-                let transports = router_manager.get_transports_unicast().await;
-                let s = transports
-                    .iter()
-                    .find(|s| s.get_zid().unwrap() == client01_id)
-                    .unwrap();
-
-                let links = s.get_links().unwrap();
-                if links.len() == links_num {
+            match s {
+                Some(s) => {
+                    let links = s.get_links().unwrap();
+                    assert_eq!(links.len(), links_num);
                     break;
                 }
-                tokio::time::sleep(SLEEP).await;
+                None => tokio::time::sleep(SLEEP).await,
             }
-        });
+        }
+    });
 
-        /* [3] */
-        // Open transport -> This should be rejected because
-        // of the maximum limit of links per transport
-        println!("\nTransport Open Close [3a1]");
-        let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
-        println!("Transport Open Close [3a2]: {res:?}");
-        assert!(res.is_err());
-        println!("Transport Open Close [3b1]");
-        let transports = client01_manager.get_transports_unicast().await;
-        println!("Transport Open Close [3b2]: {transports:?}");
-        assert_eq!(transports.len(), 1);
-        assert_eq!(c_ses1.get_zid().unwrap(), router_id);
-        println!("Transport Open Close [3c1]");
-        let links = c_ses1.get_links().unwrap();
-        println!("Transport Open Close [3c2]: {links:?}");
-        assert_eq!(links.len(), links_num);
+    /* [2] */
+    // Open a second transport from the client to the router
+    // -> This should be accepted
+    links_num = 2;
 
-        // Verify that the transport has not been open on the router
-        println!("Transport Open Close [3d1]");
-        ztimeout!(async {
-            tokio::time::sleep(SLEEP).await;
+    println!("\nTransport Open Close [2a1]");
+    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+    println!("Transport Open Close [2a2]: {res:?}");
+    assert!(res.is_ok());
+    let c_ses2 = res.unwrap();
+    println!("Transport Open Close [2b1]");
+    let transports = client01_manager.get_transports_unicast().await;
+    println!("Transport Open Close [2b2]: {transports:?}");
+    assert_eq!(transports.len(), 1);
+    assert_eq!(c_ses2.get_zid().unwrap(), router_id);
+    println!("Transport Open Close [2c1]");
+    let links = c_ses2.get_links().unwrap();
+    println!("Transport Open Close [2c2]: {links:?}");
+    assert_eq!(links.len(), links_num);
+    assert_eq!(c_ses2, c_ses1);
+
+    // Verify that the transport has been open on the router
+    println!("Transport Open Close [2d1]");
+    ztimeout!(async {
+        loop {
             let transports = router_manager.get_transports_unicast().await;
-            assert_eq!(transports.len(), 1);
             let s = transports
                 .iter()
                 .find(|s| s.get_zid().unwrap() == client01_id)
                 .unwrap();
+
             let links = s.get_links().unwrap();
-            assert_eq!(links.len(), links_num);
-        });
-
-        /* [4] */
-        // Close the open transport on the client
-        println!("\nTransport Open Close [4a1]");
-        let res = ztimeout!(c_ses1.close());
-        println!("Transport Open Close [4a2]: {res:?}");
-        assert!(res.is_ok());
-        println!("Transport Open Close [4b1]");
-        let transports = client01_manager.get_transports_unicast().await;
-        println!("Transport Open Close [4b2]: {transports:?}");
-        assert_eq!(transports.len(), 0);
-
-        // Verify that the transport has been closed also on the router
-        println!("Transport Open Close [4c1]");
-        ztimeout!(async {
-            loop {
-                let transports = router_manager.get_transports_unicast().await;
-                let index = transports
-                    .iter()
-                    .find(|s| s.get_zid().unwrap() == client01_id);
-                if index.is_none() {
-                    break;
-                }
-                tokio::time::sleep(SLEEP).await;
+            if links.len() == links_num {
+                break;
             }
-        });
-
-        /* [5] */
-        // Open transport -> This should be accepted because
-        // the number of links should be back to 0
-        links_num = 1;
-
-        println!("\nTransport Open Close [5a1]");
-        let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
-        println!("Transport Open Close [5a2]: {res:?}");
-        assert!(res.is_ok());
-        let c_ses3 = res.unwrap();
-        println!("Transport Open Close [5b1]");
-        let transports = client01_manager.get_transports_unicast().await;
-        println!("Transport Open Close [5b2]: {transports:?}");
-        assert_eq!(transports.len(), 1);
-        assert_eq!(c_ses3.get_zid().unwrap(), router_id);
-        println!("Transport Open Close [5c1]");
-        let links = c_ses3.get_links().unwrap();
-        println!("Transport Open Close [5c2]: {links:?}");
-        assert_eq!(links.len(), links_num);
-
-        // Verify that the transport has been open on the router
-        println!("Transport Open Close [5d1]");
-        ztimeout!(async {
             tokio::time::sleep(SLEEP).await;
-            let transports = router_manager.get_transports_unicast().await;
-            assert_eq!(transports.len(), 1);
-            let s = transports
-                .iter()
-                .find(|s| s.get_zid().unwrap() == client01_id)
-                .unwrap();
-            let links = s.get_links().unwrap();
-            assert_eq!(links.len(), links_num);
-        });
+        }
+    });
 
-        /* [6] */
-        // Open transport -> This should be rejected because
-        // of the maximum limit of transports
-        println!("\nTransport Open Close [6a1]");
-        let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
-        println!("Transport Open Close [6a2]: {res:?}");
-        assert!(res.is_ok());
-        let c_ses4 = res.unwrap();
-        println!("Transport Open Close [6b1]");
-        let transports = client02_manager.get_transports_unicast().await;
-        println!("Transport Open Close [6b2]: {transports:?}");
-        assert_eq!(transports.len(), 1);
-        assert_eq!(c_ses4.get_zid().unwrap(), router_id);
-        println!("Transport Open Close [6c1]");
-        let links = c_ses4.get_links().unwrap();
-        println!("Transport Open Close [6c2]: {links:?}");
-        assert_eq!(links.len(), links_num);
+    /* [3] */
+    // Open transport -> This should be rejected because
+    // of the maximum limit of links per transport
+    println!("\nTransport Open Close [3a1]");
+    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+    println!("Transport Open Close [3a2]: {res:?}");
+    assert!(res.is_err());
+    println!("Transport Open Close [3b1]");
+    let transports = client01_manager.get_transports_unicast().await;
+    println!("Transport Open Close [3b2]: {transports:?}");
+    assert_eq!(transports.len(), 1);
+    assert_eq!(c_ses1.get_zid().unwrap(), router_id);
+    println!("Transport Open Close [3c1]");
+    let links = c_ses1.get_links().unwrap();
+    println!("Transport Open Close [3c2]: {links:?}");
+    assert_eq!(links.len(), links_num);
 
-        // Open transport -> This should be rejected because
-        // of the maximum limit of transports
-        println!("\nTransport Open Close [6d1]");
-        let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
-        println!("Transport Open Close [6d2]: {res:?}");
-        assert!(res.is_err());
-        println!("Transport Open Close [6e1]");
-        let transports = client02_manager.get_transports_unicast().await;
-        println!("Transport Open Close [6e2]: {transports:?}");
-        assert_eq!(transports.len(), 1);
-
-        // Verify that the transport has been open on the router
-        println!("Transport Open Close [6f1]");
-        ztimeout!(async {
-            tokio::time::sleep(SLEEP).await;
-            let transports = router_manager.get_transports_unicast().await;
-            assert_eq!(transports.len(), 2);
-            let s = transports
-                .iter()
-                .find(|s| s.get_zid().unwrap() == client01_id)
-                .unwrap();
-            let links = s.get_links().unwrap();
-            assert_eq!(links.len(), links_num);
-        });
-
-        /* [7] */
-        // Try to spoof the first client
-        // -> This should be rejected
-        println!("\nTransport Open Close [7a1]");
-        let res = ztimeout!(client03_manager.open_transport_unicast(endpoint.clone()));
-        println!("Transport Open Close [7a2]: {res:?}");
-        assert!(res.is_err());
-        println!("Transport Open Close [7b1]");
-        let transports = client03_manager.get_transports_unicast().await;
-        println!("Transport Open Close [7b2]: {transports:?}");
-        assert_eq!(transports.len(), 0);
-
-        /* [8] */
-        // Close the open transport on the client
-        println!("\nTransport Open Close [8a1]");
-        let res = ztimeout!(c_ses3.close());
-        println!("Transport Open Close [8a2]: {res:?}");
-        assert!(res.is_ok());
-        println!("\nTransport Open Close [8b1]");
-        let res = ztimeout!(c_ses4.close());
-        println!("Transport Open Close [8b2]: {res:?}");
-        assert!(res.is_ok());
-        println!("Transport Open Close [8c1]");
-        let transports = client01_manager.get_transports_unicast().await;
-        println!("Transport Open Close [8c2]: {transports:?}");
-        assert_eq!(transports.len(), 0);
-
-        // Verify that the transport has been closed also on the router
-        println!("Transport Open Close [8d1]");
-        ztimeout!(async {
-            loop {
-                let transports = router_manager.get_transports_unicast().await;
-                if transports.is_empty() {
-                    break;
-                }
-                tokio::time::sleep(SLEEP).await;
-            }
-        });
-
-        /* [9] */
-        // Open transport -> This should be accepted because
-        // the number of transports should be back to 0
-        links_num = 1;
-
-        println!("\nTransport Open Close [9a1]");
-        let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
-        println!("Transport Open Close [9a2]: {res:?}");
-        assert!(res.is_ok());
-        let c_ses4 = res.unwrap();
-        println!("Transport Open Close [9b1]");
-        let transports = client02_manager.get_transports_unicast().await;
-        println!("Transport Open Close [9b2]: {transports:?}");
-        assert_eq!(transports.len(), 1);
-        println!("Transport Open Close [9c1]");
-        let links = c_ses4.get_links().unwrap();
-        println!("Transport Open Close [9c2]: {links:?}");
-        assert_eq!(links.len(), links_num);
-
-        // Verify that the transport has been open on the router
-        println!("Transport Open Close [9d1]");
-        ztimeout!(async {
-            loop {
-                let transports = router_manager.get_transports_unicast().await;
-                let s = transports
-                    .iter()
-                    .find(|s| s.get_zid().unwrap() == client02_id);
-                match s {
-                    Some(s) => {
-                        let links = s.get_links().unwrap();
-                        assert_eq!(links.len(), links_num);
-                        break;
-                    }
-                    None => tokio::time::sleep(SLEEP).await,
-                }
-            }
-        });
-
-        /* [9] */
-        // Close the open transport on the client
-        println!("Transport Open Close [9a1]");
-        let res = ztimeout!(c_ses4.close());
-        println!("Transport Open Close [9a2]: {res:?}");
-        assert!(res.is_ok());
-        println!("Transport Open Close [9b1]");
-        let transports = client02_manager.get_transports_unicast().await;
-        println!("Transport Open Close [9b2]: {transports:?}");
-        assert_eq!(transports.len(), 0);
-
-        // Verify that the transport has been closed also on the router
-        println!("Transport Open Close [9c1]");
-        ztimeout!(async {
-            loop {
-                let transports = router_manager.get_transports_unicast().await;
-                if transports.is_empty() {
-                    break;
-                }
-                tokio::time::sleep(SLEEP).await;
-            }
-        });
-
-        /* [10] */
-        // Perform clean up of the open locators
-        println!("\nTransport Open Close [10a1]");
-        let res = ztimeout!(router_manager.del_listener(endpoint));
-        println!("Transport Open Close [10a2]: {res:?}");
-        assert!(res.is_ok());
-
-        ztimeout!(async {
-            while !router_manager.get_listeners().await.is_empty() {
-                tokio::time::sleep(SLEEP).await;
-            }
-        });
-
-        // Wait a little bit
+    // Verify that the transport has not been open on the router
+    println!("Transport Open Close [3d1]");
+    ztimeout!(async {
         tokio::time::sleep(SLEEP).await;
+        let transports = router_manager.get_transports_unicast().await;
+        assert_eq!(transports.len(), 1);
+        let s = transports
+            .iter()
+            .find(|s| s.get_zid().unwrap() == client01_id)
+            .unwrap();
+        let links = s.get_links().unwrap();
+        assert_eq!(links.len(), links_num);
+    });
 
-        ztimeout!(router_manager.close());
-        ztimeout!(client01_manager.close());
-        ztimeout!(client02_manager.close());
+    /* [4] */
+    // Close the open transport on the client
+    println!("\nTransport Open Close [4a1]");
+    let res = ztimeout!(c_ses1.close());
+    println!("Transport Open Close [4a2]: {res:?}");
+    assert!(res.is_ok());
+    println!("Transport Open Close [4b1]");
+    let transports = client01_manager.get_transports_unicast().await;
+    println!("Transport Open Close [4b2]: {transports:?}");
+    assert_eq!(transports.len(), 0);
 
-        // Wait a little bit
+    // Verify that the transport has been closed also on the router
+    println!("Transport Open Close [4c1]");
+    ztimeout!(async {
+        loop {
+            let transports = router_manager.get_transports_unicast().await;
+            let index = transports
+                .iter()
+                .find(|s| s.get_zid().unwrap() == client01_id);
+            if index.is_none() {
+                break;
+            }
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+
+    /* [5] */
+    // Open transport -> This should be accepted because
+    // the number of links should be back to 0
+    links_num = 1;
+
+    println!("\nTransport Open Close [5a1]");
+    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
+    println!("Transport Open Close [5a2]: {res:?}");
+    assert!(res.is_ok());
+    let c_ses3 = res.unwrap();
+    println!("Transport Open Close [5b1]");
+    let transports = client01_manager.get_transports_unicast().await;
+    println!("Transport Open Close [5b2]: {transports:?}");
+    assert_eq!(transports.len(), 1);
+    assert_eq!(c_ses3.get_zid().unwrap(), router_id);
+    println!("Transport Open Close [5c1]");
+    let links = c_ses3.get_links().unwrap();
+    println!("Transport Open Close [5c2]: {links:?}");
+    assert_eq!(links.len(), links_num);
+
+    // Verify that the transport has been open on the router
+    println!("Transport Open Close [5d1]");
+    ztimeout!(async {
         tokio::time::sleep(SLEEP).await;
-    }
+        let transports = router_manager.get_transports_unicast().await;
+        assert_eq!(transports.len(), 1);
+        let s = transports
+            .iter()
+            .find(|s| s.get_zid().unwrap() == client01_id)
+            .unwrap();
+        let links = s.get_links().unwrap();
+        assert_eq!(links.len(), links_num);
+    });
 
-    #[cfg(feature = "transport_tcp")]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn multilink_tcp_only() {
-        zenoh_util::try_init_log_from_env();
+    /* [6] */
+    // Open transport -> This should be rejected because
+    // of the maximum limit of transports
+    println!("\nTransport Open Close [6a1]");
+    let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
+    println!("Transport Open Close [6a2]: {res:?}");
+    assert!(res.is_ok());
+    let c_ses4 = res.unwrap();
+    println!("Transport Open Close [6b1]");
+    let transports = client02_manager.get_transports_unicast().await;
+    println!("Transport Open Close [6b2]: {transports:?}");
+    assert_eq!(transports.len(), 1);
+    assert_eq!(c_ses4.get_zid().unwrap(), router_id);
+    println!("Transport Open Close [6c1]");
+    let links = c_ses4.get_links().unwrap();
+    println!("Transport Open Close [6c2]: {links:?}");
+    assert_eq!(links.len(), links_num);
 
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 18000).parse().unwrap();
-        multilink_transport(&endpoint).await;
-    }
+    // Open transport -> This should be rejected because
+    // of the maximum limit of transports
+    println!("\nTransport Open Close [6d1]");
+    let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
+    println!("Transport Open Close [6d2]: {res:?}");
+    assert!(res.is_err());
+    println!("Transport Open Close [6e1]");
+    let transports = client02_manager.get_transports_unicast().await;
+    println!("Transport Open Close [6e2]: {transports:?}");
+    assert_eq!(transports.len(), 1);
 
-    #[cfg(feature = "transport_udp")]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn multilink_udp_only() {
-        zenoh_util::try_init_log_from_env();
+    // Verify that the transport has been open on the router
+    println!("Transport Open Close [6f1]");
+    ztimeout!(async {
+        tokio::time::sleep(SLEEP).await;
+        let transports = router_manager.get_transports_unicast().await;
+        assert_eq!(transports.len(), 2);
+        let s = transports
+            .iter()
+            .find(|s| s.get_zid().unwrap() == client01_id)
+            .unwrap();
+        let links = s.get_links().unwrap();
+        assert_eq!(links.len(), links_num);
+    });
 
-        let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 18010).parse().unwrap();
-        multilink_transport(&endpoint).await;
-    }
+    /* [7] */
+    // Try to spoof the first client
+    // -> This should be rejected
+    println!("\nTransport Open Close [7a1]");
+    let res = ztimeout!(client03_manager.open_transport_unicast(endpoint.clone()));
+    println!("Transport Open Close [7a2]: {res:?}");
+    assert!(res.is_err());
+    println!("Transport Open Close [7b1]");
+    let transports = client03_manager.get_transports_unicast().await;
+    println!("Transport Open Close [7b2]: {transports:?}");
+    assert_eq!(transports.len(), 0);
 
-    #[cfg(feature = "transport_ws")]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    #[ignore]
-    async fn multilink_ws_only() {
-        zenoh_util::try_init_log_from_env();
+    /* [8] */
+    // Close the open transport on the client
+    println!("\nTransport Open Close [8a1]");
+    let res = ztimeout!(c_ses3.close());
+    println!("Transport Open Close [8a2]: {res:?}");
+    assert!(res.is_ok());
+    println!("\nTransport Open Close [8b1]");
+    let res = ztimeout!(c_ses4.close());
+    println!("Transport Open Close [8b2]: {res:?}");
+    assert!(res.is_ok());
+    println!("Transport Open Close [8c1]");
+    let transports = client01_manager.get_transports_unicast().await;
+    println!("Transport Open Close [8c2]: {transports:?}");
+    assert_eq!(transports.len(), 0);
 
-        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 18020).parse().unwrap();
-        multilink_transport(&endpoint).await;
-    }
+    // Verify that the transport has been closed also on the router
+    println!("Transport Open Close [8d1]");
+    ztimeout!(async {
+        loop {
+            let transports = router_manager.get_transports_unicast().await;
+            if transports.is_empty() {
+                break;
+            }
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
 
-    #[cfg(feature = "transport_unixpipe")]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    #[ignore]
-    async fn multilink_unixpipe_only() {
-        zenoh_util::try_init_log_from_env();
+    /* [9] */
+    // Open transport -> This should be accepted because
+    // the number of transports should be back to 0
+    links_num = 1;
 
-        let endpoint: EndPoint = "unixpipe/multilink_unixpipe_only".parse().unwrap();
-        multilink_transport(&endpoint).await;
-    }
+    println!("\nTransport Open Close [9a1]");
+    let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
+    println!("Transport Open Close [9a2]: {res:?}");
+    assert!(res.is_ok());
+    let c_ses4 = res.unwrap();
+    println!("Transport Open Close [9b1]");
+    let transports = client02_manager.get_transports_unicast().await;
+    println!("Transport Open Close [9b2]: {transports:?}");
+    assert_eq!(transports.len(), 1);
+    println!("Transport Open Close [9c1]");
+    let links = c_ses4.get_links().unwrap();
+    println!("Transport Open Close [9c2]: {links:?}");
+    assert_eq!(links.len(), links_num);
 
-    #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    #[ignore]
-    async fn multilink_unix_only() {
-        zenoh_util::try_init_log_from_env();
+    // Verify that the transport has been open on the router
+    println!("Transport Open Close [9d1]");
+    ztimeout!(async {
+        loop {
+            let transports = router_manager.get_transports_unicast().await;
+            let s = transports
+                .iter()
+                .find(|s| s.get_zid().unwrap() == client02_id);
+            match s {
+                Some(s) => {
+                    let links = s.get_links().unwrap();
+                    assert_eq!(links.len(), links_num);
+                    break;
+                }
+                None => tokio::time::sleep(SLEEP).await,
+            }
+        }
+    });
 
-        let f1 = "zenoh-test-unix-socket-9.sock";
-        let _ = std::fs::remove_file(f1);
-        let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
-        multilink_transport(&endpoint).await;
-        let _ = std::fs::remove_file(f1);
-        let _ = std::fs::remove_file(format!("{f1}.lock"));
-    }
+    /* [9] */
+    // Close the open transport on the client
+    println!("Transport Open Close [9a1]");
+    let res = ztimeout!(c_ses4.close());
+    println!("Transport Open Close [9a2]: {res:?}");
+    assert!(res.is_ok());
+    println!("Transport Open Close [9b1]");
+    let transports = client02_manager.get_transports_unicast().await;
+    println!("Transport Open Close [9b2]: {transports:?}");
+    assert_eq!(transports.len(), 0);
 
-    #[cfg(feature = "transport_tls")]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn multilink_tls_only() {
-        use zenoh_link::tls::config::*;
+    // Verify that the transport has been closed also on the router
+    println!("Transport Open Close [9c1]");
+    ztimeout!(async {
+        loop {
+            let transports = router_manager.get_transports_unicast().await;
+            if transports.is_empty() {
+                break;
+            }
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
 
-        zenoh_util::try_init_log_from_env();
+    /* [10] */
+    // Perform clean up of the open locators
+    println!("\nTransport Open Close [10a1]");
+    let res = ztimeout!(router_manager.del_listener(endpoint));
+    println!("Transport Open Close [10a2]: {res:?}");
+    assert!(res.is_ok());
 
-        // NOTE: this an auto-generated pair of certificate and key.
-        //       The target domain is localhost, so it has no real
-        //       mapping to any existing domain. The certificate and key
-        //       have been generated using: https://github.com/jsha/minica
-        let key = "-----BEGIN RSA PRIVATE KEY-----
+    ztimeout!(async {
+        while !router_manager.get_listeners().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+
+    // Wait a little bit
+    tokio::time::sleep(SLEEP).await;
+
+    ztimeout!(router_manager.close());
+    ztimeout!(client01_manager.close());
+    ztimeout!(client02_manager.close());
+
+    // Wait a little bit
+    tokio::time::sleep(SLEEP).await;
+}
+
+#[cfg(feature = "transport_tcp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn multilink_tcp_only() {
+    zenoh_util::try_init_log_from_env();
+
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 18000).parse().unwrap();
+    multilink_transport(&endpoint).await;
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn multilink_udp_only() {
+    zenoh_util::try_init_log_from_env();
+
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 18010).parse().unwrap();
+    multilink_transport(&endpoint).await;
+}
+
+#[cfg(feature = "transport_ws")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
+async fn multilink_ws_only() {
+    zenoh_util::try_init_log_from_env();
+
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 18020).parse().unwrap();
+    multilink_transport(&endpoint).await;
+}
+
+#[cfg(feature = "transport_unixpipe")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
+async fn multilink_unixpipe_only() {
+    zenoh_util::try_init_log_from_env();
+
+    let endpoint: EndPoint = "unixpipe/multilink_unixpipe_only".parse().unwrap();
+    multilink_transport(&endpoint).await;
+}
+
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
+async fn multilink_unix_only() {
+    zenoh_util::try_init_log_from_env();
+
+    let f1 = "zenoh-test-unix-socket-9.sock";
+    let _ = std::fs::remove_file(f1);
+    let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
+    multilink_transport(&endpoint).await;
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
+}
+
+#[cfg(feature = "transport_tls")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn multilink_tls_only() {
+    use zenoh_link::tls::config::*;
+
+    zenoh_util::try_init_log_from_env();
+
+    // NOTE: this an auto-generated pair of certificate and key.
+    //       The target domain is localhost, so it has no real
+    //       mapping to any existing domain. The certificate and key
+    //       have been generated using: https://github.com/jsha/minica
+    let key = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAsfqAuhElN4HnyeqLovSd4Qe+nNv5AwCjSO+HFiF30x3vQ1Hi
 qRA0UmyFlSqBnFH3TUHm4Jcad40QfrX8f11NKGZdpvKHsMYqYjZnYkRFGS2s4fQy
 aDbV5M06s3UDX8ETPgY41Y8fCKTSVdi9iHkwcVrXMxUu4IBBx0C1r2GSo3gkIBnU
@@ -565,7 +565,7 @@ tYsqC2FtWzY51VOEKNpnfH7zH5n+bjoI9nAEAW63TK9ZKkr2hRGsDhJdGzmLfQ7v
 F6/CuIw9EsAq6qIB8O88FXQqald+BZOx6AzB8Oedsz/WtMmIEmr/+Q==
 -----END RSA PRIVATE KEY-----";
 
-        let cert = "-----BEGIN CERTIFICATE-----
+    let cert = "-----BEGIN CERTIFICATE-----
 MIIDLjCCAhagAwIBAgIIeUtmIdFQznMwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMxOFoYDzIxMjMw
 MzA2MTYwMzE4WjAUMRIwEAYDVQQDEwlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEB
@@ -586,8 +586,8 @@ p5e60QweRuJsb60aUaCG8HoICevXYK2fFqCQdlb5sIqQqXyN2K6HuKAFywsjsGyJ
 abY=
 -----END CERTIFICATE-----";
 
-        // Configure the client
-        let ca = "-----BEGIN CERTIFICATE-----
+    // Configure the client
+    let ca = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIB42n1ZIkOakwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMwN1oYDzIxMjMw
 MzA2MTYwMzA3WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSAwNzhkYTcwggEi
@@ -608,33 +608,33 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-        let mut endpoint: EndPoint = format!("tls/localhost:{}", 18030).parse().unwrap();
-        endpoint
-            .config_mut()
-            .extend(
-                [
-                    (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                    (TLS_SERVER_PRIVATE_KEY_RAW, key),
-                    (TLS_SERVER_CERTIFICATE_RAW, cert),
-                ]
-                .iter()
-                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-            )
-            .unwrap();
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 18030).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
-        multilink_transport(&endpoint).await;
-    }
+    multilink_transport(&endpoint).await;
+}
 
-    #[cfg(feature = "transport_quic")]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn multilink_quic_only() {
-        use zenoh_link::quic::config::*;
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn multilink_quic_only() {
+    use zenoh_link::quic::config::*;
 
-        // NOTE: this an auto-generated pair of certificate and key.
-        //       The target domain is localhost, so it has no real
-        //       mapping to any existing domain. The certificate and key
-        //       have been generated using: https://github.com/jsha/minica
-        let key = "-----BEGIN RSA PRIVATE KEY-----
+    // NOTE: this an auto-generated pair of certificate and key.
+    //       The target domain is localhost, so it has no real
+    //       mapping to any existing domain. The certificate and key
+    //       have been generated using: https://github.com/jsha/minica
+    let key = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAsfqAuhElN4HnyeqLovSd4Qe+nNv5AwCjSO+HFiF30x3vQ1Hi
 qRA0UmyFlSqBnFH3TUHm4Jcad40QfrX8f11NKGZdpvKHsMYqYjZnYkRFGS2s4fQy
 aDbV5M06s3UDX8ETPgY41Y8fCKTSVdi9iHkwcVrXMxUu4IBBx0C1r2GSo3gkIBnU
@@ -662,7 +662,7 @@ tYsqC2FtWzY51VOEKNpnfH7zH5n+bjoI9nAEAW63TK9ZKkr2hRGsDhJdGzmLfQ7v
 F6/CuIw9EsAq6qIB8O88FXQqald+BZOx6AzB8Oedsz/WtMmIEmr/+Q==
 -----END RSA PRIVATE KEY-----";
 
-        let cert = "-----BEGIN CERTIFICATE-----
+    let cert = "-----BEGIN CERTIFICATE-----
 MIIDLjCCAhagAwIBAgIIeUtmIdFQznMwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMxOFoYDzIxMjMw
 MzA2MTYwMzE4WjAUMRIwEAYDVQQDEwlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEB
@@ -683,8 +683,8 @@ p5e60QweRuJsb60aUaCG8HoICevXYK2fFqCQdlb5sIqQqXyN2K6HuKAFywsjsGyJ
 abY=
 -----END CERTIFICATE-----";
 
-        // Configure the client
-        let ca = "-----BEGIN CERTIFICATE-----
+    // Configure the client
+    let ca = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIB42n1ZIkOakwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMwN1oYDzIxMjMw
 MzA2MTYwMzA3WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSAwNzhkYTcwggEi
@@ -705,30 +705,29 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-        // Define the locator
-        let mut endpoint: EndPoint = format!("quic/localhost:{}", 18040).parse().unwrap();
-        endpoint
-            .config_mut()
-            .extend(
-                [
-                    (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                    (TLS_SERVER_PRIVATE_KEY_RAW, key),
-                    (TLS_SERVER_CERTIFICATE_RAW, cert),
-                ]
-                .iter()
-                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-            )
-            .unwrap();
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 18040).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
-        multilink_transport(&endpoint).await;
-    }
+    multilink_transport(&endpoint).await;
+}
 
-    #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn multilink_vsock_only() {
-        zenoh_util::try_init_log_from_env();
+#[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn multilink_vsock_only() {
+    zenoh_util::try_init_log_from_env();
 
-        let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
-        multilink_transport(&endpoint).await;
-    }
+    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+    multilink_transport(&endpoint).await;
 }
