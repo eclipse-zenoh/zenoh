@@ -15,7 +15,6 @@ use std::time::Duration;
 
 use clap::Parser;
 use zenoh::{
-    prelude::*,
     query::QueryTarget,
     selector::Selector,
     shm::{
