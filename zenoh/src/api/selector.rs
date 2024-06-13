@@ -116,7 +116,7 @@ impl<'a> From<&'a Selector<'a>> for (&'a KeyExpr<'a>, &'a Parameters<'a>) {
 }
 
 #[zenoh_macros::unstable]
-pub trait PredefinedParameters {
+pub trait ZenohParameters {
     const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
     const TIME_RANGE_KEY: &'static str = "_time";
     /// Sets the time range targeted by the selector parameters.
@@ -140,7 +140,7 @@ pub trait PredefinedParameters {
 }
 
 #[cfg(not(feature = "unstable"))]
-pub(crate) trait PredefinedParameters {
+pub(crate) trait ZenohParameters {
     const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
     const TIME_RANGE_KEY: &'static str = "_time";
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T);
@@ -149,7 +149,7 @@ pub(crate) trait PredefinedParameters {
     fn reply_key_expr_any(&self) -> bool;
 }
 
-impl PredefinedParameters for Parameters<'_> {
+impl ZenohParameters for Parameters<'_> {
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
         let mut time_range: Option<TimeRange> = time_range.into();

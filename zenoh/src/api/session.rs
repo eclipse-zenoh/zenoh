@@ -90,7 +90,7 @@ use super::{
     sample::SourceInfo,
 };
 use crate::{
-    api::selector::PredefinedParameters,
+    api::selector::ZenohParameters,
     net::{
         primitives::Primitives,
         routing::dispatcher::face::Face,

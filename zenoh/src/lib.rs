@@ -250,7 +250,7 @@ pub mod selector {
     pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
     #[zenoh_macros::unstable]
-    pub use crate::api::selector::PredefinedParameters;
+    pub use crate::api::selector::ZenohParameters;
     pub use crate::api::selector::Selector;
 }
 
