@@ -51,6 +51,9 @@ jobs:
       - name: Code format check
         run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
 
+      - name: Clippy zenoh no-default-features
+        run: cargo +stable clippy -p zenoh --all-targets --no-default-features -- --deny warnings
+
       - name: Clippy zenoh
         run: cargo +stable clippy -p zenoh --all-targets -- --deny warnings
 
