@@ -1118,7 +1118,13 @@ mod tests {
         use super::Priority as APrio;
 
         for i in TPrio::MAX as u8..=TPrio::MIN as u8 {
-            let p: APrio = i.try_into().unwrap();
+            let p: APrio = match i.try_into() {
+                Ok(p) => p,
+                Err(_) => {
+                    assert_eq!(i, TPrio::Control as u8);
+                    continue;
+                }
+            };
 
             match p {
                 APrio::RealTime => assert_eq!(p as u8, TPrio::RealTime as u8),
