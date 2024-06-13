@@ -33,7 +33,7 @@ use super::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample},
-    selector::{ZenohParameters, Selector},
+    selector::{Selector, ZenohParameters},
     session::Session,
     value::Value,
 };
