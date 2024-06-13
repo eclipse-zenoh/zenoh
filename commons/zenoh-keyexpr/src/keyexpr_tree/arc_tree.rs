@@ -160,8 +160,11 @@ where
     }
     // tags{ketree.arc.node.mut}
     fn node_mut(&'a self, token: &'a mut Token, at: &keyexpr) -> Option<Self::NodeMut> {
-        self.node(unsafe { core::mem::transmute(&*token) }, at)
-            .map(|(node, _)| (node, token))
+        self.node(
+            unsafe { core::mem::transmute::<&Token, &Token>(&*token) },
+            at,
+        )
+        .map(|(node, _)| (node, token))
     }
     // tags{ketree.arc.node.or_create}
     fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut {
@@ -237,7 +240,9 @@ where
     fn tree_iter_mut(&'a self, token: &'a mut Token) -> Self::TreeIterMut {
         let inner = ketree_borrow(&self.inner, token);
         TokenPacker {
-            iter: TreeIter::new(unsafe { core::mem::transmute(&inner.children) }),
+            iter: TreeIter::new(unsafe {
+                core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children)
+            }),
             token,
         }
     }
@@ -289,7 +294,12 @@ where
         let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
-                iter: Intersection::new(unsafe { core::mem::transmute(&inner.children) }, key),
+                iter: Intersection::new(
+                    unsafe {
+                        core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children)
+                    },
+                    key,
+                ),
                 token,
             })
         } else {
@@ -341,7 +351,10 @@ where
         if inner.wildness.get() || key.is_wild_impl() {
             unsafe {
                 IterOrOption::Iter(TokenPacker {
-                    iter: Inclusion::new(core::mem::transmute(&inner.children), key),
+                    iter: Inclusion::new(
+                        core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children),
+                        key,
+                    ),
                     token,
                 })
             }
@@ -394,7 +407,10 @@ where
         if inner.wildness.get() || key.is_wild_impl() {
             unsafe {
                 IterOrOption::Iter(TokenPacker {
-                    iter: Includer::new(core::mem::transmute(&inner.children), key),
+                    iter: Includer::new(
+                        core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children),
+                        key,
+                    ),
                     token,
                 })
             }

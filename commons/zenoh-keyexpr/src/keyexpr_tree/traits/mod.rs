@@ -55,8 +55,10 @@ pub trait IKeyExprTree<'a, Weight> {
         Self::TreeIterItem: AsNode<Box<Self::Node>>,
     {
         self.tree_iter().filter_map(|node| {
-            unsafe { core::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
-                .map(|w| (node.as_node().keyexpr(), w))
+            unsafe {
+                core::mem::transmute::<Option<&Weight>, Option<&Weight>>(node.as_node().weight())
+            }
+            .map(|w| (node.as_node().keyexpr(), w))
         })
     }
 
