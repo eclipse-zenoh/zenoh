@@ -221,7 +221,7 @@ pub mod ext {
 
     use crate::{
         common::{imsg, ZExtZ64},
-        core::{CongestionControl, EntityId, Priority, ZenohId},
+        core::{CongestionControl, EntityId, Priority, ZenohIdProto},
     };
 
     /// ```text
@@ -274,7 +274,7 @@ pub mod ext {
         }
 
         pub fn set_priority(&mut self, priority: Priority) {
-            self.inner = imsg::set_flag(self.inner, priority as u8);
+            self.inner = imsg::set_bitfield(self.inner, priority as u8, Self::P_MASK);
         }
 
         pub const fn get_priority(&self) -> Priority {
@@ -366,7 +366,7 @@ pub mod ext {
             let mut rng = rand::thread_rng();
 
             let time = uhlc::NTP64(rng.gen());
-            let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
+            let id = uhlc::ID::try_from(ZenohIdProto::rand().to_le_bytes()).unwrap();
             let timestamp = uhlc::Timestamp::new(time, id);
             Self { timestamp }
         }
@@ -428,7 +428,7 @@ pub mod ext {
     /// +---------------+
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct EntityGlobalIdType<const ID: u8> {
-        pub zid: ZenohId,
+        pub zid: ZenohIdProto,
         pub eid: EntityId,
     }
 
@@ -438,7 +438,7 @@ pub mod ext {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
-            let zid = ZenohId::rand();
+            let zid = ZenohIdProto::rand();
             let eid: EntityId = rng.gen();
             Self { zid, eid }
         }

@@ -14,7 +14,7 @@
 
 //! ZBytes primitives.
 use std::{
-    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, ops::Deref, str::Utf8Error,
+    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, str::Utf8Error,
     string::FromUtf8Error, sync::Arc,
 };
 
@@ -23,21 +23,19 @@ use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     writer::HasWriter,
-    ZBufReader, ZBufWriter, ZSlice,
+    ZBuf, ZBufReader, ZBufWriter, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{core::Properties, zenoh::ext::AttachmentType};
 use zenoh_result::{ZError, ZResult};
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 use zenoh_shm::{
     api::buffer::{
         zshm::{zshm, ZShm},
         zshmmut::{zshmmut, ZShmMut},
     },
-    SharedMemoryBuf,
+    ShmBufInner,
 };
-
-use crate::buffers::ZBuf;
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
@@ -211,10 +209,7 @@ impl std::io::Write for ZBytesWriter<'_> {
 /// Note that [`ZBytes`] contains a serialized version of `T` and iterating over a [`ZBytes`] performs lazy deserialization.
 #[repr(transparent)]
 #[derive(Debug)]
-pub struct ZBytesIterator<'a, T>
-where
-    ZSerde: Deserialize<'a, T>,
-{
+pub struct ZBytesIterator<'a, T> {
     reader: ZBufReader<'a>,
     _t: PhantomData<T>,
 }
@@ -224,7 +219,7 @@ where
     for<'a> ZSerde: Deserialize<'a, T, Input = &'a ZBytes>,
     for<'a> <ZSerde as Deserialize<'a, T>>::Error: Debug,
 {
-    type Item = T;
+    type Item = ZResult<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let codec = Zenoh080::new();
@@ -232,8 +227,10 @@ where
         let kbuf: ZBuf = codec.read(&mut self.reader).ok()?;
         let kpld = ZBytes::new(kbuf);
 
-        let t = ZSerde.deserialize(&kpld).ok()?;
-        Some(t)
+        let result = ZSerde
+            .deserialize(&kpld)
+            .map_err(|err| zerror!("{err:?}").into());
+        Some(result)
     }
 }
 
@@ -310,6 +307,52 @@ pub struct ZSerde;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ZDeserializeError;
+
+// ZBytes
+impl Serialize<ZBytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: ZBytes) -> Self::Output {
+        t
+    }
+}
+
+impl From<&ZBytes> for ZBytes {
+    fn from(t: &ZBytes) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl From<&mut ZBytes> for ZBytes {
+    fn from(t: &mut ZBytes) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&ZBytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: &ZBytes) -> Self::Output {
+        t.clone()
+    }
+}
+
+impl Serialize<&mut ZBytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: &mut ZBytes) -> Self::Output {
+        t.clone()
+    }
+}
+
+impl<'a> Deserialize<'a, ZBytes> for ZSerde {
+    type Input = &'a ZBytes;
+    type Error = Infallible;
+
+    fn deserialize(self, v: Self::Input) -> Result<ZBytes, Self::Error> {
+        Ok(v.clone())
+    }
+}
 
 // ZBuf
 impl Serialize<ZBuf> for ZSerde {
@@ -1525,7 +1568,7 @@ impl TryFrom<&mut ZBytes> for serde_pickle::Value {
 }
 
 // Shared memory conversion
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl Serialize<ZShm> for ZSerde {
     type Output = ZBytes;
 
@@ -1535,7 +1578,7 @@ impl Serialize<ZShm> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl From<ZShm> for ZBytes {
     fn from(t: ZShm) -> Self {
         ZSerde.serialize(t)
@@ -1543,7 +1586,7 @@ impl From<ZShm> for ZBytes {
 }
 
 // Shared memory conversion
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl Serialize<ZShmMut> for ZSerde {
     type Output = ZBytes;
 
@@ -1553,14 +1596,14 @@ impl Serialize<ZShmMut> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl From<ZShmMut> for ZBytes {
     fn from(t: ZShmMut) -> Self {
         ZSerde.serialize(t)
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> Deserialize<'a, &'a zshm> for ZSerde {
     type Input = &'a ZBytes;
     type Error = ZDeserializeError;
@@ -1569,7 +1612,7 @@ impl<'a> Deserialize<'a, &'a zshm> for ZSerde {
         // A ZShm is expected to have only one slice
         let mut zslices = v.0.zslices();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
                 return Ok(shmb.into());
             }
         }
@@ -1577,7 +1620,7 @@ impl<'a> Deserialize<'a, &'a zshm> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> TryFrom<&'a ZBytes> for &'a zshm {
     type Error = ZDeserializeError;
 
@@ -1586,7 +1629,7 @@ impl<'a> TryFrom<&'a ZBytes> for &'a zshm {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zshm {
     type Error = ZDeserializeError;
 
@@ -1595,7 +1638,7 @@ impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zshm {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> Deserialize<'a, &'a mut zshm> for ZSerde {
     type Input = &'a mut ZBytes;
     type Error = ZDeserializeError;
@@ -1604,7 +1647,7 @@ impl<'a> Deserialize<'a, &'a mut zshm> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
                 return Ok(shmb.into());
             }
         }
@@ -1612,7 +1655,7 @@ impl<'a> Deserialize<'a, &'a mut zshm> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> Deserialize<'a, &'a mut zshmmut> for ZSerde {
     type Input = &'a mut ZBytes;
     type Error = ZDeserializeError;
@@ -1621,7 +1664,7 @@ impl<'a> Deserialize<'a, &'a mut zshmmut> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<SharedMemoryBuf>() {
+            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
                 return shmb.try_into().map_err(|_| ZDeserializeError);
             }
         }
@@ -1629,7 +1672,7 @@ impl<'a> Deserialize<'a, &'a mut zshmmut> for ZSerde {
     }
 }
 
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[cfg(feature = "shared-memory")]
 impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zshmmut {
     type Error = ZDeserializeError;
 
@@ -1762,53 +1805,6 @@ where
     }
 }
 
-// For convenience to always convert a Value in the examples
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StringOrBase64 {
-    String(String),
-    Base64(String),
-}
-
-impl StringOrBase64 {
-    pub fn into_string(self) -> String {
-        match self {
-            StringOrBase64::String(s) | StringOrBase64::Base64(s) => s,
-        }
-    }
-}
-
-impl Deref for StringOrBase64 {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::String(s) | Self::Base64(s) => s,
-        }
-    }
-}
-
-impl std::fmt::Display for StringOrBase64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self)
-    }
-}
-
-impl From<&ZBytes> for StringOrBase64 {
-    fn from(v: &ZBytes) -> Self {
-        use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
-        match v.deserialize::<String>() {
-            Ok(s) => StringOrBase64::String(s),
-            Err(_) => StringOrBase64::Base64(b64_std_engine.encode(v.into::<Vec<u8>>())),
-        }
-    }
-}
-
-impl From<&mut ZBytes> for StringOrBase64 {
-    fn from(v: &mut ZBytes) -> Self {
-        StringOrBase64::from(&*v)
-    }
-}
-
 // Protocol attachment extension
 impl<const ID: u8> From<ZBytes> for AttachmentType<ID> {
     fn from(this: ZBytes) -> Self {
@@ -1831,17 +1827,16 @@ mod tests {
 
         use rand::Rng;
         use zenoh_buffers::{ZBuf, ZSlice};
-        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        #[cfg(feature = "shared-memory")]
         use zenoh_core::Wait;
         use zenoh_protocol::core::Properties;
-        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        #[cfg(feature = "shared-memory")]
         use zenoh_shm::api::{
             buffer::zshm::{zshm, ZShm},
             protocol_implementations::posix::{
-                posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-                protocol_id::POSIX_PROTOCOL_ID,
+                posix_shm_provider_backend::PosixShmProviderBackend, protocol_id::POSIX_PROTOCOL_ID,
             },
-            provider::shared_memory_provider::SharedMemoryProviderBuilder,
+            provider::shm_provider::ShmProviderBuilder,
         };
 
         use super::ZBytes;
@@ -1948,16 +1943,16 @@ mod tests {
         basic();
 
         // SHM
-        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        #[cfg(feature = "shared-memory")]
         {
             // create an SHM backend...
-            let backend = PosixSharedMemoryProviderBackend::builder()
+            let backend = PosixShmProviderBackend::builder()
                 .with_size(4096)
                 .unwrap()
                 .res()
                 .unwrap();
             // ...and an SHM provider
-            let provider = SharedMemoryProviderBuilder::builder()
+            let provider = ShmProviderBuilder::builder()
                 .protocol_id::<POSIX_PROTOCOL_ID>()
                 .backend(backend)
                 .res();
@@ -1997,7 +1992,7 @@ mod tests {
         let p = ZBytes::from_iter(v.iter());
         println!("Deserialize:\t{:?}\n", p);
         for (i, t) in p.iter::<usize>().enumerate() {
-            assert_eq!(i, t);
+            assert_eq!(i, t.unwrap());
         }
 
         let mut v = vec![[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
@@ -2005,10 +2000,10 @@ mod tests {
         let p = ZBytes::from_iter(v.drain(..));
         println!("Deserialize:\t{:?}\n", p);
         let mut iter = p.iter::<[u8; 4]>();
-        assert_eq!(iter.next().unwrap(), [0, 1, 2, 3]);
-        assert_eq!(iter.next().unwrap(), [4, 5, 6, 7]);
-        assert_eq!(iter.next().unwrap(), [8, 9, 10, 11]);
-        assert_eq!(iter.next().unwrap(), [12, 13, 14, 15]);
+        assert_eq!(iter.next().unwrap().unwrap(), [0, 1, 2, 3]);
+        assert_eq!(iter.next().unwrap().unwrap(), [4, 5, 6, 7]);
+        assert_eq!(iter.next().unwrap().unwrap(), [8, 9, 10, 11]);
+        assert_eq!(iter.next().unwrap().unwrap(), [12, 13, 14, 15]);
         assert!(iter.next().is_none());
 
         use std::collections::HashMap;
@@ -2018,7 +2013,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, usize)>());
+        let o = HashMap::from_iter(p.iter::<(usize, usize)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
@@ -2027,7 +2022,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
@@ -2036,7 +2031,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, ZSlice> = HashMap::new();
@@ -2045,7 +2040,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, ZSlice)>());
+        let o = HashMap::from_iter(p.iter::<(usize, ZSlice)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, ZBuf> = HashMap::new();
@@ -2054,7 +2049,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().drain());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, ZBuf)>());
+        let o = HashMap::from_iter(p.iter::<(usize, ZBuf)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
@@ -2063,7 +2058,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.clone().iter().map(|(k, v)| (k, Cow::from(v))));
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>());
+        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<String, String> = HashMap::new();
@@ -2072,7 +2067,7 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.iter());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(String, String)>());
+        let o = HashMap::from_iter(p.iter::<(String, String)>().map(Result::unwrap));
         assert_eq!(hm, o);
 
         let mut hm: HashMap<Cow<'static, str>, Cow<'static, str>> = HashMap::new();
@@ -2081,7 +2076,10 @@ mod tests {
         println!("Serialize:\t{:?}", hm);
         let p = ZBytes::from_iter(hm.iter());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(Cow<'static, str>, Cow<'static, str>)>());
+        let o = HashMap::from_iter(
+            p.iter::<(Cow<'static, str>, Cow<'static, str>)>()
+                .map(Result::unwrap),
+        );
         assert_eq!(hm, o);
     }
 }

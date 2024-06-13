@@ -22,12 +22,10 @@ use zenoh_result::{bail, ZResult};
 
 use crate::{
     api::{
-        client::{
-            shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
-        },
+        client::{shm_client::ShmClient, shm_segment::ShmSegment},
         common::types::ProtocolID,
         protocol_implementations::posix::{
-            posix_shared_memory_client::PosixSharedMemoryClient, protocol_id::POSIX_PROTOCOL_ID,
+            posix_shm_client::PosixShmClient, protocol_id::POSIX_PROTOCOL_ID,
         },
     },
     reader::{ClientStorage, GlobalDataSegmentID},
@@ -36,10 +34,10 @@ use crate::{
 lazy_static! {
     /// A global lazily-initialized SHM client storage.
     /// When initialized, contains default client set,
-    /// see SharedMemoryClientStorage::with_default_client_set
+    /// see ShmClientStorage::with_default_client_set
     #[zenoh_macros::unstable_doc]
-    pub static ref GLOBAL_CLIENT_STORAGE: Arc<SharedMemoryClientStorage> = Arc::new(
-        SharedMemoryClientStorage::builder()
+    pub static ref GLOBAL_CLIENT_STORAGE: Arc<ShmClientStorage> = Arc::new(
+        ShmClientStorage::builder()
             .with_default_client_set()
             .build()
     );
@@ -47,64 +45,60 @@ lazy_static! {
 
 /// Builder to create new client storages
 #[zenoh_macros::unstable_doc]
-pub struct SharedMemoryClientSetBuilder;
+pub struct ShmClientSetBuilder;
 
-impl SharedMemoryClientSetBuilder {
+impl ShmClientSetBuilder {
     /// Add client to the storage (without including the default client set)
     #[zenoh_macros::unstable_doc]
     pub fn with_client(
         self,
         id: ProtocolID,
-        client: Arc<dyn SharedMemoryClient>,
-    ) -> SharedMemoryClientStorageBuilder {
+        client: Arc<dyn ShmClient>,
+    ) -> ShmClientStorageBuilder {
         let clients = HashMap::from([(id, client)]);
-        SharedMemoryClientStorageBuilder::new(clients)
+        ShmClientStorageBuilder::new(clients)
     }
 
     /// Add list of clients to the storage (without including the default client set)
     #[zenoh_macros::unstable_doc]
     pub fn with_clients(
         self,
-        clients: &[(ProtocolID, Arc<dyn SharedMemoryClient>)],
-    ) -> SharedMemoryClientStorageBuilder {
+        clients: &[(ProtocolID, Arc<dyn ShmClient>)],
+    ) -> ShmClientStorageBuilder {
         let clients = clients.iter().cloned().collect();
-        SharedMemoryClientStorageBuilder::new(clients)
+        ShmClientStorageBuilder::new(clients)
     }
 
     /// Include default clients
     #[zenoh_macros::unstable_doc]
-    pub fn with_default_client_set(self) -> SharedMemoryClientStorageBuilder {
+    pub fn with_default_client_set(self) -> ShmClientStorageBuilder {
         let clients = HashMap::from([(
             POSIX_PROTOCOL_ID,
-            Arc::new(PosixSharedMemoryClient {}) as Arc<dyn SharedMemoryClient>,
+            Arc::new(PosixShmClient {}) as Arc<dyn ShmClient>,
         )]);
-        SharedMemoryClientStorageBuilder::new(clients)
+        ShmClientStorageBuilder::new(clients)
     }
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct SharedMemoryClientStorageBuilder {
-    clients: HashMap<ProtocolID, Arc<dyn SharedMemoryClient>>,
+pub struct ShmClientStorageBuilder {
+    clients: HashMap<ProtocolID, Arc<dyn ShmClient>>,
 }
 
-impl SharedMemoryClientStorageBuilder {
-    fn new(clients: HashMap<ProtocolID, Arc<dyn SharedMemoryClient>>) -> Self {
+impl ShmClientStorageBuilder {
+    fn new(clients: HashMap<ProtocolID, Arc<dyn ShmClient>>) -> Self {
         Self { clients }
     }
 
     /// Add client to the storage
     #[zenoh_macros::unstable_doc]
-    pub fn with_client(
-        mut self,
-        id: ProtocolID,
-        client: Arc<dyn SharedMemoryClient>,
-    ) -> ZResult<Self> {
+    pub fn with_client(mut self, id: ProtocolID, client: Arc<dyn ShmClient>) -> ZResult<Self> {
         match self.clients.entry(id) {
             std::collections::hash_map::Entry::Occupied(occupied) => {
                 bail!("Client already exists for id {id}: {:?}!", occupied)
             }
             std::collections::hash_map::Entry::Vacant(vacant) => {
-                vacant.insert(client as Arc<dyn SharedMemoryClient>);
+                vacant.insert(client as Arc<dyn ShmClient>);
                 Ok(self)
             }
         }
@@ -112,15 +106,15 @@ impl SharedMemoryClientStorageBuilder {
 
     /// Add list of clients to the storage
     #[zenoh_macros::unstable_doc]
-    pub fn with_clients(mut self, clients: &[(ProtocolID, Arc<dyn SharedMemoryClient>)]) -> Self {
+    pub fn with_clients(mut self, clients: &[(ProtocolID, Arc<dyn ShmClient>)]) -> Self {
         self.clients.extend(clients.iter().cloned());
         self
     }
 
     /// Build the storage with parameters specified on previous step
     #[zenoh_macros::unstable_doc]
-    pub fn build(self) -> SharedMemoryClientStorage {
-        SharedMemoryClientStorage::new(self.clients)
+    pub fn build(self) -> ShmClientStorage {
+        ShmClientStorage::new(self.clients)
     }
 }
 
@@ -129,24 +123,24 @@ impl SharedMemoryClientStorageBuilder {
 /// SHM buffers for Protocols added to this instance.
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
-pub struct SharedMemoryClientStorage {
-    pub(crate) clients: ClientStorage<Arc<dyn SharedMemoryClient>>,
-    pub(crate) segments: RwLock<HashMap<GlobalDataSegmentID, Arc<dyn SharedMemorySegment>>>,
+pub struct ShmClientStorage {
+    pub(crate) clients: ClientStorage<Arc<dyn ShmClient>>,
+    pub(crate) segments: RwLock<HashMap<GlobalDataSegmentID, Arc<dyn ShmSegment>>>,
 }
 
-impl Eq for SharedMemoryClientStorage {}
+impl Eq for ShmClientStorage {}
 
-impl PartialEq for SharedMemoryClientStorage {
+impl PartialEq for ShmClientStorage {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
 }
 
-impl SharedMemoryClientStorage {
+impl ShmClientStorage {
     /// Get the builder to construct a new storage
     #[zenoh_macros::unstable_doc]
-    pub fn builder() -> SharedMemoryClientSetBuilder {
-        SharedMemoryClientSetBuilder
+    pub fn builder() -> ShmClientSetBuilder {
+        ShmClientSetBuilder
     }
 
     /// Get the list of supported SHM protocols.
@@ -155,7 +149,7 @@ impl SharedMemoryClientStorage {
         self.clients.get_clients().keys().copied().collect()
     }
 
-    fn new(clients: HashMap<ProtocolID, Arc<dyn SharedMemoryClient>>) -> Self {
+    fn new(clients: HashMap<ProtocolID, Arc<dyn ShmClient>>) -> Self {
         Self {
             clients: ClientStorage::new(clients),
             segments: RwLock::default(),

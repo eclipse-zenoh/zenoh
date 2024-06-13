@@ -18,7 +18,7 @@ use zenoh_examples::CommonArgs;
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let (mut config, key_expr) = parse_args();
 
@@ -42,7 +42,7 @@ async fn main() {
         );
         match sample.payload().deserialize::<&zshm>() {
             Ok(payload) => print!("'{}'", String::from_utf8_lossy(payload)),
-            Err(e) => print!("'Not a SharedMemoryBuf: {:?}'", e),
+            Err(e) => print!("'Not a ShmBufInner: {:?}'", e),
         }
         println!(")");
     }
@@ -62,7 +62,7 @@ async fn main() {
     //             kind, key_expr, payload
     //         ),
     //         Err(e) => {
-    //             println!(">> [Subscriber] Not a SharedMemoryBuf: {:?}", e);
+    //             println!(">> [Subscriber] Not a ShmBufInner: {:?}", e);
     //         }
     //     }
     // }

@@ -95,6 +95,8 @@
       address: "224.0.0.224:7446",
       /// The network interface which should be used for multicast scouting
       interface: "auto", // If not set or set to "auto" the interface if picked automatically
+      /// The time-to-live on multicast scouting packets
+      ttl: 1,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
       /// Accepts a single value or different values for router, peer and client.
       /// Each value is bit-or-like combinations of "peer", "router" and "client".

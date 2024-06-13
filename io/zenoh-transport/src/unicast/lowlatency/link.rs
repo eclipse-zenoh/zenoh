@@ -143,7 +143,7 @@ impl TransportUnicastLowlatency {
         let token = self.token.child_token();
 
         let c_transport = self.clone();
-        let task = async move {
+        let rx_task = async move {
             let guard = zasyncread!(c_transport.link);
             let link_rx = guard.as_ref().unwrap().rx();
             drop(guard);
@@ -164,7 +164,7 @@ impl TransportUnicastLowlatency {
                 zenoh_sync::RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice())
             };
 
-            let res = loop {
+            loop {
                 // Retrieve one buffer
                 let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
@@ -187,25 +187,29 @@ impl TransportUnicastLowlatency {
                         break ZResult::Ok(());
                     }
                 }
-            };
-
-            tracing::debug!(
-                "[{}] Rx task finished with result {:?}",
-                c_transport.manager.config.zid,
-                res
-            );
-            if res.is_err() {
-                tracing::debug!(
-                    "[{}] <on rx exit> finalizing transport with peer: {}",
-                    c_transport.manager.config.zid,
-                    c_transport.config.zid
-                );
-                let _ = c_transport.finalize(0).await;
             }
-            ZResult::Ok(())
         };
 
-        self.tracker.spawn_on(task, &ZRuntime::TX);
+        let c_transport = self.clone();
+        self.tracker.spawn_on(
+            async move {
+                let res = rx_task.await;
+                tracing::debug!(
+                    "[{}] Rx task finished with result {:?}",
+                    c_transport.manager.config.zid,
+                    res
+                );
+                if res.is_err() {
+                    tracing::debug!(
+                        "[{}] <on rx exit> finalizing transport with peer: {}",
+                        c_transport.manager.config.zid,
+                        c_transport.config.zid
+                    );
+                    let _ = c_transport.finalize(0).await;
+                }
+            },
+            &ZRuntime::RX,
+        );
     }
 }
 

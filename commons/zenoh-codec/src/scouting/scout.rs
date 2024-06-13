@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
-    core::{whatami::WhatAmIMatcher, ZenohId},
+    core::{whatami::WhatAmIMatcher, ZenohIdProto},
     scouting::{
         id,
         scout::{flag, Scout},
@@ -93,7 +93,7 @@ where
         let zid = if imsg::has_flag(flags, flag::I) {
             let length = 1 + ((flags >> 4) as usize);
             let lodec = Zenoh080Length::new(length);
-            let zid: ZenohId = lodec.read(&mut *reader)?;
+            let zid: ZenohIdProto = lodec.read(&mut *reader)?;
             Some(zid)
         } else {
             None

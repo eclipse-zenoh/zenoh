@@ -19,34 +19,34 @@ use zenoh_result::ZResult;
 
 use crate::{
     api::{
-        client::shared_memory_segment::SharedMemorySegment,
-        client_storage::SharedMemoryClientStorage,
+        client::shm_segment::ShmSegment,
+        client_storage::ShmClientStorage,
         common::types::{ProtocolID, SegmentID},
     },
     header::subscription::GLOBAL_HEADER_SUBSCRIPTION,
     watchdog::confirmator::GLOBAL_CONFIRMATOR,
-    SharedMemoryBuf, SharedMemoryBufInfo,
+    ShmBufInfo, ShmBufInner,
 };
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct SharedMemoryReader {
-    client_storage: Arc<SharedMemoryClientStorage>,
+pub struct ShmReader {
+    client_storage: Arc<ShmClientStorage>,
 }
 
-impl Deref for SharedMemoryReader {
-    type Target = SharedMemoryClientStorage;
+impl Deref for ShmReader {
+    type Target = ShmClientStorage;
 
     fn deref(&self) -> &Self::Target {
         &self.client_storage
     }
 }
 
-impl SharedMemoryReader {
-    pub fn new(client_storage: Arc<SharedMemoryClientStorage>) -> Self {
+impl ShmReader {
+    pub fn new(client_storage: Arc<ShmClientStorage>) -> Self {
         Self { client_storage }
     }
 
-    pub fn read_shmbuf(&self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
+    pub fn read_shmbuf(&self, info: &ShmBufInfo) -> ZResult<ShmBufInner> {
         // Read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented it for us.
 
@@ -54,7 +54,7 @@ impl SharedMemoryReader {
         let watchdog = Arc::new(GLOBAL_CONFIRMATOR.add(&info.watchdog_descriptor)?);
 
         let segment = self.ensure_segment(info)?;
-        let shmb = SharedMemoryBuf {
+        let shmb = ShmBufInner {
             header: GLOBAL_HEADER_SUBSCRIPTION.link(&info.header_descriptor)?,
             buf: segment.map(info.data_descriptor.chunk)?,
             info: info.clone(),
@@ -68,7 +68,7 @@ impl SharedMemoryReader {
         }
     }
 
-    fn ensure_segment(&self, info: &SharedMemoryBufInfo) -> ZResult<Arc<dyn SharedMemorySegment>> {
+    fn ensure_segment(&self, info: &ShmBufInfo) -> ZResult<Arc<dyn ShmSegment>> {
         let id = GlobalDataSegmentID::new(info.shm_protocol, info.data_descriptor.segment);
 
         // fastest path: try to get access to already mounted SHM segment

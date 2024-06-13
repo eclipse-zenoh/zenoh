@@ -32,8 +32,8 @@ use zenoh_config::{
 };
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohId},
-    scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
+    core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohIdProto},
+    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -53,7 +53,7 @@ pub enum Loop {
 
 #[derive(Default, Debug)]
 pub(crate) struct PeerConnector {
-    zid: Option<ZenohId>,
+    zid: Option<ZenohIdProto>,
     terminated: bool,
 }
 
@@ -74,7 +74,7 @@ impl StartConditions {
         peer_connectors.len() - 1
     }
 
-    pub(crate) async fn add_peer_connector_zid(&self, zid: ZenohId) {
+    pub(crate) async fn add_peer_connector_zid(&self, zid: ZenohIdProto) {
         let mut peer_connectors = self.peer_connectors.lock().await;
         if !peer_connectors.iter().any(|pc| pc.zid == Some(zid)) {
             peer_connectors.push(PeerConnector {
@@ -84,7 +84,7 @@ impl StartConditions {
         }
     }
 
-    pub(crate) async fn set_peer_connector_zid(&self, idx: usize, zid: ZenohId) {
+    pub(crate) async fn set_peer_connector_zid(&self, idx: usize, zid: ZenohIdProto) {
         let mut peer_connectors = self.peer_connectors.lock().await;
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.zid = Some(zid);
@@ -101,7 +101,7 @@ impl StartConditions {
         }
     }
 
-    pub(crate) async fn terminate_peer_connector_zid(&self, zid: ZenohId) {
+    pub(crate) async fn terminate_peer_connector_zid(&self, zid: ZenohIdProto) {
         let mut peer_connectors = self.peer_connectors.lock().await;
         if let Some(peer_connector) = peer_connectors.iter_mut().find(|pc| pc.zid == Some(zid)) {
             peer_connector.terminated = true;
@@ -127,7 +127,7 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (peers, scouting, addr, ifaces, timeout) = {
+        let (peers, scouting, addr, ifaces, timeout, multicast_ttl) = {
             let guard = self.state.config.lock();
             (
                 guard.connect().endpoints().clone(),
@@ -135,6 +135,7 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 std::time::Duration::from_millis(unwrap_or_default!(guard.scouting().timeout())),
+                unwrap_or_default!(guard.scouting().multicast().ttl()),
             )
         };
         match peers.len() {
@@ -147,7 +148,7 @@ impl Runtime {
                     } else {
                         let sockets: Vec<UdpSocket> = ifaces
                             .into_iter()
-                            .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
+                            .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
                             .collect();
                         if sockets.is_empty() {
                             bail!("Unable to bind UDP port to any multicast interface!")
@@ -271,12 +272,16 @@ impl Runtime {
         addr: SocketAddr,
         ifaces: String,
     ) -> ZResult<()> {
+        let multicast_ttl = {
+            let guard = self.state.config.lock();
+            unwrap_or_default!(guard.scouting().multicast().ttl())
+        };
         let ifaces = Runtime::get_interfaces(&ifaces);
-        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
+        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?;
         if !ifaces.is_empty() {
             let sockets: Vec<UdpSocket> = ifaces
                 .into_iter()
-                .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
+                .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
                 .collect();
             if !sockets.is_empty() {
                 let this = self.clone();
@@ -613,7 +618,11 @@ impl Runtime {
         }
     }
 
-    pub async fn bind_mcast_port(sockaddr: &SocketAddr, ifaces: &[IpAddr]) -> ZResult<UdpSocket> {
+    pub async fn bind_mcast_port(
+        sockaddr: &SocketAddr,
+        ifaces: &[IpAddr],
+        multicast_ttl: u32,
+    ) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -691,6 +700,11 @@ impl Runtime {
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         socket.set_nonblocking(true)?;
+        socket.set_multicast_ttl_v4(multicast_ttl)?;
+
+        if sockaddr.is_ipv6() && multicast_ttl > 1 {
+            tracing::warn!("UDP Multicast TTL has been set to a value greater than 1 on a socket bound to an IPv6 address. This might not have the desired effect");
+        }
 
         // UdpSocket::from_std requires a runtime even though it's a sync function
         let udp_socket = zenoh_runtime::ZRuntime::Net
@@ -698,7 +712,7 @@ impl Runtime {
         Ok(udp_socket)
     }
 
-    pub fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
+    pub fn bind_ucast_port(addr: IpAddr, multicast_ttl: u32) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -725,6 +739,7 @@ impl Runtime {
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         socket.set_nonblocking(true)?;
+        socket.set_multicast_ttl_v4(multicast_ttl)?;
 
         // UdpSocket::from_std requires a runtime even though it's a sync function
         let udp_socket = zenoh_runtime::ZRuntime::Net
@@ -762,7 +777,7 @@ impl Runtime {
         }
     }
 
-    async fn peer_connector_retry(&self, peer: EndPoint) -> ZResult<ZenohId> {
+    async fn peer_connector_retry(&self, peer: EndPoint) -> ZResult<ZenohIdProto> {
         let retry_config = self.get_connect_retry_config(&peer);
         let mut period = retry_config.period();
         let cancellation_token = self.get_cancellation_token();
@@ -814,7 +829,7 @@ impl Runtime {
         mcast_addr: &SocketAddr,
         f: F,
     ) where
-        F: Fn(Hello) -> Fut + std::marker::Send + std::marker::Sync + Clone,
+        F: Fn(HelloProto) -> Fut + std::marker::Send + std::marker::Sync + Clone,
         Fut: Future<Output = Loop> + std::marker::Send,
         Self: Sized,
     {
@@ -905,7 +920,7 @@ impl Runtime {
     }
 
     #[must_use]
-    async fn connect(&self, zid: &ZenohId, locators: &[Locator]) -> bool {
+    async fn connect(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
         const ERR: &str = "Unable to connect to newly scouted peer ";
 
         let inspector = LocatorInspector::default();
@@ -966,7 +981,7 @@ impl Runtime {
         false
     }
 
-    pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
+    pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) {
         let manager = self.manager();
         if zid != &manager.zid() {
             let has_unicast = manager.get_transport_unicast(zid).await.is_some();
@@ -1089,7 +1104,7 @@ impl Runtime {
                         let codec = Zenoh080::new();
 
                         let zid = self.manager().zid();
-                        let hello: ScoutingMessage = Hello {
+                        let hello: ScoutingMessage = HelloProto {
                             version: zenoh_protocol::VERSION,
                             whatami: self.whatami(),
                             zid,

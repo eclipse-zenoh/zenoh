@@ -73,6 +73,7 @@ pub struct Selector<'a> {
     pub(crate) parameters: Parameters<'a>,
 }
 
+#[zenoh_macros::unstable]
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
     /// Builds a new selector
@@ -332,6 +333,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
     }
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn selector_accessors() {
     use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;

@@ -23,12 +23,12 @@ use tokio::runtime::Handle;
 use zenoh::{
     config,
     config::{EndPoint, WhatAmI},
-    internal::ztimeout,
     key_expr::KeyExpr,
     prelude::*,
     publisher::CongestionControl,
     Session,
 };
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -257,7 +257,7 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_p2p() {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let (s01, s02, s03) = open_p2p_sessions().await;
     test_unicity_pubsub(&s01, &s02, &s03).await;
@@ -267,7 +267,7 @@ async fn zenoh_unicity_p2p() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_brokered() {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     let r = open_router_session().await;
 
     let (s01, s02, s03) = open_client_sessions().await;

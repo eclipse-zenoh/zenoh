@@ -17,20 +17,17 @@ use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
 #[cfg(feature = "unstable")]
-use crate::api::bytes::OptionZBytes;
-#[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::{
     builders::sample::{
-        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
     },
-    bytes::ZBytes,
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     key_expr::KeyExpr,
     publisher::{Priority, Publisher},
     sample::{Locality, SampleKind},
     session::SessionRef,
-    value::Value,
 };
 
 pub type SessionPutBuilder<'a, 'b> =
@@ -78,7 +75,6 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -117,33 +113,13 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
-impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
+impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: PublicationBuilderPut {
                 encoding: encoding.into(),
                 ..self.kind
             },
-            ..self
-        }
-    }
-
-    fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<ZBytes>,
-    {
-        Self {
-            kind: PublicationBuilderPut {
-                payload: payload.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            kind: PublicationBuilderPut { payload, encoding },
             ..self
         }
     }
@@ -157,7 +133,6 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
             ..self
         }
     }
-    #[cfg(feature = "unstable")]
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -191,7 +166,6 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -208,7 +182,6 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -320,6 +293,9 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             priority: self.priority,
             is_express: self.is_express,
             destination: self.destination,
+            #[cfg(feature = "unstable")]
+            matching_listeners: Default::default(),
+            undeclare_on_drop: true,
         })
     }
 }
@@ -371,6 +347,9 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
                 priority: self.priority,
                 is_express: self.is_express,
                 destination: self.destination,
+                #[cfg(feature = "unstable")]
+                matching_listeners: Default::default(),
+                undeclare_on_drop: true,
             })
     }
 }
@@ -393,7 +372,6 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -408,7 +386,6 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }

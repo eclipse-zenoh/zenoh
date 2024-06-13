@@ -16,8 +16,7 @@ use zenoh::{
     key_expr::KeyExpr,
     prelude::*,
     shm::{
-        BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder,
-        POSIX_PROTOCOL_ID,
+        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     Config,
 };
@@ -28,9 +27,9 @@ const N: usize = 10;
 #[tokio::main]
 async fn main() -> Result<(), ZError> {
     // Initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
-    let (mut config, path, value) = parse_args();
+    let (mut config, path, payload) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
@@ -42,14 +41,14 @@ async fn main() -> Result<(), ZError> {
 
     println!("Creating POSIX SHM provider...");
     // create an SHM backend...
-    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
         .with_size(N * 1024)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -75,10 +74,10 @@ async fn main() -> Result<(), ZError> {
         // of the write. This is simply to have the same format as zn_pub.
         let prefix = format!("[{idx:4}] ");
         let prefix_len = prefix.as_bytes().len();
-        let slice_len = prefix_len + value.as_bytes().len();
+        let slice_len = prefix_len + payload.as_bytes().len();
 
         sbuf[0..prefix_len].copy_from_slice(prefix.as_bytes());
-        sbuf[prefix_len..slice_len].copy_from_slice(value.as_bytes());
+        sbuf[prefix_len..slice_len].copy_from_slice(payload.as_bytes());
 
         // Write the data
         println!(
@@ -97,14 +96,14 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-pub")]
     /// The key expression to publish onto.
     path: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Pub from SharedMemory Rust!")]
-    /// The value of to publish.
-    value: String,
+    #[arg(short, long, default_value = "Pub from SHM Rust!")]
+    /// The payload of to publish.
+    payload: String,
     #[command(flatten)]
     common: CommonArgs,
 }
 
 fn parse_args() -> (Config, KeyExpr<'static>, String) {
     let args = Args::parse();
-    (args.common.into(), args.path, args.value)
+    (args.common.into(), args.path, args.payload)
 }

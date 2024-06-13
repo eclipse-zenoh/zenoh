@@ -15,6 +15,7 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+pub mod wrappers;
 
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
@@ -34,9 +35,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
+use wrappers::ZenohId;
 use zenoh_core::zlock;
 pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
+    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
 };
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, Bits},
@@ -259,6 +261,8 @@ validated_struct::validator! {
                 address: Option<SocketAddr>,
                 /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
                 interface: Option<String>,
+                /// The time-to-live on multicast scouting packets. (default: 1)
+                pub ttl: Option<u32>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
@@ -450,7 +454,7 @@ validated_struct::validator! {
                 },
             },
             pub shared_memory:
-            SharedMemoryConf {
+            ShmConf {
                 /// Whether shared memory is enabled or not.
                 /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
                 /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
@@ -1025,6 +1029,7 @@ fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
 
 #[derive(Debug, Clone)]
 pub struct PluginLoad {
+    pub id: String,
     pub name: String,
     pub paths: Option<Vec<String>>,
     pub required: bool,
@@ -1043,22 +1048,27 @@ impl PluginsConfig {
         Ok(())
     }
     pub fn load_requests(&'_ self) -> impl Iterator<Item = PluginLoad> + '_ {
-        self.values.as_object().unwrap().iter().map(|(name, value)| {
+        self.values.as_object().unwrap().iter().map(|(id, value)| {
             let value = value.as_object().expect("Plugin configurations must be objects");
             let required = match value.get("__required__") {
                 None => false,
                 Some(Value::Bool(b)) => *b,
-                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", name)
+                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", id)
             };
+            let name = match value.get("__plugin__") {
+                Some(Value::String(p)) => p,
+                _ => id,
+            };
+
             if let Some(paths) = value.get("__path__"){
                 let paths = match paths {
                     Value::String(s) => vec![s.clone()],
-                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", name)}).collect(),
-                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", name)
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)}).collect(),
+                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)
                 };
-                PluginLoad {name: name.clone(), paths: Some(paths), required}
+                PluginLoad {id: id.clone(), name: name.clone(), paths: Some(paths), required}
             } else {
-                PluginLoad {name: name.clone(), paths: None, required}
+                PluginLoad {id: id.clone(), name: name.clone(), paths: None, required}
             }
         })
     }

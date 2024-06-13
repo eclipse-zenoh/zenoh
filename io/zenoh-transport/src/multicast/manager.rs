@@ -17,12 +17,12 @@ use tokio::sync::Mutex;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionMulticastConf;
 #[cfg(feature = "shared-memory")]
-use zenoh_config::SharedMemoryConf;
+use zenoh_config::ShmConf;
 use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{Parameters, ZenohId},
+    core::{Parameters, ZenohIdProto},
     transport::close,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -152,7 +152,7 @@ impl Default for TransportManagerBuilderMulticast {
     fn default() -> TransportManagerBuilderMulticast {
         let link_tx = LinkTxConf::default();
         #[cfg(feature = "shared-memory")]
-        let shm = SharedMemoryConf::default();
+        let shm = ShmConf::default();
         #[cfg(feature = "transport_compression")]
         let compression = CompressionMulticastConf::default();
 
@@ -266,7 +266,7 @@ impl TransportManager {
         super::establishment::open_link(self, link).await
     }
 
-    pub async fn get_transport_multicast(&self, zid: &ZenohId) -> Option<TransportMulticast> {
+    pub async fn get_transport_multicast(&self, zid: &ZenohIdProto) -> Option<TransportMulticast> {
         for t in zasynclock!(self.state.multicast.transports).values() {
             if t.get_peers().iter().any(|p| p.zid == *zid) {
                 return Some(t.into());

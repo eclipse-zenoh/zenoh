@@ -15,21 +15,21 @@ use zenoh::{
     bytes::ZBytes,
     prelude::*,
     shm::{
-        zshm, zshmmut, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, ZShm,
-        ZShmMut, POSIX_PROTOCOL_ID,
+        zshm, zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut,
+        POSIX_PROTOCOL_ID,
     },
 };
 
 fn main() {
     // create an SHM backend...
-    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
         .with_size(4096)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -43,13 +43,13 @@ fn main() {
     let _data: &[u8] = &owned_shm_buf_mut;
     let _data_mut: &mut [u8] = &mut owned_shm_buf_mut;
 
-    // convert into immutable owned buffer (ZShmMut -> ZSlceShm)
+    // convert into immutable owned buffer (ZShmMut -> ZShm)
     let owned_shm_buf: ZShm = owned_shm_buf_mut.into();
 
     // immutable API
     let _data: &[u8] = &owned_shm_buf;
 
-    // convert again into mutable owned buffer (ZShm -> ZSlceShmMut)
+    // convert again into mutable owned buffer (ZShm -> ZShmMut)
     let mut owned_shm_buf_mut: ZShmMut = owned_shm_buf.try_into().unwrap();
 
     // mutable and immutable API

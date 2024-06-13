@@ -67,12 +67,7 @@ fn query_with_ringbuffer() {
     let query = queryable.recv().unwrap();
     // Only receive the latest query
     assert_eq!(
-        query
-            .value()
-            .unwrap()
-            .payload()
-            .deserialize::<String>()
-            .unwrap(),
+        query.payload().unwrap().deserialize::<String>().unwrap(),
         "query2"
     );
 }

@@ -20,8 +20,9 @@
 
 use std::{any::Any, sync::Arc};
 
-use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject, ZenohId};
+use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject};
 use zenoh_protocol::{
+    core::ZenohIdProto,
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
     zenoh::{PushBody, RequestBody},
 };
@@ -48,13 +49,13 @@ pub struct AuthSubject {
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     subject: Vec<AuthSubject>,
-    zid: ZenohId,
+    zid: ZenohIdProto,
 }
 
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     subject: Vec<AuthSubject>,
-    zid: ZenohId,
+    zid: ZenohIdProto,
 }
 
 pub(crate) fn acl_interceptor_factories(
@@ -307,7 +308,7 @@ impl InterceptorTrait for EgressAclEnforcer {
 }
 pub trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
-    fn zid(&self) -> ZenohId;
+    fn zid(&self) -> ZenohIdProto;
     fn flow(&self) -> InterceptorFlow;
     fn authn_ids(&self) -> Vec<AuthSubject>;
     fn action(&self, action: Action, log_msg: &str, key_expr: &str) -> Permission {
@@ -362,7 +363,7 @@ impl AclActionMethods for EgressAclEnforcer {
         self.policy_enforcer.clone()
     }
 
-    fn zid(&self) -> ZenohId {
+    fn zid(&self) -> ZenohIdProto {
         self.zid
     }
 
@@ -380,7 +381,7 @@ impl AclActionMethods for IngressAclEnforcer {
         self.policy_enforcer.clone()
     }
 
-    fn zid(&self) -> ZenohId {
+    fn zid(&self) -> ZenohIdProto {
         self.zid
     }
 

@@ -16,12 +16,12 @@
 // 1. normal case, just some wild card puts and deletes on existing keys and ensure it works
 // 2. check for dealing with out of order updates
 
-use std::{str::FromStr, thread::sleep};
+use std::{borrow::Cow, str::FromStr, thread::sleep};
 
 use async_std::task;
 use zenoh::{
-    bytes::StringOrBase64, internal::zasync_executor_init, prelude::*, query::Reply,
-    sample::Sample, time::Timestamp, Config, Session,
+    internal::zasync_executor_init, prelude::*, query::Reply, sample::Sample, time::Timestamp,
+    Config, Session,
 };
 use zenoh_plugin_trait::Plugin;
 
@@ -71,7 +71,7 @@ async fn test_updates_in_order() {
         )
         .unwrap();
 
-    let runtime = zenoh::runtime::RuntimeBuilder::new(config)
+    let runtime = zenoh::internal::runtime::RuntimeBuilder::new(config)
         .build()
         .await
         .unwrap();
@@ -96,7 +96,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/a").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "1");
+    assert_eq!(data[0].payload().deserialize::<Cow<str>>().unwrap(), "1");
 
     put_data(
         &session,
@@ -112,7 +112,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "2");
+    assert_eq!(data[0].payload().deserialize::<Cow<str>>().unwrap(), "2");
 
     delete_data(
         &session,
@@ -131,7 +131,7 @@ async fn test_updates_in_order() {
     // expects exactly one sample
     let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(StringOrBase64::from(data[0].payload()).as_str(), "2");
+    assert_eq!(data[0].payload().deserialize::<Cow<str>>().unwrap(), "2");
     assert_eq!(data[0].key_expr().as_str(), "operation/test/b");
 
     drop(storage);

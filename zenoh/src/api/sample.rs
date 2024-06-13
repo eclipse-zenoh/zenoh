@@ -18,7 +18,7 @@ use std::{convert::TryFrom, fmt};
 #[cfg(feature = "unstable")]
 use serde::Serialize;
 use zenoh_protocol::{
-    core::{CongestionControl, EntityGlobalId, Timestamp},
+    core::{CongestionControl, EntityGlobalIdProto, Timestamp},
     network::declare::ext::QoSType,
 };
 
@@ -52,7 +52,7 @@ pub(crate) struct DataInfo {
     pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    pub source_id: Option<EntityGlobalId>,
+    pub source_id: Option<EntityGlobalIdProto>,
     pub source_sn: Option<SourceSn>,
     pub qos: QoS,
 }
@@ -62,7 +62,7 @@ pub(crate) trait DataInfoIntoSample {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
@@ -79,7 +79,7 @@ impl DataInfoIntoSample for DataInfo {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
@@ -97,7 +97,6 @@ impl DataInfoIntoSample for DataInfo {
                 source_id: self.source_id,
                 source_sn: self.source_sn,
             },
-            #[cfg(feature = "unstable")]
             attachment,
         }
     }
@@ -109,19 +108,14 @@ impl DataInfoIntoSample for Option<DataInfo> {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
-        #[cfg(feature = "unstable")] attachment: Option<ZBytes>,
+        attachment: Option<ZBytes>,
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoZBytes: Into<ZBytes>,
     {
         if let Some(data_info) = self {
-            data_info.into_sample(
-                key_expr,
-                payload,
-                #[cfg(feature = "unstable")]
-                attachment,
-            )
+            data_info.into_sample(key_expr, payload, attachment)
         } else {
             Sample {
                 key_expr: key_expr.into(),
@@ -132,7 +126,6 @@ impl DataInfoIntoSample for Option<DataInfo> {
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
-                #[cfg(feature = "unstable")]
                 attachment,
             }
         }
@@ -144,7 +137,7 @@ impl DataInfoIntoSample for Option<DataInfo> {
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
     /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
-    pub source_id: Option<EntityGlobalId>,
+    pub source_id: Option<EntityGlobalIdProto>,
     /// The sequence number of the [`Sample`] from the source.
     pub source_sn: Option<SourceSn>,
 }
@@ -152,12 +145,12 @@ pub struct SourceInfo {
 #[test]
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
-    use zenoh_protocol::core::ZenohId;
+    use zenoh_protocol::core::ZenohIdProto;
 
     use crate::api::sample::{SourceInfo, SourceSn};
 
-    assert_eq!(std::mem::size_of::<ZenohId>(), 16);
-    assert_eq!(std::mem::size_of::<Option<ZenohId>>(), 17);
+    assert_eq!(std::mem::size_of::<ZenohIdProto>(), 16);
+    assert_eq!(std::mem::size_of::<Option<ZenohIdProto>>(), 17);
     assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 16);
     assert_eq!(std::mem::size_of::<SourceInfo>(), 17 + 16 + 7);
 }
@@ -209,6 +202,13 @@ impl From<Option<DataInfo>> for SourceInfo {
     }
 }
 
+#[zenoh_macros::unstable]
+impl Default for SourceInfo {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 /// The kind of a `Sample`.
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
@@ -252,7 +252,6 @@ pub struct SampleFields {
     pub congestion_control: CongestionControl,
     #[cfg(feature = "unstable")]
     pub source_info: SourceInfo,
-    #[cfg(feature = "unstable")]
     pub attachment: Option<ZBytes>,
 }
 
@@ -269,7 +268,6 @@ impl From<Sample> for SampleFields {
             congestion_control: sample.qos.congestion_control(),
             #[cfg(feature = "unstable")]
             source_info: sample.source_info,
-            #[cfg(feature = "unstable")]
             attachment: sample.attachment,
         }
     }
@@ -285,11 +283,8 @@ pub struct Sample {
     pub(crate) encoding: Encoding,
     pub(crate) timestamp: Option<Timestamp>,
     pub(crate) qos: QoS,
-
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
-
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -353,14 +348,12 @@ impl Sample {
     }
 
     /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
     /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()

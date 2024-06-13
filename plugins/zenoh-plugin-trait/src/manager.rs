@@ -60,6 +60,11 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
     fn name(&self) -> &str {
         self.0.name()
     }
+
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+
     fn version(&self) -> Option<&str> {
         self.0.version()
     }
@@ -110,7 +115,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         PluginsManager {
             default_lib_prefix: default_lib_prefix.into(),
             loader: Some(loader),
-            plugins: Vec::new(),
+            plugins: Default::default(),
         }
     }
     /// Constructs a new plugin manager with dynamic library loading disabled.
@@ -118,21 +123,33 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         PluginsManager {
             default_lib_prefix: String::new(),
             loader: None,
-            plugins: Vec::new(),
+            plugins: Default::default(),
         }
     }
 
     /// Adds a statically linked plugin to the manager.
     pub fn declare_static_plugin<
         P: Plugin<StartArgs = StartArgs, Instance = Instance> + Send + Sync,
+        S: Into<String>,
     >(
         mut self,
+        id: S,
         required: bool,
     ) -> Self {
-        let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new(required);
+        let id = id.into();
+        let plugin_loader: StaticPlugin<StartArgs, Instance, P> =
+            StaticPlugin::new(id.clone(), required);
+
+        if self.get_plugin_index(&id).is_some() {
+            tracing::warn!(
+                "Duplicate plugin with ID: {id}, only the last declared one will be loaded"
+            )
+        }
+
         self.plugins.push(PluginRecord::new(plugin_loader));
         tracing::debug!(
-            "Declared static plugin {}",
+            "Declared static plugin Id:{} - Name:{}",
+            self.plugins.last().unwrap().id(),
             self.plugins.last().unwrap().name()
         );
         self
@@ -141,23 +158,35 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     /// Add dynamic plugin to the manager by name, automatically prepending the default library prefix
     pub fn declare_dynamic_plugin_by_name<S: Into<String>>(
         &mut self,
-        name: S,
-        plugin_name: &str,
+        id: S,
+        plugin_name: S,
         required: bool,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
-        let name = name.into();
-        let plugin_name = format!("{}{}", self.default_lib_prefix, plugin_name);
+        let plugin_name = plugin_name.into();
+        let id = id.into();
+        let libplugin_name = format!("{}{}", self.default_lib_prefix, plugin_name);
         let libloader = self
             .loader
             .as_ref()
             .ok_or("Dynamic plugin loading is disabled")?
             .clone();
-        tracing::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
+        tracing::debug!(
+            "Declared dynamic plugin {} by name {}",
+            &id,
+            &libplugin_name
+        );
         let loader = DynamicPlugin::new(
-            name,
-            DynamicPluginSource::ByName((libloader, plugin_name)),
+            plugin_name,
+            id.clone(),
+            DynamicPluginSource::ByName((libloader, libplugin_name)),
             required,
         );
+
+        if self.get_plugin_index(&id).is_some() {
+            tracing::warn!(
+                "Duplicate plugin with ID: {id}, only the last declared one will be loaded"
+            )
+        }
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
     }
@@ -166,19 +195,33 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     pub fn declare_dynamic_plugin_by_paths<S: Into<String>, P: AsRef<str> + std::fmt::Debug>(
         &mut self,
         name: S,
+        id: S,
         paths: &[P],
         required: bool,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
+        let id = id.into();
         let paths = paths.iter().map(|p| p.as_ref().into()).collect();
-        tracing::debug!("Declared dynamic plugin {} by paths {:?}", &name, &paths);
-        let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths), required);
+        tracing::debug!("Declared dynamic plugin {} by paths {:?}", &id, &paths);
+        let loader = DynamicPlugin::new(
+            name,
+            id.clone(),
+            DynamicPluginSource::ByPaths(paths),
+            required,
+        );
+
+        if self.get_plugin_index(&id).is_some() {
+            tracing::warn!(
+                "Duplicate plugin with ID: {id}, only the last declared one will be loaded"
+            )
+        }
+
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
     }
 
-    fn get_plugin_index(&self, name: &str) -> Option<usize> {
-        self.plugins.iter().position(|p| p.name() == name)
+    fn get_plugin_index(&self, id: &str) -> Option<usize> {
+        self.plugins.iter().position(|p| p.id() == id)
     }
 
     /// Lists all plugins
@@ -210,7 +253,6 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     pub fn loaded_plugins_iter_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut dyn LoadedPlugin<StartArgs, Instance>> + '_ {
-        // self.plugins_mut().filter_map(|p| p.loaded_mut())
         self.declared_plugins_iter_mut()
             .filter_map(|p| p.loaded_mut())
     }
@@ -230,45 +272,42 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
             .filter_map(|p| p.started_mut())
     }
 
-    /// Returns single plugin record by name
-    pub fn plugin(&self, name: &str) -> Option<&dyn DeclaredPlugin<StartArgs, Instance>> {
-        let index = self.get_plugin_index(name)?;
+    /// Returns single plugin record by id
+    pub fn plugin(&self, id: &str) -> Option<&dyn DeclaredPlugin<StartArgs, Instance>> {
+        let index = self.get_plugin_index(id)?;
         Some(&self.plugins[index])
     }
 
-    /// Returns mutable plugin record by name
-    pub fn plugin_mut(
-        &mut self,
-        name: &str,
-    ) -> Option<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
-        let index = self.get_plugin_index(name)?;
+    /// Returns mutable plugin record by id
+    pub fn plugin_mut(&mut self, id: &str) -> Option<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
+        let index = self.get_plugin_index(id)?;
         Some(&mut self.plugins[index])
     }
 
-    /// Returns loaded plugin record by name
-    pub fn loaded_plugin(&self, name: &str) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {
-        self.plugin(name)?.loaded()
+    /// Returns loaded plugin record by id
+    pub fn loaded_plugin(&self, id: &str) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {
+        self.plugin(id)?.loaded()
     }
 
-    /// Returns mutable loaded plugin record by name
+    /// Returns mutable loaded plugin record by id
     pub fn loaded_plugin_mut(
         &mut self,
-        name: &str,
+        id: &str,
     ) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>> {
-        self.plugin_mut(name)?.loaded_mut()
+        self.plugin_mut(id)?.loaded_mut()
     }
 
-    /// Returns started plugin record by name
-    pub fn started_plugin(&self, name: &str) -> Option<&dyn StartedPlugin<StartArgs, Instance>> {
-        self.loaded_plugin(name)?.started()
+    /// Returns started plugin record by id
+    pub fn started_plugin(&self, id: &str) -> Option<&dyn StartedPlugin<StartArgs, Instance>> {
+        self.loaded_plugin(id)?.started()
     }
 
-    /// Returns mutable started plugin record by name
+    /// Returns mutable started plugin record by id
     pub fn started_plugin_mut(
         &mut self,
-        name: &str,
+        id: &str,
     ) -> Option<&mut dyn StartedPlugin<StartArgs, Instance>> {
-        self.loaded_plugin_mut(name)?.started_mut()
+        self.loaded_plugin_mut(id)?.started_mut()
     }
 }
 
@@ -283,21 +322,21 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
         );
         let mut plugins = Vec::new();
         for plugin in self.declared_plugins_iter() {
-            let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
-            if names.includes(name) {
+            let id = unsafe { keyexpr::from_str_unchecked(plugin.id()) };
+            if names.includes(id) {
                 let status = PluginStatusRec::new(plugin.as_status());
                 plugins.push(status);
             }
             // for running plugins append their subplugins prepended with the running plugin name
             if let Some(plugin) = plugin.loaded() {
                 if let Some(plugin) = plugin.started() {
-                    if let [names, ..] = names.strip_prefix(name)[..] {
+                    if let [names, ..] = names.strip_prefix(id)[..] {
                         plugins.append(
                             &mut plugin
                                 .instance()
                                 .plugins_status(names)
                                 .into_iter()
-                                .map(|s| s.prepend_name(name))
+                                .map(|s| s.prepend_name(id))
                                 .collect(),
                         );
                     }

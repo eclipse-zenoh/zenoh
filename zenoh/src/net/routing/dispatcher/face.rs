@@ -20,7 +20,7 @@ use std::{
 
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohId},
+    core::{ExprId, WhatAmI, ZenohIdProto},
     network::{
         declare::ext,
         interest::{InterestId, InterestMode, InterestOptions},
@@ -55,7 +55,7 @@ pub(crate) struct InterestState {
 
 pub struct FaceState {
     pub(crate) id: usize,
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
@@ -76,7 +76,7 @@ impl FaceState {
     #[allow(clippy::too_many_arguments)] // @TODO fix warning
     pub(crate) fn new(
         id: usize,
-        zid: ZenohId,
+        zid: ZenohIdProto,
         whatami: WhatAmI,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -370,6 +370,8 @@ impl Primitives for Face {
                     &self.state,
                     &msg.wire_expr,
                     msg.id,
+                    msg.ext_qos,
+                    msg.ext_tstamp,
                     msg.ext_target,
                     msg.ext_budget,
                     msg.ext_timeout,
@@ -385,6 +387,8 @@ impl Primitives for Face {
             &self.tables,
             &mut self.state.clone(),
             msg.rid,
+            msg.ext_qos,
+            msg.ext_tstamp,
             msg.ext_respid,
             msg.wire_expr,
             msg.payload,

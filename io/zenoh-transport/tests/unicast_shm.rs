@@ -27,7 +27,7 @@ mod tests {
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
         network::{
             push::ext::{NodeIdType, QoSType},
             NetworkBody, NetworkMessage, Push,
@@ -38,14 +38,11 @@ mod tests {
     use zenoh_shm::{
         api::{
             protocol_implementations::posix::{
-                posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
-                protocol_id::POSIX_PROTOCOL_ID,
+                posix_shm_provider_backend::PosixShmProviderBackend, protocol_id::POSIX_PROTOCOL_ID,
             },
-            provider::shared_memory_provider::{
-                BlockOn, GarbageCollect, SharedMemoryProviderBuilder,
-            },
+            provider::shm_provider::{BlockOn, GarbageCollect, ShmProviderBuilder},
         },
-        SharedMemoryBuf,
+        ShmBufInner,
     };
     use zenoh_transport::{
         multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
@@ -118,11 +115,10 @@ mod tests {
                 NetworkBody::Push(m) => match m.payload {
                     PushBody::Put(Put { payload, .. }) => {
                         for zs in payload.zslices() {
-                            if self.is_shm && zs.downcast_ref::<SharedMemoryBuf>().is_none() {
-                                panic!("Expected SharedMemoryBuf: {:?}", zs);
-                            } else if !self.is_shm && zs.downcast_ref::<SharedMemoryBuf>().is_some()
-                            {
-                                panic!("Not Expected SharedMemoryBuf: {:?}", zs);
+                            if self.is_shm && zs.downcast_ref::<ShmBufInner>().is_none() {
+                                panic!("Expected ShmBufInner: {:?}", zs);
+                            } else if !self.is_shm && zs.downcast_ref::<ShmBufInner>().is_some() {
+                                panic!("Not Expected ShmBufInner: {:?}", zs);
                             }
                         }
                         payload.contiguous().into_owned()
@@ -157,17 +153,17 @@ mod tests {
         println!("Transport SHM [0a]: {endpoint:?}");
 
         // Define client and router IDs
-        let peer_shm01 = ZenohId::try_from([1]).unwrap();
-        let peer_shm02 = ZenohId::try_from([2]).unwrap();
-        let peer_net01 = ZenohId::try_from([3]).unwrap();
+        let peer_shm01 = ZenohIdProto::try_from([1]).unwrap();
+        let peer_shm02 = ZenohIdProto::try_from([2]).unwrap();
+        let peer_net01 = ZenohIdProto::try_from([3]).unwrap();
 
         // create SHM provider
-        let backend = PosixSharedMemoryProviderBackend::builder()
+        let backend = PosixShmProviderBackend::builder()
             .with_size(2 * MSG_SIZE)
             .unwrap()
             .res()
             .unwrap();
-        let shm01 = SharedMemoryProviderBuilder::builder()
+        let shm01 = ShmProviderBuilder::builder()
             .protocol_id::<POSIX_PROTOCOL_ID>()
             .backend(backend)
             .res();

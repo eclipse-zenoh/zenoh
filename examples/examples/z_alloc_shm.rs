@@ -14,8 +14,8 @@
 use zenoh::{
     prelude::*,
     shm::{
-        AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect,
-        PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,
+        AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect, PosixShmProviderBackend,
+        ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     Config,
 };
@@ -23,20 +23,20 @@ use zenoh::{
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     run().await.unwrap()
 }
 
 async fn run() -> ZResult<()> {
     // create an SHM backend...
-    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
         .with_size(65536)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -90,7 +90,7 @@ async fn run() -> ZResult<()> {
         simple_layout
     };
 
-    // Allocate SharedMemoryBuf
+    // Allocate ShmBufInner
     // Policy is a generics-based API to describe necessary allocation behaviour
     // that will be higly optimized at compile-time.
     // Policy resolvable can be sync and async.

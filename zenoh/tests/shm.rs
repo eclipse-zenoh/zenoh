@@ -22,16 +22,15 @@ use std::{
 
 use zenoh::{
     config,
-    internal::ztimeout,
     prelude::*,
     publisher::CongestionControl,
     shm::{
-        BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder,
-        POSIX_PROTOCOL_ID,
+        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     subscriber::Reliability,
     Session,
 };
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -117,13 +116,13 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         tokio::time::sleep(SLEEP).await;
 
         // create SHM backend...
-        let backend = PosixSharedMemoryProviderBackend::builder()
+        let backend = PosixShmProviderBackend::builder()
             .with_size(size * MSG_COUNT / 10)
             .unwrap()
             .res()
             .unwrap();
         // ...and SHM provider
-        let shm01 = SharedMemoryProviderBuilder::builder()
+        let shm01 = ShmProviderBuilder::builder()
             .protocol_id::<POSIX_PROTOCOL_ID>()
             .backend(backend)
             .res();
@@ -182,7 +181,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
 fn zenoh_shm_unicast() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         // Initiate logging
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
 
         let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:19447"]).await;
         test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
@@ -194,7 +193,7 @@ fn zenoh_shm_unicast() {
 fn zenoh_shm_multicast() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         // Initiate logging
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
 
         let (peer01, peer02) =
             open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;

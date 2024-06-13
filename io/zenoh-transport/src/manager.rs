@@ -19,7 +19,7 @@ use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
-    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohId},
+    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::BatchSize,
     VERSION,
 };
@@ -27,7 +27,7 @@ use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::GLOBAL_CLIENT_STORAGE;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::reader::SharedMemoryReader;
+use zenoh_shm::reader::ShmReader;
 use zenoh_task::TaskController;
 
 use super::{
@@ -45,7 +45,7 @@ use crate::multicast::manager::{
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol::core::{ZenohId, Resolution, Field, Bits, WhatAmI, whatami};
+/// use zenoh_protocol::core::{ZenohIdProto, Resolution, Field, Bits, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_result::ZResult;
 ///
@@ -85,7 +85,7 @@ use crate::multicast::manager::{
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
 /// let manager = TransportManager::builder()
-///         .zid(ZenohId::rand())
+///         .zid(ZenohIdProto::rand().into())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .resolution(resolution)         // Use a sequence number resolution of 128
@@ -96,7 +96,7 @@ use crate::multicast::manager::{
 
 pub struct TransportManagerConfig {
     pub version: u8,
-    pub zid: ZenohId,
+    pub zid: ZenohIdProto,
     pub whatami: WhatAmI,
     pub resolution: Resolution,
     pub batch_size: BatchSize,
@@ -125,7 +125,7 @@ pub struct TransportManagerParams {
 
 pub struct TransportManagerBuilder {
     version: u8,
-    zid: ZenohId,
+    zid: ZenohIdProto,
     whatami: WhatAmI,
     resolution: Resolution,
     batch_size: BatchSize,
@@ -140,17 +140,17 @@ pub struct TransportManagerBuilder {
     tx_threads: usize,
     protocols: Option<Vec<String>>,
     #[cfg(feature = "shared-memory")]
-    shm_reader: Option<SharedMemoryReader>,
+    shm_reader: Option<ShmReader>,
 }
 
 impl TransportManagerBuilder {
     #[cfg(feature = "shared-memory")]
-    pub fn shm_reader(mut self, shm_reader: Option<SharedMemoryReader>) -> Self {
+    pub fn shm_reader(mut self, shm_reader: Option<ShmReader>) -> Self {
         self.shm_reader = shm_reader;
         self
     }
 
-    pub fn zid(mut self, zid: ZenohId) -> Self {
+    pub fn zid(mut self, zid: ZenohIdProto) -> Self {
         self.zid = zid;
         self
     }
@@ -221,7 +221,7 @@ impl TransportManagerBuilder {
     }
 
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
-        self = self.zid(*config.id());
+        self = self.zid((*config.id()).into());
         if let Some(v) = config.mode() {
             self = self.whatami(*v);
         }
@@ -268,7 +268,7 @@ impl TransportManagerBuilder {
         #[cfg(feature = "shared-memory")]
         let shm_reader = self
             .shm_reader
-            .unwrap_or_else(|| SharedMemoryReader::new(GLOBAL_CLIENT_STORAGE.clone()));
+            .unwrap_or_else(|| ShmReader::new(GLOBAL_CLIENT_STORAGE.clone()));
 
         let unicast = self.unicast.build(
             &mut prng,
@@ -335,7 +335,7 @@ impl Default for TransportManagerBuilder {
         let wait_before_drop = *queue.congestion_control().wait_before_drop();
         Self {
             version: VERSION,
-            zid: ZenohId::rand(),
+            zid: ZenohIdProto::rand(),
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
@@ -364,7 +364,7 @@ pub struct TransportManager {
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     #[cfg(feature = "shared-memory")]
-    pub(crate) shmr: SharedMemoryReader,
+    pub(crate) shmr: ShmReader,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
     pub(crate) task_controller: TaskController,
@@ -374,7 +374,7 @@ impl TransportManager {
     pub fn new(
         params: TransportManagerParams,
         mut prng: PseudoRng,
-        #[cfg(feature = "shared-memory")] shmr: SharedMemoryReader,
+        #[cfg(feature = "shared-memory")] shmr: ShmReader,
     ) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
@@ -424,7 +424,7 @@ impl TransportManager {
         TransportManagerBuilder::default()
     }
 
-    pub fn zid(&self) -> ZenohId {
+    pub fn zid(&self) -> ZenohIdProto {
         self.config.zid
     }
 

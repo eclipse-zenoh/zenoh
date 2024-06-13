@@ -59,12 +59,11 @@ pub use parameters::*;
 pub mod properties;
 pub use properties::*;
 
-/// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-pub struct ZenohId(uhlc::ID);
+pub struct ZenohIdProto(uhlc::ID);
 
-impl ZenohId {
+impl ZenohIdProto {
     pub const MAX_SIZE: usize = 16;
 
     #[inline]
@@ -77,8 +76,8 @@ impl ZenohId {
         self.0.to_le_bytes()
     }
 
-    pub fn rand() -> ZenohId {
-        ZenohId(uhlc::ID::rand())
+    pub fn rand() -> ZenohIdProto {
+        ZenohIdProto(uhlc::ID::rand())
     }
 
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
@@ -86,7 +85,7 @@ impl ZenohId {
     }
 }
 
-impl Default for ZenohId {
+impl Default for ZenohIdProto {
     fn default() -> Self {
         Self::rand()
     }
@@ -121,7 +120,7 @@ impl fmt::Display for SizeError {
 
 macro_rules! derive_tryfrom {
     ($T: ty) => {
-        impl TryFrom<$T> for ZenohId {
+        impl TryFrom<$T> for ZenohIdProto {
             type Error = zenoh_result::Error;
             fn try_from(val: $T) -> Result<Self, Self::Error> {
                 match val.try_into() {
@@ -166,7 +165,7 @@ derive_tryfrom!([u8; 16]);
 derive_tryfrom!(&[u8; 16]);
 derive_tryfrom!(&[u8]);
 
-impl FromStr for ZenohId {
+impl FromStr for ZenohIdProto {
     type Err = zenoh_result::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -179,31 +178,37 @@ impl FromStr for ZenohId {
         let u: uhlc::ID = s
             .parse()
             .map_err(|e: uhlc::ParseIDError| zerror!("Invalid id: {} - {}", s, e.cause))?;
-        Ok(ZenohId(u))
+        Ok(ZenohIdProto(u))
     }
 }
 
-impl fmt::Debug for ZenohId {
+impl fmt::Debug for ZenohIdProto {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl fmt::Display for ZenohId {
+impl fmt::Display for ZenohIdProto {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
 
 // A PeerID can be converted into a Timestamp's ID
-impl From<&ZenohId> for uhlc::ID {
-    fn from(zid: &ZenohId) -> Self {
+impl From<&ZenohIdProto> for uhlc::ID {
+    fn from(zid: &ZenohIdProto) -> Self {
         zid.0
     }
 }
 
-impl From<ZenohId> for OwnedKeyExpr {
-    fn from(zid: ZenohId) -> Self {
+impl From<ZenohIdProto> for uhlc::ID {
+    fn from(zid: ZenohIdProto) -> Self {
+        zid.0
+    }
+}
+
+impl From<ZenohIdProto> for OwnedKeyExpr {
+    fn from(zid: ZenohIdProto) -> Self {
         // SAFETY: zid.to_string() returns an stringified hexadecimal
         // representation of the zid. Therefore, building a OwnedKeyExpr
         // by calling from_string_unchecked() is safe because it is
@@ -212,13 +217,13 @@ impl From<ZenohId> for OwnedKeyExpr {
     }
 }
 
-impl From<&ZenohId> for OwnedKeyExpr {
-    fn from(zid: &ZenohId) -> Self {
+impl From<&ZenohIdProto> for OwnedKeyExpr {
+    fn from(zid: &ZenohIdProto) -> Self {
         (*zid).into()
     }
 }
 
-impl serde::Serialize for ZenohId {
+impl serde::Serialize for ZenohIdProto {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -227,7 +232,7 @@ impl serde::Serialize for ZenohId {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for ZenohId {
+impl<'de> serde::Deserialize<'de> for ZenohIdProto {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -235,10 +240,13 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
         struct ZenohIdVisitor;
 
         impl<'de> serde::de::Visitor<'de> for ZenohIdVisitor {
-            type Value = ZenohId;
+            type Value = ZenohIdProto;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str(&format!("An hex string of 1-{} bytes", ZenohId::MAX_SIZE))
+                formatter.write_str(&format!(
+                    "An hex string of 1-{} bytes",
+                    ZenohIdProto::MAX_SIZE
+                ))
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -271,18 +279,18 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
 pub type EntityId = u32;
 
 /// The global unique id of a zenoh entity.
-#[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
-pub struct EntityGlobalId {
-    pub zid: ZenohId,
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
+pub struct EntityGlobalIdProto {
+    pub zid: ZenohIdProto,
     pub eid: EntityId,
 }
 
-impl EntityGlobalId {
+impl EntityGlobalIdProto {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
         Self {
-            zid: ZenohId::rand(),
+            zid: ZenohIdProto::rand(),
             eid: rand::thread_rng().gen(),
         }
     }

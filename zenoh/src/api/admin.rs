@@ -167,7 +167,6 @@ impl TransportMulticastEventHandler for Handler {
                     &expr,
                     Some(info),
                     serde_json::to_vec(&peer).unwrap().into(),
-                    #[cfg(feature = "unstable")]
                     None,
                 );
                 Ok(Arc::new(PeerHandler {
@@ -216,7 +215,6 @@ impl TransportPeerEventHandler for PeerHandler {
                 .with_suffix(&format!("/link/{}", s.finish())),
             Some(info),
             serde_json::to_vec(&link).unwrap().into(),
-            #[cfg(feature = "unstable")]
             None,
         );
     }
@@ -236,7 +234,6 @@ impl TransportPeerEventHandler for PeerHandler {
                 .with_suffix(&format!("/link/{}", s.finish())),
             Some(info),
             vec![0u8; 0].into(),
-            #[cfg(feature = "unstable")]
             None,
         );
     }
@@ -248,14 +245,8 @@ impl TransportPeerEventHandler for PeerHandler {
             kind: SampleKind::Delete,
             ..Default::default()
         };
-        self.session.handle_data(
-            true,
-            &self.expr,
-            Some(info),
-            vec![0u8; 0].into(),
-            #[cfg(feature = "unstable")]
-            None,
-        );
+        self.session
+            .handle_data(true, &self.expr, Some(info), vec![0u8; 0].into(), None);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

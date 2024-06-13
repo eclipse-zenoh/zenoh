@@ -30,7 +30,7 @@ mod _prelude {
     pub use crate::{
         api::{
             builders::sample::{
-                QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+                EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
             },
             session::{SessionDeclarations, Undeclarable},
         },
@@ -48,14 +48,14 @@ pub use crate::core::SyncResolve;
 pub use crate::core::Wait;
 
 /// Prelude to import when using Zenoh's sync API.
-#[deprecated = "use `zenoh::prelude` instead"]
+#[deprecated(since = "1.0.0", note = "use `zenoh::prelude` instead")]
 pub mod sync {
     pub use super::_prelude::*;
     #[allow(deprecated)]
     pub use crate::core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
-#[deprecated = "use `zenoh::prelude` instead"]
+#[deprecated(since = "1.0.0", note = "use `zenoh::prelude` instead")]
 pub mod r#async {
     pub use super::_prelude::*;
     #[allow(deprecated)]

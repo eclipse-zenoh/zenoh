@@ -638,10 +638,13 @@ impl From<&str> for Encoding {
         }
 
         // Everything before `;` may be mapped to a known id
-        let (id, schema) = t.split_once(Encoding::SCHEMA_SEP).unwrap_or((t, ""));
+        let (id, mut schema) = t.split_once(Encoding::SCHEMA_SEP).unwrap_or((t, ""));
         if let Some(id) = Encoding::STR_TO_ID.get(id).copied() {
             inner.id = id;
-        };
+        // if id is not recognized, e.g. `t == "my_encoding"`, put it in the schema
+        } else {
+            schema = t;
+        }
         if !schema.is_empty() {
             inner.schema = Some(ZSlice::from(schema.to_string().into_bytes()));
         }
@@ -836,24 +839,17 @@ impl EncodingMapping for serde_pickle::Value {
     const ENCODING: Encoding = Encoding::APPLICATION_PYTHON_SERIALIZED_OBJECT;
 }
 
-pub trait EncodingInternals {
-    fn id(&self) -> u16;
-
-    fn schema(&self) -> Option<&ZSlice>;
-
-    fn new(id: u16, schema: Option<ZSlice>) -> Self;
-}
-
-impl EncodingInternals for Encoding {
-    fn id(&self) -> u16 {
+impl Encoding {
+    #[zenoh_macros::internal]
+    pub fn id(&self) -> u16 {
         self.0.id
     }
-
-    fn schema(&self) -> Option<&ZSlice> {
+    #[zenoh_macros::internal]
+    pub fn schema(&self) -> Option<&ZSlice> {
         self.0.schema.as_ref()
     }
-
-    fn new(id: u16, schema: Option<ZSlice>) -> Self {
+    #[zenoh_macros::internal]
+    pub fn new(id: u16, schema: Option<ZSlice>) -> Self {
         Encoding(zenoh_protocol::core::Encoding { id, schema })
     }
 }

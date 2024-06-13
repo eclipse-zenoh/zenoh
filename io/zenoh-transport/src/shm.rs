@@ -26,10 +26,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
-use zenoh_shm::{
-    api::common::types::ProtocolID, reader::SharedMemoryReader, SharedMemoryBuf,
-    SharedMemoryBufInfo,
-};
+use zenoh_shm::{api::common::types::ProtocolID, reader::ShmReader, ShmBufInfo, ShmBufInner};
 
 use crate::unicast::establishment::ext::shm::AuthSegment;
 
@@ -84,7 +81,7 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     }
 }
 
-pub fn map_zmsg_to_shmbuf(msg: &mut NetworkMessage, shmr: &SharedMemoryReader) -> ZResult<()> {
+pub fn map_zmsg_to_shmbuf(msg: &mut NetworkMessage, shmr: &ShmReader) -> ZResult<()> {
     match &mut msg.body {
         NetworkBody::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => b.map_to_shmbuf(shmr),
@@ -117,7 +114,7 @@ trait MapShm {
     // RX:
     // - shminfo -> shmbuf
     // - rawbuf -> rawbuf (no changes)
-    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<()>;
+    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()>;
 
     // TX:
     // - shmbuf -> shminfo if partner supports shmbuf's SHM protocol
@@ -170,7 +167,7 @@ impl MapShm for Put {
         map_to_partner!(payload, ext_shm, partner_shm_cfg)
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<()> {
+    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
         let Self {
             payload, ext_shm, ..
         } = self;
@@ -197,7 +194,7 @@ impl MapShm for Query {
         }
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<()> {
+    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
         if let Self {
             ext_body: Some(QueryBodyType {
                 payload, ext_shm, ..
@@ -229,7 +226,7 @@ impl MapShm for Reply {
         }
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<()> {
+    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
         match &mut self.payload {
             PushBody::Put(put) => {
                 let Put {
@@ -254,7 +251,7 @@ impl MapShm for Err {
         map_to_partner!(payload, ext_shm, partner_shm_cfg)
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<()> {
+    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
         let Self {
             payload, ext_shm, ..
         } = self;
@@ -264,7 +261,7 @@ impl MapShm for Err {
 
 #[cold]
 #[inline(never)]
-pub fn shmbuf_to_rawbuf(shmb: &SharedMemoryBuf) -> ZSlice {
+pub fn shmbuf_to_rawbuf(shmb: &ShmBufInner) -> ZSlice {
     // Convert shmb to raw buffer
     // TODO: optimize this! We should not make additional buffer copy here,
     // but we need to make serializer serialize SHM buffer as raw buffer.
@@ -273,7 +270,7 @@ pub fn shmbuf_to_rawbuf(shmb: &SharedMemoryBuf) -> ZSlice {
 
 #[cold]
 #[inline(never)]
-pub fn shmbuf_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
+pub fn shmbuf_to_shminfo(shmb: &ShmBufInner) -> ZResult<ZSlice> {
     // Serialize the shmb info
     let codec = Zenoh080::new();
     let mut info = vec![];
@@ -281,7 +278,7 @@ pub fn shmbuf_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
     codec
         .write(&mut writer, &shmb.info)
         .map_err(|e| zerror!("{:?}", e))?;
-    // Increase the reference count so to keep the SharedMemoryBuf valid
+    // Increase the reference count so to keep the ShmBufInner valid
     unsafe { shmb.inc_ref_count() };
     // Replace the content of the slice
     let mut zslice: ZSlice = info.into();
@@ -295,7 +292,7 @@ fn to_shm_partner<ShmCfg: PartnerShmConfig>(
 ) -> ZResult<bool> {
     let mut res = false;
     for zs in zbuf.zslices_mut() {
-        if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
+        if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
             if partner_shm_cfg.supports_protocol(shmb.info.shm_protocol) {
                 *zs = shmbuf_to_shminfo(shmb)?;
                 res = true;
@@ -310,14 +307,14 @@ fn to_shm_partner<ShmCfg: PartnerShmConfig>(
 
 fn to_non_shm_partner(zbuf: &mut ZBuf) {
     for zs in zbuf.zslices_mut() {
-        if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
+        if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
             // Replace the content of the slice with rawbuf
             *zs = shmbuf_to_rawbuf(shmb)
         }
     }
 }
 
-pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &SharedMemoryReader) -> ZResult<()> {
+pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &ShmReader) -> ZResult<()> {
     for zs in zbuf.zslices_mut().filter(|x| x.kind == ZSliceKind::ShmPtr) {
         map_zslice_to_shmbuf(zs, shmr)?;
     }
@@ -326,12 +323,12 @@ pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &SharedMemoryReader) -> ZResult
 
 #[cold]
 #[inline(never)]
-pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &SharedMemoryReader) -> ZResult<()> {
+pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()> {
     let codec = Zenoh080::new();
     let mut reader = zslice.reader();
 
     // Deserialize the shminfo
-    let shmbinfo: SharedMemoryBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
+    let shmbinfo: ShmBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
     // Mount shmbuf
     let smb = shmr.read_shmbuf(&shmbinfo)?;

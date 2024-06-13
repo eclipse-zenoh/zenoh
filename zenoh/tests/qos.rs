@@ -13,11 +13,8 @@
 //
 use std::time::Duration;
 
-use zenoh::{
-    internal::ztimeout,
-    prelude::*,
-    publisher::{CongestionControl, Priority},
-};
+use zenoh::{core::Priority, prelude::*, publisher::CongestionControl};
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

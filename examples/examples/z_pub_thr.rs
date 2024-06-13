@@ -15,16 +15,12 @@
 use std::convert::TryInto;
 
 use clap::Parser;
-use zenoh::{
-    bytes::ZBytes,
-    prelude::*,
-    publisher::{CongestionControl, Priority},
-};
+use zenoh::{bytes::ZBytes, core::Priority, prelude::*, publisher::CongestionControl};
 use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     let args = Args::parse();
 
     let mut prio = Priority::DEFAULT;

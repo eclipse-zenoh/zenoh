@@ -272,7 +272,7 @@ fn codec_string_bounded() {
 
 #[test]
 fn codec_zid() {
-    run!(ZenohId, ZenohId::default());
+    run!(ZenohIdProto, ZenohIdProto::default());
 }
 
 #[test]
@@ -348,7 +348,7 @@ fn codec_locator() {
 fn codec_timestamp() {
     run!(Timestamp, {
         let time = uhlc::NTP64(thread_rng().gen());
-        let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
+        let id = uhlc::ID::try_from(ZenohIdProto::rand().to_le_bytes()).unwrap();
         Timestamp::new(time, id)
     });
 }
@@ -363,12 +363,12 @@ fn codec_encoding() {
 fn codec_shm_info() {
     use zenoh_shm::{
         api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
-        watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
+        watchdog::descriptor::Descriptor, ShmBufInfo,
     };
 
-    run!(SharedMemoryBufInfo, {
+    run!(ShmBufInfo, {
         let mut rng = rand::thread_rng();
-        SharedMemoryBufInfo::new(
+        ShmBufInfo::new(
             ChunkDescriptor::new(rng.gen(), rng.gen(), rng.gen()),
             rng.gen(),
             rng.gen(),
@@ -447,7 +447,7 @@ fn codec_scout() {
 
 #[test]
 fn codec_hello() {
-    run!(Hello, Hello::rand());
+    run!(HelloProto, HelloProto::rand());
 }
 
 #[test]

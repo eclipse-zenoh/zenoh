@@ -18,15 +18,15 @@ use zenoh_examples::CommonArgs;
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
-    let (config, key_expr, value) = parse_args();
+    let (config, key_expr, payload) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Putting Float ('{key_expr}': '{value}')...");
-    session.put(&key_expr, value).await.unwrap();
+    println!("Putting Float ('{key_expr}': '{payload}')...");
+    session.put(&key_expr, payload).await.unwrap();
 
     session.close().await.unwrap();
 }
@@ -37,13 +37,13 @@ struct Args {
     /// The key expression to write to.
     key: KeyExpr<'static>,
     #[arg(short, long, default_value_t = std::f64::consts::PI)]
-    /// The value to write.
-    value: f64,
+    /// The payload to write.
+    payload: f64,
     #[command(flatten)]
     common: CommonArgs,
 }
 
 fn parse_args() -> (Config, KeyExpr<'static>, f64) {
     let args = Args::parse();
-    (args.common.into(), args.key, args.value)
+    (args.common.into(), args.key, args.payload)
 }

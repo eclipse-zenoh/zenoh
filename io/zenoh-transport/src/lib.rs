@@ -34,7 +34,7 @@ pub use manager::*;
 use serde::Serialize;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::{WhatAmI, ZenohIdProto},
     network::NetworkMessage,
 };
 use zenoh_result::ZResult;
@@ -108,7 +108,7 @@ impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename = "Transport")]
 pub struct TransportPeer {
-    pub zid: ZenohId,
+    pub zid: ZenohIdProto,
     pub whatami: WhatAmI,
     pub is_qos: bool,
     #[serde(skip)]

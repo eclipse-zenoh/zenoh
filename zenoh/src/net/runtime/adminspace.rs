@@ -19,14 +19,14 @@ use std::{
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_core::Wait;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, EMPTY_EXPR_ID},
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
@@ -40,11 +40,11 @@ use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{routing::dispatcher::face::Face, Runtime};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
-        builders::sample::ValueBuilderTrait,
+        builders::sample::EncodingBuilderTrait,
         bytes::ZBytes,
         key_expr::KeyExpr,
         queryable::{Query, QueryInner},
@@ -71,7 +71,7 @@ pub struct AdminSpace {
     context: Arc<AdminContext>,
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
@@ -86,7 +86,7 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         {
             let plugins_mgr = self.context.runtime.plugins_manager();
             let Some(plugin) = plugins_mgr.started_plugin(name) else {
@@ -97,7 +97,7 @@ impl ConfigValidator for AdminSpace {
             };
             plugin.instance().config_checker(path, current, new)
         }
-        #[cfg(not(all(feature = "unstable", feature = "plugins")))]
+        #[cfg(not(feature = "plugins"))]
         {
             let _ = (name, path, current, new);
             Ok(None)
@@ -106,27 +106,28 @@ impl ConfigValidator for AdminSpace {
 }
 
 impl AdminSpace {
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     fn start_plugin(
         plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
         start_args: &Runtime,
         required: bool,
     ) -> ZResult<()> {
+        let id = &config.id;
         let name = &config.name;
-        let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-            tracing::warn!("Plugin `{}` was already declared", declared.name());
+        let declared = if let Some(declared) = plugin_mgr.plugin_mut(id) {
+            tracing::warn!("Plugin `{}` was already declared", declared.id());
             declared
         } else if let Some(paths) = &config.paths {
-            plugin_mgr.declare_dynamic_plugin_by_paths(name, paths, required)?
+            plugin_mgr.declare_dynamic_plugin_by_paths(id, name, paths, required)?
         } else {
-            plugin_mgr.declare_dynamic_plugin_by_name(name, name, required)?
+            plugin_mgr.declare_dynamic_plugin_by_name(id, name, required)?
         };
 
         let loaded = if let Some(loaded) = declared.loaded_mut() {
             tracing::warn!(
                 "Plugin `{}` was already loaded from {}",
-                loaded.name(),
+                loaded.id(),
                 loaded.path()
             );
             loaded
@@ -135,12 +136,12 @@ impl AdminSpace {
         };
 
         if let Some(started) = loaded.started_mut() {
-            tracing::warn!("Plugin `{}` was already started", started.name());
+            tracing::warn!("Plugin `{}` was already started", started.id());
         } else {
             let started = loaded.start(start_args)?;
             tracing::info!(
                 "Successfully started plugin `{}` from {}",
-                started.name(),
+                started.id(),
                 started.path()
             );
         };
@@ -194,7 +195,7 @@ impl AdminSpace {
             Arc::new(queryables_data),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         handlers.insert(
             format!("@/{whatami_str}/{zid_str}/plugins/**")
                 .try_into()
@@ -202,7 +203,7 @@ impl AdminSpace {
             Arc::new(plugins_data),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         handlers.insert(
             format!("@/{whatami_str}/{zid_str}/status/plugins/**")
                 .try_into()
@@ -210,11 +211,11 @@ impl AdminSpace {
             Arc::new(plugins_status),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
-            .map(|rec| (rec.name().to_string(), rec.path().to_string()))
+            .map(|rec| (rec.id().to_string(), rec.path().to_string()))
             .collect::<HashMap<_, _>>();
 
         let context = Arc::new(AdminContext {
@@ -233,7 +234,7 @@ impl AdminSpace {
 
         config.set_plugin_validator(Arc::downgrade(&admin));
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         {
             let cfg_rx = admin.context.runtime.state.config.subscribe();
 
@@ -252,12 +253,12 @@ impl AdminSpace {
                         };
                         let mut diffs = Vec::new();
                         for plugin in active_plugins.keys() {
-                            if !requested_plugins.iter().any(|r| &r.name == plugin) {
+                            if !requested_plugins.iter().any(|r| &r.id == plugin) {
                                 diffs.push(PluginDiff::Delete(plugin.clone()))
                             }
                         }
                         for request in requested_plugins {
-                            if let Some(active) = active_plugins.get(&request.name) {
+                            if let Some(active) = active_plugins.get(&request.id) {
                                 if request
                                     .paths
                                     .as_ref()
@@ -266,16 +267,16 @@ impl AdminSpace {
                                 {
                                     continue;
                                 }
-                                diffs.push(PluginDiff::Delete(request.name.clone()))
+                                diffs.push(PluginDiff::Delete(request.id.clone()))
                             }
                             diffs.push(PluginDiff::Start(request))
                         }
                         let mut plugins_mgr = admin.context.runtime.plugins_manager();
                         for diff in diffs {
                             match diff {
-                                PluginDiff::Delete(name) => {
-                                    active_plugins.remove(name.as_str());
-                                    if let Some(running) = plugins_mgr.started_plugin_mut(&name) {
+                                PluginDiff::Delete(id) => {
+                                    active_plugins.remove(id.as_str());
+                                    if let Some(running) = plugins_mgr.started_plugin_mut(&id) {
                                         running.stop()
                                     }
                                 }
@@ -287,11 +288,11 @@ impl AdminSpace {
                                         plugin.required,
                                     ) {
                                         if plugin.required {
-                                            panic!("Failed to load plugin `{}`: {}", plugin.name, e)
+                                            panic!("Failed to load plugin `{}`: {}", plugin.id, e)
                                         } else {
                                             tracing::error!(
                                                 "Failed to load plugin `{}`: {}",
-                                                plugin.name,
+                                                plugin.id,
                                                 e
                                             )
                                         }
@@ -467,12 +468,11 @@ impl Primitives for AdminSpace {
                         key_expr: key_expr.clone(),
                         parameters: query.parameters.into(),
                         qid: msg.id,
-                        zid,
+                        zid: zid.into(),
                         primitives,
                     }),
                     eid: self.queryable_id,
                     value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
-                    #[cfg(feature = "unstable")]
                     attachment: query.ext_attachment.map(Into::into),
                 };
 
@@ -545,12 +545,12 @@ fn local_data(context: &AdminContext, query: Query) {
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     let plugins: serde_json::Value = {
         let plugins_mgr = context.runtime.plugins_manager();
         plugins_mgr
             .started_plugins_iter()
-            .map(|rec| (rec.name(), json!({ "path": rec.path() })))
+            .map(|rec| (rec.id(), json!({"name":rec.name(), "path": rec.path() })))
             .collect()
     };
     #[cfg(not(all(feature = "unstable", feature = "plugins")))]
@@ -755,7 +755,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn plugins_data(context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!(
@@ -768,7 +768,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
         let statuses = guard.plugins_status(names);
         for status in statuses {
             tracing::debug!("plugin status: {:?}", status);
-            let key = root_key.join(status.name()).unwrap();
+            let key = root_key.join(status.id()).unwrap();
             let status = serde_json::to_value(status).unwrap();
             match ZBytes::try_from(status) {
                 Ok(zbuf) => {
@@ -782,7 +782,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn plugins_status(context: &AdminContext, query: Query) {
     use crate::bytes::{Serialize, ZSerde};
 
@@ -794,7 +794,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     );
 
     for plugin in guard.started_plugins_iter() {
-        with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
+        with_extended_string(&mut root_key, &[plugin.id()], |plugin_key| {
             // @TODO: response to "__version__", this need not to be implemented by each plugin
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
@@ -838,22 +838,22 @@ fn plugins_status(context: &AdminContext, query: Query) {
                     }
                 }
                 Ok(Err(e)) => {
-                    tracing::error!("Plugin {} bailed from responding to {}: {}", plugin.name(), query.key_expr(), e)
+                    tracing::error!("Plugin {} bailed from responding to {}: {}", plugin.id(), query.key_expr(), e)
                 }
                 Err(e) => match e
                     .downcast_ref::<String>()
                     .map(|s| s.as_str())
                     .or_else(|| e.downcast_ref::<&str>().copied())
                 {
-                    Some(e) => tracing::error!("Plugin {} panicked while responding to {}: {}", plugin.name(), query.key_expr(), e),
-                    None => tracing::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.name(), query.key_expr()),
+                    Some(e) => tracing::error!("Plugin {} panicked while responding to {}: {}", plugin.id(), query.key_expr(), e),
+                    None => tracing::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.id(), query.key_expr()),
                 },
             }
         });
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     prefix: &mut String,
     suffixes: &[&str],
