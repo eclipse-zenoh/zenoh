@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use zenoh_core::{zcondfeat, zread, zwrite};
 use zenoh_link::{Link, Locator};
 use zenoh_protocol::{
-    core::{Bits, Field, Priority, Resolution, WhatAmI, ZenohId},
+    core::{Bits, Field, Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::{batch_size, close, Close, Join, TransportMessage},
 };
 use zenoh_result::{bail, ZResult};
@@ -53,7 +53,7 @@ use crate::{
 pub(super) struct TransportMulticastPeer {
     pub(super) version: u8,
     pub(super) locator: Locator,
-    pub(super) zid: ZenohId,
+    pub(super) zid: ZenohIdProto,
     pub(super) whatami: WhatAmI,
     pub(super) resolution: Resolution,
     pub(super) lease: Duration,

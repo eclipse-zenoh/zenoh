@@ -191,7 +191,8 @@ impl HatInterestTrait for HatCode {
                         .collect::<Vec<InterestId>>()
                     {
                         let local_interest = dst_face.local_interests.get(&id).unwrap();
-                        if local_interest.res == interest.0 {
+                        if local_interest.res == interest.0 && local_interest.options == interest.1
+                        {
                             dst_face.primitives.send_interest(RoutingContext::with_expr(
                                 Interest {
                                     id,

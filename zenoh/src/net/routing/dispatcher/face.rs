@@ -20,7 +20,7 @@ use std::{
 
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohId},
+    core::{ExprId, WhatAmI, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
         Mapping, Push, Request, RequestId, Response, ResponseFinal,
@@ -55,7 +55,7 @@ pub(crate) struct InterestState {
 
 pub struct FaceState {
     pub(crate) id: usize,
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
@@ -78,7 +78,7 @@ impl FaceState {
     #[allow(clippy::too_many_arguments)] // @TODO fix warning
     pub(crate) fn new(
         id: usize,
-        zid: ZenohId,
+        zid: ZenohIdProto,
         whatami: WhatAmI,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,

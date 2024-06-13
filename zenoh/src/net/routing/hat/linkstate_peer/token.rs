@@ -15,8 +15,9 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use petgraph::graph::NodeIndex;
+use zenoh_config::ZenohIdProto;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::WhatAmI,
     network::{
         declare::{common::ext::WireExprType, TokenId},
         ext,
@@ -153,7 +154,7 @@ fn propagate_sourced_token(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohId,
+    source: &ZenohIdProto,
 ) {
     let net = hat!(tables).peers_net.as_ref().unwrap();
     match net.get_idx(source) {
@@ -188,7 +189,7 @@ fn register_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: ZenohId,
+    peer: ZenohIdProto,
 ) {
     if !res_hat!(res).peer_tokens.contains(&peer) {
         // Register peer liveliness
@@ -211,7 +212,7 @@ fn declare_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: ZenohId,
+    peer: ZenohIdProto,
 ) {
     register_peer_token(tables, face, res, peer);
 }
@@ -376,7 +377,7 @@ fn propagate_forget_sourced_token(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohId,
+    source: &ZenohIdProto,
 ) {
     let net = hat!(tables).peers_net.as_ref().unwrap();
     match net.get_idx(source) {
@@ -407,7 +408,7 @@ fn propagate_forget_sourced_token(
     }
 }
 
-fn unregister_peer_token(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
+fn unregister_peer_token(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
     res_hat_mut!(res).peer_tokens.retain(|token| token != peer);
 
     if res_hat!(res).peer_tokens.is_empty() {
@@ -425,7 +426,7 @@ fn undeclare_peer_token(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    peer: &ZenohId,
+    peer: &ZenohIdProto,
 ) {
     if res_hat!(res).peer_tokens.contains(peer) {
         unregister_peer_token(tables, res, peer);
@@ -437,7 +438,7 @@ fn forget_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: &ZenohId,
+    peer: &ZenohIdProto,
 ) {
     undeclare_peer_token(tables, Some(face), res, peer);
 }
@@ -528,7 +529,7 @@ fn forget_client_token(
     }
 }
 
-pub(super) fn token_remove_node(tables: &mut Tables, node: &ZenohId) {
+pub(super) fn token_remove_node(tables: &mut Tables, node: &ZenohIdProto) {
     for mut res in hat!(tables)
         .peer_tokens
         .iter()

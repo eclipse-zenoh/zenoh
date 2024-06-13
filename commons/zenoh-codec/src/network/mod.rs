@@ -24,7 +24,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
-    core::{EntityId, Reliability, ZenohId},
+    core::{EntityId, Reliability, ZenohIdProto},
     network::{ext::EntityGlobalIdType, *},
 };
 
@@ -265,7 +265,7 @@ where
         let length = 1 + ((flags >> 4) as usize);
 
         let lodec = Zenoh080Length::new(length);
-        let zid: ZenohId = lodec.read(&mut *reader)?;
+        let zid: ZenohIdProto = lodec.read(&mut *reader)?;
 
         let eid: EntityId = self.codec.read(&mut *reader)?;
 

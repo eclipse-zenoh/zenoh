@@ -19,7 +19,7 @@ use std::{
 
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, ZenohId},
+    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, ZenohIdProto},
     network::{
         declare::{
             common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
@@ -34,19 +34,18 @@ use super::{
     face_hat, face_hat_mut, get_peer, get_routes_entries, hat, hat_mut, network::Network, res_hat,
     res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::FaceState,
-            pubsub::*,
-            resource::{NodeId, Resource, SessionContext},
-            tables::{Route, RoutingExpr, Tables},
-        },
-        hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
-        router::RoutesIndexes,
-        RoutingContext,
+#[cfg(feature = "unstable")]
+use crate::key_expr::KeyExpr;
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        pubsub::*,
+        resource::{NodeId, Resource, SessionContext},
+        tables::{Route, RoutingExpr, Tables},
     },
+    hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
+    router::RoutesIndexes,
+    RoutingContext,
 };
 
 #[inline]
@@ -181,7 +180,7 @@ fn propagate_sourced_subscription(
     res: &Arc<Resource>,
     sub_info: &SubscriberInfo,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohId,
+    source: &ZenohIdProto,
 ) {
     let net = hat!(tables).peers_net.as_ref().unwrap();
     match net.get_idx(source) {
@@ -218,7 +217,7 @@ fn register_peer_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
-    peer: ZenohId,
+    peer: ZenohIdProto,
 ) {
     if !res_hat!(res).peer_subs.contains(&peer) {
         // Register peer subscription
@@ -242,7 +241,7 @@ fn declare_peer_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
-    peer: ZenohId,
+    peer: ZenohIdProto,
 ) {
     register_peer_subscription(tables, face, res, sub_info, peer);
 }
@@ -409,7 +408,7 @@ fn propagate_forget_sourced_subscription(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohId,
+    source: &ZenohIdProto,
 ) {
     let net = hat!(tables).peers_net.as_ref().unwrap();
     match net.get_idx(source) {
@@ -440,7 +439,7 @@ fn propagate_forget_sourced_subscription(
     }
 }
 
-fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
+fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
     res_hat_mut!(res).peer_subs.retain(|sub| sub != peer);
 
     if res_hat!(res).peer_subs.is_empty() {
@@ -458,7 +457,7 @@ fn undeclare_peer_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    peer: &ZenohId,
+    peer: &ZenohIdProto,
 ) {
     if res_hat!(res).peer_subs.contains(peer) {
         unregister_peer_subscription(tables, res, peer);
@@ -470,7 +469,7 @@ fn forget_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: &ZenohId,
+    peer: &ZenohIdProto,
 ) {
     undeclare_peer_subscription(tables, Some(face), res, peer);
 }
@@ -556,7 +555,7 @@ fn forget_client_subscription(
     }
 }
 
-pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId) {
+pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohIdProto) {
     for mut res in hat!(tables)
         .peer_subs
         .iter()
@@ -800,7 +799,7 @@ impl HatPubSubTrait for HatCode {
             tables: &Tables,
             net: &Network,
             source: NodeId,
-            subs: &HashSet<ZenohId>,
+            subs: &HashSet<ZenohIdProto>,
         ) {
             if net.trees.len() > source as usize {
                 for sub in subs {
@@ -900,6 +899,7 @@ impl HatPubSubTrait for HatCode {
         get_routes_entries(tables)
     }
 
+    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,
@@ -911,7 +911,7 @@ impl HatPubSubTrait for HatCode {
             tables: &Tables,
             net: &Network,
             source: usize,
-            subs: &HashSet<ZenohId>,
+            subs: &HashSet<ZenohIdProto>,
         ) {
             if net.trees.len() > source {
                 for sub in subs {

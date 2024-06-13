@@ -19,7 +19,7 @@ use std::{
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI, ZenohId};
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_core::Wait;
 #[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
@@ -44,7 +44,7 @@ use super::{routing::dispatcher::face::Face, Runtime};
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
-        builders::sample::ValueBuilderTrait,
+        builders::sample::EncodingBuilderTrait,
         bytes::ZBytes,
         key_expr::KeyExpr,
         queryable::{Query, QueryInner},

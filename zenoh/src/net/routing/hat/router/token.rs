@@ -15,8 +15,9 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use petgraph::graph::NodeIndex;
+use zenoh_config::ZenohIdProto;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::WhatAmI,
     network::{
         declare::{common::ext::WireExprType, TokenId},
         ext,
@@ -165,7 +166,7 @@ fn propagate_sourced_token(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohId,
+    source: &ZenohIdProto,
     net_type: WhatAmI,
 ) {
     let net = hat!(tables).get_net(net_type).unwrap();
@@ -201,7 +202,7 @@ fn register_router_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    router: ZenohId,
+    router: ZenohIdProto,
 ) {
     if !res_hat!(res).router_tokens.contains(&router) {
         // Register router liveliness
@@ -226,7 +227,7 @@ fn declare_router_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    router: ZenohId,
+    router: ZenohIdProto,
 ) {
     register_router_token(tables, face, res, router);
 }
@@ -235,7 +236,7 @@ fn register_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: ZenohId,
+    peer: ZenohIdProto,
 ) {
     if !res_hat!(res).peer_tokens.contains(&peer) {
         // Register peer liveliness
@@ -253,7 +254,7 @@ fn declare_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: ZenohId,
+    peer: ZenohIdProto,
 ) {
     register_peer_token(tables, face, res, peer);
     let zid = tables.zid;
@@ -514,7 +515,7 @@ fn propagate_forget_sourced_token(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohId,
+    source: &ZenohIdProto,
     net_type: WhatAmI,
 ) {
     let net = hat!(tables).get_net(net_type).unwrap();
@@ -546,7 +547,7 @@ fn propagate_forget_sourced_token(
     }
 }
 
-fn unregister_router_token(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohId) {
+fn unregister_router_token(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohIdProto) {
     res_hat_mut!(res)
         .router_tokens
         .retain(|token| token != router);
@@ -569,7 +570,7 @@ fn undeclare_router_token(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    router: &ZenohId,
+    router: &ZenohIdProto,
 ) {
     if res_hat!(res).router_tokens.contains(router) {
         unregister_router_token(tables, res, router);
@@ -581,12 +582,12 @@ fn forget_router_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    router: &ZenohId,
+    router: &ZenohIdProto,
 ) {
     undeclare_router_token(tables, Some(face), res, router);
 }
 
-fn unregister_peer_token(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
+fn unregister_peer_token(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
     res_hat_mut!(res).peer_tokens.retain(|token| token != peer);
 
     if res_hat!(res).peer_tokens.is_empty() {
@@ -600,7 +601,7 @@ fn undeclare_peer_token(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    peer: &ZenohId,
+    peer: &ZenohIdProto,
 ) {
     if res_hat!(res).peer_tokens.contains(peer) {
         unregister_peer_token(tables, res, peer);
@@ -612,7 +613,7 @@ fn forget_peer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: &ZenohId,
+    peer: &ZenohIdProto,
 ) {
     undeclare_peer_token(tables, Some(face), res, peer);
     let client_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
@@ -713,7 +714,7 @@ fn forget_client_token(
     }
 }
 
-pub(super) fn token_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
+pub(super) fn token_remove_node(tables: &mut Tables, node: &ZenohIdProto, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {
             for mut res in hat!(tables)
@@ -789,7 +790,11 @@ pub(super) fn token_tree_change(
     }
 }
 
-pub(super) fn token_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
+pub(super) fn token_linkstate_change(
+    tables: &mut Tables,
+    zid: &ZenohIdProto,
+    links: &[ZenohIdProto],
+) {
     if let Some(src_face) = tables.get_face(zid).cloned() {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
             for res in face_hat!(src_face).remote_tokens.values() {

@@ -22,7 +22,7 @@ use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohId},
+    core::{Priority, WhatAmI, ZenohIdProto},
     network::NetworkMessage,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
@@ -320,7 +320,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         zasynclock!(self.alive)
     }
 
-    fn get_zid(&self) -> ZenohId {
+    fn get_zid(&self) -> ZenohIdProto {
         self.config.zid
     }
 

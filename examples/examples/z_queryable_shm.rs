@@ -30,7 +30,7 @@ async fn main() {
     // initiate logging
     zenoh::try_init_log_from_env();
 
-    let (mut config, key_expr, value, complete) = parse_args();
+    let (mut config, key_expr, payload, complete) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_get_shm` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
@@ -68,9 +68,9 @@ async fn main() {
             query.selector(),
             query.key_expr().as_str(),
         );
-        if let Some(payload) = query.payload() {
-            match payload.deserialize::<&zshm>() {
-                Ok(payload) => print!(": '{}'", String::from_utf8_lossy(payload)),
+        if let Some(query_payload) = query.payload() {
+            match query_payload.deserialize::<&zshm>() {
+                Ok(p) => print!(": '{}'", String::from_utf8_lossy(p)),
                 Err(e) => print!(": 'Not a ShmBufInner: {:?}'", e),
             }
         }
@@ -86,12 +86,12 @@ async fn main() {
             .await
             .unwrap();
 
-        sbuf[0..value.len()].copy_from_slice(value.as_bytes());
+        sbuf[0..payload.len()].copy_from_slice(payload.as_bytes());
 
         println!(
             ">> [Queryable] Responding ('{}': '{}')",
             key_expr.as_str(),
-            value,
+            payload,
         );
         query
             .reply(key_expr.clone(), sbuf)
@@ -106,8 +106,8 @@ struct Args {
     /// The key expression matching queries to reply to.
     key: KeyExpr<'static>,
     #[arg(short, long, default_value = "Queryable from SHM Rust!")]
-    /// The value to reply to queries.
-    value: String,
+    /// The payload to reply to queries.
+    payload: String,
     #[arg(long)]
     /// Declare the queryable as complete w.r.t. the key expression.
     complete: bool,
@@ -117,5 +117,5 @@ struct Args {
 
 fn parse_args() -> (Config, KeyExpr<'static>, String, bool) {
     let args = Args::parse();
-    (args.common.into(), args.key, args.value, args.complete)
+    (args.common.into(), args.key, args.payload, args.complete)
 }

@@ -29,7 +29,7 @@ async fn main() -> Result<(), ZError> {
     // Initiate logging
     zenoh::try_init_log_from_env();
 
-    let (mut config, path, value) = parse_args();
+    let (mut config, path, payload) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
@@ -74,10 +74,10 @@ async fn main() -> Result<(), ZError> {
         // of the write. This is simply to have the same format as zn_pub.
         let prefix = format!("[{idx:4}] ");
         let prefix_len = prefix.as_bytes().len();
-        let slice_len = prefix_len + value.as_bytes().len();
+        let slice_len = prefix_len + payload.as_bytes().len();
 
         sbuf[0..prefix_len].copy_from_slice(prefix.as_bytes());
-        sbuf[prefix_len..slice_len].copy_from_slice(value.as_bytes());
+        sbuf[prefix_len..slice_len].copy_from_slice(payload.as_bytes());
 
         // Write the data
         println!(
@@ -97,13 +97,13 @@ struct Args {
     /// The key expression to publish onto.
     path: KeyExpr<'static>,
     #[arg(short, long, default_value = "Pub from SHM Rust!")]
-    /// The value of to publish.
-    value: String,
+    /// The payload of to publish.
+    payload: String,
     #[command(flatten)]
     common: CommonArgs,
 }
 
 fn parse_args() -> (Config, KeyExpr<'static>, String) {
     let args = Args::parse();
-    (args.common.into(), args.path, args.value)
+    (args.common.into(), args.path, args.payload)
 }

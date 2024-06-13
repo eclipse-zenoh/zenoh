@@ -23,11 +23,12 @@ use std::{
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
-    internal::{bail, ztimeout},
     prelude::*,
     publisher::CongestionControl,
     Config, Result, Session,
 };
+use zenoh_core::ztimeout;
+use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;

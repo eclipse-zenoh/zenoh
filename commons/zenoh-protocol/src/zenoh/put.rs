@@ -84,12 +84,12 @@ impl Put {
     pub fn rand() -> Self {
         use rand::Rng;
 
-        use crate::{common::iext, core::ZenohId};
+        use crate::{common::iext, core::ZenohIdProto};
         let mut rng = rand::thread_rng();
 
         let timestamp = rng.gen_bool(0.5).then_some({
             let time = uhlc::NTP64(rng.gen());
-            let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
+            let id = uhlc::ID::try_from(ZenohIdProto::rand().to_le_bytes()).unwrap();
             Timestamp::new(time, id)
         });
         let encoding = Encoding::rand();

@@ -21,7 +21,7 @@ use std::{
 
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "unstable")]
-use zenoh_protocol::core::EntityGlobalId;
+use zenoh_protocol::core::EntityGlobalIdProto;
 use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
 use zenoh_result::ZResult;
 
@@ -462,8 +462,8 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn id(&self) -> EntityGlobalId {
-        EntityGlobalId {
+    pub fn id(&self) -> EntityGlobalIdProto {
+        EntityGlobalIdProto {
             zid: self.subscriber.session.zid().into(),
             eid: self.subscriber.state.id,
         }

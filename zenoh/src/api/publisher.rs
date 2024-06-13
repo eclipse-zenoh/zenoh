@@ -13,12 +13,10 @@
 //
 
 use std::{
-    collections::HashSet,
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
-    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
@@ -30,11 +28,18 @@ use zenoh_protocol::{
     zenoh::{Del, PushBody, Put},
 };
 use zenoh_result::{Error, ZResult};
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use {
-    crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
-    crate::api::sample::SourceInfo,
-    zenoh_protocol::core::EntityGlobalId,
+    crate::api::{
+        handlers::{Callback, DefaultHandler, IntoHandler},
+        sample::SourceInfo,
+    },
+    std::{
+        collections::HashSet,
+        sync::{Arc, Mutex},
+    },
+    zenoh_config::wrappers::EntityGlobalId,
+    zenoh_protocol::core::EntityGlobalIdProto,
 };
 
 use super::{
@@ -138,6 +143,7 @@ pub struct Publisher<'a> {
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
     pub(crate) destination: Locality,
+    #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     pub(crate) undeclare_on_drop: bool,
 }
@@ -160,10 +166,11 @@ impl<'a> Publisher<'a> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
-        EntityGlobalId {
+        EntityGlobalIdProto {
             zid: self.session.zid().into(),
             eid: self.id,
         }
+        .into()
     }
 
     #[inline]
@@ -177,22 +184,10 @@ impl<'a> Publisher<'a> {
         self.congestion_control
     }
 
-    /// Change the `congestion_control` to apply when routing the data.
-    #[inline]
-    pub fn set_congestion_control(&mut self, congestion_control: CongestionControl) {
-        self.congestion_control = congestion_control;
-    }
-
     /// Get the priority of the written data.
     #[inline]
     pub fn priority(&self) -> Priority {
         self.priority
-    }
-
-    /// Change the priority of the written data.
-    #[inline]
-    pub fn set_priority(&mut self, priority: Priority) {
-        self.priority = priority;
     }
 
     /// Consumes the given `Publisher`, returning a thread-safe reference-counting
@@ -362,6 +357,7 @@ impl<'a> Publisher<'a> {
         Undeclarable::undeclare_inner(self, ())
     }
 
+    #[cfg(feature = "unstable")]
     fn undeclare_matching_listeners(&self) -> ZResult<()> {
         let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
         for id in ids {
@@ -491,6 +487,7 @@ impl Wait for PublisherUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         // set the flag first to avoid double panic if this function panic
         self.publisher.undeclare_on_drop = false;
+        #[cfg(feature = "unstable")]
         self.publisher.undeclare_matching_listeners()?;
         self.publisher
             .session
@@ -510,6 +507,7 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
         if self.undeclare_on_drop {
+            #[cfg(feature = "unstable")]
             let _ = self.undeclare_matching_listeners();
             let _ = self.session.undeclare_publisher_inner(self.id);
         }
@@ -1115,6 +1113,7 @@ mod tests {
 
     use crate::api::{sample::SampleKind, session::SessionDeclarations};
 
+    #[cfg(feature = "internal")]
     #[test]
     fn priority_from() {
         use std::convert::TryInto;

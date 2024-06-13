@@ -163,23 +163,25 @@ impl HatInterestTrait for HatCode {
             ));
         }
 
-        if let Some(interest) = Arc::into_inner(interest) {
-            tracing::debug!(
-                "Propagate DeclareFinal {}:{}",
-                interest.src_face,
-                interest.src_interest_id
-            );
-            interest
-                .src_face
-                .primitives
-                .clone()
-                .send_declare(RoutingContext::new(Declare {
-                    interest_id: Some(interest.src_interest_id),
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                }));
+        if mode.current() {
+            if let Some(interest) = Arc::into_inner(interest) {
+                tracing::debug!(
+                    "Propagate DeclareFinal {}:{}",
+                    interest.src_face,
+                    interest.src_interest_id
+                );
+                interest
+                    .src_face
+                    .primitives
+                    .clone()
+                    .send_declare(RoutingContext::new(Declare {
+                        interest_id: Some(interest.src_interest_id),
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareFinal(DeclareFinal),
+                    }));
+            }
         }
     }
 
@@ -204,8 +206,7 @@ impl HatInterestTrait for HatCode {
                         .collect::<Vec<InterestId>>()
                     {
                         let local_interest = dst_face.local_interests.get(&id).unwrap();
-                        if local_interest.options.subscribers()
-                            && (local_interest.res == interest.0)
+                        if local_interest.res == interest.0 && local_interest.options == interest.1
                         {
                             dst_face.primitives.send_interest(RoutingContext::with_expr(
                                 Interest {

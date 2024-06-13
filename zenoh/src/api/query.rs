@@ -20,13 +20,13 @@ use std::{
 
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::{CongestionControl, ZenohId};
+use zenoh_protocol::core::{CongestionControl, ZenohIdProto};
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
 use super::{builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo};
 use super::{
-    builders::sample::{QoSBuilderTrait, ValueBuilderTrait},
+    builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
     bytes::ZBytes,
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -79,37 +79,67 @@ impl Default for QueryConsolidation {
     }
 }
 
-/// Structs returned by a [`get`](Session::get).
+/// Error returned by a [`get`](Session::get).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReplyError {
+    pub(crate) payload: ZBytes,
+    pub(crate) encoding: Encoding,
+}
+
+impl ReplyError {
+    /// Gets the payload of this ReplyError.
+    #[inline]
+    pub fn payload(&self) -> &ZBytes {
+        &self.payload
+    }
+
+    /// Gets the encoding of this ReplyError.
+    #[inline]
+    pub fn encoding(&self) -> &Encoding {
+        &self.encoding
+    }
+}
+
+impl From<Value> for ReplyError {
+    fn from(value: Value) -> Self {
+        Self {
+            payload: value.payload,
+            encoding: value.encoding,
+        }
+    }
+}
+
+/// Struct returned by a [`get`](Session::get).
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
-    pub(crate) result: Result<Sample, Value>,
-    pub(crate) replier_id: ZenohId,
+    pub(crate) result: Result<Sample, ReplyError>,
+    pub(crate) replier_id: ZenohIdProto,
 }
 
 impl Reply {
     /// Gets the a borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
-    pub fn result(&self) -> Result<&Sample, &Value> {
+    pub fn result(&self) -> Result<&Sample, &ReplyError> {
         self.result.as_ref()
     }
 
     /// Gets the a mutable borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
-    pub fn result_mut(&mut self) -> Result<&mut Sample, &mut Value> {
+    pub fn result_mut(&mut self) -> Result<&mut Sample, &mut ReplyError> {
         self.result.as_mut()
     }
 
     /// Converts this `Reply` into the its result. Use [`Reply::result`] it you don't want to take ownership.
-    pub fn into_result(self) -> Result<Sample, Value> {
+    pub fn into_result(self) -> Result<Sample, ReplyError> {
         self.result
     }
 
     /// Gets the id of the zenoh instance that answered this Reply.
-    pub fn replier_id(&self) -> ZenohId {
+    pub fn replier_id(&self) -> ZenohIdProto {
         self.replier_id
     }
 }
 
-impl From<Reply> for Result<Sample, Value> {
+impl From<Reply> for Result<Sample, ReplyError> {
     fn from(value: Reply) -> Self {
         value.into_result()
     }
@@ -202,28 +232,12 @@ impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     }
 }
 
-impl<Handler> ValueBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.unwrap_or_default();
         value.encoding = encoding.into();
         Self {
             value: Some(value),
-            ..self
-        }
-    }
-
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        let mut value = self.value.unwrap_or_default();
-        value.payload = payload.into();
-        Self {
-            value: Some(value),
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let value: Value = value.into();
-        Self {
-            value: if value.is_empty() { None } else { Some(value) },
             ..self
         }
     }
@@ -371,6 +385,17 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     }
 }
 impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
+    #[inline]
+    pub fn payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Self
+    where
+        IntoZBytes: Into<ZBytes>,
+    {
+        let mut value = self.value.unwrap_or_default();
+        value.payload = payload.into();
+        self.value = Some(value);
+        self
+    }
+
     /// Change the target of the query.
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
