@@ -35,7 +35,8 @@ use zenoh_protocol::network::{declare::SubscriberId, ext};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, Reliability, WireExpr,
+        EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -89,10 +90,10 @@ use super::{
     liveliness::{Liveliness, LivelinessTokenState},
     publisher::Publisher,
     publisher::{MatchingListenerState, MatchingStatus},
-    query::_REPLY_KEY_EXPR_ANY_SEL_PARAM,
     sample::SourceInfo,
-    selector::TIME_RANGE_KEY,
 };
+#[cfg(feature = "unstable")]
+use crate::api::selector::ZenohParameters;
 use crate::net::{
     primitives::Primitives,
     routing::dispatcher::face::Face,
@@ -1755,7 +1756,8 @@ impl Session {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
         &self,
-        selector: &Selector<'_>,
+        key_expr: &KeyExpr<'_>,
+        parameters: &Parameters<'_>,
         scope: &Option<KeyExpr<'_>>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
@@ -1767,13 +1769,16 @@ impl Session {
         #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
-        tracing::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
+        tracing::trace!(
+            "get({}, {:?}, {:?})",
+            Selector::borrowed(key_expr, parameters),
+            target,
+            consolidation
+        );
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
             #[cfg(feature = "unstable")]
-            ConsolidationMode::Auto if selector.parameters().contains_key(TIME_RANGE_KEY) => {
-                ConsolidationMode::None
-            }
+            ConsolidationMode::Auto if parameters.time_range().is_some() => ConsolidationMode::None,
             ConsolidationMode::Auto => ConsolidationMode::Latest,
             mode => mode,
         };
@@ -1811,21 +1816,19 @@ impl Session {
                 }
             });
 
-        let selector = match scope {
-            Some(scope) => Selector {
-                key_expr: scope / &*selector.key_expr,
-                parameters: selector.parameters.clone(),
-            },
-            None => selector.clone(),
+        let key_expr = match scope {
+            Some(scope) => scope / key_expr,
+            None => key_expr.clone().into_owned(),
         };
 
         tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
-        let wexpr = selector.key_expr.to_wire(self).to_owned();
+        let wexpr = key_expr.to_wire(self).to_owned();
         state.queries.insert(
             qid,
             QueryState {
                 nb_final,
-                selector: selector.clone().into_owned(),
+                key_expr,
+                parameters: parameters.clone().into_owned(),
                 scope: scope.clone().map(|e| e.into_owned()),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
@@ -1849,7 +1852,7 @@ impl Session {
                 ext_timeout: Some(timeout),
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
                     consolidation,
-                    parameters: selector.parameters().to_string(),
+                    parameters: parameters.to_string(),
                     #[cfg(feature = "unstable")]
                     ext_sinfo: source.into(),
                     #[cfg(not(feature = "unstable"))]
@@ -1869,7 +1872,7 @@ impl Session {
             self.handle_query(
                 true,
                 &wexpr,
-                selector.parameters().as_str(),
+                parameters.as_str(),
                 qid,
                 target,
                 consolidation,
@@ -2461,20 +2464,14 @@ impl Primitives for Session {
                 };
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        let c = zcondfeat!(
-                            "unstable",
-                            !query
-                                .selector
-                                .parameters()
-                                .contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM),
-                            true
-                        );
-                        if c && !query.selector.key_expr.intersects(&key_expr) {
+                        let c =
+                            zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
+                        if c && !query.key_expr.intersects(&key_expr) {
                             tracing::warn!(
                                 "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
-                                query.selector
+                                query.selector()
                             );
                             return;
                         }

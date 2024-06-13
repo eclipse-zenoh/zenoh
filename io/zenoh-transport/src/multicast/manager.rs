@@ -22,7 +22,7 @@ use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{Parameters, ZenohIdProto},
+    core::{parameters, ZenohIdProto},
     transport::close,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -258,7 +258,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend_from_iter(Parameters::iter(config))?;
+                .extend_from_iter(parameters::iter(config))?;
         }
 
         // Open the link

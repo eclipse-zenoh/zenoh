@@ -36,8 +36,7 @@ use zenoh::{
         runtime::Runtime,
         zlock, LibLoader,
     },
-    key_expr::keyexpr,
-    selector::Selector,
+    key_expr::{keyexpr, KeyExpr},
     session::Session,
 };
 use zenoh_backend_traits::{
@@ -305,17 +304,14 @@ impl RunningPluginTrait for StorageRuntime {
 
     fn adminspace_getter<'a>(
         &'a self,
-        selector: &'a Selector<'a>,
+        key_expr: &'a KeyExpr<'a>,
         plugin_status_key: &str,
     ) -> ZResult<Vec<Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         // TODO: to be removed when "__version__" is implemented in admoin space
         with_extended_string(&mut key, &["/version"], |key| {
-            if keyexpr::new(key.as_str())
-                .unwrap()
-                .intersects(selector.key_expr())
-            {
+            if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                 responses.push(Response::new(
                     key.clone(),
                     StoragesPlugin::PLUGIN_VERSION.into(),
@@ -327,17 +323,11 @@ impl RunningPluginTrait for StorageRuntime {
             for plugin in guard.plugins_manager.started_plugins_iter() {
                 with_extended_string(key, &[plugin.id()], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
-                        if keyexpr::new(key.as_str())
-                            .unwrap()
-                            .intersects(selector.key_expr())
-                        {
+                        if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                             responses.push(Response::new(key.clone(), plugin.path().into()))
                         }
                     });
-                    if keyexpr::new(key.as_str())
-                        .unwrap()
-                        .intersects(selector.key_expr())
-                    {
+                    if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                         responses.push(Response::new(
                             key.clone(),
                             plugin.instance().get_admin_status(),
@@ -350,10 +340,7 @@ impl RunningPluginTrait for StorageRuntime {
             for storages in guard.storages.values() {
                 for (storage, handle) in storages {
                     with_extended_string(key, &[storage], |key| {
-                        if keyexpr::new(key.as_str())
-                            .unwrap()
-                            .intersects(selector.key_expr())
-                        {
+                        if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                             if let Ok(value) = task::block_on(async {
                                 let (tx, rx) = async_std::channel::bounded(1);
                                 let _ = handle.send(StorageMessage::GetStatus(tx));

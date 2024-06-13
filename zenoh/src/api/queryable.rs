@@ -21,7 +21,7 @@ use std::{
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
-    core::{CongestionControl, EntityId, WireExpr, ZenohIdProto},
+    core::{CongestionControl, EntityId, Parameters, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
@@ -32,6 +32,8 @@ use {
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
+#[zenoh_macros::unstable]
+use super::selector::ZenohParameters;
 use super::{
     builders::sample::{
         EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
@@ -43,7 +45,7 @@ use super::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample, SampleKind},
-    selector::{Parameters, Selector},
+    selector::Selector,
     session::{SessionRef, Undeclarable},
     value::Value,
     Id,
@@ -81,10 +83,7 @@ impl Query {
     /// The full [`Selector`] of this Query.
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
-        Selector {
-            key_expr: self.inner.key_expr.clone(),
-            parameters: self.inner.parameters.clone(),
-        }
+        Selector::borrowed(&self.inner.key_expr, &self.inner.parameters)
     }
 
     /// The key selector part of this Query.
@@ -226,11 +225,7 @@ impl Query {
     }
     #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
-
-        Ok(self
-            .parameters()
-            .contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM))
+        Ok(self.parameters().reply_key_expr_any())
     }
 }
 

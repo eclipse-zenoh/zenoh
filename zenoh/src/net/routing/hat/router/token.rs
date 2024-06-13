@@ -15,9 +15,8 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use petgraph::graph::NodeIndex;
-use zenoh_config::ZenohIdProto;
 use zenoh_protocol::{
-    core::WhatAmI,
+    core::{WhatAmI, ZenohIdProto},
     network::{
         declare::{common::ext::WireExprType, TokenId},
         ext,
