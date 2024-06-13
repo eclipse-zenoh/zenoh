@@ -18,7 +18,7 @@ use zenoh_protocol::{
     network::{
         declare::ext,
         interest::{InterestId, InterestMode, InterestOptions},
-        Interest,
+        Declare, DeclareBody, DeclareFinal, Interest,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -28,9 +28,9 @@ use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
         resource::Resource,
-        tables::Tables,
+        tables::{Tables, TablesLock},
     },
-    hat::HatInterestTrait,
+    hat::{CurrentFutureTrait, HatInterestTrait},
     RoutingContext,
 };
 
@@ -74,6 +74,7 @@ impl HatInterestTrait for HatCode {
     fn declare_interest(
         &self,
         tables: &mut Tables,
+        _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -110,6 +111,16 @@ impl HatInterestTrait for HatCode {
                 },
                 res.as_ref().map(|res| res.expr()).unwrap_or_default(),
             ));
+        }
+
+        if mode.current() {
+            face.primitives.send_declare(RoutingContext::new(Declare {
+                interest_id: Some(id),
+                ext_qos: ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareFinal(DeclareFinal),
+            }));
         }
     }
 

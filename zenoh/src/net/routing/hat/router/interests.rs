@@ -15,7 +15,11 @@ use std::sync::Arc;
 
 use zenoh_protocol::{
     core::WhatAmI,
-    network::interest::{InterestId, InterestMode, InterestOptions},
+    network::{
+        declare::ext,
+        interest::{InterestId, InterestMode, InterestOptions},
+        Declare, DeclareBody, DeclareFinal,
+    },
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -23,14 +27,20 @@ use super::{
     face_hat_mut, pubsub::declare_sub_interest, queries::declare_qabl_interest, HatCode, HatFace,
 };
 use crate::net::routing::{
-    dispatcher::{face::FaceState, resource::Resource, tables::Tables},
+    dispatcher::{
+        face::FaceState,
+        resource::Resource,
+        tables::{Tables, TablesLock},
+    },
     hat::{CurrentFutureTrait, HatInterestTrait},
+    RoutingContext,
 };
 
 impl HatInterestTrait for HatCode {
     fn declare_interest(
         &self,
         tables: &mut Tables,
+        _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -68,6 +78,15 @@ impl HatInterestTrait for HatCode {
             face_hat_mut!(face)
                 .remote_interests
                 .insert(id, (res.cloned(), options));
+        }
+        if mode.current() {
+            face.primitives.send_declare(RoutingContext::new(Declare {
+                interest_id: Some(id),
+                ext_qos: ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareFinal(DeclareFinal),
+            }));
         }
     }
 

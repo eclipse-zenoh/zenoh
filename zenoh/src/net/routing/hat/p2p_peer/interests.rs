@@ -18,7 +18,7 @@ use zenoh_protocol::{
     network::{
         declare::ext,
         interest::{InterestId, InterestMode, InterestOptions},
-        Interest,
+        Declare, DeclareBody, DeclareFinal, Interest,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -30,10 +30,11 @@ use super::{
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
+        interests::{CurrentInterest, CurrentInterestCleanup},
         resource::Resource,
-        tables::Tables,
+        tables::{Tables, TablesLock},
     },
-    hat::HatInterestTrait,
+    hat::{CurrentFutureTrait, HatInterestTrait},
     RoutingContext,
 };
 
@@ -79,6 +80,7 @@ impl HatInterestTrait for HatCode {
     fn declare_interest(
         &self,
         tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -108,6 +110,12 @@ impl HatInterestTrait for HatCode {
         face_hat_mut!(face)
             .remote_interests
             .insert(id, (res.as_ref().map(|res| (*res).clone()), options));
+
+        let interest = Arc::new(CurrentInterest {
+            src_face: face.clone(),
+            src_interest_id: id,
+        });
+
         for dst_face in tables
             .faces
             .values_mut()
@@ -122,6 +130,14 @@ impl HatInterestTrait for HatCode {
                     finalized: mode == InterestMode::Future,
                 },
             );
+            if mode.current() {
+                let dst_face_mut = get_mut_unchecked(dst_face);
+                let cancellation_token = dst_face_mut.task_controller.get_cancellation_token();
+                dst_face_mut
+                    .pending_current_interests
+                    .insert(id, (interest.clone(), cancellation_token));
+                CurrentInterestCleanup::spawn_interest_clean_up_task(dst_face, tables_ref, id);
+            }
             let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
             dst_face.primitives.send_interest(RoutingContext::with_expr(
                 Interest {
@@ -135,6 +151,25 @@ impl HatInterestTrait for HatCode {
                 },
                 res.as_ref().map(|res| res.expr()).unwrap_or_default(),
             ));
+        }
+
+        if let Some(interest) = Arc::into_inner(interest) {
+            tracing::debug!(
+                "Propagate DeclareFinal {}:{}",
+                interest.src_face,
+                interest.src_interest_id
+            );
+            interest
+                .src_face
+                .primitives
+                .clone()
+                .send_declare(RoutingContext::new(Declare {
+                    interest_id: Some(interest.src_interest_id),
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareFinal(DeclareFinal),
+                }));
         }
     }
 

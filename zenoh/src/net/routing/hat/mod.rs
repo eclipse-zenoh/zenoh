@@ -137,9 +137,11 @@ pub(crate) trait HatBaseTrait {
 }
 
 pub(crate) trait HatInterestTrait {
+    #[allow(clippy::too_many_arguments)]
     fn declare_interest(
         &self,
         tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,

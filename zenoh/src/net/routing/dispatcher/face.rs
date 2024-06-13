@@ -35,7 +35,7 @@ use zenoh_transport::stats::TransportStats;
 
 use super::{
     super::router::*,
-    interests::{declare_interest, undeclare_interest},
+    interests::{declare_final, declare_interest, undeclare_interest, CurrentInterest},
     resource::*,
     tables::{self, TablesLock},
 };
@@ -62,6 +62,8 @@ pub struct FaceState {
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
+    pub(crate) pending_current_interests:
+        HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
@@ -93,6 +95,7 @@ impl FaceState {
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
+            pending_current_interests: HashMap::new(),
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
             next_qid: 0,
@@ -295,6 +298,8 @@ impl Primitives for Face {
                         .local_interests
                         .entry(id)
                         .and_modify(|interest| interest.finalized = true);
+
+                    declare_final(&mut self.state.clone(), id);
 
                     // recompute routes
                     // TODO: disable  routes and recompute them in parallel to avoid holding
