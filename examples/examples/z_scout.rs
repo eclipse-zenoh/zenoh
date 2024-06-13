@@ -25,7 +25,7 @@ async fn main() {
 
     let _ = tokio::time::timeout(std::time::Duration::from_secs(1), async {
         while let Ok(hello) = receiver.recv_async().await {
-            println!("{hello}");
+            println!("{hello:?}");
         }
     })
     .await;
