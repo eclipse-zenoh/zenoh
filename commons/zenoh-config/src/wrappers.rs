@@ -103,6 +103,12 @@ impl fmt::Debug for Hello {
     }
 }
 
+impl fmt::Display for Hello {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
 #[derive(Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(transparent)]
 pub struct EntityGlobalId(EntityGlobalIdProto);
