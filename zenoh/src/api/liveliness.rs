@@ -22,7 +22,10 @@ use std::{
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::network::{declare::subscriber::ext::SubscriberInfo, request};
+use zenoh_protocol::{
+    core::Parameters,
+    network::{declare::subscriber::ext::SubscriberInfo, request},
+};
 
 use super::{
     handlers::{locked, DefaultHandler, IntoHandler},
@@ -753,7 +756,8 @@ where
         let (callback, receiver) = self.handler.into_handler();
         self.session
             .query(
-                &self.key_expr?.into(),
+                &self.key_expr?,
+                &Parameters::empty(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 QueryTarget::DEFAULT,
                 QueryConsolidation::DEFAULT,

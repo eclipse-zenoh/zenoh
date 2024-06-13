@@ -27,6 +27,8 @@
 mod _prelude {
     #[zenoh_macros::unstable]
     pub use crate::api::publisher::PublisherDeclarations;
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::ZenohParameters;
     pub use crate::{
         api::{
             builders::sample::{

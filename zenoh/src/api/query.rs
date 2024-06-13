@@ -20,11 +20,14 @@ use std::{
 
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::{CongestionControl, ZenohIdProto};
+use zenoh_protocol::core::{CongestionControl, Parameters, ZenohIdProto};
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
-use super::{builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo};
+use super::{
+    builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo,
+    selector::ZenohParameters,
+};
 use super::{
     builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
     bytes::ZBytes,
@@ -147,11 +150,18 @@ impl From<Reply> for Result<Sample, ReplyError> {
 
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
-    pub(crate) selector: Selector<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) parameters: Parameters<'static>,
     pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<'static, Reply>,
+}
+
+impl QueryState {
+    pub(crate) fn selector(&self) -> Selector {
+        Selector::borrowed(&self.key_expr, &self.parameters)
+    }
 }
 
 /// A builder for initializing a `query`.
@@ -431,21 +441,23 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
     /// expressions that don't intersect with the query's.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
-        Self {
-            selector: self.selector.map(|mut s| {
-                if accept == ReplyKeyExpr::Any {
-                    s.parameters_mut().insert(_REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
-                }
-                s
-            }),
-            ..self
+        if accept == ReplyKeyExpr::Any {
+            if let Ok(Selector {
+                key_expr,
+                mut parameters,
+            }) = self.selector
+            {
+                parameters.to_mut().set_reply_key_expr_any();
+                let selector = Ok(Selector {
+                    key_expr,
+                    parameters,
+                });
+                return Self { selector, ..self };
+            }
         }
+        self
     }
 }
-
-pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
-#[zenoh_macros::unstable]
-pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -470,10 +482,14 @@ where
 {
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-
+        let Selector {
+            key_expr,
+            parameters,
+        } = self.selector?;
         self.session
             .query(
-                &self.selector?,
+                &key_expr,
+                &parameters,
                 &self.scope?,
                 self.target,
                 self.consolidation,
