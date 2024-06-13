@@ -180,14 +180,12 @@ impl PolicyEnforcer {
                         match rule.usernames {
                             Some(_) => (),
                             None => {
-                                tracing::warn!("ACL config usernames list is empty. Applying rule #{} to all usernames", rule_offset);
                                 rule.usernames = Some(Vec::new());
                             }
                         }
                         match rule.cert_common_names {
                             Some(_) => (),
                             None => {
-                                tracing::warn!("ACL config cert_common_names list is empty. Applying rule #{} to all certificate common names", rule_offset);
                                 rule.cert_common_names = Some(Vec::new());
                             }
                         }
