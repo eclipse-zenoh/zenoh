@@ -49,10 +49,13 @@ mod test {
         test_get_qbl_allow_then_deny_tls(3776).await;
         test_get_qbl_deny_then_allow_tls(3777).await;
 
-        test_pub_sub_deny_then_allow_quic(3774).await;
+        test_pub_sub_deny_then_allow_quic(3774, false).await;
         test_pub_sub_allow_then_deny_quic(3775).await;
         test_get_qbl_deny_then_allow_quic(3776).await;
         test_get_qbl_allow_then_deny_quic(3777).await;
+
+        // Test link AuthIds accessibility for lowlatency transport
+        test_pub_sub_deny_then_allow_quic(3778, true).await;
 
         std::fs::remove_dir_all(path).unwrap();
         println!("testfiles removed successfully.");
@@ -258,7 +261,7 @@ client2name:client2passwd";
             .unwrap();
         config
     }
-    async fn get_basic_router_config_quic(port: u16) -> Config {
+    async fn get_basic_router_config_quic(port: u16, lowlatency: bool) -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config.listen.endpoints = vec![format!("quic/127.0.0.1:{}", port).parse().unwrap()];
@@ -281,6 +284,13 @@ client2name:client2passwd";
                     },  
                 }"#,
             )
+            .unwrap();
+        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
+        config
+            .transport
+            .unicast
+            .qos
+            .set_enabled(!lowlatency)
             .unwrap();
         config
     }
@@ -362,7 +372,7 @@ client2name:client2passwd";
         (s01, s02)
     }
 
-    async fn get_client_sessions_quic(port: u16) -> (Session, Session) {
+    async fn get_client_sessions_quic(port: u16, lowlatency: bool) -> (Session, Session) {
         println!("Opening client sessions");
         let mut config = config::client([format!("quic/127.0.0.1:{}", port)
             .parse::<EndPoint>()
@@ -386,6 +396,13 @@ client2name:client2passwd";
                 }"#,
             )
             .unwrap();
+        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
+        config
+            .transport
+            .unicast
+            .qos
+            .set_enabled(!lowlatency)
+            .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
         let mut config = config::client([format!("quic/127.0.0.1:{}", port)
             .parse::<EndPoint>()
@@ -408,6 +425,13 @@ client2name:client2passwd";
                     }
                 }"#,
             )
+            .unwrap();
+        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
+        config
+            .transport
+            .unicast
+            .qos
+            .set_enabled(!lowlatency)
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
@@ -714,10 +738,10 @@ client2name:client2passwd";
         close_router_session(session).await;
     }
 
-    async fn test_pub_sub_deny_then_allow_quic(port: u16) {
+    async fn test_pub_sub_deny_then_allow_quic(port: u16, lowlatency: bool) {
         println!("test_pub_sub_deny_then_allow_quic");
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+        let mut config_router = get_basic_router_config_quic(port, lowlatency).await;
 
         config_router
             .insert_json5(
@@ -748,7 +772,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (sub_session, pub_session) = get_client_sessions_quic(port).await;
+        let (sub_session, pub_session) = get_client_sessions_quic(port, lowlatency).await;
         {
             let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -776,7 +800,7 @@ client2name:client2passwd";
     async fn test_pub_sub_allow_then_deny_quic(port: u16) {
         println!("test_pub_sub_allow_then_deny_quic");
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+        let mut config_router = get_basic_router_config_quic(port, false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -805,7 +829,7 @@ client2name:client2passwd";
         println!("Opening router session");
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_quic(port).await;
+        let (sub_session, pub_session) = get_client_sessions_quic(port, false).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -835,7 +859,7 @@ client2name:client2passwd";
     async fn test_get_qbl_deny_then_allow_quic(port: u16) {
         println!("test_get_qbl_deny_then_allow_quic");
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+        let mut config_router = get_basic_router_config_quic(port, false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -865,7 +889,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions_quic(port).await;
+        let (get_session, qbl_session) = get_client_sessions_quic(port, false).await;
         {
             let mut received_value = String::new();
 
@@ -908,7 +932,7 @@ client2name:client2passwd";
     async fn test_get_qbl_allow_then_deny_quic(port: u16) {
         println!("test_get_qbl_allow_then_deny_quic");
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+        let mut config_router = get_basic_router_config_quic(port, false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -939,7 +963,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions_quic(port).await;
+        let (get_session, qbl_session) = get_client_sessions_quic(port, false).await;
         {
             let mut received_value = String::new();
 
