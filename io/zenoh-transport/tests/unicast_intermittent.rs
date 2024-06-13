@@ -25,7 +25,7 @@ use std::{
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
     network::{
         push::{
             ext::{NodeIdType, QoSType},
@@ -148,7 +148,7 @@ impl TransportPeerEventHandler for SCClient {
 
 async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool) {
     /* [ROUTER] */
-    let router_id = ZenohId::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([1]).unwrap();
 
     let router_handler = Arc::new(SHRouterIntermittent);
     // Create the router transport manager
@@ -168,9 +168,9 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .unwrap();
 
     /* [CLIENT] */
-    let client01_id = ZenohId::try_from([2]).unwrap();
-    let client02_id = ZenohId::try_from([3]).unwrap();
-    let client03_id = ZenohId::try_from([4]).unwrap();
+    let client01_id = ZenohIdProto::try_from([2]).unwrap();
+    let client02_id = ZenohIdProto::try_from([3]).unwrap();
+    let client03_id = ZenohIdProto::try_from([4]).unwrap();
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));

@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 use zenoh::{
-    internal::buffers::ZSlice,
+    bytes::ZBytes,
     key_expr::keyexpr,
     prelude::*,
     publisher::CongestionControl,
@@ -70,8 +70,8 @@ fn main() {
     // NOTE: For buf's API please check z_bytes_shm.rs example
     let buf = provider.alloc(size).wait().unwrap();
 
-    // convert ZShmMut into ZSlice as ZShmMut does not support Clone
-    let buf: ZSlice = buf.into();
+    // convert ZShmMut into ZBytes as ZShmMut does not support Clone
+    let buf: ZBytes = buf.into();
 
     // -- warmup --
     println!("Warming up for {warmup:?}...");

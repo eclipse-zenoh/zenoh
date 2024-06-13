@@ -650,6 +650,7 @@ impl HatPubSubTrait for HatCode {
         get_routes_entries()
     }
 
+    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
+use zenoh_protocol::core::{Locator, WhatAmI, ZenohIdProto};
 
 pub const PID: u64 = 1; // 0x01
 pub const WAI: u64 = 1 << 1; // 0x02
@@ -37,7 +37,7 @@ pub const LOC: u64 = 1 << 2; // 0x04
 pub(crate) struct LinkState {
     pub(crate) psid: u64,
     pub(crate) sn: u64,
-    pub(crate) zid: Option<ZenohId>,
+    pub(crate) zid: Option<ZenohIdProto>,
     pub(crate) whatami: Option<WhatAmI>,
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) links: Vec<u64>,
@@ -56,7 +56,7 @@ impl LinkState {
         let psid: u64 = rng.gen();
         let sn: u64 = rng.gen();
         let zid = if rng.gen_bool(0.5) {
-            Some(ZenohId::default())
+            Some(ZenohIdProto::default())
         } else {
             None
         };

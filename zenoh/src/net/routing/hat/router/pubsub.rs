@@ -19,7 +19,7 @@ use std::{
 
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, ZenohId},
+    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, ZenohIdProto},
     network::{
         declare::{
             common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
@@ -34,19 +34,18 @@ use super::{
     face_hat, face_hat_mut, get_peer, get_router, get_routes_entries, hat, hat_mut,
     network::Network, res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::FaceState,
-            pubsub::*,
-            resource::{NodeId, Resource, SessionContext},
-            tables::{Route, RoutingExpr, Tables},
-        },
-        hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
-        router::RoutesIndexes,
-        RoutingContext, PREFIX_LIVELINESS,
+#[cfg(feature = "unstable")]
+use crate::key_expr::KeyExpr;
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        pubsub::*,
+        resource::{NodeId, Resource, SessionContext},
+        tables::{Route, RoutingExpr, Tables},
     },
+    hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
+    router::RoutesIndexes,
+    RoutingContext, PREFIX_LIVELINESS,
 };
 
 #[inline]
@@ -176,7 +175,7 @@ fn propagate_sourced_subscription(
     res: &Arc<Resource>,
     sub_info: &SubscriberInfo,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohId,
+    source: &ZenohIdProto,
     net_type: WhatAmI,
 ) {
     let net = hat!(tables).get_net(net_type).unwrap();
@@ -214,7 +213,7 @@ fn register_router_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
-    router: ZenohId,
+    router: ZenohIdProto,
 ) {
     if !res_hat!(res).router_subs.contains(&router) {
         // Register router subscription
@@ -240,7 +239,7 @@ fn declare_router_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
-    router: ZenohId,
+    router: ZenohIdProto,
 ) {
     register_router_subscription(tables, face, res, sub_info, router);
 }
@@ -250,7 +249,7 @@ fn register_peer_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
-    peer: ZenohId,
+    peer: ZenohIdProto,
 ) {
     if !res_hat!(res).peer_subs.contains(&peer) {
         // Register peer subscription
@@ -269,7 +268,7 @@ fn declare_peer_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
-    peer: ZenohId,
+    peer: ZenohIdProto,
 ) {
     register_peer_subscription(tables, face, res, sub_info, peer);
     let propa_sub_info = *sub_info;
@@ -491,7 +490,7 @@ fn propagate_forget_sourced_subscription(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    source: &ZenohId,
+    source: &ZenohIdProto,
     net_type: WhatAmI,
 ) {
     let net = hat!(tables).get_net(net_type).unwrap();
@@ -523,7 +522,11 @@ fn propagate_forget_sourced_subscription(
     }
 }
 
-fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohId) {
+fn unregister_router_subscription(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    router: &ZenohIdProto,
+) {
     res_hat_mut!(res).router_subs.retain(|sub| sub != router);
 
     if res_hat!(res).router_subs.is_empty() {
@@ -544,7 +547,7 @@ fn undeclare_router_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    router: &ZenohId,
+    router: &ZenohIdProto,
 ) {
     if res_hat!(res).router_subs.contains(router) {
         unregister_router_subscription(tables, res, router);
@@ -556,12 +559,12 @@ fn forget_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    router: &ZenohId,
+    router: &ZenohIdProto,
 ) {
     undeclare_router_subscription(tables, Some(face), res, router);
 }
 
-fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
+fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
     res_hat_mut!(res).peer_subs.retain(|sub| sub != peer);
 
     if res_hat!(res).peer_subs.is_empty() {
@@ -575,7 +578,7 @@ fn undeclare_peer_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    peer: &ZenohId,
+    peer: &ZenohIdProto,
 ) {
     if res_hat!(res).peer_subs.contains(peer) {
         unregister_peer_subscription(tables, res, peer);
@@ -587,7 +590,7 @@ fn forget_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: &ZenohId,
+    peer: &ZenohIdProto,
 ) {
     undeclare_peer_subscription(tables, Some(face), res, peer);
     let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
@@ -684,7 +687,7 @@ fn forget_client_subscription(
     }
 }
 
-pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
+pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohIdProto, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {
             for mut res in hat!(tables)
@@ -771,7 +774,11 @@ pub(super) fn pubsub_tree_change(
     update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
-pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
+pub(super) fn pubsub_linkstate_change(
+    tables: &mut Tables,
+    zid: &ZenohIdProto,
+    links: &[ZenohIdProto],
+) {
     if let Some(src_face) = tables.get_face(zid).cloned() {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
             for res in face_hat!(src_face).remote_subs.values() {
@@ -1100,7 +1107,7 @@ impl HatPubSubTrait for HatCode {
             tables: &Tables,
             net: &Network,
             source: NodeId,
-            subs: &HashSet<ZenohId>,
+            subs: &HashSet<ZenohIdProto>,
         ) {
             if net.trees.len() > source as usize {
                 for sub in subs {
@@ -1222,6 +1229,7 @@ impl HatPubSubTrait for HatCode {
         get_routes_entries(tables)
     }
 
+    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,
@@ -1233,7 +1241,7 @@ impl HatPubSubTrait for HatCode {
             tables: &Tables,
             net: &Network,
             source: usize,
-            subs: &HashSet<ZenohId>,
+            subs: &HashSet<ZenohIdProto>,
         ) {
             if net.trees.len() > source {
                 for sub in subs {

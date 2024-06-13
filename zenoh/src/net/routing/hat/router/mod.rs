@@ -28,7 +28,7 @@ use std::{
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     common::ZExtBody,
-    core::ZenohId,
+    core::ZenohIdProto,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
         interest::{InterestId, InterestOptions},
@@ -122,7 +122,7 @@ struct HatTables {
     peer_qabls: HashSet<Arc<Resource>>,
     routers_net: Option<Network>,
     peers_net: Option<Network>,
-    shared_nodes: Vec<ZenohId>,
+    shared_nodes: Vec<ZenohIdProto>,
     routers_trees_task: Option<TerminatableTask>,
     peers_trees_task: Option<TerminatableTask>,
     router_peers_failover_brokering: bool,
@@ -184,7 +184,7 @@ impl HatTables {
     }
 
     #[inline]
-    fn get_router_links(&self, peer: ZenohId) -> impl Iterator<Item = &ZenohId> + '_ {
+    fn get_router_links(&self, peer: ZenohIdProto) -> impl Iterator<Item = &ZenohIdProto> + '_ {
         self.peers_net
             .as_ref()
             .unwrap()
@@ -202,14 +202,14 @@ impl HatTables {
     #[inline]
     fn elect_router<'a>(
         &'a self,
-        self_zid: &'a ZenohId,
+        self_zid: &'a ZenohIdProto,
         key_expr: &str,
-        mut routers: impl Iterator<Item = &'a ZenohId>,
-    ) -> &'a ZenohId {
+        mut routers: impl Iterator<Item = &'a ZenohIdProto>,
+    ) -> &'a ZenohIdProto {
         match routers.next() {
             None => self_zid,
             Some(router) => {
-                let hash = |r: &ZenohId| {
+                let hash = |r: &ZenohIdProto| {
                     let mut hasher = DefaultHasher::new();
                     for b in key_expr.as_bytes() {
                         hasher.write_u8(*b);
@@ -234,13 +234,13 @@ impl HatTables {
     }
 
     #[inline]
-    fn failover_brokering_to(source_links: &[ZenohId], dest: ZenohId) -> bool {
+    fn failover_brokering_to(source_links: &[ZenohIdProto], dest: ZenohIdProto) -> bool {
         // if source_links is empty then gossip is probably disabled in source peer
         !source_links.is_empty() && !source_links.contains(&dest)
     }
 
     #[inline]
-    fn failover_brokering(&self, peer1: ZenohId, peer2: ZenohId) -> bool {
+    fn failover_brokering(&self, peer1: ZenohIdProto, peer2: ZenohIdProto) -> bool {
         self.router_peers_failover_brokering
             && self
                 .peers_net
@@ -762,10 +762,10 @@ impl HatBaseTrait for HatCode {
 }
 
 struct HatContext {
-    router_subs: HashSet<ZenohId>,
-    peer_subs: HashSet<ZenohId>,
-    router_qabls: HashMap<ZenohId, QueryableInfoType>,
-    peer_qabls: HashMap<ZenohId, QueryableInfoType>,
+    router_subs: HashSet<ZenohIdProto>,
+    peer_subs: HashSet<ZenohIdProto>,
+    router_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
+    peer_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
 }
 
 impl HatContext {
@@ -803,7 +803,7 @@ impl HatFace {
     }
 }
 
-fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohId> {
+fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohIdProto> {
     match hat!(tables)
         .routers_net
         .as_ref()
@@ -830,7 +830,7 @@ fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<
     }
 }
 
-fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohId> {
+fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohIdProto> {
     match hat!(tables)
         .peers_net
         .as_ref()

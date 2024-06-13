@@ -20,7 +20,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{iext, imsg, ZExtZBufHeader},
-    core::{Priority, Resolution, WhatAmI, ZenohId},
+    core::{Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size, id,
         join::{ext, flag, Join},
@@ -242,7 +242,7 @@ where
         };
         let length = 1 + ((flags >> 4) as usize);
         let lodec = Zenoh080Length::new(length);
-        let zid: ZenohId = lodec.read(&mut *reader)?;
+        let zid: ZenohIdProto = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
         let mut batch_size = batch_size::MULTICAST.to_le_bytes();

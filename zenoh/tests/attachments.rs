@@ -21,10 +21,15 @@ fn attachment_pubsub() {
         .declare_subscriber("test/attachment")
         .callback(|sample| {
             println!("{}", sample.payload().deserialize::<String>().unwrap());
-            for (k, v) in sample.attachment().unwrap().iter::<(
-                [u8; std::mem::size_of::<usize>()],
-                [u8; std::mem::size_of::<usize>()],
-            )>() {
+            for (k, v) in sample
+                .attachment()
+                .unwrap()
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
             }
         })
@@ -62,31 +67,32 @@ fn attachment_queries() {
         .declare_queryable("test/attachment")
         .callback(|query| {
             let s = query
-                .value()
-                .map(|q| q.payload().deserialize::<String>().unwrap())
+                .payload()
+                .map(|p| p.deserialize::<String>().unwrap())
                 .unwrap_or_default();
             println!("Query value: {}", s);
 
             let attachment = query.attachment().unwrap();
             println!("Query attachment: {:?}", attachment);
-            for (k, v) in attachment.iter::<(
-                [u8; std::mem::size_of::<usize>()],
-                [u8; std::mem::size_of::<usize>()],
-            )>() {
+            for (k, v) in attachment
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v));
             }
 
             query
-                .reply(
-                    query.key_expr().clone(),
-                    query.value().unwrap().payload().clone(),
-                )
+                .reply(query.key_expr().clone(), query.payload().unwrap().clone())
                 .attachment(ZBytes::from_iter(
                     attachment
                         .iter::<(
                             [u8; std::mem::size_of::<usize>()],
                             [u8; std::mem::size_of::<usize>()],
                         )>()
+                        .map(Result::unwrap)
                         .map(|(k, _)| (k, k)),
                 ))
                 .wait()
@@ -111,10 +117,15 @@ fn attachment_queries() {
             .unwrap();
         while let Ok(reply) = get.recv() {
             let response = reply.result().unwrap();
-            for (k, v) in response.attachment().unwrap().iter::<(
-                [u8; std::mem::size_of::<usize>()],
-                [u8; std::mem::size_of::<usize>()],
-            )>() {
+            for (k, v) in response
+                .attachment()
+                .unwrap()
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert_eq!(k, v)
             }
         }
