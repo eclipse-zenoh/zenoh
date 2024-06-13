@@ -15,14 +15,13 @@
 //! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 use std::{borrow::Cow, convert::TryFrom, str::FromStr};
 
+use super::{key_expr::KeyExpr, queryable::Query};
 use zenoh_protocol::core::{
     key_expr::{keyexpr, OwnedKeyExpr},
     Parameters,
 };
-use zenoh_result::ZResult;
-use zenoh_util::time_range::TimeRange;
-
-use super::{key_expr::KeyExpr, queryable::Query};
+#[cfg(feature = "unstable")]
+use ::{zenoh_result::ZResult, zenoh_util::time_range::TimeRange};
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of parameters
@@ -141,16 +140,7 @@ pub trait ZenohParameters {
     fn reply_key_expr_any(&self) -> bool;
 }
 
-#[cfg(not(feature = "unstable"))]
-pub(crate) trait ZenohParameters {
-    const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
-    const TIME_RANGE_KEY: &'static str = "_time";
-    fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T);
-    fn set_reply_key_expr_any(&mut self);
-    fn time_range(&self) -> Option<ZResult<TimeRange>>;
-    fn reply_key_expr_any(&self) -> bool;
-}
-
+#[cfg(feature = "unstable")]
 impl ZenohParameters for Parameters<'_> {
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
