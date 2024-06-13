@@ -35,7 +35,7 @@ use zenoh::{
     key_expr::{keyexpr, KeyExpr},
     query::{QueryConsolidation, Reply},
     sample::{EncodingBuilderTrait, Sample, SampleKind},
-    selector::{Parameters, ZenohParameters, Selector},
+    selector::{Parameters, Selector, ZenohParameters},
     session::{Session, SessionDeclarations},
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
