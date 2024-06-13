@@ -24,7 +24,10 @@ use zenoh_protocol::core::{CongestionControl, Parameters, ZenohIdProto};
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
-use super::{builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo};
+use super::{
+    builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo,
+    selector::ZenohParameters,
+};
 use super::{
     builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
     bytes::ZBytes,
@@ -33,7 +36,7 @@ use super::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample},
-    selector::{Selector, ZenohParameters},
+    selector::Selector,
     session::Session,
     value::Value,
 };

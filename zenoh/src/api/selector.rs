@@ -19,9 +19,7 @@ use zenoh_protocol::core::{
     key_expr::{keyexpr, OwnedKeyExpr},
     Parameters,
 };
-#[cfg(feature = "unstable")]
 use zenoh_result::ZResult;
-#[cfg(feature = "unstable")]
 use zenoh_util::time_range::TimeRange;
 
 use super::{key_expr::KeyExpr, queryable::Query};

@@ -84,18 +84,16 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use super::{
+    api::selector::ZenohParameters,
     liveliness::{Liveliness, LivelinessTokenState},
     publisher::Publisher,
     publisher::{MatchingListenerState, MatchingStatus},
     sample::SourceInfo,
 };
-use crate::{
-    api::selector::ZenohParameters,
-    net::{
-        primitives::Primitives,
-        routing::dispatcher::face::Face,
-        runtime::{Runtime, RuntimeBuilder},
-    },
+use crate::net::{
+    primitives::Primitives,
+    routing::dispatcher::face::Face,
+    runtime::{Runtime, RuntimeBuilder},
 };
 
 zconfigurable! {
