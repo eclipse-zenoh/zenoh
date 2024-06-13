@@ -96,55 +96,36 @@ fn propagate_simple_token_to(
                     || hat!(tables).failover_brokering(src_face.zid, dst_face.zid))
         }
     {
-        if dst_face.whatami != WhatAmI::Client {
-            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-            face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face);
-            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareToken(DeclareToken {
-                        id,
-                        wire_expr: key_expr,
-                    }),
-                },
-                res.expr(),
-            ));
-        } else {
-            let matching_interests = face_hat!(dst_face)
-                .remote_interests
-                .values()
-                .filter(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
-                .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
+        let matching_interests = face_hat!(dst_face)
+            .remote_interests
+            .values()
+            .filter(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
+            .cloned()
+            .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
 
-            for (int_res, options) in matching_interests {
-                let res = if options.aggregate() {
-                    int_res.as_ref().unwrap_or(res)
-                } else {
-                    res
-                };
-                if !face_hat!(dst_face).local_tokens.contains_key(res) {
-                    let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                    face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                    let key_expr = Resource::decl_key(res, dst_face);
-                    dst_face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareToken(DeclareToken {
-                                id,
-                                wire_expr: key_expr,
-                            }),
-                        },
-                        res.expr(),
-                    ));
-                }
+        for (int_res, options) in matching_interests {
+            let res = if options.aggregate() {
+                int_res.as_ref().unwrap_or(res)
+            } else {
+                res
+            };
+            if !face_hat!(dst_face).local_tokens.contains_key(res) {
+                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+                face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
+                let key_expr = Resource::decl_key(res, dst_face);
+                dst_face.primitives.send_declare(RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareToken(DeclareToken {
+                            id,
+                            wire_expr: key_expr,
+                        }),
+                    },
+                    res.expr(),
+                ));
             }
         }
     }
@@ -912,9 +893,20 @@ pub(crate) fn declare_token_interest(
                 for token in &hat!(tables).router_tokens {
                     if token.context.is_some()
                         && token.matches(res)
-                        && (remote_client_tokens(token, face)
-                            || remote_peer_tokens(tables, token)
-                            || remote_router_tokens(tables, token))
+                        && (res_hat!(token)
+                            .router_tokens
+                            .iter()
+                            .any(|r| *r != tables.zid)
+                            || res_hat!(token).peer_tokens.iter().any(|r| *r != tables.zid)
+                            || token.session_ctxs.values().any(|s| {
+                                s.face.id != face.id
+                                    && s.token
+                                    && (s.face.whatami == WhatAmI::Client
+                                        || face.whatami == WhatAmI::Client
+                                        || (s.face.whatami == WhatAmI::Peer
+                                            && hat!(tables)
+                                                .failover_brokering(s.face.zid, face.zid)))
+                            }))
                     {
                         let id = if mode.future() {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
@@ -940,9 +932,17 @@ pub(crate) fn declare_token_interest(
         } else {
             for token in &hat!(tables).router_tokens {
                 if token.context.is_some()
-                    && (remote_client_tokens(token, face)
-                        || remote_peer_tokens(tables, token)
-                        || remote_router_tokens(tables, token))
+                    && (res_hat!(token)
+                        .router_tokens
+                        .iter()
+                        .any(|r| *r != tables.zid)
+                        || res_hat!(token).peer_tokens.iter().any(|r| *r != tables.zid)
+                        || token.session_ctxs.values().any(|s| {
+                            s.token
+                                && (s.face.whatami != WhatAmI::Peer
+                                    || face.whatami != WhatAmI::Peer
+                                    || hat!(tables).failover_brokering(s.face.zid, face.zid))
+                        }))
                 {
                     let id = if mode.future() {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
