@@ -13,7 +13,7 @@
 //
 use clap::Parser;
 use zenoh::{
-    internal::buffers::ZSlice,
+    bytes::ZBytes,
     prelude::*,
     publisher::CongestionControl,
     shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
@@ -63,7 +63,8 @@ async fn main() {
         .await
         .unwrap();
 
-    let buf: ZSlice = buf.into();
+    // convert ZShmMut into ZBytes as ZShmMut does not support Clone
+    let buf: ZBytes = buf.into();
 
     println!("Press CTRL-C to quit...");
     loop {
