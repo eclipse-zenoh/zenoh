@@ -189,7 +189,7 @@ impl AlignQueryable {
     }
 
     fn parse_parameters(&self, parameters: &Parameters) -> Option<AlignComponent> {
-        tracing::trace!("[ALIGN QUERYABLE] Properties are: {:?}", parameters);
+        tracing::trace!("[ALIGN QUERYABLE] Parameters are: {:?}", parameters);
         if parameters.contains_key(super::ERA) {
             Some(AlignComponent::Era(
                 EraType::from_str(parameters.get(super::ERA).unwrap()).unwrap(),
