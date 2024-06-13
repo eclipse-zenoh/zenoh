@@ -463,7 +463,7 @@ client2name:client2passwd";
             .insert_json5(
                 "access_control",
                 r#"{
-                    "enabled": false,
+                    "enabled": true,
                     "default_permission": "deny",
                     "rules": [
                         {
@@ -723,7 +723,7 @@ client2name:client2passwd";
             .insert_json5(
                 "access_control",
                 r#"{
-                    "enabled": false,
+                    "enabled": true,
                     "default_permission": "deny",
                     "rules": [
                         {
@@ -987,7 +987,7 @@ client2name:client2passwd";
             .insert_json5(
                 "access_control",
                 r#"{
-                    "enabled": false,
+                    "enabled": true,
                     "default_permission": "deny",
                     "rules": [
                         {
