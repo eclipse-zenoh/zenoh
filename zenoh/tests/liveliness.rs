@@ -251,3 +251,76 @@ async fn test_liveliness_query_brokered() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 }
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subscriber_local() {
+    use std::time::Duration;
+
+    use zenoh::{config, prelude::*, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/local";
+
+    zenoh_util::try_init_log_from_env();
+
+    let peer = {
+        let mut c = config::default();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let token = ztimeout!(peer.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    drop(token);
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_query_local() {
+    use std::time::Duration;
+
+    use zenoh::{config, prelude::*, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/local";
+
+    zenoh_util::try_init_log_from_env();
+
+    let peer = {
+        let mut c = config::default();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+
+    let _token = ztimeout!(peer.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let get = ztimeout!(peer.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+}
