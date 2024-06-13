@@ -35,7 +35,7 @@ use zenoh::{
     key_expr::{keyexpr, KeyExpr},
     query::{QueryConsolidation, Reply},
     sample::{EncodingBuilderTrait, Sample, SampleKind},
-    selector::{Selector, TIME_RANGE_KEY},
+    selector::{Parameters, Selector, ZenohParameters},
     session::{Session, SessionDeclarations},
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
@@ -252,16 +252,13 @@ impl PluginControl for RunningPlugin {}
 impl RunningPluginTrait for RunningPlugin {
     fn adminspace_getter<'a>(
         &'a self,
-        selector: &'a Selector<'a>,
+        key_expr: &'a KeyExpr<'a>,
         plugin_status_key: &str,
     ) -> ZResult<Vec<zenoh::internal::plugins::Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         with_extended_string(&mut key, &["/version"], |key| {
-            if keyexpr::new(key.as_str())
-                .unwrap()
-                .intersects(selector.key_expr())
-            {
+            if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                 responses.push(zenoh::internal::plugins::Response::new(
                     key.clone(),
                     GIT_VERSION.into(),
@@ -271,7 +268,7 @@ impl RunningPluginTrait for RunningPlugin {
         with_extended_string(&mut key, &["/port"], |port_key| {
             if keyexpr::new(port_key.as_str())
                 .unwrap()
-                .intersects(selector.key_expr())
+                .intersects(key_expr)
             {
                 responses.push(zenoh::internal::plugins::Response::new(
                     port_key.clone(),
@@ -385,18 +382,18 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             }
         };
         let query_part = url.query();
-        let selector = if let Some(q) = query_part {
-            Selector::new(key_expr, q)
-        } else {
-            key_expr.into()
-        };
-        let consolidation = if selector.parameters().contains_key(TIME_RANGE_KEY) {
+        let parameters = Parameters::from(query_part.unwrap_or_default());
+        let consolidation = if parameters.time_range().is_some() {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
         } else {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
-        let raw = selector.parameters().contains_key(RAW_KEY);
-        let mut query = req.state().0.get(&selector).consolidation(consolidation);
+        let raw = parameters.contains_key(RAW_KEY);
+        let mut query = req
+            .state()
+            .0
+            .get(Selector::borrowed(&key_expr, &parameters))
+            .consolidation(consolidation);
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()

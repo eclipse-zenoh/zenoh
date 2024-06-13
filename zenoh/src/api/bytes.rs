@@ -26,7 +26,7 @@ use zenoh_buffers::{
     ZBuf, ZBufReader, ZBufWriter, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::{core::Properties, zenoh::ext::AttachmentType};
+use zenoh_protocol::{core::Parameters, zenoh::ext::AttachmentType};
 use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::{
@@ -1142,72 +1142,72 @@ impl TryFrom<&mut ZBytes> for bool {
     }
 }
 
-// - Zenoh advanced types encoders/decoders
-// Properties
-impl Serialize<Properties<'_>> for ZSerde {
+// - Zenoh advanced types serializer/deserializer
+// Parameters
+impl Serialize<Parameters<'_>> for ZSerde {
     type Output = ZBytes;
 
-    fn serialize(self, t: Properties<'_>) -> Self::Output {
+    fn serialize(self, t: Parameters<'_>) -> Self::Output {
         Self.serialize(t.as_str())
     }
 }
 
-impl From<Properties<'_>> for ZBytes {
-    fn from(t: Properties<'_>) -> Self {
+impl From<Parameters<'_>> for ZBytes {
+    fn from(t: Parameters<'_>) -> Self {
         ZSerde.serialize(t)
     }
 }
 
-impl Serialize<&Properties<'_>> for ZSerde {
+impl Serialize<&Parameters<'_>> for ZSerde {
     type Output = ZBytes;
 
-    fn serialize(self, t: &Properties<'_>) -> Self::Output {
+    fn serialize(self, t: &Parameters<'_>) -> Self::Output {
         Self.serialize(t.as_str())
     }
 }
 
-impl<'s> From<&'s Properties<'s>> for ZBytes {
-    fn from(t: &'s Properties<'s>) -> Self {
+impl<'s> From<&'s Parameters<'s>> for ZBytes {
+    fn from(t: &'s Parameters<'s>) -> Self {
         ZSerde.serialize(t)
     }
 }
 
-impl Serialize<&mut Properties<'_>> for ZSerde {
+impl Serialize<&mut Parameters<'_>> for ZSerde {
     type Output = ZBytes;
 
-    fn serialize(self, t: &mut Properties<'_>) -> Self::Output {
+    fn serialize(self, t: &mut Parameters<'_>) -> Self::Output {
         Self.serialize(t.as_str())
     }
 }
 
-impl<'s> From<&'s mut Properties<'s>> for ZBytes {
-    fn from(t: &'s mut Properties<'s>) -> Self {
+impl<'s> From<&'s mut Parameters<'s>> for ZBytes {
+    fn from(t: &'s mut Parameters<'s>) -> Self {
         ZSerde.serialize(&*t)
     }
 }
 
-impl<'s> Deserialize<'s, Properties<'s>> for ZSerde {
+impl<'s> Deserialize<'s, Parameters<'s>> for ZSerde {
     type Input = &'s ZBytes;
     type Error = ZDeserializeError;
 
-    fn deserialize(self, v: Self::Input) -> Result<Properties<'s>, Self::Error> {
+    fn deserialize(self, v: Self::Input) -> Result<Parameters<'s>, Self::Error> {
         let s = v
             .deserialize::<Cow<'s, str>>()
             .map_err(|_| ZDeserializeError)?;
-        Ok(Properties::from(s))
+        Ok(Parameters::from(s))
     }
 }
 
-impl TryFrom<ZBytes> for Properties<'static> {
+impl TryFrom<ZBytes> for Parameters<'static> {
     type Error = ZDeserializeError;
 
     fn try_from(v: ZBytes) -> Result<Self, Self::Error> {
         let s = v.deserialize::<Cow<str>>().map_err(|_| ZDeserializeError)?;
-        Ok(Properties::from(s.into_owned()))
+        Ok(Parameters::from(s.into_owned()))
     }
 }
 
-impl<'s> TryFrom<&'s ZBytes> for Properties<'s> {
+impl<'s> TryFrom<&'s ZBytes> for Parameters<'s> {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'s ZBytes) -> Result<Self, Self::Error> {
@@ -1215,7 +1215,7 @@ impl<'s> TryFrom<&'s ZBytes> for Properties<'s> {
     }
 }
 
-impl<'s> TryFrom<&'s mut ZBytes> for Properties<'s> {
+impl<'s> TryFrom<&'s mut ZBytes> for Parameters<'s> {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'s mut ZBytes) -> Result<Self, Self::Error> {
@@ -1829,7 +1829,7 @@ mod tests {
         use zenoh_buffers::{ZBuf, ZSlice};
         #[cfg(feature = "shared-memory")]
         use zenoh_core::Wait;
-        use zenoh_protocol::core::Properties;
+        use zenoh_protocol::core::Parameters;
         #[cfg(feature = "shared-memory")]
         use zenoh_shm::api::{
             buffer::zshm::{zshm, ZShm},
@@ -1969,9 +1969,9 @@ mod tests {
             serialize_deserialize!(&zshm, immutable_shm_buf);
         }
 
-        // Properties
-        serialize_deserialize!(Properties, Properties::from(""));
-        serialize_deserialize!(Properties, Properties::from("a=1;b=2;c3"));
+        // Parameters
+        serialize_deserialize!(Parameters, Parameters::from(""));
+        serialize_deserialize!(Parameters, Parameters::from("a=1;b=2;c3"));
 
         // Tuple
         serialize_deserialize!((usize, usize), (0, 1));
