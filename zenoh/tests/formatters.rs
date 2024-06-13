@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "unstable")]
 use zenoh::key_expr::format::{kedefine, keformat};
 
 #[test]

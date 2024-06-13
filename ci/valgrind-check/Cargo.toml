@@ -22,10 +22,10 @@ categories = ["network-programming"]
 description = "Internal crate for zenoh."
 
 [dependencies]
-tokio = { version = "1.35.1",  features = ["rt-multi-thread", "time", "io-std"] }
+tokio = { version = "1.35.1", features = ["rt-multi-thread", "time", "io-std"] }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 futures = "0.3.25"
-zenoh = { path = "../../zenoh/", features = ["unstable"] }
+zenoh = { path = "../../zenoh/" }
 zenoh-runtime = { path = "../../commons/zenoh-runtime/" }
 zenoh-util = { path = "../../commons/zenoh-util/", features = ["test"] }
 

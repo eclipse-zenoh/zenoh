@@ -1665,13 +1665,11 @@ impl Session {
         tracing::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
-            ConsolidationMode::Auto => {
-                if selector.parameters().contains_key(TIME_RANGE_KEY) {
-                    ConsolidationMode::None
-                } else {
-                    ConsolidationMode::Latest
-                }
+            #[cfg(feature = "unstable")]
+            ConsolidationMode::Auto if selector.parameters().contains_key(TIME_RANGE_KEY) => {
+                ConsolidationMode::None
             }
+            ConsolidationMode::Auto => ConsolidationMode::Latest,
             mode => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);

@@ -13,18 +13,14 @@
 //
 
 use std::{
-    collections::HashSet,
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
-    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
 use futures::Sink;
-#[zenoh_macros::unstable]
-use zenoh_config::wrappers::EntityGlobalId;
 use zenoh_core::{zread, Resolvable, Resolve, Wait};
 use zenoh_protocol::{
     core::CongestionControl,
@@ -32,10 +28,17 @@ use zenoh_protocol::{
     zenoh::{Del, PushBody, Put},
 };
 use zenoh_result::{Error, ZResult};
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use {
-    crate::api::handlers::{Callback, DefaultHandler, IntoHandler},
-    crate::api::sample::SourceInfo,
+    crate::api::{
+        handlers::{Callback, DefaultHandler, IntoHandler},
+        sample::SourceInfo,
+    },
+    std::{
+        collections::HashSet,
+        sync::{Arc, Mutex},
+    },
+    zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
@@ -137,6 +140,7 @@ pub struct Publisher<'a> {
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
     pub(crate) destination: Locality,
+    #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     pub(crate) undeclare_on_drop: bool,
 }
@@ -350,6 +354,7 @@ impl<'a> Publisher<'a> {
         Undeclarable::undeclare_inner(self, ())
     }
 
+    #[cfg(feature = "unstable")]
     fn undeclare_matching_listeners(&self) -> ZResult<()> {
         let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
         for id in ids {
@@ -479,6 +484,7 @@ impl Wait for PublisherUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         // set the flag first to avoid double panic if this function panic
         self.publisher.undeclare_on_drop = false;
+        #[cfg(feature = "unstable")]
         self.publisher.undeclare_matching_listeners()?;
         self.publisher
             .session
@@ -498,6 +504,7 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
         if self.undeclare_on_drop {
+            #[cfg(feature = "unstable")]
             let _ = self.undeclare_matching_listeners();
             let _ = self.session.undeclare_publisher_inner(self.id);
         }
@@ -1110,7 +1117,7 @@ mod tests {
 
         use super::Priority as APrio;
 
-        for i in APrio::MAX as u8..=APrio::MIN as u8 {
+        for i in TPrio::MAX as u8..=TPrio::MIN as u8 {
             let p: APrio = i.try_into().unwrap();
 
             match p {

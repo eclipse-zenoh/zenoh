@@ -16,10 +16,10 @@ use std::time::Duration;
 
 use zenoh::{
     config,
-    internal::ztimeout,
     prelude::*,
     sample::{Sample, SampleKind},
 };
+use zenoh_core::ztimeout;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_liveliness() {
