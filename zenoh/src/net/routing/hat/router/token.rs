@@ -20,8 +20,8 @@ use zenoh_protocol::{
     network::{
         declare::{common::ext::WireExprType, TokenId},
         ext,
-        interest::{InterestId, InterestMode},
-        Declare, DeclareBody, DeclareFinal, DeclareToken, UndeclareToken,
+        interest::{InterestId, InterestMode, InterestOptions},
+        Declare, DeclareBody, DeclareToken, UndeclareToken,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -114,14 +114,14 @@ fn propagate_simple_token_to(
             ));
         } else {
             let matching_interests = face_hat!(dst_face)
-                .remote_token_interests
+                .remote_interests
                 .values()
-                .filter(|si| si.0.as_ref().map(|si| si.matches(res)).unwrap_or(true))
+                .filter(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
                 .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, bool)>>();
+                .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
 
-            for (int_res, aggregate) in matching_interests {
-                let res = if aggregate {
+            for (int_res, options) in matching_interests {
+                let res = if options.aggregate() {
                     int_res.as_ref().unwrap_or(res)
                 } else {
                     res
@@ -392,11 +392,9 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                 },
                 res.expr(),
             ));
-        } else if face_hat!(face)
-            .remote_token_interests
-            .values()
-            .any(|si| si.0.as_ref().map(|si| si.matches(res)).unwrap_or(true) && !si.1)
-        {
+        } else if face_hat!(face).remote_interests.values().any(|(r, o)| {
+            o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
+        }) {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
             face.primitives.send_declare(RoutingContext::with_expr(
@@ -443,11 +441,11 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                         },
                         res.expr(),
                     ));
-                } else if face_hat!(face)
-                    .remote_token_interests
-                    .values()
-                    .any(|si| si.0.as_ref().map(|si| si.matches(&res)).unwrap_or(true) && !si.1)
-                {
+                } else if face_hat!(face).remote_interests.values().any(|(r, o)| {
+                    o.tokens()
+                        && r.as_ref().map(|r| r.matches(&res)).unwrap_or(true)
+                        && !o.aggregate()
+                }) {
                     // Token has never been declared on this face.
                     // Send an Undeclare with a one shot generated id and a WireExpr ext.
                     face.primitives.send_declare(RoutingContext::with_expr(
@@ -867,78 +865,48 @@ pub(super) fn token_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: 
     }
 }
 
-impl HatTokenTrait for HatCode {
-    fn declare_token_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        aggregate: bool,
-    ) {
-        if mode.current() && face.whatami == WhatAmI::Client {
-            let interest_id = (!mode.future()).then_some(id);
-            if let Some(res) = res.as_ref() {
-                if aggregate {
-                    if hat!(tables).router_tokens.iter().any(|token| {
-                        token.context.is_some()
-                            && token.matches(res)
-                            && (remote_client_tokens(token, face)
-                                || remote_peer_tokens(tables, token)
-                                || remote_router_tokens(tables, token))
-                    }) {
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
-                            id
-                        } else {
-                            0
-                        };
-                        let wire_expr = Resource::decl_key(res, face);
-                        face.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                            },
-                            res.expr(),
-                        ));
-                    }
-                } else {
-                    for token in &hat!(tables).router_tokens {
-                        if token.context.is_some()
-                            && token.matches(res)
-                            && (remote_client_tokens(token, face)
-                                || remote_peer_tokens(tables, token)
-                                || remote_router_tokens(tables, token))
-                        {
-                            let id = if mode.future() {
-                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                face_hat_mut!(face).local_tokens.insert(token.clone(), id);
-                                id
-                            } else {
-                                0
-                            };
-                            let wire_expr = Resource::decl_key(token, face);
-                            face.primitives.send_declare(RoutingContext::with_expr(
-                                Declare {
-                                    interest_id,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                                },
-                                token.expr(),
-                            ));
-                        }
-                    }
+pub(crate) fn declare_token_interest(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    id: InterestId,
+    res: Option<&mut Arc<Resource>>,
+    mode: InterestMode,
+    aggregate: bool,
+) {
+    if mode.current() && face.whatami == WhatAmI::Client {
+        let interest_id = (!mode.future()).then_some(id);
+        if let Some(res) = res.as_ref() {
+            if aggregate {
+                if hat!(tables).router_tokens.iter().any(|token| {
+                    token.context.is_some()
+                        && token.matches(res)
+                        && (remote_client_tokens(token, face)
+                            || remote_peer_tokens(tables, token)
+                            || remote_router_tokens(tables, token))
+                }) {
+                    let id = if mode.future() {
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
+                        id
+                    } else {
+                        0
+                    };
+                    let wire_expr = Resource::decl_key(res, face);
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                        },
+                        res.expr(),
+                    ));
                 }
             } else {
                 for token in &hat!(tables).router_tokens {
                     if token.context.is_some()
+                        && token.matches(res)
                         && (remote_client_tokens(token, face)
                             || remote_peer_tokens(tables, token)
                             || remote_router_tokens(tables, token))
@@ -964,34 +932,38 @@ impl HatTokenTrait for HatCode {
                     }
                 }
             }
-
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id,
-                    ext_qos: ext::QoSType::default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                },
-                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
-            ));
-        }
-        if mode.future() {
-            face_hat_mut!(face)
-                .remote_token_interests
-                .insert(id, (res.cloned(), aggregate));
+        } else {
+            for token in &hat!(tables).router_tokens {
+                if token.context.is_some()
+                    && (remote_client_tokens(token, face)
+                        || remote_peer_tokens(tables, token)
+                        || remote_router_tokens(tables, token))
+                {
+                    let id = if mode.future() {
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                        id
+                    } else {
+                        0
+                    };
+                    let wire_expr = Resource::decl_key(token, face);
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                        },
+                        token.expr(),
+                    ));
+                }
+            }
         }
     }
+}
 
-    fn undeclare_token_interest(
-        &self,
-        _tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    ) {
-        face_hat_mut!(face).remote_token_interests.remove(&id);
-    }
-
+impl HatTokenTrait for HatCode {
     fn declare_token(
         &self,
         tables: &mut Tables,

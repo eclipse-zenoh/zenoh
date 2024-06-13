@@ -22,10 +22,8 @@ use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
     network::{
-        declare::ext,
         interest::{InterestId, InterestMode, InterestOptions},
-        Declare, DeclareBody, DeclareFinal, Mapping, Push, Request, RequestId, Response,
-        ResponseFinal,
+        Mapping, Push, Request, RequestId, Response, ResponseFinal,
     },
     zenoh::RequestBody,
 };
@@ -37,6 +35,7 @@ use zenoh_transport::stats::TransportStats;
 
 use super::{
     super::router::*,
+    interests::{declare_final, declare_interest, undeclare_interest, CurrentInterest},
     resource::*,
     tables::{self, TablesLock},
 };
@@ -44,10 +43,7 @@ use crate::{
     api::key_expr::KeyExpr,
     net::{
         primitives::{McastMux, Mux, Primitives},
-        routing::{
-            interceptor::{InterceptorTrait, InterceptorsChain},
-            RoutingContext,
-        },
+        routing::interceptor::{InterceptorTrait, InterceptorsChain},
     },
 };
 
@@ -66,11 +62,12 @@ pub struct FaceState {
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
+    pub(crate) pending_current_interests:
+        HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
-    pub(crate) pending_token_queries: HashMap<InterestId, (Arc<TokenQuery>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
@@ -98,11 +95,11 @@ impl FaceState {
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
+            pending_current_interests: HashMap::new(),
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
-            pending_token_queries: HashMap::new(),
             mcast_group,
             in_interceptors,
             hat,
@@ -218,74 +215,17 @@ impl Primitives for Face {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
-            if msg.options.keyexprs() && msg.mode != InterestMode::Current {
-                register_expr_interest(
-                    &self.tables,
-                    &mut self.state.clone(),
-                    msg.id,
-                    msg.wire_expr.as_ref(),
-                );
-            }
-            if msg.options.subscribers() {
-                declare_sub_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    msg.id,
-                    msg.wire_expr.as_ref(),
-                    msg.mode,
-                    msg.options.aggregate(),
-                );
-            }
-            if msg.options.queryables() {
-                declare_qabl_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    msg.id,
-                    msg.wire_expr.as_ref(),
-                    msg.mode,
-                    msg.options.aggregate(),
-                );
-            }
-            if msg.options.tokens() {
-                declare_token_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    msg.id,
-                    msg.wire_expr.as_ref(),
-                    msg.mode,
-                    msg.options.aggregate(),
-                );
-            }
-            if msg.mode != InterestMode::Future && !msg.options.tokens() {
-                self.state.primitives.send_declare(RoutingContext::new_out(
-                    Declare {
-                        interest_id: Some(msg.id),
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareFinal(DeclareFinal),
-                    },
-                    self.clone(),
-                ));
-            }
+            declare_interest(
+                ctrl_lock.as_ref(),
+                &self.tables,
+                &mut self.state.clone(),
+                msg.id,
+                msg.wire_expr.as_ref(),
+                msg.mode,
+                msg.options,
+            );
         } else {
-            unregister_expr_interest(&self.tables, &mut self.state.clone(), msg.id);
-            undeclare_sub_interest(
-                ctrl_lock.as_ref(),
-                &self.tables,
-                &mut self.state.clone(),
-                msg.id,
-            );
-            undeclare_qabl_interest(
-                ctrl_lock.as_ref(),
-                &self.tables,
-                &mut self.state.clone(),
-                msg.id,
-            );
-            undeclare_token_interest(
+            undeclare_interest(
                 ctrl_lock.as_ref(),
                 &self.tables,
                 &mut self.state.clone(),
@@ -367,34 +307,15 @@ impl Primitives for Face {
                     msg.ext_nodeid.node_id,
                 );
             }
-            zenoh_protocol::network::DeclareBody::DeclareFinal(DeclareFinal) => {
+            zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
                 if let Some(id) = msg.interest_id {
                     get_mut_unchecked(&mut self.state.clone())
                         .local_interests
                         .entry(id)
                         .and_modify(|interest| interest.finalized = true);
 
-                    if let Some((query, cancellation_token)) =
-                        get_mut_unchecked(&mut self.state.clone())
-                            .pending_token_queries
-                            .remove(&id)
-                    {
-                        cancellation_token.cancel();
-                        if let Some(query) = Arc::into_inner(query) {
-                            query.src_face.primitives.clone().send_declare(
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id: Some(query.src_interest_id),
-                                        ext_qos: ext::QoSType::default(),
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        body: DeclareBody::DeclareFinal(DeclareFinal),
-                                    },
-                                    "".to_string(),
-                                ),
-                            );
-                        }
-                    }
+                    declare_final(&mut self.state.clone(), id);
+
                     // recompute routes
                     // TODO: disable  routes and recompute them in parallel to avoid holding
                     // tables write lock for a long time.

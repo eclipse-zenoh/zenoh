@@ -32,7 +32,7 @@ use zenoh_protocol::{
     core::ZenohId,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-        interest::InterestId,
+        interest::{InterestId, InterestOptions},
         oam::id::OAM_LINKSTATE,
         Oam,
     },
@@ -65,6 +65,7 @@ use crate::net::{
     runtime::Runtime,
 };
 
+mod interests;
 mod network;
 mod pubsub;
 mod queries;
@@ -426,11 +427,9 @@ impl HatBaseTrait for HatCode {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
 
-        face_hat_mut!(face).remote_sub_interests.clear();
+        face_hat_mut!(face).remote_interests.clear();
         face_hat_mut!(face).local_subs.clear();
-        face_hat_mut!(face).remote_qabl_interests.clear();
         face_hat_mut!(face).local_qabls.clear();
-        face_hat_mut!(face).remote_token_interests.clear();
         face_hat_mut!(face).local_tokens.clear();
 
         let face = get_mut_unchecked(face);
@@ -815,15 +814,13 @@ impl HatContext {
 struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_sub_interests: HashMap<InterestId, (Option<Arc<Resource>>, bool)>,
+    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    remote_qabl_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
-    remote_token_interests: HashMap<TokenId, (Option<Arc<Resource>>, bool)>,
 }
 
 impl HatFace {
@@ -831,15 +828,13 @@ impl HatFace {
         Self {
             link_id: 0,
             next_id: AtomicU32::new(0),
-            remote_sub_interests: HashMap::new(),
+            remote_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
-            remote_qabl_interests: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),
             local_tokens: HashMap::new(),
             remote_tokens: HashMap::new(),
-            remote_token_interests: HashMap::new(),
         }
     }
 }

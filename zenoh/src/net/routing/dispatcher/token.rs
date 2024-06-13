@@ -19,7 +19,7 @@ use zenoh_protocol::{
     core::WireExpr,
     network::{
         declare::{common::ext, TokenId},
-        interest::{InterestId, InterestMode},
+        interest::InterestId,
     },
 };
 
@@ -28,11 +28,6 @@ use super::{
     tables::{NodeId, TablesLock},
 };
 use crate::net::routing::{hat::HatTrait, router::Resource};
-
-pub(crate) struct TokenQuery {
-    pub(crate) src_face: Arc<FaceState>,
-    pub(crate) src_interest_id: InterestId,
-}
 
 pub(crate) fn declare_token(
     hat_code: &(dyn HatTrait + Send + Sync),
@@ -148,84 +143,4 @@ pub(crate) fn undeclare_token(
     } else {
         tracing::error!("{} Undeclare unknown token {}", face, id);
     }
-}
-
-pub(crate) fn declare_token_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-    expr: Option<&WireExpr>,
-    mode: InterestMode,
-    aggregate: bool,
-) {
-    if let Some(expr) = expr {
-        let rtables = zread!(tables.tables);
-        match rtables
-            .get_mapping(face, &expr.scope, expr.mapping)
-            .cloned()
-        {
-            Some(mut prefix) => {
-                tracing::debug!(
-                    "{} Declare token interest {} ({}{})",
-                    face,
-                    id,
-                    prefix.expr(),
-                    expr.suffix
-                );
-                let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) = if res
-                    .as_ref()
-                    .map(|r| r.context.is_some())
-                    .unwrap_or(false)
-                {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
-
-                hat_code.declare_token_interest(
-                    &mut wtables,
-                    face,
-                    id,
-                    Some(&mut res),
-                    mode,
-                    aggregate,
-                );
-            }
-            None => tracing::error!(
-                "{} Declare token interest {} for unknown scope {}!",
-                face,
-                id,
-                expr.scope
-            ),
-        }
-    } else {
-        let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_token_interest(&mut wtables, face, id, None, mode, aggregate);
-    }
-}
-
-pub(crate) fn undeclare_token_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-) {
-    tracing::debug!("{} Undeclare token interest {}", face, id,);
-    let mut wtables = zwrite!(tables.tables);
-    hat_code.undeclare_token_interest(&mut wtables, face, id);
 }

@@ -27,7 +27,7 @@ use token::{token_new_face, undeclare_client_token};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-    interest::InterestId,
+    interest::{InterestId, InterestOptions},
     Oam,
 };
 use zenoh_result::ZResult;
@@ -35,6 +35,7 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
+    interests::interests_new_face,
     pubsub::{pubsub_new_face, undeclare_client_subscription},
     queries::{queries_new_face, undeclare_client_queryable},
 };
@@ -53,6 +54,7 @@ use crate::net::{
     runtime::Runtime,
 };
 
+mod interests;
 mod pubsub;
 mod queries;
 mod token;
@@ -102,6 +104,7 @@ impl HatBaseTrait for HatCode {
         _tables_ref: &Arc<TablesLock>,
         face: &mut Face,
     ) -> ZResult<()> {
+        interests_new_face(tables, &mut face.state);
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
         token_new_face(tables, &mut face.state);
@@ -115,6 +118,7 @@ impl HatBaseTrait for HatCode {
         face: &mut Face,
         _transport: &TransportUnicast,
     ) -> ZResult<()> {
+        interests_new_face(tables, &mut face.state);
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
         token_new_face(tables, &mut face.state);
@@ -125,10 +129,9 @@ impl HatBaseTrait for HatCode {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
 
-        face_hat_mut!(face).remote_sub_interests.clear();
+        face_hat_mut!(face).remote_interests.clear();
         face_hat_mut!(face).local_subs.clear();
         face_hat_mut!(face).local_qabls.clear();
-        face_hat_mut!(face).remote_token_interests.clear();
         face_hat_mut!(face).local_tokens.clear();
 
         let face = get_mut_unchecked(face);
@@ -304,8 +307,7 @@ impl HatContext {
 
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_sub_interests: HashMap<InterestId, Option<Arc<Resource>>>,
-    remote_token_interests: HashMap<TokenId, Option<Arc<Resource>>>,
+    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
@@ -318,8 +320,7 @@ impl HatFace {
     fn new() -> Self {
         Self {
             next_id: AtomicU32::new(0),
-            remote_sub_interests: HashMap::new(),
-            remote_token_interests: HashMap::new(),
+            remote_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),

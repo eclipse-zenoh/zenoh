@@ -27,7 +27,7 @@ use zenoh_protocol::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
             SubscriberId, TokenId,
         },
-        interest::{InterestId, InterestMode},
+        interest::{InterestId, InterestMode, InterestOptions},
         Oam,
     },
 };
@@ -70,7 +70,7 @@ impl Sources {
 }
 
 pub(crate) trait HatTrait:
-    HatBaseTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
+    HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {
 }
 
@@ -135,22 +135,22 @@ pub(crate) trait HatBaseTrait {
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>);
 }
 
-pub(crate) trait HatPubSubTrait {
-    fn declare_sub_interest(
+pub(crate) trait HatInterestTrait {
+    #[allow(clippy::too_many_arguments)]
+    fn declare_interest(
         &self,
         tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
-        aggregate: bool,
+        options: InterestOptions,
     );
-    fn undeclare_sub_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    );
+    fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
+}
+
+pub(crate) trait HatPubSubTrait {
     fn declare_subscription(
         &self,
         tables: &mut Tables,
@@ -189,21 +189,6 @@ pub(crate) trait HatPubSubTrait {
 }
 
 pub(crate) trait HatQueriesTrait {
-    fn declare_qabl_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        aggregate: bool,
-    );
-    fn undeclare_qabl_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    );
     fn declare_queryable(
         &self,
         tables: &mut Tables,
@@ -268,23 +253,6 @@ pub trait HatTokenTrait {
         res: Option<Arc<Resource>>,
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
-
-    fn declare_token_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        aggregate: bool,
-    );
-
-    fn undeclare_token_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    );
 }
 
 trait CurrentFutureTrait {

@@ -18,19 +18,16 @@ use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{common::ext::WireExprType, TokenId},
     ext,
-    interest::{InterestId, InterestMode, InterestOptions},
-    Declare, DeclareBody, DeclareFinal, DeclareToken, Interest, UndeclareToken,
+    interest::{InterestId, InterestMode},
+    Declare, DeclareBody, DeclareToken, UndeclareToken,
 };
 use zenoh_sync::get_mut_unchecked;
 
 use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::net::routing::{
-    dispatcher::{
-        face::{FaceState, InterestState},
-        tables::Tables,
-    },
+    dispatcher::{face::FaceState, tables::Tables},
     hat::{CurrentFutureTrait, HatTokenTrait},
-    router::{NodeId, Resource, SessionContext, TokenQuery},
+    router::{NodeId, Resource, SessionContext},
     RoutingContext,
 };
 
@@ -115,13 +112,13 @@ fn declare_client_token(
 
     let wire_expr = Resource::decl_key(res, face);
     if let Some(interest_id) = interest_id {
-        if let Some((query, _)) = face.pending_token_queries.get(&interest_id) {
-            query
+        if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
+            interest
                 .src_face
                 .primitives
                 .send_declare(RoutingContext::with_expr(
                     Declare {
-                        interest_id: Some(query.src_interest_id),
+                        interest_id: Some(interest.src_interest_id),
                         ext_qos: ext::QoSType::default(),
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
@@ -164,9 +161,9 @@ fn propagate_forget_simple_token(tables: &mut Tables, res: &Arc<Resource>) {
                 res.expr(),
             ));
         } else if face_hat!(face)
-            .remote_token_interests
+            .remote_interests
             .values()
-            .any(|si| si.as_ref().map(|si| si.matches(res)).unwrap_or(true))
+            .any(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
@@ -248,7 +245,7 @@ fn forget_client_token(
 }
 
 pub(super) fn token_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    for mut src_face in tables
+    for src_face in tables
         .faces
         .values()
         .cloned()
@@ -257,199 +254,110 @@ pub(super) fn token_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         for token in face_hat!(src_face).remote_tokens.values() {
             propagate_simple_token_to(tables, face, token, &mut src_face.clone());
         }
-        if face.whatami != WhatAmI::Client {
-            for res in face_hat_mut!(&mut src_face).remote_token_interests.values() {
-                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                let options = InterestOptions::KEYEXPRS + InterestOptions::TOKENS;
-                get_mut_unchecked(face).local_interests.insert(
-                    id,
-                    InterestState {
-                        options,
-                        res: res.as_ref().map(|res| (*res).clone()),
-                        finalized: false,
-                    },
-                );
-                let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face));
-                face.primitives.send_interest(RoutingContext::with_expr(
-                    Interest {
-                        id,
-                        mode: InterestMode::CurrentFuture,
-                        options,
-                        wire_expr,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                    },
-                    res.as_ref().map(|res| res.expr()).unwrap_or_default(),
-                ));
+    }
+}
+
+pub(crate) fn declare_token_interest(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    id: InterestId,
+    res: Option<&mut Arc<Resource>>,
+    mode: InterestMode,
+    aggregate: bool,
+) {
+    if mode.current() {
+        let interest_id = (!mode.future()).then_some(id);
+        if let Some(res) = res.as_ref() {
+            if aggregate {
+                if tables.faces.values().any(|src_face| {
+                    face_hat!(src_face)
+                        .remote_tokens
+                        .values()
+                        .any(|token| token.context.is_some() && token.matches(res))
+                }) {
+                    let id = if mode.future() {
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
+                        id
+                    } else {
+                        0
+                    };
+                    let wire_expr = Resource::decl_key(res, face);
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                        },
+                        res.expr(),
+                    ));
+                }
+            } else {
+                for src_face in tables
+                    .faces
+                    .values()
+                    .cloned()
+                    .collect::<Vec<Arc<FaceState>>>()
+                {
+                    for token in face_hat!(src_face).remote_tokens.values() {
+                        if token.context.is_some() && token.matches(res) {
+                            let id = if mode.future() {
+                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                                face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                                id
+                            } else {
+                                0
+                            };
+                            let wire_expr = Resource::decl_key(token, face);
+                            face.primitives.send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    interest_id,
+                                    ext_qos: ext::QoSType::default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::default(),
+                                    body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                                },
+                                res.expr(),
+                            ))
+                        }
+                    }
+                }
+            }
+        } else {
+            for src_face in tables
+                .faces
+                .values()
+                .cloned()
+                .collect::<Vec<Arc<FaceState>>>()
+            {
+                for token in face_hat!(src_face).remote_tokens.values() {
+                    let id = if mode.future() {
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        face_hat_mut!(face).local_tokens.insert(token.clone(), id);
+                        id
+                    } else {
+                        0
+                    };
+                    let wire_expr = Resource::decl_key(token, face);
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                        },
+                        token.expr(),
+                    ));
+                }
             }
         }
     }
 }
 
 impl HatTokenTrait for HatCode {
-    fn declare_token_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        _aggregate: bool,
-    ) {
-        let src_id = id;
-        face_hat_mut!(face)
-            .remote_token_interests
-            .insert(src_id, res.as_ref().map(|res| (*res).clone()));
-
-        let query = Arc::new(TokenQuery {
-            src_face: face.clone(),
-            src_interest_id: src_id,
-        });
-
-        let mut should_send_declare_final = true;
-        for dst_face in tables
-            .faces
-            .values_mut()
-            .filter(|f| f.whatami != WhatAmI::Client)
-        {
-            let dst_id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-
-            if mode.current() {
-                should_send_declare_final = false;
-                let dst_face_mut = get_mut_unchecked(dst_face);
-                let cancellation_token = dst_face_mut.task_controller.get_cancellation_token();
-
-                dst_face_mut
-                    .pending_token_queries
-                    .insert(dst_id, (query.clone(), cancellation_token));
-            }
-
-            let options = InterestOptions::KEYEXPRS + InterestOptions::TOKENS;
-            get_mut_unchecked(dst_face).local_interests.insert(
-                dst_id,
-                InterestState {
-                    options,
-                    res: res.as_ref().map(|res| (*res).clone()),
-                    finalized: mode == InterestMode::Future,
-                },
-            );
-            let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
-            dst_face.primitives.send_interest(RoutingContext::with_expr(
-                Interest {
-                    id: dst_id,
-                    mode,
-                    options,
-                    wire_expr,
-                    ext_qos: ext::QoSType::DEFAULT,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                },
-                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
-            ));
-        }
-
-        if mode.current() {
-            for dst_face in tables
-                .faces
-                .values_mut()
-                .filter(|f| f.whatami == WhatAmI::Client)
-            {
-                let tokens = face_hat!(dst_face)
-                    .remote_tokens
-                    .values()
-                    .filter(|res| res.matches(res))
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                for res in tokens {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert(res.clone(), id);
-                        id
-                    } else {
-                        0
-                    };
-                    let wire_expr = Resource::decl_key(&res, dst_face);
-                    face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id: Some(src_id),
-                            ext_qos: ext::QoSType::default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                        },
-                        res.expr(),
-                    ))
-                }
-            }
-        }
-
-        if should_send_declare_final {
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: Some(src_id),
-                    ext_qos: ext::QoSType::default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                },
-                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
-            ));
-        }
-    }
-
-    fn undeclare_token_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    ) {
-        if let Some(interest) = face_hat_mut!(face).remote_token_interests.remove(&id) {
-            if !tables.faces.values().any(|f| {
-                f.whatami == WhatAmI::Client
-                    && face_hat!(f)
-                        .remote_token_interests
-                        .values()
-                        .any(|i| *i == interest)
-            }) {
-                for dst_face in tables
-                    .faces
-                    .values_mut()
-                    .filter(|f| f.whatami != WhatAmI::Client)
-                {
-                    for id in dst_face
-                        .local_interests
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<InterestId>>()
-                    {
-                        let local_interest = dst_face.local_interests.get(&id).unwrap();
-                        if local_interest.options.tokens() && (local_interest.res == interest) {
-                            dst_face.primitives.send_interest(RoutingContext::with_expr(
-                                Interest {
-                                    id,
-                                    mode: InterestMode::Final,
-                                    options: InterestOptions::empty(),
-                                    wire_expr: None,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                },
-                                local_interest
-                                    .res
-                                    .as_ref()
-                                    .map(|res| res.expr())
-                                    .unwrap_or_default(),
-                            ));
-                            get_mut_unchecked(dst_face).local_interests.remove(&id);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     fn declare_token(
         &self,
         tables: &mut Tables,
