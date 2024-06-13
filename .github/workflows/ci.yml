@@ -51,14 +51,26 @@ jobs:
       - name: Code format check
         run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
 
-      - name: Clippy
+      - name: Clippy zenoh no-default-features
+        run: cargo +stable clippy -p zenoh --all-targets --no-default-features -- --deny warnings
+
+      - name: Clippy zenoh
+        run: cargo +stable clippy -p zenoh --all-targets -- --deny warnings
+
+      - name: Clippy zenoh unstable
+        run: cargo +stable clippy -p zenoh --all-targets --features unstable -- --deny warnings
+
+      - name: Clippy zenoh internal
+        run: cargo +stable clippy -p zenoh --all-targets --features unstable,internal -- --deny warnings
+
+      - name: Clippy zenoh shared-memory
+        run: cargo +stable clippy -p zenoh --all-targets --features unstable,shared-memory -- --deny warnings
+
+      - name: Clippy workspace
         run: cargo +stable clippy --all-targets -- --deny warnings
 
-      - name: Clippy unstable targets
+      - name: Clippy workspace unstable
         run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
-
-      - name: Clippy shared memory without unstable
-        run: cargo +stable clippy --all-targets --features shared-memory -- --deny warnings
 
       - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}

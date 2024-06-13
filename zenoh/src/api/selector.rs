@@ -302,6 +302,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
     }
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn selector_accessors() {
     use std::collections::HashMap;

@@ -23,12 +23,12 @@ use tokio::runtime::Handle;
 use zenoh::{
     config,
     config::{EndPoint, WhatAmI},
-    internal::ztimeout,
     key_expr::KeyExpr,
     prelude::*,
     publisher::CongestionControl,
     Session,
 };
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

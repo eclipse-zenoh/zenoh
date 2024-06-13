@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![allow(unused)]
 use std::{
     future::IntoFuture,
     time::{Duration, Instant},

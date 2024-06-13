@@ -22,10 +22,10 @@ mod test {
     use zenoh::{
         config,
         config::{EndPoint, WhatAmI},
-        internal::{zlock, ztimeout},
         prelude::*,
         Config, Session,
     };
+    use zenoh_core::{zlock, ztimeout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
