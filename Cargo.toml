@@ -178,6 +178,7 @@ validated_struct = "2.1.0"
 vec_map = "0.8.2"
 webpki-roots = "0.26.0"
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
+x509-parser = "0.16.0"
 z-serial = "0.2.3"
 zenoh-ext = { version = "0.11.0-dev", path = "zenoh-ext" }
 zenoh-shm = { version = "0.11.0-dev", path = "commons/zenoh-shm" }

@@ -56,4 +56,4 @@ zenoh-util = { workspace = true }
 rustls = { version = "0.21", features = ["dangerous_configuration", "quic"] }
 rustls-pemfile = { version = "1" }
 tokio-rustls = "0.24.1"
-x509-parser = "0.16.0"
+x509-parser = { workspace = true }
