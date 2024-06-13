@@ -26,7 +26,7 @@ use zenoh::{
     query::Query,
     queryable::Queryable,
     sample::{Locality, Sample},
-    selector::PredefinedParameters,
+    selector::ZenohParameters,
     session::{SessionDeclarations, SessionRef},
     subscriber::FlumeSubscriber,
 };

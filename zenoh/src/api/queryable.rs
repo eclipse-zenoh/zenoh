@@ -33,7 +33,7 @@ use {
 };
 
 #[zenoh_macros::unstable]
-use super::selector::PredefinedParameters;
+use super::selector::ZenohParameters;
 use super::{
     builders::sample::{
         EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,

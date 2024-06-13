@@ -116,7 +116,11 @@ impl<'a> From<&'a Selector<'a>> for (&'a KeyExpr<'a>, &'a Parameters<'a>) {
 }
 
 #[zenoh_macros::unstable]
-pub trait PredefinedParameters {
+/// The trait allows to set/read parameters processed by the zenoh library itself
+pub trait ZenohParameters {
+    /// Text parameter names are not part of the public API. They exposed just to provide information about current parameters
+    /// namings, allowing user to avoid conflicts with custom parameters. It's also possible that some of these zenoh-specific parameters
+    /// which now are stored in the key-value pairs will be later passed in some other way, keeping the same get/set interface functions.
     const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
     const TIME_RANGE_KEY: &'static str = "_time";
     /// Sets the time range targeted by the selector parameters.
@@ -140,7 +144,7 @@ pub trait PredefinedParameters {
 }
 
 #[cfg(not(feature = "unstable"))]
-pub(crate) trait PredefinedParameters {
+pub(crate) trait ZenohParameters {
     const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
     const TIME_RANGE_KEY: &'static str = "_time";
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T);
@@ -149,7 +153,7 @@ pub(crate) trait PredefinedParameters {
     fn reply_key_expr_any(&self) -> bool;
 }
 
-impl PredefinedParameters for Parameters<'_> {
+impl ZenohParameters for Parameters<'_> {
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
         let mut time_range: Option<TimeRange> = time_range.into();
