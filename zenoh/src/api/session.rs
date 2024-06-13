@@ -1674,7 +1674,7 @@ impl Session {
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
             ConsolidationMode::Auto => {
-                if parameters.time_range().is_none() {
+                if parameters.time_range().is_some() {
                     ConsolidationMode::None
                 } else {
                     ConsolidationMode::Latest
