@@ -241,6 +241,9 @@ impl PolicyEnforcer {
         for config_rule in config_rule_set {
             // Config validation
             let mut validation_err = String::new();
+            if config_rule.interfaces.as_ref().unwrap().is_empty() {
+                validation_err.push_str("ACL config interfaces list is empty. ");
+            }
             if config_rule.actions.is_empty() {
                 validation_err.push_str("ACL config actions list is empty. ");
             }
@@ -251,27 +254,6 @@ impl PolicyEnforcer {
                 validation_err.push_str("ACL config key_exprs list is empty. ");
             }
             if !validation_err.is_empty() {
-                bail!("{}", validation_err);
-            }
-
-            // At least one must not be empty
-            let mut subject_validation_err: usize = 0;
-            validation_err = String::new();
-
-            if config_rule.interfaces.as_ref().unwrap().is_empty() {
-                subject_validation_err += 1;
-                validation_err.push_str("ACL config interfaces list is empty. ");
-            }
-            if config_rule.cert_common_names.as_ref().unwrap().is_empty() {
-                subject_validation_err += 1;
-                validation_err.push_str("ACL config certificate common names list is empty. ");
-            }
-            if config_rule.usernames.as_ref().unwrap().is_empty() {
-                subject_validation_err += 1;
-                validation_err.push_str("ACL config usernames list is empty. ");
-            }
-
-            if subject_validation_err == 3 {
                 bail!("{}", validation_err);
             }
 
