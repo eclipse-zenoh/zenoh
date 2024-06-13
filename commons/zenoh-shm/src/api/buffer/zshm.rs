@@ -97,7 +97,7 @@ impl TryFrom<&mut ZShm> for &mut zshmmut {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
                 // to ShmBufInner type, so it is safe to transmute them in any direction
-                Ok(unsafe { core::mem::transmute(value) })
+                Ok(unsafe { core::mem::transmute::<&mut ZShm, &mut zshmmut>(value) })
             }
             false => Err(()),
         }
@@ -163,7 +163,7 @@ impl TryFrom<&mut zshm> for &mut zshmmut {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
                 // to ShmBufInner type, so it is safe to transmute them in any direction
-                Ok(unsafe { core::mem::transmute(value) })
+                Ok(unsafe { core::mem::transmute::<&mut zshm, &mut zshmmut>(value) })
             }
             false => Err(()),
         }
