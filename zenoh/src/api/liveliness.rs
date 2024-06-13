@@ -757,7 +757,7 @@ where
         self.session
             .query(
                 &self.key_expr?,
-                &Parameters::default(),
+                &Parameters::empty(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 QueryTarget::DEFAULT,
                 QueryConsolidation::DEFAULT,
