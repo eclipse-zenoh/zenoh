@@ -21,12 +21,12 @@ use std::{
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use zenoh::{
+    internal::Value,
     key_expr::{KeyExpr, OwnedKeyExpr},
     prelude::*,
     sample::{Sample, SampleBuilder},
     selector::Selector,
     time::Timestamp,
-    value::Value,
     Session,
 };
 

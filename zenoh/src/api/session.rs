@@ -1706,7 +1706,7 @@ impl Session {
                                     }
                                 }
                                 (query.callback)(Reply {
-                                    result: Err("Timeout".into()),
+                                    result: Err(Value::from("Timeout").into()),
                                     replier_id: zid.into(),
                                 });
                             }
@@ -2205,7 +2205,7 @@ impl Primitives for Session {
                         };
                         let new_reply = Reply {
                             replier_id,
-                            result: Err(value),
+                            result: Err(value.into()),
                         };
                         callback(new_reply);
                     }

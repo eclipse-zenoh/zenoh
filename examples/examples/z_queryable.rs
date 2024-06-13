@@ -20,7 +20,7 @@ async fn main() {
     // initiate logging
     zenoh::try_init_log_from_env();
 
-    let (mut config, key_expr, value, complete) = parse_args();
+    let (mut config, key_expr, payload, complete) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_get_shm` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
@@ -43,27 +43,26 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(query) = queryable.recv_async().await {
-        match query.value() {
+        match query.payload() {
             None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-            Some(value) => {
-                let payload = value
-                    .payload()
+            Some(query_payload) => {
+                let deserialized_payload = query_payload
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(
                     ">> [Queryable ] Received Query '{}' with payload '{}'",
                     query.selector(),
-                    payload
+                    deserialized_payload
                 )
             }
         }
         println!(
             ">> [Queryable ] Responding ('{}': '{}')",
             key_expr.as_str(),
-            value,
+            payload,
         );
         query
-            .reply(key_expr.clone(), value.clone())
+            .reply(key_expr.clone(), payload.clone())
             .await
             .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
     }
@@ -75,8 +74,8 @@ struct Args {
     /// The key expression matching queries to reply to.
     key: KeyExpr<'static>,
     #[arg(short, long, default_value = "Queryable from Rust!")]
-    /// The value to reply to queries.
-    value: String,
+    /// The payload to reply to queries.
+    payload: String,
     #[arg(long)]
     /// Declare the queryable as complete w.r.t. the key expression.
     complete: bool,
@@ -86,5 +85,5 @@ struct Args {
 
 fn parse_args() -> (Config, KeyExpr<'static>, String, bool) {
     let args = Args::parse();
-    (args.common.into(), args.key, args.value, args.complete)
+    (args.common.into(), args.key, args.payload, args.complete)
 }

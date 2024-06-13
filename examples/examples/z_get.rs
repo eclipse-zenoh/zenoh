@@ -14,7 +14,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{prelude::*, query::QueryTarget, selector::Selector, Config};
+use zenoh::{query::QueryTarget, selector::Selector, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -22,7 +22,7 @@ async fn main() {
     // initiate logging
     zenoh::try_init_log_from_env();
 
-    let (config, selector, value, target, timeout) = parse_args();
+    let (config, selector, payload, target, timeout) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
@@ -34,7 +34,7 @@ async fn main() {
         // // Uncomment this line to use a ring channel instead.
         // // More information on the ring channel are available in the z_pull example.
         // .with(zenoh::handlers::RingChannel::default())
-        .value(value)
+        .payload(payload.unwrap_or_default())
         .target(target)
         .timeout(timeout)
         .await
@@ -77,8 +77,8 @@ struct Args {
     /// The selection of resources to query
     selector: Selector<'static>,
     #[arg(short, long)]
-    /// An optional value to put in the query.
-    value: Option<String>,
+    /// An optional payload to put in the query.
+    payload: Option<String>,
     #[arg(short, long, default_value = "BEST_MATCHING")]
     /// The target queryables of the query.
     target: Qt,
@@ -100,7 +100,7 @@ fn parse_args() -> (
     (
         args.common.into(),
         args.selector,
-        args.value,
+        args.payload,
         match args.target {
             Qt::BestMatching => QueryTarget::BestMatching,
             Qt::All => QueryTarget::All,

@@ -22,7 +22,7 @@ use std::{
 use async_std::sync::Arc;
 use zenoh::{
     key_expr::OwnedKeyExpr, prelude::*, sample::Sample, selector::Parameters, time::Timestamp,
-    value::Value, Session,
+    Session,
 };
 
 use super::{digest::*, Snapshotter};
