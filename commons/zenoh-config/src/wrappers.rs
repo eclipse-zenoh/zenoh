@@ -25,12 +25,15 @@ use zenoh_protocol::{
 };
 
 /// The global unique id of a zenoh peer.
-#[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug, Default,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[repr(transparent)]
 pub struct ZenohId(ZenohIdProto);
 
+impl fmt::Debug for ZenohId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 impl fmt::Display for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
@@ -64,6 +67,7 @@ impl FromStr for ZenohId {
 }
 
 /// A zenoh Hello message.
+#[repr(transparent)]
 pub struct Hello(HelloProto);
 
 impl Hello {
@@ -89,7 +93,7 @@ impl From<HelloProto> for Hello {
     }
 }
 
-impl fmt::Display for Hello {
+impl fmt::Debug for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Hello")
             .field("zid", &self.zid())
@@ -99,7 +103,7 @@ impl fmt::Display for Hello {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
+#[derive(Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(transparent)]
 pub struct EntityGlobalId(EntityGlobalIdProto);
 
@@ -110,6 +114,15 @@ impl EntityGlobalId {
 
     pub fn eid(&self) -> EntityId {
         self.0.eid
+    }
+}
+
+impl fmt::Debug for EntityGlobalId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("EntityGlobalId")
+            .field("zid", &self.zid())
+            .field("eid", &self.eid())
+            .finish()
     }
 }
 
