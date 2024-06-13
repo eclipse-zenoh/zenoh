@@ -95,17 +95,17 @@ impl From<HelloProto> for Hello {
 
 impl fmt::Debug for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Hello")
-            .field("zid", &self.zid())
-            .field("whatami", &self.whatami())
-            .field("locators", &self.locators())
-            .finish()
+        fmt::Debug::fmt(&self.0, f)
     }
 }
 
 impl fmt::Display for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+        f.debug_struct("Hello")
+            .field("zid", &self.zid())
+            .field("whatami", &self.whatami())
+            .field("locators", &self.locators())
+            .finish()
     }
 }
 
