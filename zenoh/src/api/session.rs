@@ -84,12 +84,13 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use super::{
-    api::selector::ZenohParameters,
     liveliness::{Liveliness, LivelinessTokenState},
     publisher::Publisher,
     publisher::{MatchingListenerState, MatchingStatus},
     sample::SourceInfo,
 };
+#[cfg(feature = "unstable")]
+use crate::api::selector::ZenohParameters;
 use crate::net::{
     primitives::Primitives,
     routing::dispatcher::face::Face,
