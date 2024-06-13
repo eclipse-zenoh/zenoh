@@ -223,16 +223,11 @@ pub mod sample {
     pub use crate::api::sample::SourceInfo;
     pub use crate::api::{
         builders::sample::{
-            QoSBuilderTrait, SampleBuilder, SampleBuilderAny, SampleBuilderDelete,
-            SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderAny,
+            SampleBuilderDelete, SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait,
         },
         sample::{Sample, SampleFields, SampleKind, SourceSn},
     };
-}
-
-/// Value primitives
-pub mod value {
-    pub use crate::api::value::Value;
 }
 
 /// Encoding support
@@ -305,7 +300,7 @@ pub mod query {
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
     pub use crate::api::{
-        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply},
+        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
         queryable::{Query, ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
     };
 }
@@ -399,6 +394,8 @@ pub mod internal {
             PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
         };
     }
+
+    pub use crate::api::value::Value;
 }
 
 #[cfg(all(feature = "shared-memory", not(feature = "unstable")))]

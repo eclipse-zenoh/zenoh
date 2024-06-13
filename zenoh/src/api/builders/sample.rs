@@ -23,7 +23,6 @@ use crate::api::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{QoS, QoSBuilder, Sample, SampleKind},
-    value::Value,
 };
 #[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
@@ -52,14 +51,9 @@ pub trait SampleBuilderTrait {
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
 
-pub trait ValueBuilderTrait {
+pub trait EncodingBuilderTrait {
     /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self;
-    /// Sets the payload
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self;
-    /// Sets both payload and encoding at once.
-    /// This is convenient for passing user type which supports `Into<Value>` when both payload and encoding depends on user type
-    fn value<T: Into<Value>>(self, value: T) -> Self;
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +92,14 @@ impl SampleBuilder<SampleBuilderPut> {
             },
             _t: PhantomData::<SampleBuilderPut>,
         }
+    }
+
+    pub fn payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Self
+    where
+        IntoZBytes: Into<ZBytes>,
+    {
+        self.sample.payload = payload.into();
+        self
     }
 }
 
@@ -210,31 +212,11 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
     }
 }
 
-impl ValueBuilderTrait for SampleBuilder<SampleBuilderPut> {
+impl EncodingBuilderTrait for SampleBuilder<SampleBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             sample: Sample {
                 encoding: encoding.into(),
-                ..self.sample
-            },
-            _t: PhantomData::<SampleBuilderPut>,
-        }
-    }
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        Self {
-            sample: Sample {
-                payload: payload.into(),
-                ..self.sample
-            },
-            _t: PhantomData::<SampleBuilderPut>,
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            sample: Sample {
-                payload,
-                encoding,
                 ..self.sample
             },
             _t: PhantomData::<SampleBuilderPut>,

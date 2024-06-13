@@ -36,8 +36,8 @@ use {
 use super::selector::PredefinedParameters;
 use super::{
     builders::sample::{
-        QoSBuilderTrait, SampleBuilder, SampleBuilderTrait, TimestampBuilderTrait,
-        ValueBuilderTrait,
+        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
+        TimestampBuilderTrait,
     },
     bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
@@ -96,18 +96,6 @@ impl Query {
     #[inline(always)]
     pub fn parameters(&self) -> &Parameters {
         &self.inner.parameters
-    }
-
-    /// This Query's value.
-    #[inline(always)]
-    pub fn value(&self) -> Option<&Value> {
-        self.value.as_ref()
-    }
-
-    /// This Query's value.
-    #[inline(always)]
-    pub fn value_mut(&mut self) -> Option<&mut Value> {
-        self.value.as_mut()
     }
 
     /// This Query's payload.
@@ -355,30 +343,13 @@ impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-impl ValueBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+impl EncodingBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: ReplyBuilderPut {
                 encoding: encoding.into(),
                 ..self.kind
             },
-            ..self
-        }
-    }
-
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        Self {
-            kind: ReplyBuilderPut {
-                payload: payload.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            kind: ReplyBuilderPut { payload, encoding },
             ..self
         }
     }
@@ -495,24 +466,11 @@ pub struct ReplyErrBuilder<'a> {
     value: Value,
 }
 
-impl ValueBuilderTrait for ReplyErrBuilder<'_> {
+impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.clone();
         value.encoding = encoding.into();
         Self { value, ..self }
-    }
-
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        let mut value = self.value.clone();
-        value.payload = payload.into();
-        Self { value, ..self }
-    }
-
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        Self {
-            value: value.into(),
-            ..self
-        }
     }
 }
 

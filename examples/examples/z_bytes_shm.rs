@@ -43,13 +43,13 @@ fn main() {
     let _data: &[u8] = &owned_shm_buf_mut;
     let _data_mut: &mut [u8] = &mut owned_shm_buf_mut;
 
-    // convert into immutable owned buffer (ZShmMut -> ZSlceShm)
+    // convert into immutable owned buffer (ZShmMut -> ZShm)
     let owned_shm_buf: ZShm = owned_shm_buf_mut.into();
 
     // immutable API
     let _data: &[u8] = &owned_shm_buf;
 
-    // convert again into mutable owned buffer (ZShm -> ZSlceShmMut)
+    // convert again into mutable owned buffer (ZShm -> ZShmMut)
     let mut owned_shm_buf_mut: ZShmMut = owned_shm_buf.try_into().unwrap();
 
     // mutable and immutable API

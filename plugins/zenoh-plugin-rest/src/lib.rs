@@ -34,16 +34,16 @@ use zenoh::{
     },
     key_expr::{keyexpr, KeyExpr},
     query::{QueryConsolidation, Reply},
-    sample::{Sample, SampleKind, ValueBuilderTrait},
+    sample::{EncodingBuilderTrait, Sample, SampleKind},
     selector::{Parameters, PredefinedParameters, Selector},
     session::{Session, SessionDeclarations},
-    value::Value,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 
 mod config;
 pub use config::Config;
+use zenoh::query::ReplyError;
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -95,7 +95,7 @@ fn sample_to_json(sample: &Sample) -> JSONSample {
     }
 }
 
-fn result_to_json(sample: Result<&Sample, &Value>) -> JSONSample {
+fn result_to_json(sample: Result<&Sample, &ReplyError>) -> JSONSample {
     match sample {
         Ok(sample) => sample_to_json(sample),
         Err(err) => JSONSample {
@@ -136,7 +136,7 @@ fn sample_to_html(sample: &Sample) -> String {
     )
 }
 
-fn result_to_html(sample: Result<&Sample, &Value>) -> String {
+fn result_to_html(sample: Result<&Sample, &ReplyError>) -> String {
     match sample {
         Ok(sample) => sample_to_html(sample),
         Err(err) => {

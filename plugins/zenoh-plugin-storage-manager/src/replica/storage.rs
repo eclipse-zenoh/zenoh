@@ -26,7 +26,7 @@ use zenoh::{
     internal::{
         bail,
         buffers::{SplitBuffer, ZBuf},
-        zenoh_home, Timed, TimedEvent, Timer,
+        zenoh_home, Timed, TimedEvent, Timer, Value,
     },
     key_expr::{
         keyexpr_tree::{
@@ -35,10 +35,9 @@ use zenoh::{
         KeyExpr, OwnedKeyExpr,
     },
     query::{ConsolidationMode, QueryTarget},
-    sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait, ValueBuilderTrait},
+    sample::{EncodingBuilderTrait, Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
     session::{Session, SessionDeclarations},
     time::{new_timestamp, Timestamp, NTP64},
-    value::Value,
 };
 use zenoh_backend_traits::{
     config::{GarbageCollectionConfig, StorageConfig},
