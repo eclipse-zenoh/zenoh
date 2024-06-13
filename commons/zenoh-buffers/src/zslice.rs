@@ -99,7 +99,7 @@ pub struct ZSlice {
 }
 
 impl ZSlice {
-    #[deprecated(note = "use `new` instead")]
+    #[deprecated(since = "1.0.0", note = "use `new` instead")]
     pub fn make(
         buf: Arc<dyn ZSliceBuffer>,
         start: usize,
