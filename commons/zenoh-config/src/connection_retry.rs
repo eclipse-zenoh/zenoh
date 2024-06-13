@@ -14,7 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 use zenoh_core::zparse_default;
-use zenoh_protocol::core::WhatAmI;
+use zenoh_protocol::core::{EndPoint, WhatAmI};
 
 use crate::{
     defaults::{

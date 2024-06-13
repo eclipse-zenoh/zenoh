@@ -18,9 +18,7 @@ use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
 };
-pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohIdProto,
-};
+use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor};
 
 pub trait ModeDependent<T> {
     fn router(&self) -> Option<&T>;
