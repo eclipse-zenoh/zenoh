@@ -15,10 +15,13 @@ use std::time::Duration;
 
 use clap::Parser;
 use zenoh::{
-    key_expr::KeyExpr, prelude::*, query::QueryTarget, selector::Selector, shm::{
+    query::QueryTarget,
+    selector::Selector,
+    shm::{
         zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
         POSIX_PROTOCOL_ID,
-    }, Config
+    },
+    Config,
 };
 use zenoh_examples::CommonArgs;
 
