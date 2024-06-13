@@ -34,19 +34,18 @@ use super::{
     face_hat, face_hat_mut, get_peer, get_routes_entries, hat, hat_mut, network::Network, res_hat,
     res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::FaceState,
-            pubsub::*,
-            resource::{NodeId, Resource, SessionContext},
-            tables::{Route, RoutingExpr, Tables},
-        },
-        hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
-        router::RoutesIndexes,
-        RoutingContext, PREFIX_LIVELINESS,
+#[cfg(feature = "unstable")]
+use crate::key_expr::KeyExpr;
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        pubsub::*,
+        resource::{NodeId, Resource, SessionContext},
+        tables::{Route, RoutingExpr, Tables},
     },
+    hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
+    router::RoutesIndexes,
+    RoutingContext, PREFIX_LIVELINESS,
 };
 
 #[inline]
@@ -913,6 +912,7 @@ impl HatPubSubTrait for HatCode {
         get_routes_entries(tables)
     }
 
+    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,

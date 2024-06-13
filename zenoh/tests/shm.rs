@@ -22,7 +22,6 @@ use std::{
 
 use zenoh::{
     config,
-    internal::ztimeout,
     prelude::*,
     publisher::CongestionControl,
     shm::{
@@ -31,6 +30,7 @@ use zenoh::{
     subscriber::Reliability,
     Session,
 };
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

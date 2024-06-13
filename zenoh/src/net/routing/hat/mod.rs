@@ -17,7 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{any::Any, collections::HashMap, sync::Arc};
+use std::{any::Any, sync::Arc};
 
 use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};
@@ -34,6 +34,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
+#[cfg(feature = "unstable")]
+use {crate::key_expr::KeyExpr, std::collections::HashMap};
 
 use super::{
     dispatcher::{
@@ -42,7 +44,7 @@ use super::{
     },
     router::RoutesIndexes,
 };
-use crate::{key_expr::KeyExpr, net::runtime::Runtime};
+use crate::net::runtime::Runtime;
 
 mod client;
 mod linkstate_peer;
@@ -180,6 +182,7 @@ pub(crate) trait HatPubSubTrait {
 
     fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
 
+    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,

@@ -333,6 +333,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
     }
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn selector_accessors() {
     use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM as ANYKE;
