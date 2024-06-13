@@ -1142,8 +1142,8 @@ impl TryFrom<&mut ZBytes> for bool {
     }
 }
 
-// - Zenoh advanced types encoders/decoders
-// Properties
+// - Zenoh advanced types serializer/deserializer
+// Parameters
 impl Serialize<Parameters<'_>> for ZSerde {
     type Output = ZBytes;
 
