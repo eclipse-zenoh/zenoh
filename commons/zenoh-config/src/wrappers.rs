@@ -137,3 +137,9 @@ impl From<EntityGlobalIdProto> for EntityGlobalId {
         Self(id)
     }
 }
+
+impl From<EntityGlobalId> for EntityGlobalIdProto {
+    fn from(value: EntityGlobalId) -> Self {
+        value.0
+    }
+}
