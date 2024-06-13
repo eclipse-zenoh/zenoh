@@ -1702,7 +1702,7 @@ impl Session {
                                 }
                                 (query.callback)(Reply {
                                     result: Err(Value::from("Timeout").into()),
-                                    replier_id: zid.into(),
+                                    replier_id: Some(zid.into()),
                                 });
                             }
                         }
@@ -2194,12 +2194,8 @@ impl Primitives for Session {
                             payload: e.payload.into(),
                             encoding: e.encoding.into(),
                         };
-                        let replier_id = match e.ext_sinfo {
-                            Some(info) => info.id.zid,
-                            None => zenoh_protocol::core::ZenohIdProto::rand(),
-                        };
                         let new_reply = Reply {
-                            replier_id,
+                            replier_id: e.ext_sinfo.map(|info| info.id.zid),
                             result: Err(value.into()),
                         };
                         callback(new_reply);
@@ -2308,7 +2304,7 @@ impl Primitives for Session {
                         let sample = info.into_sample(key_expr.into_owned(), payload, attachment);
                         let new_reply = Reply {
                             result: Ok(sample),
-                            replier_id: zenoh_protocol::core::ZenohIdProto::rand(), // TODO
+                            replier_id: None,
                         };
                         let callback =
                             match query.reception_mode {

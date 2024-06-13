@@ -18,6 +18,7 @@ use std::{
     time::Duration,
 };
 
+use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_protocol::core::{CongestionControl, Parameters, ZenohIdProto};
@@ -117,7 +118,7 @@ impl From<Value> for ReplyError {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub(crate) result: Result<Sample, ReplyError>,
-    pub(crate) replier_id: ZenohIdProto,
+    pub(crate) replier_id: Option<ZenohIdProto>,
 }
 
 impl Reply {
@@ -137,8 +138,8 @@ impl Reply {
     }
 
     /// Gets the id of the zenoh instance that answered this Reply.
-    pub fn replier_id(&self) -> ZenohIdProto {
-        self.replier_id
+    pub fn replier_id(&self) -> Option<ZenohId> {
+        self.replier_id.map(Into::into)
     }
 }
 
