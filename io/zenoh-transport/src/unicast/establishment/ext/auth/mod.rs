@@ -475,6 +475,11 @@ impl<'a> OpenFsm for &'a AuthFsm<'a> {
 /*************************************/
 /*            ACCEPT                 */
 /*************************************/
+pub(crate) struct RecvOpenSynOut {
+    #[cfg(feature = "auth_usrpwd")]
+    pub(crate) auth_id: UsrPwdId,
+}
+
 #[async_trait]
 impl<'a> AcceptFsm for &'a AuthFsm<'a> {
     type Error = ZError;
@@ -572,8 +577,7 @@ impl<'a> AcceptFsm for &'a AuthFsm<'a> {
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Auth>);
 
-    #[cfg(feature = "auth_usrpwd")]
-    type RecvOpenSynOut = UsrPwdId;
+    type RecvOpenSynOut = RecvOpenSynOut;
 
     async fn recv_open_syn(
         self,
@@ -603,22 +607,26 @@ impl<'a> AcceptFsm for &'a AuthFsm<'a> {
         }
 
         #[cfg(feature = "auth_usrpwd")]
+        let auth_id: UsrPwdId;
+
+        #[cfg(feature = "auth_usrpwd")]
         {
             match (self.usrpwd.as_ref(), state.usrpwd.as_mut()) {
                 (Some(e), Some(s)) => {
                     let x = ztake!(exts, id::USRPWD);
                     let username = e.recv_open_syn((s, ztryinto!(x, S))).await?;
-                    let user_passwd_id = UsrPwdId(Some(username));
-                    return Ok(user_passwd_id);
+                    auth_id = UsrPwdId(Some(username));
                 }
                 (None, None) => {
-                    return Ok(UsrPwdId(None));
+                    auth_id = UsrPwdId(None);
                 }
                 _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
-        #[cfg(not(feature = "auth_usrpwd"))]
-        Ok(())
+        Ok(RecvOpenSynOut {
+            #[cfg(feature = "auth_usrpwd")]
+            auth_id,
+        })
     }
 
     type SendOpenAckIn = &'a StateAccept;

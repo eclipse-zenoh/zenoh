@@ -495,7 +495,8 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .ext_auth
             .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
             .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?
+            .auth_id;
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
