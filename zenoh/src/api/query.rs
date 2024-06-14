@@ -84,7 +84,7 @@ impl Default for QueryConsolidation {
 }
 
 /// Error returned by a [`get`](Session::get).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ReplyError {
     pub(crate) payload: ZBytes,
     pub(crate) encoding: Encoding,
