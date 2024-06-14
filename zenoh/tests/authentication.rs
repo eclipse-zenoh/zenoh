@@ -14,11 +14,12 @@
 mod test {
     use std::{
         fs,
-        path::Path,
+        path::PathBuf,
         sync::{Arc, Mutex},
         time::Duration,
     };
 
+    use once_cell::sync::Lazy;
     use tokio::runtime::Handle;
     use zenoh::{
         config,
@@ -32,11 +33,14 @@ mod test {
     const SLEEP: Duration = Duration::from_secs(1);
     const KEY_EXPR: &str = "test/demo";
     const VALUE: &str = "zenoh";
+    static TESTFILES_PATH: Lazy<PathBuf> = Lazy::new(|| std::env::temp_dir());
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication() {
         zenoh_util::try_init_log_from_env();
-        let path = "./tests/testfiles";
-        create_new_files(path).await.unwrap();
+        create_new_files(TESTFILES_PATH.to_path_buf())
+            .await
+            .unwrap();
         println!("testfiles created successfully.");
 
         test_pub_sub_deny_then_allow_usrpswd().await;
@@ -56,13 +60,10 @@ mod test {
 
         // Test link AuthIds accessibility for lowlatency transport
         test_pub_sub_deny_then_allow_quic(3778, true).await;
-
-        std::fs::remove_dir_all(path).unwrap();
-        println!("testfiles removed successfully.");
     }
 
     #[allow(clippy::all)]
-    async fn create_new_files(file_path: &str) -> std::io::Result<()> {
+    async fn create_new_files(certs_dir: std::path::PathBuf) -> std::io::Result<()> {
         use std::io::prelude::*;
         let ca_pem = b"-----BEGIN CERTIFICATE-----
 MIIDiTCCAnGgAwIBAgIUO1x6LAlICgKs5+pYUTo4CughfKEwDQYJKoZIhvcNAQEL
@@ -191,10 +192,6 @@ qNsoty1gY/y3n7SN/iMZo8lO
         let credentials_txt = b"client1name:client1passwd
 client2name:client2passwd";
 
-        let certs_dir = Path::new(file_path);
-        if !certs_dir.exists() {
-            fs::create_dir(certs_dir)?;
-        }
         struct Testfile<'a> {
             name: &'a str,
             value: &'a [u8],
@@ -226,7 +223,7 @@ client2name:client2passwd";
                 value: credentials_txt,
             },
         ];
-        for test_file in test_files.iter() {
+        for test_file in test_files {
             let file_path = certs_dir.join(test_file.name);
             let mut file = fs::File::create(&file_path)?;
             file.write_all(test_file.value)?;
@@ -236,6 +233,7 @@ client2name:client2passwd";
     }
 
     async fn get_basic_router_config_tls(port: u16) -> Config {
+        let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config.listen.endpoints = vec![format!("tls/127.0.0.1:{}", port).parse().unwrap()];
@@ -245,23 +243,39 @@ client2name:client2passwd";
                 "transport",
                 r#"{
                     "link": {
-                    "protocols": [
-                        "tls"
-                    ],
-                    "tls": {
-                        "server_private_key": "tests/testfiles/serversidekey.pem",
-                        "server_certificate": "tests/testfiles/serverside.pem",
-                        "root_ca_certificate": "tests/testfiles/ca.pem",
-                        "client_auth": true,
-                        "server_name_verification": false
-                    },
+                        "protocols": [
+                            "tls"
+                        ],
+                        "tls": {
+                            "client_auth": true,
+                            "server_name_verification": false
+                        },
                     },
                 }"#,
             )
             .unwrap();
         config
+            .transport
+            .link
+            .tls
+            .set_server_private_key(Some(format!("{}serversidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_server_certificate(Some(format!("{}serverside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}ca.pem", cert_path)))
+            .unwrap();
+        config
     }
     async fn get_basic_router_config_quic(port: u16, lowlatency: bool) -> Config {
+        let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config.listen.endpoints = vec![format!("quic/127.0.0.1:{}", port).parse().unwrap()];
@@ -275,15 +289,30 @@ client2name:client2passwd";
                         "quic"
                     ],
                     "tls": {
-                        "server_private_key": "tests/testfiles/serversidekey.pem",
-                        "server_certificate": "tests/testfiles/serverside.pem",
-                        "root_ca_certificate": "tests/testfiles/ca.pem",
                         "client_auth": true,
                         "server_name_verification": false
                     },
                     },  
                 }"#,
             )
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_server_private_key(Some(format!("{}serversidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_server_certificate(Some(format!("{}serverside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}ca.pem", cert_path)))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config
@@ -308,11 +337,19 @@ client2name:client2passwd";
                         usrpwd: {
                             user: "routername",
                             password: "routerpasswd",
-                            dictionary_file: "tests/testfiles/credentials.txt",
                         },
                     },
                 }"#,
             )
+            .unwrap();
+        config
+            .transport
+            .auth
+            .usrpwd
+            .set_dictionary_file(Some(format!(
+                "{}credentials.txt",
+                TESTFILES_PATH.to_string_lossy()
+            )))
             .unwrap();
         config
     }
@@ -322,6 +359,7 @@ client2name:client2passwd";
     }
 
     async fn get_client_sessions_tls(port: u16) -> (Session, Session) {
+        let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
         let mut config = config::client([format!("tls/127.0.0.1:{}", port)
             .parse::<EndPoint>()
@@ -335,9 +373,6 @@ client2name:client2passwd";
                             "tls"
                         ],
                         "tls": {
-                            "root_ca_certificate": "tests/testfiles/ca.pem",
-                            "client_private_key": "tests/testfiles/clientsidekey.pem",
-                            "client_certificate": "tests/testfiles/clientside.pem",
                             "client_auth": true,
                             "server_name_verification": false
                         }
@@ -345,7 +380,26 @@ client2name:client2passwd";
                 }"#,
             )
             .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_private_key(Some(format!("{}clientsidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_certificate(Some(format!("{}clientside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}ca.pem", cert_path)))
+            .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
+
         let mut config = config::client([format!("tls/127.0.0.1:{}", port)
             .parse::<EndPoint>()
             .unwrap()]);
@@ -358,9 +412,6 @@ client2name:client2passwd";
                             "tls"
                         ],
                         "tls": {
-                            "root_ca_certificate": "tests/testfiles/ca.pem",
-                            "client_private_key": "tests/testfiles/clientsidekey.pem",
-                            "client_certificate": "tests/testfiles/clientside.pem",
                             "client_auth": true,
                             "server_name_verification": false
                         }
@@ -368,11 +419,30 @@ client2name:client2passwd";
                 }"#,
             )
             .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_private_key(Some(format!("{}clientsidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_certificate(Some(format!("{}clientside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}ca.pem", cert_path)))
+            .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
     }
 
     async fn get_client_sessions_quic(port: u16, lowlatency: bool) -> (Session, Session) {
+        let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
         let mut config = config::client([format!("quic/127.0.0.1:{}", port)
             .parse::<EndPoint>()
@@ -386,15 +456,30 @@ client2name:client2passwd";
                             "quic"
                         ],
                         "tls": {
-                            "root_ca_certificate": "tests/testfiles/ca.pem",
-                            "client_private_key": "tests/testfiles/clientsidekey.pem",
-                            "client_certificate": "tests/testfiles/clientside.pem",
                             "client_auth": true,
                             "server_name_verification": false
                         }
                     }
                 }"#,
             )
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_private_key(Some(format!("{}clientsidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_certificate(Some(format!("{}clientside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}ca.pem", cert_path)))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config
@@ -416,15 +501,30 @@ client2name:client2passwd";
                             "quic"
                         ],
                         "tls": {
-                            "root_ca_certificate": "tests/testfiles/ca.pem",
-                            "client_private_key": "tests/testfiles/clientsidekey.pem",
-                            "client_certificate": "tests/testfiles/clientside.pem",
                             "client_auth": true,
                             "server_name_verification": false
                         }
                     }
                 }"#,
             )
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_private_key(Some(format!("{}clientsidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_certificate(Some(format!("{}clientside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}ca.pem", cert_path)))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config

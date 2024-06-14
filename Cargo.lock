@@ -5195,6 +5195,7 @@ dependencies = [
  "futures",
  "git-version",
  "lazy_static",
+ "once_cell",
  "ordered-float",
  "paste",
  "petgraph",
