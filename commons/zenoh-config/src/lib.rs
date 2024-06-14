@@ -1093,7 +1093,11 @@ impl PluginsConfig {
         for next in split {
             match remove_from {
                 Value::Object(o) => match o.get_mut(current) {
-                    Some(v) => unsafe { remove_from = std::mem::transmute(v) },
+                    Some(v) => {
+                        remove_from = unsafe {
+                            std::mem::transmute::<&mut serde_json::Value, &mut serde_json::Value>(v)
+                        }
+                    }
                     None => bail!("{:?} has no {} property", o, current),
                 },
                 Value::Array(a) => {
