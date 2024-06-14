@@ -127,6 +127,6 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../LICENSE", "0"]
-depends = "zenohd (=0.11.0), zenoh-plugin-rest (=0.11.0), zenoh-plugin-storage-manager (=0.11.0)"
+depends = "zenohd (=0.11.0-stable), zenoh-plugin-rest (=0.11.0-stable), zenoh-plugin-storage-manager (=0.11.0-stable)"
 maintainer-scripts = ".deb"
 assets = [["../README.md", "README.md", "644"]]
