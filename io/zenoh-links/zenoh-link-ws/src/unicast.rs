@@ -228,7 +228,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
     }
 
     #[inline(always)]
-    fn get_auth_identifier(&self) -> &LinkAuthId {
+    fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::NONE
     }
 }

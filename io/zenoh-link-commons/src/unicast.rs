@@ -52,7 +52,7 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
-    fn get_auth_identifier(&self) -> &LinkAuthId;
+    fn get_auth_id(&self) -> &LinkAuthId;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
