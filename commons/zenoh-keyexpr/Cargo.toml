@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.68.2"
+rust-version = "1.72.1"
 name = "zenoh-keyexpr"
 version = { workspace = true }
 repository = { workspace = true }

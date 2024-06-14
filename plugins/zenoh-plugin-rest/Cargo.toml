@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.70.0"
+rust-version = "1.72.1"
 name = "zenoh-plugin-rest"
 version = { workspace = true }
 repository = { workspace = true }
@@ -36,13 +36,13 @@ anyhow = { workspace = true, features = ["default"] }
 async-std = { workspace = true, features = ["default", "attributes"] }
 base64 = { workspace = true }
 const_format = { workspace = true }
-zenoh-util = {workspace = true }
+zenoh-util = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 http-types = { workspace = true }
 lazy_static = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }

@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.70.0"
+rust-version = "1.72.1"
 name = "zenoh-ext-examples"
 version = { workspace = true }
 repository = { workspace = true }

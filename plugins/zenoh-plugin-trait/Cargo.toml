@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.70.0"
+rust-version = "1.72.1"
 name = "zenoh-plugin-trait"
 version = { workspace = true }
 repository = { workspace = true }
@@ -28,7 +28,7 @@ name = "zenoh_plugin_trait"
 
 [dependencies]
 libloading = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 zenoh-macros = { workspace = true }
