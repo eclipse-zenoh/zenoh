@@ -264,7 +264,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        let auth_id = get_cert_common_name(quic_conn.clone())?;
+        let auth_id = get_cert_common_name(&quic_conn)?;
 
         let link = Arc::new(LinkUnicastQuic::new(
             quic_conn,
@@ -399,7 +399,7 @@ async fn accept_task(
 
                         // Get Quic auth identifier
                         let dst_addr = quic_conn.remote_address();
-                        let auth_id = get_cert_common_name(quic_conn.clone())?;
+                        let auth_id = get_cert_common_name(&quic_conn)?;
 
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
@@ -435,7 +435,7 @@ async fn accept_task(
     Ok(())
 }
 
-fn get_cert_common_name(conn: quinn::Connection) -> ZResult<QuicAuthId> {
+fn get_cert_common_name(conn: &quinn::Connection) -> ZResult<QuicAuthId> {
     let mut auth_id = QuicAuthId { auth_value: None };
     if let Some(pi) = conn.peer_identity() {
         let serv_certs = pi.downcast::<Vec<rustls::Certificate>>().unwrap();
