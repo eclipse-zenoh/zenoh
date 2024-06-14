@@ -118,7 +118,7 @@ impl From<Value> for ReplyError {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub(crate) result: Result<Sample, ReplyError>,
-    pub(crate) replier_id: ZenohIdProto,
+    pub(crate) replier_id: Option<ZenohIdProto>,
 }
 
 impl Reply {
@@ -138,8 +138,8 @@ impl Reply {
     }
 
     /// Gets the id of the zenoh instance that answered this Reply.
-    pub fn replier_id(&self) -> ZenohId {
-        self.replier_id.into()
+    pub fn replier_id(&self) -> Option<ZenohId> {
+        self.replier_id.map(Into::into)
     }
 }
 
