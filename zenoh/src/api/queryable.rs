@@ -94,7 +94,7 @@ impl Query {
 
     /// This Query's selector parameters.
     #[inline(always)]
-    pub fn parameters(&self) -> &Parameters {
+    pub fn parameters(&self) -> &Parameters<'static> {
         &self.inner.parameters
     }
 
