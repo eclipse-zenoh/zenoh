@@ -34,9 +34,9 @@ rustls-pki-types = { workspace = true }
 rustls-webpki = { workspace = true }
 secrecy = { workspace = true }
 tokio = { workspace = true, features = [
+  "fs",
   "io-util",
   "net",
-  "fs",
   "sync",
   "time",
 ] }
