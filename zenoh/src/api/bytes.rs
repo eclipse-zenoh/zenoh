@@ -911,11 +911,10 @@ impl TryFrom<ZBytes> for Cow<'static, str> {
     type Error = Utf8Error;
 
     fn try_from(v: ZBytes) -> Result<Self, Self::Error> {
-        let v: Cow<'static, [u8]> = Cow::from(v);
-        let _ = core::str::from_utf8(v.as_ref())?;
-        // SAFETY: &str is &[u8] with the guarantee that every char is UTF-8
-        //         As implemented internally https://doc.rust-lang.org/std/str/fn.from_utf8_unchecked.html.
-        Ok(unsafe { core::mem::transmute(v) })
+        Ok(match Cow::<[u8]>::from(v) {
+            Cow::Borrowed(s) => core::str::from_utf8(s)?.into(),
+            Cow::Owned(s) => String::from_utf8(s).map_err(|err| err.utf8_error())?.into(),
+        })
     }
 }
 
@@ -923,11 +922,10 @@ impl<'a> TryFrom<&'a ZBytes> for Cow<'a, str> {
     type Error = Utf8Error;
 
     fn try_from(v: &'a ZBytes) -> Result<Self, Self::Error> {
-        let v: Cow<'a, [u8]> = Cow::from(v);
-        let _ = core::str::from_utf8(v.as_ref())?;
-        // SAFETY: &str is &[u8] with the guarantee that every char is UTF-8
-        //         As implemented internally https://doc.rust-lang.org/std/str/fn.from_utf8_unchecked.html.
-        Ok(unsafe { core::mem::transmute(v) })
+        Ok(match Cow::<[u8]>::from(v) {
+            Cow::Borrowed(s) => core::str::from_utf8(s)?.into(),
+            Cow::Owned(s) => String::from_utf8(s).map_err(|err| err.utf8_error())?.into(),
+        })
     }
 }
 
@@ -935,11 +933,10 @@ impl<'a> TryFrom<&'a mut ZBytes> for Cow<'a, str> {
     type Error = Utf8Error;
 
     fn try_from(v: &'a mut ZBytes) -> Result<Self, Self::Error> {
-        let v: Cow<'a, [u8]> = Cow::from(v);
-        let _ = core::str::from_utf8(v.as_ref())?;
-        // SAFETY: &str is &[u8] with the guarantee that every char is UTF-8
-        //         As implemented internally https://doc.rust-lang.org/std/str/fn.from_utf8_unchecked.html.
-        Ok(unsafe { core::mem::transmute(v) })
+        Ok(match Cow::<[u8]>::from(v) {
+            Cow::Borrowed(s) => core::str::from_utf8(s)?.into(),
+            Cow::Owned(s) => String::from_utf8(s).map_err(|err| err.utf8_error())?.into(),
+        })
     }
 }
 

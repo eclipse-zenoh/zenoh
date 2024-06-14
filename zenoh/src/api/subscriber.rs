@@ -20,10 +20,10 @@ use std::{
 };
 
 use zenoh_core::{Resolvable, Wait};
-#[cfg(feature = "unstable")]
-use zenoh_protocol::core::EntityGlobalIdProto;
 use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
 use zenoh_result::ZResult;
+#[cfg(feature = "unstable")]
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 use super::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -458,11 +458,12 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn id(&self) -> EntityGlobalIdProto {
+    pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
             zid: self.subscriber.session.zid().into(),
             eid: self.subscriber.state.id,
         }
+        .into()
     }
 
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
