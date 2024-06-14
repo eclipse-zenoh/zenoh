@@ -154,7 +154,7 @@ impl<'a> AsyncResolve for PeersZidBuilder<'a> {
 }
 
 /// Struct returned by [`Session::info()`](crate::SessionDeclarations::info) which allows
-/// to access informations about the current zenoh [`Session`](crate::Session).
+/// to access information about the current zenoh [`Session`](crate::Session).
 ///
 /// # Examples
 /// ```

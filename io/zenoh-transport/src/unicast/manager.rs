@@ -95,7 +95,7 @@ pub struct TransportManagerParamsUnicast {
 pub struct TransportManagerBuilderUnicast {
     // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
     //       set the actual keep_alive timeout to one fourth of the lease time.
-    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continuous connectivity
     //       check which considers a link as failed when no messages are received in 3.5 times the
     //       target interval.
     pub(super) lease: Duration,
@@ -444,7 +444,7 @@ impl TransportManager {
         }
 
         // Add the link to the transport
-        let (start_tx_rx, ack) = transport
+        let (start_tx, start_rx, ack) = transport
             .add_link(link, other_initial_sn, other_lease)
             .await
             .map_err(InitTransportError::Link)?;
@@ -456,10 +456,12 @@ impl TransportManager {
             .await
             .map_err(|e| InitTransportError::Transport((e, c_t, close::reason::GENERIC)))?;
 
+        start_tx();
+
         // notify transport's callback interface that there is a new link
         Self::notify_new_link_unicast(&transport, c_link);
 
-        start_tx_rx();
+        start_rx();
 
         Ok(transport)
     }
@@ -548,7 +550,8 @@ impl TransportManager {
         };
 
         // Add the link to the transport
-        let (start_tx_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await {
+        let (start_tx, start_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await
+        {
             Ok(val) => val,
             Err(e) => {
                 let _ = t.close(e.2).await;
@@ -575,6 +578,8 @@ impl TransportManager {
         guard.insert(config.zid, t.clone());
         drop(guard);
 
+        start_tx();
+
         // Notify manager's interface that there is a new transport
         transport_error!(
             self.notify_new_transport_unicast(&t),
@@ -584,7 +589,7 @@ impl TransportManager {
         // Notify transport's callback interface that there is a new link
         Self::notify_new_link_unicast(&t, c_link);
 
-        start_tx_rx();
+        start_rx();
 
         zcondfeat!(
             "shared-memory",
@@ -746,13 +751,17 @@ impl TransportManager {
         let c_manager = self.clone();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Acceptor, async move {
-                if let Err(e) = tokio::time::timeout(
+                if tokio::time::timeout(
                     c_manager.config.unicast.accept_timeout,
                     super::establishment::accept::accept_link(link, &c_manager),
                 )
                 .await
+                .is_err()
                 {
-                    tracing::debug!("{}", e);
+                    tracing::debug!(
+                        "Failed to accept link before deadline ({}ms)",
+                        c_manager.config.unicast.accept_timeout.as_millis()
+                    );
                 }
                 incoming_counter.fetch_sub(1, SeqCst);
             });

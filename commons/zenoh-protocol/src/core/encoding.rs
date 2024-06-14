@@ -148,7 +148,7 @@ impl Encoding {
     }
 
     /// Returns `true`if the string representation of this encoding starts with
-    /// the string representation of ther given encoding.
+    /// the string representation of their given encoding.
     pub fn starts_with<T>(&self, with: T) -> bool
     where
         T: Into<Encoding>,

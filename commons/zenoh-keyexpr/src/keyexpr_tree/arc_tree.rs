@@ -88,10 +88,10 @@ impl<
     /// # Type inference papercut
     /// Despite some of `KeArcTree`'s generic parameters having default values, those are only taken into
     /// account by the compiler when a type is named with some parameters omitted, and not when a type is
-    /// infered with the same parameters unconstrained.
+    /// inferred with the same parameters unconstrained.
     ///
     /// The simplest way to resolve this is to eventually assign to tree part of the return value
-    /// to a variable or field whose type is named `KeArcTree<_>` (the `Weight` parameter can generally be infered).
+    /// to a variable or field whose type is named `KeArcTree<_>` (the `Weight` parameter can generally be inferred).
     pub fn new() -> Result<(Self, DefaultToken), <DefaultToken as TokenTrait>::ConstructionError> {
         let token = DefaultToken::new()?;
         Ok((Self::with_token(&token), token))

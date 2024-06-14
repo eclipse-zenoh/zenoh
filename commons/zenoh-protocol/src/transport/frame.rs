@@ -20,7 +20,7 @@ use alloc::vec::Vec;
 /// [`crate::net::protocol::message::ZenohMessage`]. I.e., the total length of the
 /// serialized [`crate::net::protocol::message::ZenohMessage`] (s) MUST be smaller
 /// than the maximum batch size (i.e. 2^16-1) and the link MTU.
-/// The [`Frame`] message is used as means to aggreate multiple
+/// The [`Frame`] message is used as means to aggregate multiple
 /// [`crate::net::protocol::message::ZenohMessage`] in a single atomic message that
 /// goes on the wire. By doing so, many small messages can be batched together and
 /// share common information like the sequence number.

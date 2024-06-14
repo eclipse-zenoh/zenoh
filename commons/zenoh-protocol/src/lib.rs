@@ -73,7 +73,7 @@ pub const VERSION: u8 = 0x08;
 // # Array field
 //
 // An array contains a fixed number of elements whose number is known a priori or indicated by
-// another field. Each element can be either a single byte field or a variable legnth field.
+// another field. Each element can be either a single byte field or a variable length field.
 //
 // ```text
 //  7 6 5 4 3 2 1 0

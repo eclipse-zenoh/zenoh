@@ -42,7 +42,7 @@
 //! KeTrees were designed to maximize code reuse. As such, their core properties are reflected through the [`IKeyExprTree`] and [`IKeyExprTreeMut`] traits.
 //!
 //! KeTrees are made up of node, where nodes may or may not have a value (called `weight`) associated with them. To access these weighs, as well as other
-//! properties of a node, you can go throught the [`IKeyExprTreeNode`] and [`IKeyExprTreeNodeMut`] traits.
+//! properties of a node, you can go through the [`IKeyExprTreeNode`] and [`IKeyExprTreeNodeMut`] traits.
 //!
 //! # Iterators
 //! KeTrees provide iterators for the following operations:

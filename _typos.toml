@@ -1,0 +1,11 @@
+[files]
+extend-exclude = [
+  # Ignore all files in transport tests as they contain
+  # hashes that are treated as typos.
+  "io/zenoh-transport/tests/*.rs",
+]
+
+
+[default.extend-words]
+mis = "mis" # mismatch
+thr = "thr" # throughput

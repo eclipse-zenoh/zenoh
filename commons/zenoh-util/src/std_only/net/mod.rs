@@ -24,7 +24,7 @@ zconfigurable! {
 }
 
 #[cfg(windows)]
-unsafe fn get_adapters_adresses(af_spec: i32) -> ZResult<Vec<u8>> {
+unsafe fn get_adapters_addresses(af_spec: i32) -> ZResult<Vec<u8>> {
     use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
     let mut ret;
@@ -81,7 +81,7 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
-            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
+            let buffer = get_adapters_addresses(winapi::shared::ws2def::AF_INET)?;
 
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
@@ -165,7 +165,7 @@ pub fn get_local_addresses(interface: Option<&str>) -> ZResult<Vec<IpAddr>> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
-            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_UNSPEC)?;
+            let buffer = get_adapters_addresses(winapi::shared::ws2def::AF_UNSPEC)?;
 
             let mut result = vec![];
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
@@ -245,7 +245,7 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
-            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
+            let buffer = get_adapters_addresses(winapi::shared::ws2def::AF_INET)?;
 
             let mut addrs = vec![];
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
@@ -284,7 +284,7 @@ pub fn get_index_of_interface(addr: IpAddr) -> ZResult<u32> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
-            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_INET)?;
+            let buffer = get_adapters_addresses(winapi::shared::ws2def::AF_INET)?;
 
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
@@ -327,7 +327,7 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
             use crate::ffi;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
-            let buffer = get_adapters_adresses(winapi::shared::ws2def::AF_UNSPEC)?;
+            let buffer = get_adapters_addresses(winapi::shared::ws2def::AF_UNSPEC)?;
 
             if addr.is_unspecified() {
                 let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();

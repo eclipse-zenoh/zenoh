@@ -173,7 +173,7 @@ pub struct Resource {
     pub(crate) parent: Option<Arc<Resource>>,
     pub(crate) suffix: String,
     pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(crate) childs: HashMap<String, Arc<Resource>>,
+    pub(crate) children: HashMap<String, Arc<Resource>>,
     pub(crate) context: Option<ResourceContext>,
     pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
 }
@@ -208,7 +208,7 @@ impl Resource {
             parent: Some(parent.clone()),
             suffix: String::from(suffix),
             nonwild_prefix,
-            childs: HashMap::new(),
+            children: HashMap::new(),
             context,
             session_ctxs: HashMap::new(),
         }
@@ -282,7 +282,7 @@ impl Resource {
             parent: None,
             suffix: String::from(""),
             nonwild_prefix: None,
-            childs: HashMap::new(),
+            children: HashMap::new(),
             context: None,
             session_ctxs: HashMap::new(),
         })
@@ -292,7 +292,7 @@ impl Resource {
         let mut resclone = res.clone();
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
-            if Arc::strong_count(res) <= 3 && res.childs.is_empty() {
+            if Arc::strong_count(res) <= 3 && res.children.is_empty() {
                 // consider only childless resource held by only one external object (+ 1 strong count for resclone, + 1 strong count for res.parent to a total of 3 )
                 tracing::debug!("Unregister resource {}", res.expr());
                 if let Some(context) = mutres.context.as_mut() {
@@ -309,7 +309,7 @@ impl Resource {
                 }
                 mutres.nonwild_prefix.take();
                 {
-                    get_mut_unchecked(parent).childs.remove(&res.suffix);
+                    get_mut_unchecked(parent).children.remove(&res.suffix);
                 }
                 Resource::clean(parent);
             }
@@ -318,11 +318,11 @@ impl Resource {
 
     pub fn close(self: &mut Arc<Resource>) {
         let r = get_mut_unchecked(self);
-        for c in r.childs.values_mut() {
+        for c in r.children.values_mut() {
             Self::close(c);
         }
         r.parent.take();
-        r.childs.clear();
+        r.children.clear();
         r.nonwild_prefix.take();
         r.session_ctxs.clear();
     }
@@ -331,7 +331,7 @@ impl Resource {
     pub fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr();
         result.push('\n');
-        for child in from.childs.values() {
+        for child in from.children.values() {
             result.push_str(&Resource::print_tree(child));
         }
         result
@@ -351,7 +351,7 @@ impl Resource {
                 None => (suffix, ""),
             };
 
-            match get_mut_unchecked(from).childs.get_mut(chunk) {
+            match get_mut_unchecked(from).children.get_mut(chunk) {
                 Some(res) => Resource::make_resource(tables, res, rest),
                 None => {
                     let mut new = Arc::new(Resource::new(from, chunk, None));
@@ -360,7 +360,7 @@ impl Resource {
                     }
                     let res = Resource::make_resource(tables, &mut new, rest);
                     get_mut_unchecked(from)
-                        .childs
+                        .children
                         .insert(String::from(chunk), new);
                     res
                 }
@@ -376,7 +376,7 @@ impl Resource {
                         None => (suffix, ""),
                     };
 
-                    match get_mut_unchecked(from).childs.get_mut(chunk) {
+                    match get_mut_unchecked(from).children.get_mut(chunk) {
                         Some(res) => Resource::make_resource(tables, res, rest),
                         None => {
                             let mut new = Arc::new(Resource::new(from, chunk, None));
@@ -385,7 +385,7 @@ impl Resource {
                             }
                             let res = Resource::make_resource(tables, &mut new, rest);
                             get_mut_unchecked(from)
-                                .childs
+                                .children
                                 .insert(String::from(chunk), new);
                             res
                         }
@@ -405,7 +405,7 @@ impl Resource {
                 None => (suffix, ""),
             };
 
-            match from.childs.get(chunk) {
+            match from.children.get(chunk) {
                 Some(res) => Resource::get_resource(res, rest),
                 None => None,
             }
@@ -418,7 +418,7 @@ impl Resource {
                         None => (suffix, ""),
                     };
 
-                    match from.childs.get(chunk) {
+                    match from.children.get(chunk) {
                         Some(res) => Resource::get_resource(res, rest),
                         None => None,
                     }
@@ -516,7 +516,7 @@ impl Resource {
         ) -> WireExpr<'a> {
             if checkchilds && !suffix.is_empty() {
                 let (chunk, rest) = suffix.split_at(suffix.find('/').unwrap_or(suffix.len()));
-                if let Some(child) = prefix.childs.get(chunk) {
+                if let Some(child) = prefix.children.get(chunk) {
                     return get_best_key_(child, rest, sid, true);
                 }
             }
@@ -550,7 +550,7 @@ impl Resource {
             if from.context.is_some() {
                 matches.push(Arc::downgrade(from));
             }
-            for child in from.childs.values() {
+            for child in from.children.values() {
                 recursive_push(child, matches)
             }
         }
@@ -560,7 +560,7 @@ impl Resource {
             matches: &mut Vec<Weak<Resource>>,
         ) {
             if from.parent.is_none() || from.suffix == "/" {
-                for child in from.childs.values() {
+                for child in from.children.values() {
                     get_matches_from(key_expr, child, matches);
                 }
                 return;
@@ -582,12 +582,12 @@ impl Resource {
                                 matches.push(Arc::downgrade(from));
                             }
                             if suffix.as_bytes() == b"**" {
-                                for child in from.childs.values() {
+                                for child in from.children.values() {
                                     get_matches_from(key_expr, child, matches)
                                 }
                             }
                             if let Some(child) =
-                                from.childs.get("/**").or_else(|| from.childs.get("**"))
+                                from.children.get("/**").or_else(|| from.children.get("**"))
                             {
                                 if child.context.is_some() {
                                     matches.push(Arc::downgrade(child))
@@ -599,7 +599,7 @@ impl Resource {
                     Some(rest) => {
                         let recheck_keyexpr_one_level_lower =
                             chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
-                        for child in from.childs.values() {
+                        for child in from.children.values() {
                             get_matches_from(rest, child, matches);
                             if recheck_keyexpr_one_level_lower {
                                 get_matches_from(key_expr, child, matches)

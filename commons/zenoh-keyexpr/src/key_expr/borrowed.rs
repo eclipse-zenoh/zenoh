@@ -107,7 +107,7 @@ impl keyexpr {
 
     /// Joins both sides, inserting a `/` in between them.
     ///
-    /// This should be your prefered method when concatenating path segments.
+    /// This should be your preferred method when concatenating path segments.
     ///
     /// This is notably useful for workspaces:
     /// ```rust
@@ -137,7 +137,7 @@ impl keyexpr {
     ///
     /// NOTE: this operation can typically be used in a backend implementation, at creation of a Storage to get the keys prefix,
     /// and then in `zenoh_backend_traits::Storage::on_sample()` this prefix has to be stripped from all received
-    /// `Sample::key_expr` to retrieve the corrsponding key.
+    /// `Sample::key_expr` to retrieve the corresponding key.
     ///
     /// # Examples:
     /// ```
@@ -172,12 +172,12 @@ impl keyexpr {
     }
 
     /// Remove the specified `prefix` from `self`.
-    /// The result is a list of `keyexpr`, since there might be several ways for the prefix to match the begining of the `self` key expression.  
+    /// The result is a list of `keyexpr`, since there might be several ways for the prefix to match the beginning of the `self` key expression.  
     /// For instance, if `self` is `"a/**/c/*" and `prefix` is `a/b/c` then:  
     ///   - the `prefix` matches `"a/**/c"` leading to a result of `"*"` when stripped from `self`
     ///   - the `prefix` matches `"a/**"` leading to a result of `"**/c/*"` when stripped from `self`
     /// So the result is `["*", "**/c/*"]`.  
-    /// If `prefix` cannot match the begining of `self`, an empty list is reuturned.
+    /// If `prefix` cannot match the beginning of `self`, an empty list is reuturned.
     ///
     /// See below more examples.
     ///
@@ -581,7 +581,7 @@ enum KeyExprConstructionError {
     LoneDollarStar = -1,
     SingleStarAfterDoubleStar = -2,
     DoubleStarAfterDoubleStar = -3,
-    EmpyChunk = -4,
+    EmptyChunk = -4,
     StarsInChunk = -5,
     DollarAfterDollarOrStar = -6,
     ContainsSharpOrQMark = -7,
@@ -595,7 +595,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
         let mut in_big_wild = false;
         for chunk in value.split('/') {
             if chunk.is_empty() {
-                bail!((KeyExprConstructionError::EmpyChunk) "Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
+                bail!((KeyExprConstructionError::EmptyChunk) "Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
             }
             if chunk == "$*" {
                 bail!((KeyExprConstructionError::LoneDollarStar)

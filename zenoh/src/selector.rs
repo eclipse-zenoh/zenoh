@@ -161,7 +161,7 @@ impl<'a> Selector<'a> {
             selector.push('&')
         }
         use std::fmt::Write;
-        write!(selector, "{TIME_RANGE_KEY}={time_range}").unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
+        write!(selector, "{TIME_RANGE_KEY}={time_range}").unwrap(); // This unwrap is safe because `String: Write` should be infallible.
     }
 
     pub fn remove_time_range(&mut self) {
@@ -328,7 +328,7 @@ pub trait Parameters<'a> {
     where
         <Self::Decoder as Iterator>::Item: Parameter;
 
-    /// Extracts all parameters into a HashMap, returning an error if duplicate parameters arrise.
+    /// Extracts all parameters into a HashMap, returning an error if duplicate parameters arise.
     fn decode_into_map<N, V>(&'a self) -> ZResult<HashMap<N, V>>
     where
         <Self::Decoder as Iterator>::Item: Parameter,

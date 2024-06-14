@@ -66,7 +66,7 @@ pub mod ext {
     pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
 
     /// # Shared Memory extension
-    /// Used to carry additional information about the shared-memory layour of data
+    /// Used to carry additional information about the shared-memory layout of data
     #[cfg(feature = "shared-memory")]
     pub type Shm = zextunit!(0x2, true);
     #[cfg(feature = "shared-memory")]

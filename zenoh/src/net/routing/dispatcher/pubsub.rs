@@ -194,7 +194,7 @@ pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resourc
     update_data_routes(tables, res);
     update_matching_pulls(tables, res);
     let res = get_mut_unchecked(res);
-    for child in res.childs.values_mut() {
+    for child in res.children.values_mut() {
         update_data_routes_from(tables, child);
     }
 }

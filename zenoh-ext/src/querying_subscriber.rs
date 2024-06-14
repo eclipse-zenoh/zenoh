@@ -96,7 +96,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
         self.callback(locked(callback))
     }
 
-    /// Use the given handler to recieve Samples.
+    /// Use the given handler to receive Samples.
     #[inline]
     pub fn with<Handler>(
         self,
@@ -585,9 +585,9 @@ where
     }
 }
 
-/// A Subscriber that will run the given user defined `fetch` funtion at startup.
+/// A Subscriber that will run the given user defined `fetch` function at startup.
 ///
-/// The user defined `fetch` funtion should fetch some samples and return them through the callback funtion
+/// The user defined `fetch` function should fetch some samples and return them through the callback function
 /// (it could typically be a Session::get()). Those samples will be merged with the received publications and made available in the receiver.
 /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
 ///
@@ -726,7 +726,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
 
     /// Perform an additional `fetch`.
     ///
-    /// The provided `fetch` funtion should fetch some samples and return them through the callback funtion
+    /// The provided `fetch` function should fetch some samples and return them through the callback function
     /// (it could typically be a Session::get()). Those samples will be merged with the received publications and made available in the receiver.
     ///
     /// # Examples

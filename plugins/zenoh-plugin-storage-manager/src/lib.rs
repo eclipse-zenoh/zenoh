@@ -224,7 +224,7 @@ impl StorageRuntimeInner {
                     config.volume_id
                 );
                 // let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
-                let _ = storage.send(StorageMessage::Stop); // TODO: was previosuly spawning a task. do we need that?
+                let _ = storage.send(StorageMessage::Stop); // TODO: was previously spawning a task. do we need that?
             }
         }
     }

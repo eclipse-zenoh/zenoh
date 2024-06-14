@@ -37,16 +37,16 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 #[inline]
-fn send_sourced_subscription_to_net_childs(
+fn send_sourced_subscription_to_net_children(
     tables: &Tables,
     net: &Network,
-    childs: &[NodeIndex],
+    children: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
     sub_info: &SubscriberInfo,
     routing_context: NodeId,
 ) {
-    for child in childs {
+    for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
@@ -135,10 +135,10 @@ fn propagate_sourced_subscription(
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
-                send_sourced_subscription_to_net_childs(
+                send_sourced_subscription_to_net_children(
                     tables,
                     net,
-                    &net.trees[tree_sid.index()].childs,
+                    &net.trees[tree_sid.index()].children,
                     res,
                     src_face,
                     sub_info,
@@ -274,15 +274,15 @@ fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn send_forget_sourced_subscription_to_net_childs(
+fn send_forget_sourced_subscription_to_net_children(
     tables: &Tables,
     net: &Network,
-    childs: &[NodeIndex],
+    children: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
     routing_context: Option<NodeId>,
 ) {
-    for child in childs {
+    for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
@@ -344,10 +344,10 @@ fn propagate_forget_sourced_subscription(
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
-                send_forget_sourced_subscription_to_net_childs(
+                send_forget_sourced_subscription_to_net_children(
                     tables,
                     net,
-                    &net.trees[tree_sid.index()].childs,
+                    &net.trees[tree_sid.index()].children,
                     res,
                     src_face,
                     Some(tree_sid.index() as NodeId),
@@ -499,10 +499,10 @@ pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId) {
     }
 }
 
-pub(super) fn pubsub_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeIndex>]) {
-    // propagate subs to new childs
-    for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
-        if !tree_childs.is_empty() {
+pub(super) fn pubsub_tree_change(tables: &mut Tables, new_children: &[Vec<NodeIndex>]) {
+    // propagate subs to new children
+    for (tree_sid, tree_children) in new_children.iter().enumerate() {
+        if !tree_children.is_empty() {
             let net = hat!(tables).peers_net.as_ref().unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
@@ -518,10 +518,10 @@ pub(super) fn pubsub_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeInde
                                 reliability: Reliability::Reliable, // @TODO
                                 mode: Mode::Push,
                             };
-                            send_sourced_subscription_to_net_childs(
+                            send_sourced_subscription_to_net_children(
                                 tables,
                                 net,
-                                tree_childs,
+                                tree_children,
                                 res,
                                 None,
                                 &sub_info,

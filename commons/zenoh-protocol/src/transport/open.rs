@@ -17,7 +17,7 @@ use zenoh_buffers::ZSlice;
 
 /// # Open message
 ///
-/// After having succesfully complete the [`super::InitSyn`]-[`super::InitAck`] message exchange,
+/// After having successfully complete the [`super::InitSyn`]-[`super::InitAck`] message exchange,
 /// the OPEN message is sent on a link to finalize the initialization of the link and
 /// associated transport with a zenoh node.
 /// For convenience, we call [`OpenSyn`] and [`OpenAck`] an OPEN message with the A flag

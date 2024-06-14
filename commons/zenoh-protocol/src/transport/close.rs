@@ -16,7 +16,7 @@
 ///
 /// The [`Close`] message is sent in any of the following two cases:
 ///     1) in response to an INIT or OPEN message which are not accepted;
-///     2) at any time to arbitrarly close the transport with the corresponding zenoh node.
+///     2) at any time to arbitrarily close the transport with the corresponding zenoh node.
 ///
 /// The [`Close`] message flow is the following:
 ///

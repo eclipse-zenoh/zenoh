@@ -17,7 +17,7 @@
 
 ### z_pub_cache
 
-   Declares a publisher and an assiciated publication cache with a given key expression.  
+   Declares a publisher and an associated publication cache with a given key expression.  
    All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource). The cache can be queried by a QueryingSubscriber at startup (see next example).
 
    Typical usage:

@@ -65,7 +65,7 @@ pub(crate) fn recursive_include<P>(
 where
     P: AsRef<Path>,
 {
-    // if include property is present, read the file and remove properites found in file from values
+    // if include property is present, read the file and remove properties found in file from values
     let include_object = if let Some(include_path) = values.get(include_property_name) {
         let Some(include_path) = include_path.as_str() else {
             bail!(
