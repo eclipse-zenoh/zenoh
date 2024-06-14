@@ -52,7 +52,7 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
-    fn get_auth_identifier(&self) -> LinkAuthId;
+    fn get_auth_identifier(&self) -> &LinkAuthId;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
@@ -135,12 +135,10 @@ pub struct LinkAuthId {
 }
 
 impl LinkAuthId {
-    pub const fn none() -> Self {
-        LinkAuthId {
-            auth_type: LinkAuthType::None,
-            auth_value: None,
-        }
-    }
+    pub const NONE: Self = Self {
+        auth_type: LinkAuthType::None,
+        auth_value: None,
+    };
     pub fn get_type(&self) -> &LinkAuthType {
         &self.auth_type
     }
@@ -154,7 +152,7 @@ impl LinkAuthId {
 
 impl Default for LinkAuthId {
     fn default() -> Self {
-        LinkAuthId::none()
+        LinkAuthId::NONE.clone()
     }
 }
 

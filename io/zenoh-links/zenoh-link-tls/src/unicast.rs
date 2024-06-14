@@ -198,8 +198,8 @@ impl LinkUnicastTrait for LinkUnicastTls {
     }
 
     #[inline(always)]
-    fn get_auth_identifier(&self) -> LinkAuthId {
-        self.auth_identifier.clone()
+    fn get_auth_identifier(&self) -> &LinkAuthId {
+        &self.auth_identifier
     }
 }
 

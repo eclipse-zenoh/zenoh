@@ -166,8 +166,8 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
-    fn get_auth_identifier(&self) -> LinkAuthId {
-        LinkAuthId::default()
+    fn get_auth_identifier(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
     }
 }
 

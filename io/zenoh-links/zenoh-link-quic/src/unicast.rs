@@ -162,8 +162,8 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     #[inline(always)]
-    fn get_auth_identifier(&self) -> LinkAuthId {
-        self.auth_identifier.clone()
+    fn get_auth_identifier(&self) -> &LinkAuthId {
+        &self.auth_identifier
     }
 }
 
