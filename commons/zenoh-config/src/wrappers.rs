@@ -77,8 +77,8 @@ impl Hello {
     }
 
     /// Get the zenoh id of this Hello message.
-    pub fn zid(&self) -> ZenohIdProto {
-        self.0.zid
+    pub fn zid(&self) -> ZenohId {
+        self.0.zid.into()
     }
 
     /// Get the whatami of this Hello message.
