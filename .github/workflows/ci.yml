@@ -144,14 +144,20 @@ jobs:
         uses: crate-ci/typos@master
 
   msrvs:
-    name: MSRV checks on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    # NOTE: It is necessary to run the check-msrv action on multiple platforms since a crate's MSRV
+    name: MSRV checks for ${{ matrix.target }}
+    runs-on: macos-14
+    # NOTE: It is necessary to run the check-msrv action for multiple targets since a crate's MSRV
     # depends on the target it's compiled for.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        target:
+          - aarch64-apple-darwin
+          - aarch64-unknown-linux-gnu
+          - x86_64-unknown-linux-gnu
+          - x86_64-pc-windows-msvc
+          - arm-unknown-linux-gnueabihf
+          - armv7-unknown-linux-gnueabihf
     steps:
       - name: Clone this repository
         uses: actions/checkout@v4
@@ -162,6 +168,7 @@ jobs:
           # NOTE: As of commit 25f06bd, the minimum MSRV found in the workspace is 1.68.
           # This value should be as high as possible to avoid needlessly checking older versions.
           min: 1.68.0
+          target: ${{ matrix.target }}
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
