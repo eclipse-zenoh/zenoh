@@ -172,16 +172,17 @@ impl LinkAuthIdBuilder {
         }
     }
 
-    pub fn auth_type(&mut self, auth_type: LinkAuthType) -> &mut Self {
+    pub fn auth_type(mut self, auth_type: LinkAuthType) -> Self {
         self.auth_type = auth_type;
         self
     }
-    pub fn auth_value(&mut self, auth_value: Option<String>) -> &mut Self {
+
+    pub fn auth_value(mut self, auth_value: Option<String>) -> Self {
         self.auth_value = auth_value;
         self
     }
 
-    pub fn build(&self) -> LinkAuthId {
+    pub fn build(self) -> LinkAuthId {
         LinkAuthId {
             auth_type: self.auth_type.clone(),
             auth_value: self.auth_value.clone(),
