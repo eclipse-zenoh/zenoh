@@ -24,8 +24,8 @@ use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkAuthId, LinkAuthIdBuilder, LinkAuthType, LinkManagerUnicastTrait,
-    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -486,7 +486,7 @@ struct TlsAuthId {
 
 impl From<TlsAuthId> for LinkAuthId {
     fn from(value: TlsAuthId) -> Self {
-        LinkAuthIdBuilder::new()
+        LinkAuthId::builder()
             .auth_type(LinkAuthType::Tls)
             .auth_value(value.auth_value.clone())
             .build()

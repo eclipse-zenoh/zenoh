@@ -141,6 +141,9 @@ impl LinkAuthId {
     pub fn get_value(&self) -> &Option<String> {
         &self.auth_value
     }
+    pub fn builder() -> LinkAuthIdBuilder {
+        LinkAuthIdBuilder::new()
+    }
 }
 
 impl Default for LinkAuthId {
