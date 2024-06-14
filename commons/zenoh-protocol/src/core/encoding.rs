@@ -89,7 +89,7 @@ impl TryFrom<u8> for KnownEncoding {
     type Error = ZError;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value < consts::MIMES.len() as u8 + 1 {
-            Ok(unsafe { mem::transmute(value) })
+            Ok(unsafe { mem::transmute::<u8, KnownEncoding>(value) })
         } else {
             Err(zerror!("Unknown encoding"))
         }
@@ -213,9 +213,14 @@ impl From<&'static str> for Encoding {
         for (i, v) in consts::MIMES.iter().enumerate().skip(1) {
             if let Some(suffix) = s.strip_prefix(v) {
                 if suffix.is_empty() {
-                    return Encoding::Exact(unsafe { mem::transmute(i as u8) });
+                    return Encoding::Exact(unsafe {
+                        mem::transmute::<u8, KnownEncoding>(i as u8)
+                    });
                 } else {
-                    return Encoding::WithSuffix(unsafe { mem::transmute(i as u8) }, suffix.into());
+                    return Encoding::WithSuffix(
+                        unsafe { mem::transmute::<u8, KnownEncoding>(i as u8) },
+                        suffix.into(),
+                    );
                 }
             }
         }
@@ -233,9 +238,14 @@ impl From<String> for Encoding {
             if s.starts_with(v) {
                 s.replace_range(..v.len(), "");
                 if s.is_empty() {
-                    return Encoding::Exact(unsafe { mem::transmute(i as u8) });
+                    return Encoding::Exact(unsafe {
+                        mem::transmute::<u8, KnownEncoding>(i as u8)
+                    });
                 } else {
-                    return Encoding::WithSuffix(unsafe { mem::transmute(i as u8) }, s.into());
+                    return Encoding::WithSuffix(
+                        unsafe { mem::transmute::<u8, KnownEncoding>(i as u8) },
+                        s.into(),
+                    );
                 }
             }
         }

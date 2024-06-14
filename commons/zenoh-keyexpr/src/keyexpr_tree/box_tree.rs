@@ -157,7 +157,7 @@ where
         if !node.children.is_empty() {
             node.weight.take()
         } else {
-            let chunk = unsafe { core::mem::transmute::<_, &keyexpr>(node.chunk()) };
+            let chunk = unsafe { core::mem::transmute::<&keyexpr, &keyexpr>(node.chunk()) };
             match node.parent {
                 None => &mut self.children,
                 Some(parent) => unsafe { &mut (*parent.as_ptr()).children },
