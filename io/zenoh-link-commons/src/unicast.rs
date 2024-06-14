@@ -135,6 +135,12 @@ pub struct LinkAuthId {
 }
 
 impl LinkAuthId {
+    pub const fn none() -> Self {
+        LinkAuthId {
+            auth_type: LinkAuthType::None,
+            auth_value: None,
+        }
+    }
     pub fn get_type(&self) -> &LinkAuthType {
         &self.auth_type
     }
@@ -148,10 +154,7 @@ impl LinkAuthId {
 
 impl Default for LinkAuthId {
     fn default() -> Self {
-        LinkAuthId {
-            auth_type: LinkAuthType::None,
-            auth_value: None,
-        }
+        LinkAuthId::none()
     }
 }
 
