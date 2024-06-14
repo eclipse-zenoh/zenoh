@@ -33,7 +33,7 @@ mod test {
     const SLEEP: Duration = Duration::from_secs(1);
     const KEY_EXPR: &str = "test/demo";
     const VALUE: &str = "zenoh";
-    static TESTFILES_PATH: Lazy<PathBuf> = Lazy::new(|| std::env::temp_dir());
+    static TESTFILES_PATH: Lazy<PathBuf> = Lazy::new(std::env::temp_dir);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication() {
