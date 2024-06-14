@@ -157,37 +157,21 @@ impl PolicyEnforcer {
                 } else {
                     // check for undefined values in rules and initialize them to defaults
                     for (rule_offset, rule) in rules.iter_mut().enumerate() {
-                        match rule.interfaces {
-                            Some(_) => (),
-                            None => {
-                                tracing::warn!("ACL config interfaces list is empty. Applying rule #{} to all network interfaces", rule_offset);
-                                if let Ok(all_interfaces) =
-                                    get_interface_names_by_addr(Ipv4Addr::UNSPECIFIED.into())
-                                {
-                                    rule.interfaces = Some(all_interfaces);
-                                }
-                            }
+                        if rule.interfaces.is_none() {
+                            tracing::warn!("ACL config interfaces list is empty. Applying rule #{} to all network interfaces", rule_offset);
+                            rule.interfaces =
+                                Some(get_interface_names_by_addr(Ipv4Addr::UNSPECIFIED.into())?);
                         }
-                        match rule.flows {
-                            Some(_) => (),
-                            None => {
-                                tracing::warn!("ACL config flows list is empty. Applying rule #{} to both Ingress and Egress flows", rule_offset);
-                                rule.flows = Some(
-                                    [InterceptorFlow::Ingress, InterceptorFlow::Egress].into(),
-                                );
-                            }
+                        if rule.flows.is_none() {
+                            tracing::warn!("ACL config flows list is empty. Applying rule #{} to both Ingress and Egress flows", rule_offset);
+                            rule.flows =
+                                Some([InterceptorFlow::Ingress, InterceptorFlow::Egress].into());
                         }
-                        match rule.usernames {
-                            Some(_) => (),
-                            None => {
-                                rule.usernames = Some(Vec::new());
-                            }
+                        if rule.usernames.is_none() {
+                            rule.usernames = Some(Vec::new());
                         }
-                        match rule.cert_common_names {
-                            Some(_) => (),
-                            None => {
-                                rule.cert_common_names = Some(Vec::new());
-                            }
+                        if rule.cert_common_names.is_none() {
+                            rule.cert_common_names = Some(Vec::new());
                         }
                     }
                     let policy_information = self.policy_information_point(&rules)?;
