@@ -76,7 +76,7 @@ impl Writer for &mut [u8] {
         // SAFETY: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { mem::transmute(lhs) };
+        *self = unsafe { mem::transmute::<&mut [u8], &mut [u8]>(lhs) };
 
         // SAFETY: this operation is safe since we check if len is non-zero.
         Ok(unsafe { NonZeroUsize::new_unchecked(len) })
@@ -98,7 +98,7 @@ impl Writer for &mut [u8] {
         // SAFETY: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { mem::transmute(lhs) };
+        *self = unsafe { mem::transmute::<&mut [u8], &mut [u8]>(lhs) };
 
         Ok(())
     }
@@ -122,7 +122,7 @@ impl Writer for &mut [u8] {
         // SAFETY: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { mem::transmute(s) };
+        *self = unsafe { mem::transmute::<&mut [u8], &mut [u8]>(s) };
 
         NonZeroUsize::new(len).ok_or(DidntWrite)
     }
