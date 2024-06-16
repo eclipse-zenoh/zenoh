@@ -29,6 +29,14 @@ use zenoh_protocol::{
 #[repr(transparent)]
 pub struct ZenohId(ZenohIdProto);
 
+impl ZenohId {
+    /// Used by plugins for crating adminspace path
+    #[zenoh_macros::unstable]
+    pub fn into_keyexpr(self) -> OwnedKeyExpr {
+        self.into()
+    }
+}
+
 impl fmt::Debug for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
