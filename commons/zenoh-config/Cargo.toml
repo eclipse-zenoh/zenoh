@@ -23,6 +23,9 @@ license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
 
+[features]
+unstable = []
+
 [dependencies]
 tracing = { workspace = true }
 flume = { workspace = true }
