@@ -20,7 +20,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use zenoh_protocol::{
-    core::{EntityGlobalIdProto, EntityId, Locator, WhatAmI, ZenohIdProto},
+    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, EntityId, Locator, WhatAmI, ZenohIdProto},
     scouting::HelloProto,
 };
 
@@ -55,6 +55,18 @@ impl From<ZenohId> for ZenohIdProto {
 impl From<ZenohId> for uhlc::ID {
     fn from(zid: ZenohId) -> Self {
         zid.0.into()
+    }
+}
+
+impl From<ZenohId> for OwnedKeyExpr {
+    fn from(zid: ZenohId) -> Self {
+        zid.0.into()
+    }
+}
+
+impl From<&ZenohId> for OwnedKeyExpr {
+    fn from(zid: &ZenohId) -> Self {
+        (*zid).into()
     }
 }
 
