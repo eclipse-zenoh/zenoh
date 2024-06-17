@@ -191,8 +191,8 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     }
 
     #[inline(always)]
-    fn get_auth_id(&self) -> LinkAuthId {
-        LinkAuthId::default()
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
     }
 }
 
