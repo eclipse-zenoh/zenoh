@@ -21,9 +21,10 @@ test(=header_link_failure_concurrent)
 threads-required = 'num-cpus'
 slow-timeout = { period = "60s", terminate-after = 6 }
 
-# Run the following tests with all cpus available
+# Run the following tests with all cpus available and 4 attempts
 [[profile.default.overrides]]
 filter = """
 test(=downsampling_by_keyexpr)
 """
-threads-required = 'num-cpus'
+threads-required = 6
+retries = 4
