@@ -364,7 +364,9 @@ compile_error!(
 
 #[zenoh_macros::internal]
 pub mod internal {
-    pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout, ResolveFuture};
+    pub use zenoh_core::{
+        zasync_executor_init, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture,
+    };
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
     pub use zenoh_task::{TaskController, TerminatableTask};
