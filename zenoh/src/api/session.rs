@@ -1911,7 +1911,7 @@ impl Session {
                                 tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
                                 (query.callback)(Reply {
                                     result: Err(Value::from("Timeout").into()),
-                                    replier_id: zid.into(),
+                                    replier_id: Some(zid.into()),
                                 });
                             }
                         }
@@ -2274,7 +2274,7 @@ impl Primitives for Session {
                                             #[cfg(feature = "unstable")]
                                             attachment: None,
                                         }),
-                                        replier_id: zenoh_protocol::core::ZenohIdProto::rand(),
+                                        replier_id: None,
                                     };
 
                                     (query.callback)(reply);
