@@ -378,6 +378,7 @@ pub mod internal {
         pub use zenoh_buffers::{
             buffer::SplitBuffer,
             reader::{HasReader, Reader},
+            writer::{HasWriter, Writer},
             ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
         };
     }
