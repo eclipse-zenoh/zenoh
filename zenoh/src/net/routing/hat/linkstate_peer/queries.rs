@@ -265,10 +265,8 @@ fn register_peer_queryable(
         propagate_sourced_queryable(tables, res, qabl_info, face.as_deref_mut(), &peer);
     }
 
-    if tables.whatami == WhatAmI::Peer {
-        // Propagate queryable to clients
-        propagate_simple_queryable(tables, res, face);
-    }
+    // Propagate queryable to clients
+    propagate_simple_queryable(tables, res, face);
 }
 
 fn declare_peer_queryable(
@@ -479,9 +477,7 @@ fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer:
             .peer_qabls
             .retain(|qabl| !Arc::ptr_eq(qabl, res));
 
-        if tables.whatami == WhatAmI::Peer {
-            propagate_forget_simple_queryable(tables, res);
-        }
+        propagate_forget_simple_queryable(tables, res);
     }
 }
 

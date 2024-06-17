@@ -204,10 +204,8 @@ fn register_peer_token(
         propagate_sourced_token(tables, res, Some(face), &peer);
     }
 
-    if tables.whatami == WhatAmI::Peer {
-        // Propagate liveliness to clients
-        propagate_simple_token(tables, res, face);
-    }
+    // Propagate liveliness to clients
+    propagate_simple_token(tables, res, face);
 }
 
 fn declare_peer_token(
@@ -421,9 +419,7 @@ fn unregister_peer_token(tables: &mut Tables, res: &mut Arc<Resource>, peer: &Ze
             .peer_tokens
             .retain(|token| !Arc::ptr_eq(token, res));
 
-        if tables.whatami == WhatAmI::Peer {
-            propagate_forget_simple_token(tables, res);
-        }
+        propagate_forget_simple_token(tables, res);
     }
 }
 
