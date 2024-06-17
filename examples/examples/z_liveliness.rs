@@ -29,7 +29,7 @@ async fn main() {
     let mut token = Some(session.liveliness().declare_token(&key_expr).await.unwrap());
 
     println!("Press CTRL-C to undeclare LivelinessToken and quit...");
-    std::thread::park();
+    std::thread::sleep(std::time::Duration::from_secs(5));
     // LivelinessTokens are automatically closed when dropped
     // Use the code below to manually undeclare it if needed
     if let Some(token) = token.take() {
