@@ -59,18 +59,6 @@ impl Value {
     }
 }
 
-impl<T> From<T> for Value
-where
-    T: Into<ZBytes>,
-{
-    fn from(t: T) -> Self {
-        Value {
-            payload: t.into(),
-            encoding: Encoding::default(),
-        }
-    }
-}
-
 impl<T> From<Option<T>> for Value
 where
     T: Into<Value>,

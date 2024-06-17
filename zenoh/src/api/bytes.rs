@@ -18,6 +18,7 @@ use std::{
     string::FromUtf8Error, sync::Arc,
 };
 
+use super::{encoding::Encoding, value::Value};
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
@@ -26,7 +27,10 @@ use zenoh_buffers::{
     ZBuf, ZBufReader, ZBufWriter, ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::{core::Parameters, zenoh::ext::AttachmentType};
+use zenoh_protocol::{
+    core::{Encoding as EncodingProto, Parameters},
+    zenoh::ext::AttachmentType,
+};
 use zenoh_result::{ZError, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::{
@@ -1216,6 +1220,174 @@ impl<'s> TryFrom<&'s mut ZBytes> for Parameters<'s> {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'s mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
+// Encoding
+impl Serialize<Encoding> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: Encoding) -> Self::Output {
+        let e: EncodingProto = s.into();
+        let codec = Zenoh080::new();
+        let mut buffer = ZBuf::empty();
+        let mut writer = buffer.writer();
+        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
+        //         fail unless we run out of memory. In that case, Rust memory allocator
+        //         will panic before the serializer has any chance to fail.
+        unsafe {
+            codec.write(&mut writer, &e).unwrap_unchecked();
+        }
+        ZBytes::from(buffer)
+    }
+}
+
+impl From<Encoding> for ZBytes {
+    fn from(t: Encoding) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&Encoding> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: &Encoding) -> Self::Output {
+        ZSerde.serialize(s.clone())
+    }
+}
+
+impl From<&Encoding> for ZBytes {
+    fn from(t: &Encoding) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&mut Encoding> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: &mut Encoding) -> Self::Output {
+        ZSerde.serialize(&*s)
+    }
+}
+
+impl From<&mut Encoding> for ZBytes {
+    fn from(t: &mut Encoding) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl<'a> Deserialize<'a, Encoding> for ZSerde {
+    type Input = &'a ZBytes;
+    type Error = zenoh_buffers::reader::DidntRead;
+
+    fn deserialize(self, v: Self::Input) -> Result<Encoding, Self::Error> {
+        let codec = Zenoh080::new();
+        let mut reader = v.0.reader();
+        let e: EncodingProto = codec.read(&mut reader)?;
+        Ok(e.into())
+    }
+}
+
+impl TryFrom<ZBytes> for Encoding {
+    type Error = zenoh_buffers::reader::DidntRead;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl TryFrom<&ZBytes> for Encoding {
+    type Error = zenoh_buffers::reader::DidntRead;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl TryFrom<&mut ZBytes> for Encoding {
+    type Error = zenoh_buffers::reader::DidntRead;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
+// Value
+impl Serialize<Value> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: Value) -> Self::Output {
+        ZSerde.serialize((s.payload(), s.encoding()))
+    }
+}
+
+impl From<Value> for ZBytes {
+    fn from(t: Value) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&Value> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: &Value) -> Self::Output {
+        ZSerde.serialize(s.clone())
+    }
+}
+
+impl From<&Value> for ZBytes {
+    fn from(t: &Value) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&mut Value> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: &mut Value) -> Self::Output {
+        ZSerde.serialize(&*s)
+    }
+}
+
+impl From<&mut Value> for ZBytes {
+    fn from(t: &mut Value) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl<'a> Deserialize<'a, Value> for ZSerde {
+    type Input = &'a ZBytes;
+    type Error = ZError;
+
+    fn deserialize(self, v: Self::Input) -> Result<Value, Self::Error> {
+        let (payload, encoding) = v
+            .deserialize::<(ZBytes, Encoding)>()
+            .map_err(|e| zerror!("{:?}", e))?;
+        Ok(Value::new(payload, encoding))
+    }
+}
+
+impl TryFrom<ZBytes> for Value {
+    type Error = ZError;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl TryFrom<&ZBytes> for Value {
+    type Error = ZError;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl TryFrom<&mut ZBytes> for Value {
+    type Error = ZError;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
     }
 }
