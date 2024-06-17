@@ -1080,7 +1080,7 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        scope: &Option<KeyExpr>,
+        scope: Option<&KeyExpr>,
         origin: Locality,
         callback: Callback<'static, Sample>,
         info: &SubscriberInfo,
@@ -1097,7 +1097,7 @@ impl Session {
             id,
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
-            scope: scope.clone().map(|e| e.into_owned()),
+            scope: scope.map(|e| e.clone().into_owned()),
             origin,
             callback,
         };
@@ -1390,7 +1390,7 @@ impl Session {
     pub(crate) fn declare_liveliness_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        scope: &Option<KeyExpr>,
+        scope: Option<&KeyExpr>,
         origin: Locality,
         callback: Callback<'static, Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
@@ -1406,7 +1406,7 @@ impl Session {
             id,
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
-            scope: scope.clone().map(|e| e.into_owned()),
+            scope: scope.map(|e| e.clone().into_owned()),
             origin,
             callback,
         };

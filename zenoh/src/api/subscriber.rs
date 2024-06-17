@@ -380,7 +380,7 @@ where
         session
             .declare_subscriber_inner(
                 &key_expr,
-                &None,
+                None,
                 self.origin,
                 callback,
                 &SubscriberInfo {
