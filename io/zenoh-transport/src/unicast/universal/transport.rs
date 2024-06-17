@@ -382,12 +382,12 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         zread!(self.links).iter().map(|l| l.link.link()).collect()
     }
 
-    fn get_auth_ids(&self) -> Vec<super::transport::AuthId> {
-        // Convert link level auth ids to AuthId
+    fn get_auth_ids(&self) -> Vec<AuthId> {
+        // Convert LinkUnicast auth ids to AuthId
         #[allow(unused_mut)]
         let mut auth_ids: Vec<AuthId> = zread!(self.links)
             .iter()
-            .map(|l| l.link.link().auth_identifier.into())
+            .map(|l| l.link.link.get_auth_id().to_owned().into())
             .collect();
         // Convert usrpwd auth id to AuthId
         #[cfg(feature = "auth_usrpwd")]

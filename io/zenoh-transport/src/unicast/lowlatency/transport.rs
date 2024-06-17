@@ -189,13 +189,14 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     }
 
     fn get_auth_ids(&self) -> Vec<AuthId> {
-        // Convert link level auth ids to AuthId
-        #[allow(unused_mut)]
-        let mut auth_ids: Vec<AuthId> = self
-            .get_links()
-            .iter()
-            .map(|l| l.auth_identifier.to_owned().into())
-            .collect();
+        // Convert LinkUnicast auth id to AuthId
+        let mut auth_ids: Vec<AuthId> = vec![];
+        let handle = tokio::runtime::Handle::current();
+        let guard =
+            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
+        if let Some(val) = guard.as_ref() {
+            auth_ids.push(val.link.get_auth_id().to_owned().into());
+        }
         // Convert usrpwd auth id to AuthId
         #[cfg(feature = "auth_usrpwd")]
         auth_ids.push(self.config.auth_id.clone().into());
