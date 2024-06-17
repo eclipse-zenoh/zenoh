@@ -370,7 +370,9 @@ pub mod internal {
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
     pub use zenoh_task::{TaskController, TerminatableTask};
-    pub use zenoh_util::{zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
+    pub use zenoh_util::{
+        zenoh_home, LibLoader, Timed, TimedEvent, TimedHandle, Timer, ZENOH_HOME_ENV_VAR,
+    };
 
     /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
     /// reading and writing data.
