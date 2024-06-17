@@ -257,7 +257,7 @@ impl<'a> PublicationCache<'a> {
             let PublicationCache {
                 _queryable,
                 local_sub,
-                task,
+                mut task,
             } = self;
             _queryable.undeclare().res_async().await?;
             local_sub.undeclare().res_async().await?;
