@@ -63,7 +63,7 @@ transport_udp = ["zenoh-transport/transport_udp"]
 transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
-unstable = ["zenoh-keyexpr/unstable"]
+unstable = ["zenoh-keyexpr/unstable", "zenoh-config/unstable"]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
