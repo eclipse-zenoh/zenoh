@@ -20,7 +20,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use zenoh_protocol::{
-    core::{EntityGlobalIdProto, EntityId, Locator, WhatAmI, ZenohIdProto},
+    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, EntityId, Locator, WhatAmI, ZenohIdProto},
     scouting::HelloProto,
 };
 
@@ -28,6 +28,14 @@ use zenoh_protocol::{
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[repr(transparent)]
 pub struct ZenohId(ZenohIdProto);
+
+impl ZenohId {
+    /// Used by plugins for crating adminspace path
+    #[zenoh_macros::unstable]
+    pub fn into_keyexpr(self) -> OwnedKeyExpr {
+        self.into()
+    }
+}
 
 impl fmt::Debug for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -55,6 +63,18 @@ impl From<ZenohId> for ZenohIdProto {
 impl From<ZenohId> for uhlc::ID {
     fn from(zid: ZenohId) -> Self {
         zid.0.into()
+    }
+}
+
+impl From<ZenohId> for OwnedKeyExpr {
+    fn from(zid: ZenohId) -> Self {
+        zid.0.into()
+    }
+}
+
+impl From<&ZenohId> for OwnedKeyExpr {
+    fn from(zid: &ZenohId) -> Self {
+        (*zid).into()
     }
 }
 

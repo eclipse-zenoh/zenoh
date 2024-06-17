@@ -119,7 +119,7 @@ pub use {
         scouting::scout,
         session::{open, Session},
     },
-    zenoh_util::try_init_log_from_env,
+    zenoh_util::{init_log_from_env_or, try_init_log_from_env},
 };
 
 pub mod prelude;
