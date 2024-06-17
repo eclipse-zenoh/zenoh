@@ -22,10 +22,8 @@ use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohIdProto},
     network::{
-        declare::ext,
         interest::{InterestId, InterestMode, InterestOptions},
-        Declare, DeclareBody, DeclareFinal, Mapping, Push, Request, RequestId, Response,
-        ResponseFinal,
+        Mapping, Push, Request, RequestId, Response, ResponseFinal,
     },
     zenoh::RequestBody,
 };
@@ -35,15 +33,17 @@ use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
 
-use super::{super::router::*, resource::*, tables, tables::TablesLock};
+use super::{
+    super::router::*,
+    interests::{declare_final, declare_interest, undeclare_interest, CurrentInterest},
+    resource::*,
+    tables::{self, TablesLock},
+};
 use crate::{
     api::key_expr::KeyExpr,
     net::{
         primitives::{McastMux, Mux, Primitives},
-        routing::{
-            interceptor::{InterceptorTrait, InterceptorsChain},
-            RoutingContext,
-        },
+        routing::interceptor::{InterceptorTrait, InterceptorsChain},
     },
 };
 
@@ -62,6 +62,8 @@ pub struct FaceState {
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
+    pub(crate) pending_current_interests:
+        HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
@@ -93,6 +95,7 @@ impl FaceState {
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
+            pending_current_interests: HashMap::new(),
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
             next_qid: 0,
@@ -212,57 +215,17 @@ impl Primitives for Face {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
-            if msg.options.keyexprs() && msg.mode != InterestMode::Current {
-                register_expr_interest(
-                    &self.tables,
-                    &mut self.state.clone(),
-                    msg.id,
-                    msg.wire_expr.as_ref(),
-                );
-            }
-            if msg.options.subscribers() {
-                declare_sub_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    msg.id,
-                    msg.wire_expr.as_ref(),
-                    msg.mode,
-                    msg.options.aggregate(),
-                );
-            }
-            if msg.options.queryables() {
-                declare_qabl_interest(
-                    ctrl_lock.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
-                    msg.id,
-                    msg.wire_expr.as_ref(),
-                    msg.mode,
-                    msg.options.aggregate(),
-                );
-            }
-            if msg.mode != InterestMode::Future {
-                self.state.primitives.send_declare(RoutingContext::new_out(
-                    Declare {
-                        interest_id: Some(msg.id),
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareFinal(DeclareFinal),
-                    },
-                    self.clone(),
-                ));
-            }
-        } else {
-            unregister_expr_interest(&self.tables, &mut self.state.clone(), msg.id);
-            undeclare_sub_interest(
+            declare_interest(
                 ctrl_lock.as_ref(),
                 &self.tables,
                 &mut self.state.clone(),
                 msg.id,
+                msg.wire_expr.as_ref(),
+                msg.mode,
+                msg.options,
             );
-            undeclare_qabl_interest(
+        } else {
+            undeclare_interest(
                 ctrl_lock.as_ref(),
                 &self.tables,
                 &mut self.state.clone(),
@@ -335,6 +298,8 @@ impl Primitives for Face {
                         .local_interests
                         .entry(id)
                         .and_modify(|interest| interest.finalized = true);
+
+                    declare_final(&mut self.state.clone(), id);
 
                     // recompute routes
                     // TODO: disable  routes and recompute them in parallel to avoid holding

@@ -28,7 +28,7 @@ use zenoh_protocol::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
             SubscriberId,
         },
-        interest::{InterestId, InterestMode},
+        interest::{InterestId, InterestMode, InterestOptions},
         Oam,
     },
 };
@@ -72,7 +72,10 @@ impl Sources {
     }
 }
 
-pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
+pub(crate) trait HatTrait:
+    HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait
+{
+}
 
 pub(crate) trait HatBaseTrait {
     fn init(&self, tables: &mut Tables, runtime: Runtime);
@@ -135,23 +138,22 @@ pub(crate) trait HatBaseTrait {
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>);
 }
 
-pub(crate) trait HatPubSubTrait {
-    #[allow(clippy::too_many_arguments)] // TODO refactor
-    fn declare_sub_interest(
+pub(crate) trait HatInterestTrait {
+    #[allow(clippy::too_many_arguments)]
+    fn declare_interest(
         &self,
         tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
-        aggregate: bool,
+        options: InterestOptions,
     );
-    fn undeclare_sub_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    );
+    fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
+}
+
+pub(crate) trait HatPubSubTrait {
     fn declare_subscription(
         &self,
         tables: &mut Tables,
@@ -191,22 +193,6 @@ pub(crate) trait HatPubSubTrait {
 }
 
 pub(crate) trait HatQueriesTrait {
-    #[allow(clippy::too_many_arguments)] // TODO refactor
-    fn declare_qabl_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        aggregate: bool,
-    );
-    fn undeclare_qabl_interest(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    );
     fn declare_queryable(
         &self,
         tables: &mut Tables,

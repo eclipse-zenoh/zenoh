@@ -18,7 +18,6 @@ use zenoh_protocol::{
     core::{key_expr::keyexpr, WhatAmI, WireExpr},
     network::{
         declare::{ext, subscriber::ext::SubscriberInfo, SubscriberId},
-        interest::{InterestId, InterestMode},
         Push,
     },
     zenoh::PushBody,
@@ -33,86 +32,6 @@ use super::{
 #[zenoh_macros::unstable]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::hat::HatTrait;
-
-pub(crate) fn declare_sub_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-    expr: Option<&WireExpr>,
-    mode: InterestMode,
-    aggregate: bool,
-) {
-    if let Some(expr) = expr {
-        let rtables = zread!(tables.tables);
-        match rtables
-            .get_mapping(face, &expr.scope, expr.mapping)
-            .cloned()
-        {
-            Some(mut prefix) => {
-                tracing::debug!(
-                    "{} Declare sub interest {} ({}{})",
-                    face,
-                    id,
-                    prefix.expr(),
-                    expr.suffix
-                );
-                let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) = if res
-                    .as_ref()
-                    .map(|r| r.context.is_some())
-                    .unwrap_or(false)
-                {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
-
-                hat_code.declare_sub_interest(
-                    &mut wtables,
-                    face,
-                    id,
-                    Some(&mut res),
-                    mode,
-                    aggregate,
-                );
-            }
-            None => tracing::error!(
-                "{} Declare sub interest {} for unknown scope {}!",
-                face,
-                id,
-                expr.scope
-            ),
-        }
-    } else {
-        let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_sub_interest(&mut wtables, face, id, None, mode, aggregate);
-    }
-}
-
-pub(crate) fn undeclare_sub_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-) {
-    tracing::debug!("{} Undeclare sub interest {}", face, id,);
-    let mut wtables = zwrite!(tables.tables);
-    hat_code.undeclare_sub_interest(&mut wtables, face, id);
-}
 
 pub(crate) fn declare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),

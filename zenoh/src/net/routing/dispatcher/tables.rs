@@ -30,8 +30,8 @@ use zenoh_sync::get_mut_unchecked;
 use super::face::FaceState;
 pub use super::{pubsub::*, queries::*, resource::*};
 use crate::net::routing::{
-    hat,
-    hat::HatTrait,
+    dispatcher::interests::finalize_pending_interests,
+    hat::{self, HatTrait},
     interceptor::{interceptor_factories, InterceptorFactory},
 };
 
@@ -175,7 +175,9 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
             tracing::debug!("Close {}", face);
             face.task_controller.terminate_all(Duration::from_secs(10));
             finalize_pending_queries(tables, &mut face);
-            zlock!(tables.ctrl_lock).close_face(tables, &mut face);
+            let ctrl_lock = zlock!(tables.ctrl_lock);
+            finalize_pending_interests(tables, &mut face);
+            ctrl_lock.close_face(tables, &mut face);
         }
         None => tracing::error!("Face already closed!"),
     }

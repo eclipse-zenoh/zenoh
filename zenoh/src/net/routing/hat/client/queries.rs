@@ -27,12 +27,9 @@ use zenoh_protocol::{
         },
         WhatAmI, WireExpr,
     },
-    network::{
-        declare::{
-            common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
-            DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
-        },
-        interest::{InterestId, InterestMode},
+    network::declare::{
+        common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
+        DeclareQueryable, QueryableId, UndeclareQueryable,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -258,27 +255,6 @@ lazy_static::lazy_static! {
 }
 
 impl HatQueriesTrait for HatCode {
-    fn declare_qabl_interest(
-        &self,
-        _tables: &mut Tables,
-        _face: &mut Arc<FaceState>,
-        _id: InterestId,
-        _res: Option<&mut Arc<Resource>>,
-        _mode: InterestMode,
-        _aggregate: bool,
-    ) {
-        // ignore
-    }
-
-    fn undeclare_qabl_interest(
-        &self,
-        _tables: &mut Tables,
-        _face: &mut Arc<FaceState>,
-        _id: InterestId,
-    ) {
-        // ignore
-    }
-
     fn declare_queryable(
         &self,
         tables: &mut Tables,
