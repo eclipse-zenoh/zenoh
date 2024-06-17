@@ -29,6 +29,7 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
     super::{query::ReplyKeyExpr, sample::SourceInfo},
+    zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
@@ -94,7 +95,7 @@ impl Query {
 
     /// This Query's selector parameters.
     #[inline(always)]
-    pub fn parameters(&self) -> &Parameters {
+    pub fn parameters(&self) -> &Parameters<'static> {
         &self.inner.parameters
     }
 
@@ -823,11 +824,12 @@ impl<'a, Handler> Queryable<'a, Handler> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn id(&self) -> EntityGlobalIdProto {
+    pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
             zid: self.queryable.session.zid().into(),
             eid: self.queryable.state.id,
         }
+        .into()
     }
 
     /// Returns a reference to this queryable's handler.

@@ -77,8 +77,8 @@ impl Hello {
     }
 
     /// Get the zenoh id of this Hello message.
-    pub fn zid(&self) -> ZenohIdProto {
-        self.0.zid
+    pub fn zid(&self) -> ZenohId {
+        self.0.zid.into()
     }
 
     /// Get the whatami of this Hello message.
@@ -135,5 +135,11 @@ impl fmt::Debug for EntityGlobalId {
 impl From<EntityGlobalIdProto> for EntityGlobalId {
     fn from(id: EntityGlobalIdProto) -> Self {
         Self(id)
+    }
+}
+
+impl From<EntityGlobalId> for EntityGlobalIdProto {
+    fn from(value: EntityGlobalId) -> Self {
+        value.0
     }
 }

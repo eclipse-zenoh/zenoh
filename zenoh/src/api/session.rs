@@ -1807,7 +1807,7 @@ impl Session {
                                 }
                                 (query.callback)(Reply {
                                     result: Err(Value::from("Timeout").into()),
-                                    replier_id: zid.into(),
+                                    replier_id: Some(zid.into()),
                                 });
                             }
                         }
@@ -2376,7 +2376,7 @@ impl Primitives for Session {
                     encoding: Some(m.encoding.into()),
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.id),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.execute_subscriber_callbacks(
@@ -2394,7 +2394,7 @@ impl Primitives for Session {
                     encoding: None,
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.id),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.execute_subscriber_callbacks(
@@ -2438,12 +2438,8 @@ impl Primitives for Session {
                             payload: e.payload.into(),
                             encoding: e.encoding.into(),
                         };
-                        let replier_id = match e.ext_sinfo {
-                            Some(info) => info.id.zid,
-                            None => zenoh_protocol::core::ZenohIdProto::rand(),
-                        };
                         let new_reply = Reply {
-                            replier_id,
+                            replier_id: e.ext_sinfo.map(|info| info.id.zid),
                             result: Err(value.into()),
                         };
                         callback(new_reply);
@@ -2526,7 +2522,7 @@ impl Primitives for Session {
                                     encoding: Some(encoding.into()),
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.id),
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
                                 attachment: _attachment.map(Into::into),
@@ -2543,7 +2539,7 @@ impl Primitives for Session {
                                     encoding: None,
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.id),
+                                    source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
                                 },
                                 attachment: _attachment.map(Into::into),
@@ -2552,7 +2548,7 @@ impl Primitives for Session {
                         let sample = info.into_sample(key_expr.into_owned(), payload, attachment);
                         let new_reply = Reply {
                             result: Ok(sample),
-                            replier_id: zenoh_protocol::core::ZenohIdProto::rand(), // TODO
+                            replier_id: None,
                         };
                         let callback =
                             match query.reception_mode {

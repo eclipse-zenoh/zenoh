@@ -36,13 +36,13 @@ use crate::net::routing::{
 };
 
 pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    for mut src_face in tables
-        .faces
-        .values()
-        .cloned()
-        .collect::<Vec<Arc<FaceState>>>()
-    {
-        if face.whatami != WhatAmI::Client {
+    if face.whatami != WhatAmI::Client {
+        for mut src_face in tables
+            .faces
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
             for (res, options) in face_hat_mut!(&mut src_face).remote_interests.values() {
                 let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                 get_mut_unchecked(face).local_interests.insert(

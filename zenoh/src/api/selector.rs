@@ -79,12 +79,20 @@ impl<'a> Selector<'a> {
         }
     }
     /// Build a new selector holding references to keyexpr and parameters
-    /// Useful for printing pair of keyexpr and parameters in url-like format
+    /// Useful for printing pairs of keyexpr and parameters in url-like format
     pub fn borrowed(key_expr: &'a KeyExpr<'a>, parameters: &'a Parameters<'a>) -> Self {
         Self {
             key_expr: Cow::Borrowed(key_expr),
             parameters: Cow::Borrowed(parameters),
         }
+    }
+
+    /// Convert this selector into an owned one.
+    pub fn into_owned(self) -> Selector<'static> {
+        Selector::owned(
+            self.key_expr.into_owned().into_owned(),
+            self.parameters.into_owned().into_owned(),
+        )
     }
 }
 
