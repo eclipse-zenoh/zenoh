@@ -24,7 +24,7 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 
 [features]
-unstable = []
+internal = []
 
 [dependencies]
 tracing = { workspace = true }

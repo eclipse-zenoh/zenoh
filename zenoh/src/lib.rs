@@ -364,18 +364,26 @@ compile_error!(
 
 #[zenoh_macros::internal]
 pub mod internal {
-    pub use zenoh_core::{zasync_executor_init, zerror, zlock, ztimeout, ResolveFuture};
+    pub use zenoh_core::{
+        zasync_executor_init, zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture,
+    };
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
     pub use zenoh_task::{TaskController, TerminatableTask};
-    pub use zenoh_util::{zenoh_home, LibLoader, Timed, TimedEvent, Timer, ZENOH_HOME_ENV_VAR};
+    pub use zenoh_util::{
+        zenoh_home, LibLoader, Timed, TimedEvent, TimedHandle, Timer, ZENOH_HOME_ENV_VAR,
+    };
 
     /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
     /// reading and writing data.
     pub mod buffers {
         pub use zenoh_buffers::{
-            buffer::SplitBuffer,
-            reader::{HasReader, Reader},
+            buffer::{Buffer, SplitBuffer},
+            reader::{
+                AdvanceableReader, BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader,
+                SiphonableReader,
+            },
+            writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
             ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
         };
     }
