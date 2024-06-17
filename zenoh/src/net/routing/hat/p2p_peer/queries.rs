@@ -88,7 +88,10 @@ fn propagate_simple_queryable_to(
 ) {
     let info = local_qabl_info(tables, res, dst_face);
     let current = face_hat!(dst_face).local_qabls.get(res);
-    if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
+    if src_face
+        .as_ref()
+        .map(|src_face| dst_face.id != src_face.id)
+        .unwrap_or(true)
         && (current.is_none() || current.unwrap().1 != info)
         && (dst_face.whatami != WhatAmI::Client
             || face_hat!(dst_face)

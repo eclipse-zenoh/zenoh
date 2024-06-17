@@ -128,13 +128,20 @@ impl HatBaseTrait for HatCode {
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
-
-        face_hat_mut!(face).remote_interests.clear();
-        face_hat_mut!(face).local_subs.clear();
-        face_hat_mut!(face).local_qabls.clear();
-        face_hat_mut!(face).local_tokens.clear();
-
         let face = get_mut_unchecked(face);
+        let hat_face = match face.hat.downcast_mut::<HatFace>() {
+            Some(hate_face) => hate_face,
+            None => {
+                tracing::error!("Error downcasting face hat in close_face!");
+                return;
+            }
+        };
+
+        hat_face.remote_interests.clear();
+        hat_face.local_subs.clear();
+        hat_face.local_qabls.clear();
+        hat_face.local_tokens.clear();
+
         for res in face.remote_mappings.values_mut() {
             get_mut_unchecked(res).session_ctxs.remove(&face.id);
             Resource::clean(res);
@@ -147,13 +154,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for (_id, mut res) in face
-            .hat
-            .downcast_mut::<HatFace>()
-            .unwrap()
-            .remote_subs
-            .drain()
-        {
+        for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
 
@@ -175,13 +176,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for (_id, mut res) in face
-            .hat
-            .downcast_mut::<HatFace>()
-            .unwrap()
-            .remote_qabls
-            .drain()
-        {
+        for (_id, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
 
@@ -202,13 +197,7 @@ impl HatBaseTrait for HatCode {
             }
         }
 
-        for (_id, mut res) in face
-            .hat
-            .downcast_mut::<HatFace>()
-            .unwrap()
-            .remote_tokens
-            .drain()
-        {
+        for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_client_token(&mut wtables, &mut face_clone, &mut res);
         }

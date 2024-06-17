@@ -50,7 +50,10 @@ fn send_sourced_token_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                    if src_face
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -331,7 +334,10 @@ fn send_forget_sourced_token_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                    if src_face
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -734,10 +740,16 @@ pub(super) fn token_tree_change(
     new_childs: &[Vec<NodeIndex>],
     net_type: WhatAmI,
 ) {
+    let net = match hat!(tables).get_net(net_type) {
+        Some(net) => net,
+        None => {
+            tracing::error!("Error accessing net in token_tree_change!");
+            return;
+        }
+    };
     // propagate tokens to new childs
     for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
-            let net = hat!(tables).get_net(net_type).unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
                 let tree_id = net.graph[tree_idx].zid;

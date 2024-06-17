@@ -133,7 +133,11 @@ fn send_sourced_queryable_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.as_ref().unwrap().id {
+                    if src_face
+                        .as_ref()
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -169,7 +173,10 @@ fn propagate_simple_queryable(
     for mut dst_face in faces {
         let info = local_qabl_info(tables, res, &dst_face);
         let current = face_hat!(dst_face).local_qabls.get(res);
-        if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
+        if src_face
+            .as_ref()
+            .map(|src_face| dst_face.id != src_face.id)
+            .unwrap_or(true)
             && (current.is_none() || current.unwrap().1 != info)
             && dst_face.whatami == WhatAmI::Client
             && face_hat!(dst_face)
@@ -351,7 +358,10 @@ fn send_forget_sourced_queryable_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                    if src_face
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -601,10 +611,16 @@ pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohIdProto) {
 }
 
 pub(super) fn queries_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeIndex>]) {
+    let net = match hat!(tables).peers_net.as_ref() {
+        Some(net) => net,
+        None => {
+            tracing::error!("Error accessing peers_net in queries_tree_change!");
+            return;
+        }
+    };
     // propagate qabls to new childs
     for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
-            let net = hat!(tables).peers_net.as_ref().unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
                 let tree_id = net.graph[tree_idx].zid;

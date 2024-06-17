@@ -85,11 +85,17 @@ fn propagate_simple_queryable(
     for mut dst_face in faces {
         let info = local_qabl_info(tables, res, &dst_face);
         let current = face_hat!(dst_face).local_qabls.get(res);
-        if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
+        if src_face
+            .as_ref()
+            .map(|src_face| dst_face.id != src_face.id)
+            .unwrap_or(true)
             && (current.is_none() || current.unwrap().1 != info)
-            && (src_face.is_none()
-                || src_face.as_ref().unwrap().whatami == WhatAmI::Client
-                || dst_face.whatami == WhatAmI::Client)
+            && src_face
+                .as_ref()
+                .map(|src_face| {
+                    src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
+                })
+                .unwrap_or(true)
         {
             let id = current
                 .map(|c| c.0)
