@@ -1701,7 +1701,7 @@ impl Session {
                                     }
                                 }
                                 (query.callback)(Reply {
-                                    result: Err(Value::from("Timeout").into()),
+                                    result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
                                     replier_id: Some(zid.into()),
                                 });
                             }
