@@ -343,14 +343,14 @@ fn forget_client_token(
 
 pub(super) fn token_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     if face.whatami != WhatAmI::Client {
-        for src_face in tables
+        for mut src_face in tables
             .faces
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
         {
-            for token in face_hat!(src_face).remote_tokens.values() {
-                propagate_simple_token_to(tables, face, token, &mut src_face.clone());
+            for token in face_hat!(src_face.clone()).remote_tokens.values() {
+                propagate_simple_token_to(tables, face, token, &mut src_face);
             }
         }
     }
