@@ -19,7 +19,7 @@ use crate::net::routing::dispatcher::queries::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::hat::{HatQueriesTrait, Sources};
+use crate::net::routing::hat::{HatQueriesTrait, SendDeclare, Sources};
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
@@ -162,6 +162,7 @@ fn propagate_simple_queryable(
     tables: &mut Tables,
     res: &Arc<Resource>,
     src_face: Option<&mut Arc<FaceState>>,
+    send_declare: &mut SendDeclare,
 ) {
     let faces = tables.faces.values().cloned();
     for mut dst_face in faces {
@@ -175,19 +176,22 @@ fn propagate_simple_queryable(
                 .local_qabls
                 .insert(res.clone(), info);
             let key_expr = Resource::decl_key(res, &mut dst_face);
-            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id: 0, // @TODO use proper QueryableId (#703)
-                        wire_expr: key_expr,
-                        ext_info: info,
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                            id: 0, // @TODO use proper QueryableId (#703)
+                            wire_expr: key_expr,
+                            ext_info: info,
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
         }
     }
 }
@@ -235,6 +239,7 @@ fn register_peer_queryable(
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfo,
     peer: ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
     let current_info = res_hat!(res).peer_qabls.get(&peer);
     if current_info.is_none() || current_info.unwrap() != qabl_info {
@@ -251,7 +256,7 @@ fn register_peer_queryable(
 
     if tables.whatami == WhatAmI::Peer {
         // Propagate queryable to clients
-        propagate_simple_queryable(tables, res, face);
+        propagate_simple_queryable(tables, res, face, send_declare);
     }
 }
 
@@ -261,9 +266,10 @@ fn declare_peer_queryable(
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfo,
     peer: ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
     let face = Some(face);
-    register_peer_queryable(tables, face, res, qabl_info, peer);
+    register_peer_queryable(tables, face, res, qabl_info, peer, send_declare);
 }
 
 fn register_client_queryable(
@@ -298,12 +304,13 @@ fn declare_client_queryable(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfo,
+    send_declare: &mut SendDeclare,
 ) {
     register_client_queryable(tables, face, res, qabl_info);
 
     let local_details = local_peer_qabl_info(tables, res);
     let zid = tables.zid;
-    register_peer_queryable(tables, Some(face), res, &local_details, zid);
+    register_peer_queryable(tables, Some(face), res, &local_details, zid, send_declare);
 }
 
 #[inline]
@@ -369,22 +376,29 @@ fn send_forget_sourced_queryable_to_net_children(
     }
 }
 
-fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
+fn propagate_forget_simple_queryable(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
+) {
     for face in tables.faces.values_mut() {
         if face_hat!(face).local_qabls.contains_key(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // @TODO use proper QueryableId (#703)
-                        ext_wire_expr: WireExprType { wire_expr },
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id: 0, // @TODO use proper QueryableId (#703)
+                            ext_wire_expr: WireExprType { wire_expr },
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
 
             face_hat_mut!(face).local_qabls.remove(res);
         }
@@ -426,7 +440,12 @@ fn propagate_forget_sourced_queryable(
     }
 }
 
-fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
+fn unregister_peer_queryable(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    peer: &ZenohId,
+    send_declare: &mut SendDeclare,
+) {
     tracing::debug!("Unregister peer queryable {} (peer: {})", res.expr(), peer,);
     res_hat_mut!(res).peer_qabls.remove(peer);
 
@@ -436,7 +455,7 @@ fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer:
             .retain(|qabl| !Arc::ptr_eq(qabl, res));
 
         if tables.whatami == WhatAmI::Peer {
-            propagate_forget_simple_queryable(tables, res);
+            propagate_forget_simple_queryable(tables, res, send_declare);
         }
     }
 }
@@ -446,9 +465,10 @@ fn undeclare_peer_queryable(
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     peer: &ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
     if res_hat!(res).peer_qabls.contains_key(peer) {
-        unregister_peer_queryable(tables, res, peer);
+        unregister_peer_queryable(tables, res, peer, send_declare);
         propagate_forget_sourced_queryable(tables, res, face, peer);
     }
 }
@@ -458,14 +478,16 @@ fn forget_peer_queryable(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     peer: &ZenohId,
+    send_declare: &mut SendDeclare,
 ) {
-    undeclare_peer_queryable(tables, Some(face), res, peer);
+    undeclare_peer_queryable(tables, Some(face), res, peer, send_declare);
 }
 
 pub(super) fn undeclare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
 ) {
     tracing::debug!("Unregister client queryable {} for {}", res.expr(), face);
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
@@ -479,28 +501,31 @@ pub(super) fn undeclare_client_queryable(
     let peer_qabls = remote_peer_qabls(tables, res);
 
     if client_qabls.is_empty() {
-        undeclare_peer_queryable(tables, None, res, &tables.zid.clone());
+        undeclare_peer_queryable(tables, None, res, &tables.zid.clone(), send_declare);
     } else {
         let local_info = local_peer_qabl_info(tables, res);
-        register_peer_queryable(tables, None, res, &local_info, tables.zid);
+        register_peer_queryable(tables, None, res, &local_info, tables.zid, send_declare);
     }
 
     if client_qabls.len() == 1 && !peer_qabls {
         let face = &mut client_qabls[0];
         if face_hat!(face).local_qabls.contains_key(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // @TODO use proper QueryableId (#703)
-                        ext_wire_expr: WireExprType { wire_expr },
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id: 0, // @TODO use proper QueryableId (#703)
+                            ext_wire_expr: WireExprType { wire_expr },
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
 
             face_hat_mut!(face).local_qabls.remove(res);
         }
@@ -511,36 +536,48 @@ fn forget_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
 ) {
-    undeclare_client_queryable(tables, face, res);
+    undeclare_client_queryable(tables, face, res, send_declare);
 }
 
-pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(super) fn queries_new_face(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    send_declare: &mut SendDeclare,
+) {
     if face.whatami == WhatAmI::Client {
         for qabl in &hat!(tables).peer_qabls {
             if qabl.context.is_some() {
                 let info = local_qabl_info(tables, qabl, face);
                 face_hat_mut!(face).local_qabls.insert(qabl.clone(), info);
                 let key_expr = Resource::decl_key(qabl, face);
-                face.primitives.send_declare(RoutingContext::with_expr(
-                    Declare {
-                        ext_qos: ext::QoSType::declare_default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                            id: 0, // @TODO use proper QueryableId (#703)
-                            wire_expr: key_expr,
-                            ext_info: info,
-                        }),
-                    },
-                    qabl.expr(),
-                ));
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            ext_qos: ext::QoSType::declare_default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                id: 0, // @TODO use proper QueryableId (#703)
+                                wire_expr: key_expr,
+                                ext_info: info,
+                            }),
+                        },
+                        qabl.expr(),
+                    ),
+                );
             }
         }
     }
 }
 
-pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId) {
+pub(super) fn queries_remove_node(
+    tables: &mut Tables,
+    node: &ZenohId,
+    send_declare: &mut SendDeclare,
+) {
     let mut qabls = vec![];
     for res in hat!(tables).peer_qabls.iter() {
         for qabl in res_hat!(res).peer_qabls.keys() {
@@ -550,7 +587,7 @@ pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId) {
         }
     }
     for mut res in qabls {
-        unregister_peer_queryable(tables, &mut res, node);
+        unregister_peer_queryable(tables, &mut res, node, send_declare);
 
         update_matches_query_routes(tables, &res);
         Resource::clean(&mut res)
@@ -644,13 +681,14 @@ impl HatQueriesTrait for HatCode {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfo,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) {
         if face.whatami != WhatAmI::Client {
             if let Some(peer) = get_peer(tables, face, node_id) {
-                declare_peer_queryable(tables, face, res, qabl_info, peer);
+                declare_peer_queryable(tables, face, res, qabl_info, peer, send_declare);
             }
         } else {
-            declare_client_queryable(tables, face, res, qabl_info);
+            declare_client_queryable(tables, face, res, qabl_info, send_declare);
         }
     }
 
@@ -660,13 +698,14 @@ impl HatQueriesTrait for HatCode {
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) {
         if face.whatami != WhatAmI::Client {
             if let Some(peer) = get_peer(tables, face, node_id) {
-                forget_peer_queryable(tables, face, res, &peer);
+                forget_peer_queryable(tables, face, res, &peer, send_declare);
             }
         } else {
-            forget_client_queryable(tables, face, res);
+            forget_client_queryable(tables, face, res, send_declare);
         }
     }
 

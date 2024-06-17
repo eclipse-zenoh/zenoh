@@ -195,6 +195,7 @@ impl Primitives for Face {
                 unregister_expr(&self.tables, &mut self.state.clone(), m.id);
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
+                let mut declares = vec![];
                 declare_subscription(
                     ctrl_lock.as_ref(),
                     &self.tables,
@@ -202,18 +203,30 @@ impl Primitives for Face {
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
+                let mut declares = vec![];
                 undeclare_subscription(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
+                let mut declares = vec![];
                 declare_queryable(
                     ctrl_lock.as_ref(),
                     &self.tables,
@@ -221,16 +234,27 @@ impl Primitives for Face {
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
+                let mut declares = vec![];
                 undeclare_queryable(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
@@ -238,7 +262,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::FinalInterest(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::UndeclareInterest(_m) => todo!(),
         }
-        drop(ctrl_lock);
     }
 
     #[inline]
