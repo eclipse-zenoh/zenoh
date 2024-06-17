@@ -149,6 +149,7 @@ impl From<Reply> for Result<Sample, ReplyError> {
     }
 }
 
+#[cfg(feature = "unstable")]
 pub(crate) struct LivelinessQueryState {
     pub(crate) callback: Callback<'static, Reply>,
 }

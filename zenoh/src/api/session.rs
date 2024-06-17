@@ -31,7 +31,11 @@ use zenoh_collections::SingleOrVec;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
-use zenoh_protocol::network::{declare::SubscriberId, ext};
+use zenoh_protocol::network::{
+    declare::{DeclareToken, SubscriberId, TokenId, UndeclareToken},
+    ext,
+    interest::InterestId,
+};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -43,10 +47,9 @@ use zenoh_protocol::{
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
             subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
-            DeclareQueryable, DeclareSubscriber, DeclareToken, TokenId, UndeclareQueryable,
-            UndeclareSubscriber, UndeclareToken,
+            DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
         },
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestMode, InterestOptions},
         request::{self, ext::TargetType},
         AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId, Response,
         ResponseFinal,
@@ -75,8 +78,7 @@ use super::{
     key_expr::{KeyExpr, KeyExprInner},
     publisher::{Priority, PublisherState},
     query::{
-        ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
-        Reply, SessionGetBuilder,
+        ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply, SessionGetBuilder,
     },
     queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
@@ -90,6 +92,7 @@ use super::{
     liveliness::{Liveliness, LivelinessTokenState},
     publisher::Publisher,
     publisher::{MatchingListenerState, MatchingStatus},
+    query::LivelinessQueryState,
     sample::SourceInfo,
 };
 #[cfg(feature = "unstable")]
@@ -111,6 +114,7 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
+    #[cfg(feature = "unstable")]
     pub(crate) liveliness_qid_counter: AtomicRequestId,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
@@ -128,6 +132,7 @@ pub(crate) struct SessionState {
     #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
+    #[cfg(feature = "unstable")]
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
@@ -142,6 +147,7 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
+            #[cfg(feature = "unstable")]
             liveliness_qid_counter: AtomicRequestId::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
@@ -159,6 +165,7 @@ impl SessionState {
             #[cfg(feature = "unstable")]
             matching_listeners: HashMap::new(),
             queries: HashMap::new(),
+            #[cfg(feature = "unstable")]
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
@@ -1888,6 +1895,7 @@ impl Session {
         Ok(())
     }
 
+    #[cfg(feature = "unstable")]
     pub(crate) fn liveliness_query(
         &self,
         key_expr: &KeyExpr<'_>,
@@ -2359,6 +2367,7 @@ impl Primitives for Session {
             DeclareBody::DeclareFinal(DeclareFinal) => {
                 trace!("recv DeclareFinal {:?}", msg.interest_id);
 
+                #[cfg(feature = "unstable")]
                 if let Some(interest_id) = msg.interest_id {
                     let mut state = zwrite!(self.state);
                     let _ = state.liveliness_queries.remove(&interest_id);
