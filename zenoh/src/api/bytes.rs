@@ -18,7 +18,6 @@ use std::{
     string::FromUtf8Error, sync::Arc,
 };
 
-use super::{encoding::Encoding, value::Value};
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
@@ -40,6 +39,8 @@ use zenoh_shm::{
     },
     ShmBufInner,
 };
+
+use super::{encoding::Encoding, value::Value};
 
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
