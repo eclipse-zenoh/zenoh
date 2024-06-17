@@ -13,7 +13,7 @@
 //
 use std::{fmt, thread, thread::ThreadId};
 
-use tracing::{field::Field, span, Event, Subscriber};
+use tracing::{field::Field, span, Event, Metadata, Subscriber};
 use tracing_subscriber::{
     layer::{Context, SubscriberExt},
     registry::LookupSpan,
@@ -76,13 +76,21 @@ pub struct LogRecord {
 #[derive(Clone)]
 struct SpanFields(Vec<(&'static str, String)>);
 
-struct Layer<F>(F);
+struct Layer<Enabled, Callback> {
+    enabled: Enabled,
+    callback: Callback,
+}
 
-impl<S, F> tracing_subscriber::Layer<S> for Layer<F>
+impl<S, E, C> tracing_subscriber::Layer<S> for Layer<E, C>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
-    F: Fn(LogRecord) + 'static,
+    E: Fn(&Metadata) -> bool + 'static,
+    C: Fn(LogRecord) + 'static,
 {
+    fn enabled(&self, metadata: &Metadata<'_>, _: Context<'_, S>) -> bool {
+        (self.enabled)(metadata)
+    }
+
     fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
         let span = ctx.span(id).unwrap();
         let mut extensions = span.extensions_mut();
@@ -92,6 +100,7 @@ where
         });
         extensions.insert(SpanFields(fields));
     }
+
     fn on_record(&self, id: &span::Id, values: &span::Record<'_>, ctx: Context<'_, S>) {
         let span = ctx.span(id).unwrap();
         let mut extensions = span.extensions_mut();
@@ -100,6 +109,7 @@ where
             fields.0.push((field.name(), format!("{value:?}")))
         });
     }
+
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
         let thread = thread::current();
         let mut record = LogRecord {
@@ -126,12 +136,15 @@ where
                 record.attributes.push((field.name(), format!("{value:?}")))
             }
         });
-        self.0(record);
+        (self.callback)(record);
     }
 }
 
-pub fn init_log_with_callback(cb: impl Fn(LogRecord) + Send + Sync + 'static) {
-    let subscriber = tracing_subscriber::registry().with(Layer(cb));
+pub fn init_log_with_callback(
+    enabled: impl Fn(&Metadata) -> bool + Send + Sync + 'static,
+    callback: impl Fn(LogRecord) + Send + Sync + 'static,
+) {
+    let subscriber = tracing_subscriber::registry().with(Layer { enabled, callback });
     let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
