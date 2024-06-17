@@ -181,7 +181,7 @@ impl TryFrom<&mut ShmBufInner> for &mut zshmmut {
         match value.is_unique() && value.is_valid() {
             // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
             // to ShmBufInner type, so it is safe to transmute them in any direction
-            true => Ok(unsafe { core::mem::transmute(value) }),
+            true => Ok(unsafe { core::mem::transmute::<&mut ShmBufInner, &mut zshmmut>(value) }),
             false => Err(()),
         }
     }

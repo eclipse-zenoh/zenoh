@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
-use wrappers::ZenohId;
+pub use wrappers::ZenohId;
 use zenoh_core::zlock;
 pub use zenoh_protocol::core::{
     whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
@@ -1089,7 +1089,11 @@ impl PluginsConfig {
         for next in split {
             match remove_from {
                 Value::Object(o) => match o.get_mut(current) {
-                    Some(v) => unsafe { remove_from = std::mem::transmute(v) },
+                    Some(v) => {
+                        remove_from = unsafe {
+                            std::mem::transmute::<&mut serde_json::Value, &mut serde_json::Value>(v)
+                        }
+                    }
                     None => bail!("{:?} has no {} property", o, current),
                 },
                 Value::Array(a) => {
