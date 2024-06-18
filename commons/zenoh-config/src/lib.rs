@@ -106,6 +106,8 @@ pub struct DownsamplingItemConf {
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigRules {
     pub interfaces: Option<Vec<String>>,
+    pub cert_common_names: Option<Vec<String>>,
+    pub usernames: Option<Vec<String>>,
     pub key_exprs: Vec<String>,
     pub actions: Vec<Action>,
     pub flows: Option<Vec<InterceptorFlow>>,
@@ -126,6 +128,8 @@ pub struct PolicyRule {
 #[serde(rename_all = "snake_case")]
 pub enum Subject {
     Interface(String),
+    CertCommonName(String),
+    Username(String),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]

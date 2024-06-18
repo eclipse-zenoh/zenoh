@@ -31,6 +31,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
+#[cfg(feature = "auth_usrpwd")]
+use super::ext::auth::UsrPwdId;
 #[cfg(feature = "shared-memory")]
 use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
@@ -111,6 +113,8 @@ struct RecvOpenSynOut {
     other_whatami: WhatAmI,
     other_lease: Duration,
     other_initial_sn: TransportSn,
+    #[cfg(feature = "auth_usrpwd")]
+    other_auth_id: UsrPwdId,
 }
 
 // OpenAck
@@ -486,11 +490,13 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         }
 
         // Extension Auth
-        #[cfg(feature = "transport_auth")]
-        self.ext_auth
+        #[cfg(feature = "auth_usrpwd")]
+        let user_password_id = self
+            .ext_auth
             .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
             .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?
+            .auth_id;
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
@@ -517,6 +523,8 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             other_whatami: cookie.whatami,
             other_lease: open_syn.lease,
             other_initial_sn: open_syn.initial_sn,
+            #[cfg(feature = "auth_usrpwd")]
+            other_auth_id: user_password_id,
         };
         Ok((state, output))
     }
@@ -735,6 +743,8 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             false => None,
         },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
+        #[cfg(feature = "auth_usrpwd")]
+        auth_id: osyn_out.other_auth_id,
     };
 
     let a_config = TransportLinkUnicastConfig {

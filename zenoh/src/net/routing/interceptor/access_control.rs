@@ -27,7 +27,10 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
+use zenoh_transport::{
+    multicast::TransportMulticast,
+    unicast::{authentication::AuthId, TransportUnicast},
+};
 
 use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
@@ -38,18 +41,20 @@ pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
 #[derive(Clone, Debug)]
-pub struct Interface {
+pub struct AuthSubject {
     id: usize,
     name: String,
 }
+
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
-    interface_list: Vec<Interface>,
+    subject: Vec<AuthSubject>,
     zid: ZenohIdProto,
 }
+
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
-    interface_list: Vec<Interface>,
+    subject: Vec<AuthSubject>,
     zid: ZenohIdProto,
 }
 
@@ -81,17 +86,35 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
+        let mut authn_ids = vec![];
+        if let Ok(ids) = transport.get_auth_ids() {
+            for auth_id in ids {
+                match auth_id {
+                    AuthId::CertCommonName(name) => {
+                        let subject = &Subject::CertCommonName(name.clone());
+                        if let Some(val) = self.enforcer.subject_map.get(subject) {
+                            authn_ids.push(AuthSubject { id: *val, name });
+                        }
+                    }
+                    AuthId::Username(name) => {
+                        let subject = &Subject::Username(name.clone());
+                        if let Some(val) = self.enforcer.subject_map.get(subject) {
+                            authn_ids.push(AuthSubject { id: *val, name });
+                        }
+                    }
+                    AuthId::None => {}
+                }
+            }
+        }
         match transport.get_zid() {
             Ok(zid) => {
-                let mut interface_list: Vec<Interface> = Vec::new();
                 match transport.get_links() {
                     Ok(links) => {
                         for link in links {
-                            let enforcer = self.enforcer.clone();
                             for face in link.interfaces {
                                 let subject = &Subject::Interface(face.clone());
-                                if let Some(val) = enforcer.subject_map.get(subject) {
-                                    interface_list.push(Interface {
+                                if let Some(val) = self.enforcer.subject_map.get(subject) {
+                                    authn_ids.push(AuthSubject {
                                         id: *val,
                                         name: face,
                                     });
@@ -106,23 +129,24 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 }
                 let ingress_interceptor = Box::new(IngressAclEnforcer {
                     policy_enforcer: self.enforcer.clone(),
-                    interface_list: interface_list.clone(),
                     zid,
+                    subject: authn_ids.clone(),
                 });
                 let egress_interceptor = Box::new(EgressAclEnforcer {
                     policy_enforcer: self.enforcer.clone(),
-                    interface_list: interface_list.clone(),
                     zid,
+                    subject: authn_ids,
                 });
-                match (
-                    self.enforcer.interface_enabled.ingress,
-                    self.enforcer.interface_enabled.egress,
-                ) {
-                    (true, true) => (Some(ingress_interceptor), Some(egress_interceptor)),
-                    (true, false) => (Some(ingress_interceptor), None),
-                    (false, true) => (None, Some(egress_interceptor)),
-                    (false, false) => (None, None),
-                }
+                (
+                    self.enforcer
+                        .interface_enabled
+                        .ingress
+                        .then_some(ingress_interceptor),
+                    self.enforcer
+                        .interface_enabled
+                        .egress
+                        .then_some(egress_interceptor),
+                )
             }
             Err(e) => {
                 tracing::error!("Failed to get zid with error :{}", e);
@@ -218,6 +242,7 @@ impl InterceptorTrait for EgressAclEnforcer {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(key_expr.to_string()))
     }
+
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
@@ -283,15 +308,15 @@ impl InterceptorTrait for EgressAclEnforcer {
 }
 pub trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
-    fn interface_list(&self) -> Vec<Interface>;
     fn zid(&self) -> ZenohIdProto;
     fn flow(&self) -> InterceptorFlow;
+    fn authn_ids(&self) -> Vec<AuthSubject>;
     fn action(&self, action: Action, log_msg: &str, key_expr: &str) -> Permission {
         let policy_enforcer = self.policy_enforcer();
-        let interface_list = self.interface_list();
+        let authn_ids: Vec<AuthSubject> = self.authn_ids();
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission;
-        for subject in &interface_list {
+        for subject in &authn_ids {
             match policy_enforcer.policy_decision_point(subject.id, self.flow(), action, key_expr) {
                 Ok(Permission::Allow) => {
                     tracing::trace!(
@@ -338,15 +363,16 @@ impl AclActionMethods for EgressAclEnforcer {
         self.policy_enforcer.clone()
     }
 
-    fn interface_list(&self) -> Vec<Interface> {
-        self.interface_list.clone()
-    }
-
     fn zid(&self) -> ZenohIdProto {
         self.zid
     }
+
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Egress
+    }
+
+    fn authn_ids(&self) -> Vec<AuthSubject> {
+        self.subject.clone()
     }
 }
 
@@ -355,14 +381,15 @@ impl AclActionMethods for IngressAclEnforcer {
         self.policy_enforcer.clone()
     }
 
-    fn interface_list(&self) -> Vec<Interface> {
-        self.interface_list.clone()
-    }
-
     fn zid(&self) -> ZenohIdProto {
         self.zid
     }
+
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Ingress
+    }
+
+    fn authn_ids(&self) -> Vec<AuthSubject> {
+        self.subject.clone()
     }
 }

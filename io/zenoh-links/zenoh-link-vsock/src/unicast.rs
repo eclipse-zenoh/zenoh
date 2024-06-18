@@ -28,7 +28,7 @@ use tokio_vsock::{
 };
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{endpoint::Address, EndPoint, Locator},
@@ -188,6 +188,11 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
+    }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
     }
 }
 

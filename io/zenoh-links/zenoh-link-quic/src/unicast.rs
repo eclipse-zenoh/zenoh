@@ -22,10 +22,11 @@ use std::{
 use async_trait::async_trait;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
+use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -46,6 +47,7 @@ pub struct LinkUnicastQuic {
     dst_locator: Locator,
     send: AsyncMutex<quinn::SendStream>,
     recv: AsyncMutex<quinn::RecvStream>,
+    auth_identifier: LinkAuthId,
 }
 
 impl LinkUnicastQuic {
@@ -55,6 +57,7 @@ impl LinkUnicastQuic {
         dst_locator: Locator,
         send: quinn::SendStream,
         recv: quinn::RecvStream,
+        auth_identifier: LinkAuthId,
     ) -> LinkUnicastQuic {
         // Build the Quic object
         LinkUnicastQuic {
@@ -64,6 +67,7 @@ impl LinkUnicastQuic {
             dst_locator,
             send: AsyncMutex::new(send),
             recv: AsyncMutex::new(recv),
+            auth_identifier,
         }
     }
 }
@@ -155,6 +159,11 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
+    }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &self.auth_identifier
     }
 }
 
@@ -255,12 +264,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
+        let auth_id = get_cert_common_name(&quic_conn)?;
+
         let link = Arc::new(LinkUnicastQuic::new(
             quic_conn,
             src_addr,
             endpoint.into(),
             send,
             recv,
+            auth_id.into(),
         ));
 
         Ok(LinkUnicast(link))
@@ -385,7 +397,10 @@ async fn accept_task(
                             }
                         };
 
+                        // Get Quic auth identifier
                         let dst_addr = quic_conn.remote_address();
+                        let auth_id = get_cert_common_name(&quic_conn)?;
+
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastQuic::new(
@@ -394,6 +409,7 @@ async fn accept_task(
                             Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
                             send,
                             recv,
+                            auth_id.into()
                         ));
 
                         // Communicate the new link to the initial transport manager
@@ -417,4 +433,38 @@ async fn accept_task(
         }
     }
     Ok(())
+}
+
+fn get_cert_common_name(conn: &quinn::Connection) -> ZResult<QuicAuthId> {
+    let mut auth_id = QuicAuthId { auth_value: None };
+    if let Some(pi) = conn.peer_identity() {
+        let serv_certs = pi.downcast::<Vec<rustls::Certificate>>().unwrap();
+        if let Some(item) = serv_certs.iter().next() {
+            let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
+            let subject_name = cert
+                .subject
+                .iter_common_name()
+                .next()
+                .and_then(|cn| cn.as_str().ok())
+                .unwrap();
+            auth_id = QuicAuthId {
+                auth_value: Some(subject_name.to_string()),
+            };
+        }
+    }
+    Ok(auth_id)
+}
+
+#[derive(Debug, Clone)]
+struct QuicAuthId {
+    auth_value: Option<String>,
+}
+
+impl From<QuicAuthId> for LinkAuthId {
+    fn from(value: QuicAuthId) -> Self {
+        LinkAuthId::builder()
+            .auth_type(LinkAuthType::Quic)
+            .auth_value(value.auth_value.clone())
+            .build()
+    }
 }
