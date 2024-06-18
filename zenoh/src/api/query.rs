@@ -158,7 +158,6 @@ pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) parameters: Parameters<'static>,
-    pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<'static, Reply>,
@@ -195,7 +194,6 @@ impl QueryState {
 pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,
     pub(crate) selector: ZResult<Selector<'b>>,
-    pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) qos: QoSBuilder,
@@ -280,7 +278,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
         let SessionGetBuilder {
             session,
             selector,
-            scope,
             target,
             consolidation,
             qos,
@@ -295,7 +292,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
         SessionGetBuilder {
             session,
             selector,
-            scope,
             target,
             consolidation,
             qos,
@@ -367,7 +363,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
         let SessionGetBuilder {
             session,
             selector,
-            scope,
             target,
             consolidation,
             qos,
@@ -382,7 +377,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
         SessionGetBuilder {
             session,
             selector,
-            scope,
             target,
             consolidation,
             qos,
@@ -496,7 +490,6 @@ where
             .query(
                 &key_expr,
                 &parameters,
-                &self.scope?,
                 self.target,
                 self.consolidation,
                 self.qos.into(),

@@ -13,7 +13,7 @@
 //
 use std::{
     collections::HashMap,
-    convert::{TryFrom, TryInto},
+    convert::TryInto,
     fmt,
     future::{IntoFuture, Ready},
     ops::Deref,
@@ -878,7 +878,6 @@ impl Session {
         SessionGetBuilder {
             session: self,
             selector,
-            scope: Ok(None),
             target: QueryTarget::DEFAULT,
             consolidation: QueryConsolidation::DEFAULT,
             qos: qos.into(),
@@ -1080,7 +1079,6 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        scope: Option<&KeyExpr>,
         origin: Locality,
         callback: Callback<'static, Sample>,
         info: &SubscriberInfo,
@@ -1088,16 +1086,11 @@ impl Session {
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_subscriber({:?})", key_expr);
         let id = self.runtime.next_id();
-        let key_expr = match scope {
-            Some(scope) => scope / key_expr,
-            None => key_expr.clone(),
-        };
 
         let mut sub_state = SubscriberState {
             id,
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
-            scope: scope.map(|e| e.clone().into_owned()),
             origin,
             callback,
         };
@@ -1109,7 +1102,7 @@ impl Session {
                 match state
                     .aggregated_subscribers
                     .iter()
-                    .find(|s| s.includes(&key_expr))
+                    .find(|s| s.includes(key_expr))
                 {
                     Some(join_sub) => {
                         if let Some(joined_sub) = state
@@ -1129,7 +1122,7 @@ impl Session {
                         if let Some(twin_sub) = state
                             .subscribers(SubscriberKind::Subscriber)
                             .values()
-                            .find(|s| s.origin != Locality::SessionLocal && s.key_expr == key_expr)
+                            .find(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr)
                         {
                             sub_state.remote_id = twin_sub.remote_id;
                             None
@@ -1390,23 +1383,17 @@ impl Session {
     pub(crate) fn declare_liveliness_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        scope: Option<&KeyExpr>,
         origin: Locality,
         callback: Callback<'static, Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         trace!("declare_liveliness_subscriber({:?})", key_expr);
         let id = self.runtime.next_id();
-        let key_expr = match scope {
-            Some(scope) => scope / key_expr,
-            None => key_expr.clone(),
-        };
 
         let sub_state = SubscriberState {
             id,
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
-            scope: scope.map(|e| e.clone().into_owned()),
             origin,
             callback,
         };
@@ -1659,34 +1646,7 @@ impl Session {
                         if sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal))
                         {
-                            match &sub.scope {
-                                Some(scope) => {
-                                    if !res.key_expr.starts_with(&***scope) {
-                                        tracing::warn!(
-                                            "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
-                                            res.key_expr,
-                                            scope,
-                                        );
-                                    } else {
-                                        match KeyExpr::try_from(&res.key_expr[(scope.len() + 1)..])
-                                        {
-                                            Ok(key_expr) => callbacks.push((
-                                                sub.callback.clone(),
-                                                key_expr.into_owned(),
-                                            )),
-                                            Err(e) => {
-                                                tracing::warn!(
-                                                    "Error unscoping received Data for `{}`: {}",
-                                                    res.key_expr,
-                                                    e,
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                                None => callbacks
-                                    .push((sub.callback.clone(), res.key_expr.clone().into())),
-                            };
+                            callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
                         }
                     }
                 }
@@ -1710,33 +1670,7 @@ impl Session {
                             || (local == (sub.origin == Locality::SessionLocal)))
                             && key_expr.intersects(&sub.key_expr)
                         {
-                            match &sub.scope {
-                                Some(scope) => {
-                                    if !key_expr.starts_with(&***scope) {
-                                        tracing::warn!(
-                                            "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
-                                            key_expr,
-                                            scope,
-                                        );
-                                    } else {
-                                        match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
-                                            Ok(key_expr) => callbacks.push((
-                                                sub.callback.clone(),
-                                                key_expr.into_owned(),
-                                            )),
-                                            Err(e) => {
-                                                tracing::warn!(
-                                                    "Error unscoping received Data for `{}`: {}",
-                                                    key_expr,
-                                                    e,
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                                None => callbacks
-                                    .push((sub.callback.clone(), key_expr.clone().into_owned())),
-                            };
+                            callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
                         }
                     }
                 }
@@ -1765,7 +1699,6 @@ impl Session {
         &self,
         key_expr: &KeyExpr<'_>,
         parameters: &Parameters<'_>,
-        scope: &Option<KeyExpr<'_>>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
         qos: QoS,
@@ -1823,20 +1756,14 @@ impl Session {
                 }
             });
 
-        let key_expr = match scope {
-            Some(scope) => scope / key_expr,
-            None => key_expr.clone().into_owned(),
-        };
-
         tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = key_expr.to_wire(self).to_owned();
         state.queries.insert(
             qid,
             QueryState {
                 nb_final,
-                key_expr,
+                key_expr: key_expr.clone().into_owned(),
                 parameters: parameters.clone().into_owned(),
-                scope: scope.clone().map(|e| e.into_owned()),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
                 callback,
@@ -2480,32 +2407,6 @@ impl Primitives for Session {
                             );
                             return;
                         }
-                        let key_expr = match &query.scope {
-                            Some(scope) => {
-                                if !key_expr.starts_with(&***scope) {
-                                    tracing::warn!(
-                                        "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
-                                        key_expr,
-                                        msg.ext_respid,
-                                        scope,
-                                    );
-                                    return;
-                                }
-                                match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
-                                    Ok(key_expr) => key_expr,
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            "Error unscoping received Reply for `{}` from `{:?}: {}",
-                                            key_expr,
-                                            msg.ext_respid,
-                                            e,
-                                        );
-                                        return;
-                                    }
-                                }
-                            }
-                            None => key_expr,
-                        };
 
                         struct Ret {
                             payload: ZBuf,
