@@ -27,16 +27,17 @@ use futures::select;
 use tracing::{debug, info};
 use zenoh::{
     internal::{
+        bail,
         plugins::{RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
+        zlock,
     },
     key_expr::{keyexpr, KeyExpr},
+    prelude::ZResult,
     sample::Sample,
     session::SessionDeclarations,
 };
-use zenoh_core::zlock;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
-use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
 pub struct ExamplePlugin {}
