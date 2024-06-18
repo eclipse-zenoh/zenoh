@@ -78,7 +78,7 @@ impl ZBytes {
         Self(t.into())
     }
 
-    /// Returns wether the ZBytes is empty or not.
+    /// Returns whether the ZBytes is empty or not.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }

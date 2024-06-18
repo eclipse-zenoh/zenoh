@@ -133,7 +133,7 @@ impl DataInfoIntoSample for Option<DataInfo> {
     }
 }
 
-/// Informations on the source of a zenoh [`Sample`].
+/// Information on the source of a zenoh [`Sample`].
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {

@@ -2231,7 +2231,7 @@ impl Primitives for Session {
                             }
                         }
                         Err(err) => {
-                            tracing::error!("Received DeclareToken for unkown wire_expr: {}", err)
+                            tracing::error!("Received DeclareToken for unknown wire_expr: {}", err)
                         }
                     }
                 }
@@ -2283,7 +2283,7 @@ impl Primitives for Session {
                             }
                             Err(err) => {
                                 tracing::error!(
-                                    "Received UndeclareToken for unkown wire_expr: {}",
+                                    "Received UndeclareToken for unknown wire_expr: {}",
                                     err
                                 )
                             }

@@ -44,14 +44,14 @@ async fn run() -> ZResult<()> {
     // There are two API-defined ways of making shm buffer allocations: direct and through the layout...
 
     // Direct allocation
-    // The direct allocation calcualtes all layouting checks on each allocation. It is good for making
+    // The direct allocation calculates all layouting checks on each allocation. It is good for making
     // uniquely-layouted allocations. For making series of similar allocations, please refer to  layout
     // allocation API which is shown later in this example...
     let _direct_allocation = {
         // OPTION: Simple allocation
         let simple = provider.alloc(512).wait().unwrap();
 
-        // OPTION: Allocation with custom alignemnt and alloc policy customization
+        // OPTION: Allocation with custom alignment and alloc policy customization
         let _comprehensive = provider
             .alloc(512)
             .with_alignment(AllocAlignment::new(2))
@@ -60,7 +60,7 @@ async fn run() -> ZResult<()> {
             .wait()
             .unwrap();
 
-        // OPTION: Allocation with custom alignemnt and async alloc policy
+        // OPTION: Allocation with custom alignment and async alloc policy
         let _async = provider
             .alloc(512)
             .with_alignment(AllocAlignment::new(2))
@@ -92,7 +92,7 @@ async fn run() -> ZResult<()> {
 
     // Allocate ShmBufInner
     // Policy is a generics-based API to describe necessary allocation behaviour
-    // that will be higly optimized at compile-time.
+    // that will be highly optimized at compile-time.
     // Policy resolvable can be sync and async.
     // The basic policies are:
     // -JustAlloc (sync)

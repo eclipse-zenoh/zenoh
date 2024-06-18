@@ -50,7 +50,7 @@ pub mod posix_shm;
 pub mod reader;
 pub mod watchdog;
 
-/// Informations about a [`ShmBufInner`].
+/// Information about a [`ShmBufInner`].
 ///
 /// This that can be serialized and can be used to retrieve the [`ShmBufInner`] in a remote process.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -104,7 +104,7 @@ pub struct ShmBufInner {
 impl PartialEq for ShmBufInner {
     fn eq(&self, other: &Self) -> bool {
         // currently there is no API to resize an SHM buffer, but it is intended in the future,
-        // so I add size comparsion here to avoid future bugs :)
+        // so I add size comparison here to avoid future bugs :)
         self.buf.load(Ordering::Relaxed) == other.buf.load(Ordering::Relaxed)
             && self.info.data_len == other.info.data_len
     }

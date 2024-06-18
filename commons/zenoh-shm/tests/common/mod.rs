@@ -80,7 +80,7 @@ impl Drop for CpuLoad {
 }
 
 impl CpuLoad {
-    pub fn exessive() -> Self {
+    pub fn excessive() -> Self {
         Self::new(1000)
     }
 

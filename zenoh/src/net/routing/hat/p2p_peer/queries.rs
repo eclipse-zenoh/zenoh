@@ -373,7 +373,7 @@ pub(super) fn queries_new_face(
     }
     // recompute routes
     // TODO: disable query routes and recompute them in parallel to avoid holding
-    // tables write lock for a long time on peer conenction.
+    // tables write lock for a long time on peer connection.
     update_query_routes_from(tables, &mut tables.root_res.clone());
 }
 

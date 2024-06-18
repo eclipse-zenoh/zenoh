@@ -38,7 +38,7 @@ impl From<zenoh_result::Error> for ZAllocError {
     }
 }
 
-/// alignemnt in powers of 2: 0 == 1-byte alignment, 1 == 2byte, 2 == 4byte, 3 == 8byte etc
+/// alignment in powers of 2: 0 == 1-byte alignment, 1 == 2byte, 2 == 4byte, 3 == 8byte etc
 #[zenoh_macros::unstable_doc]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AllocAlignment {
@@ -93,7 +93,7 @@ impl AllocAlignment {
     }
 }
 
-/// Memory layout representation: alignemnt and size aligned for this alignment
+/// Memory layout representation: alignment and size aligned for this alignment
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct MemoryLayout {

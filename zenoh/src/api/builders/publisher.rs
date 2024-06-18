@@ -283,7 +283,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         self
     }
 
-    // internal function for perfroming the publication
+    // internal function for performing the publication
     fn create_one_shot_publisher(self) -> ZResult<Publisher<'a>> {
         Ok(Publisher {
             session: self.session,

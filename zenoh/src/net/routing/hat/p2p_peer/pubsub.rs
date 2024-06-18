@@ -398,7 +398,7 @@ pub(super) fn pubsub_new_face(
     }
     // recompute routes
     // TODO: disable data routes and recompute them in parallel to avoid holding
-    // tables write lock for a long time on peer conenction.
+    // tables write lock for a long time on peer connection.
     update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 

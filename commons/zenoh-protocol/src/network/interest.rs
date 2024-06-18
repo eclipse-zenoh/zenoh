@@ -27,7 +27,7 @@ pub mod flag {
 
 /// The INTEREST message is sent to request the transmission of current and optionally future
 /// declarations of a given kind matching a target keyexpr. E.g., an interest could be
-/// sent to request the transmisison of all current subscriptions matching `a/*`.
+/// sent to request the transmission of all current subscriptions matching `a/*`.
 ///
 /// The behaviour of a INTEREST depends on the INTEREST MODE.
 ///

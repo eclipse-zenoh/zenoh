@@ -61,8 +61,8 @@ use super::bytes::ZBytes;
 /// ### Schema
 ///
 /// Additionally, a schema can be associated to the encoding.
-/// The convetions is to use the `;` separator if an encoding is created from a string.
-/// Alternatively, [`with_schema()`](Encoding::with_schema) can be used to add a schme to one of the associated constants.
+/// The conventions is to use the `;` separator if an encoding is created from a string.
+/// Alternatively, [`with_schema()`](Encoding::with_schema) can be used to add a scheme to one of the associated constants.
 /// ```
 /// use zenoh::encoding::Encoding;
 ///
@@ -89,7 +89,7 @@ impl Encoding {
         id: 0,
         schema: None,
     });
-    /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, or 64bit. Binary reprensentation uses two's complement.
+    /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, or 64bit. Binary representation uses two's complement.
     ///
     /// Constant alias for string: `"zenoh/int"`.
     pub const ZENOH_INT: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -253,7 +253,7 @@ impl Encoding {
         id: 23,
         schema: None,
     });
-    /// A Web Protable (WebP) image.
+    /// A Web Portable (WebP) image.
     ///
     ///  Constant alias for string: `"image/webp"`.
     pub const IMAGE_WEBP: Encoding = Self(zenoh_protocol::core::Encoding {
