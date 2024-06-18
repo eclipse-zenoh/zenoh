@@ -5077,7 +5077,6 @@ dependencies = [
  "ahash",
  "async-trait",
  "base64 0.21.4",
- "const_format",
  "event-listener 4.0.0",
  "flume",
  "form_urlencoded",
@@ -5615,7 +5614,6 @@ dependencies = [
 name = "zenoh-plugin-trait"
 version = "0.11.0-dev"
 dependencies = [
- "const_format",
  "libloading",
  "serde",
  "serde_json",
@@ -5755,6 +5753,7 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "async-trait",
+ "const_format",
  "flume",
  "home",
  "humantime",
