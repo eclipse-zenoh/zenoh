@@ -504,6 +504,15 @@ async fn accept_task(
             _ = token.cancelled() => break,
         };
 
+        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+        let src_addr = match stream.local_addr() {
+            Ok(sa) => sa,
+            Err(e) => {
+                tracing::debug!("Can not accept TCP connection: {}", e);
+                continue;
+            }
+        };
+
         tracing::debug!(
             "Accepted TCP (WebSocket) connection on {:?}: {:?}",
             src_addr,

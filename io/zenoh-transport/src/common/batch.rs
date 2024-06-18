@@ -328,7 +328,7 @@ impl WBatch {
             })
             .map_err(|_| zerror!("Compression error"))?;
 
-        // Verify wether the resulting compressed data is smaller than the initial input
+        // Verify whether the resulting compressed data is smaller than the initial input
         if support.len() < self.buffer.len() {
             Ok(Finalize::Buffer)
         } else {

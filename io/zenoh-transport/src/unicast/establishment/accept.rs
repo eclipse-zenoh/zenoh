@@ -445,7 +445,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Verify that the cookie is the one we sent
         if input.cookie_nonce != cookie.nonce {
-            let e = zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", self.link);
+            let e = zerror!("Rejecting OpenSyn on: {}. Unknown cookie.", self.link);
             return Err((e.into(), Some(close::reason::INVALID)));
         }
 

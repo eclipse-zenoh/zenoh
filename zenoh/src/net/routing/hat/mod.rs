@@ -28,7 +28,7 @@ use zenoh_protocol::{
             SubscriberId, TokenId,
         },
         interest::{InterestId, InterestMode, InterestOptions},
-        Oam,
+        Declare, Oam,
     },
 };
 use zenoh_result::ZResult;
@@ -42,6 +42,7 @@ use super::{
         tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
     },
     router::RoutesIndexes,
+    RoutingContext,
 };
 use crate::net::runtime::Runtime;
 
@@ -71,6 +72,8 @@ impl Sources {
     }
 }
 
+pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>, RoutingContext<Declare>)
+    + 'a;
 pub(crate) trait HatTrait:
     HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {
@@ -90,6 +93,7 @@ pub(crate) trait HatBaseTrait {
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
         face: &mut Face,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn new_transport_unicast_face(
@@ -98,6 +102,7 @@ pub(crate) trait HatBaseTrait {
         tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn handle_oam(
@@ -106,6 +111,7 @@ pub(crate) trait HatBaseTrait {
         tables_ref: &Arc<TablesLock>,
         oam: Oam,
         transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn map_routing_context(
@@ -132,9 +138,15 @@ pub(crate) trait HatBaseTrait {
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
-    fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>);
+    fn close_face(
+        &self,
+        tables: &TablesLock,
+        face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    );
 }
 
 pub(crate) trait HatInterestTrait {
@@ -148,11 +160,13 @@ pub(crate) trait HatInterestTrait {
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
         options: InterestOptions,
+        send_declare: &mut SendDeclare,
     );
     fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
 }
 
 pub(crate) trait HatPubSubTrait {
+    #[allow(clippy::too_many_arguments)]
     fn declare_subscription(
         &self,
         tables: &mut Tables,
@@ -161,6 +175,7 @@ pub(crate) trait HatPubSubTrait {
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     );
     fn undeclare_subscription(
         &self,
@@ -169,6 +184,7 @@ pub(crate) trait HatPubSubTrait {
         id: SubscriberId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>>;
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
@@ -192,6 +208,7 @@ pub(crate) trait HatPubSubTrait {
 }
 
 pub(crate) trait HatQueriesTrait {
+    #[allow(clippy::too_many_arguments)]
     fn declare_queryable(
         &self,
         tables: &mut Tables,
@@ -200,6 +217,7 @@ pub(crate) trait HatQueriesTrait {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     );
     fn undeclare_queryable(
         &self,
@@ -208,6 +226,7 @@ pub(crate) trait HatQueriesTrait {
         id: QueryableId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>>;
 
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
@@ -238,6 +257,7 @@ pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + S
 }
 
 pub trait HatTokenTrait {
+    #[allow(clippy::too_many_arguments)]
     fn declare_token(
         &self,
         tables: &mut Tables,
@@ -246,6 +266,7 @@ pub trait HatTokenTrait {
         res: &mut Arc<Resource>,
         node_id: NodeId,
         interest_id: Option<InterestId>,
+        send_declare: &mut SendDeclare,
     );
 
     fn undeclare_token(
@@ -255,6 +276,7 @@ pub trait HatTokenTrait {
         id: TokenId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>>;
 }
 

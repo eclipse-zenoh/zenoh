@@ -296,17 +296,21 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
         // create a callback to start the link
         let transport = self.clone();
-        let start_link = Box::new(move || {
+        let mut c_link = link.clone();
+        let c_transport = transport.clone();
+        let start_tx = Box::new(move || {
             // Start the TX loop
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            link.start_tx(transport.clone(), consumer, keep_alive);
+            c_link.start_tx(c_transport, consumer, keep_alive);
+        });
 
+        let start_rx = Box::new(move || {
             // Start the RX loop
             link.start_rx(transport, other_lease);
         });
 
-        Ok((start_link, ack))
+        Ok((start_tx, start_rx, ack))
     }
 
     /*************************************/

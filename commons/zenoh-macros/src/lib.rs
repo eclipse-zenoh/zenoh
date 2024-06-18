@@ -492,7 +492,7 @@ mod zenoh_runtime_derive;
 use syn::DeriveInput;
 use zenoh_runtime_derive::{derive_generic_runtime_param, derive_register_param};
 
-/// Make the underlying struct `Param` be generic over any `T` satifying a generated `trait DefaultParam { fn param() -> Param; }`
+/// Make the underlying struct `Param` be generic over any `T` satisfying a generated `trait DefaultParam { fn param() -> Param; }`
 /// ```rust,ignore
 /// #[derive(GenericRuntimeParam)]
 /// struct Param {

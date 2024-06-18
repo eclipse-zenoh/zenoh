@@ -372,7 +372,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             e
         })?;
 
-        // Update the endpoint with the acutal local path
+        // Update the endpoint with the actual local path
         endpoint = EndPoint::new(
             endpoint.protocol(),
             local_path_str,

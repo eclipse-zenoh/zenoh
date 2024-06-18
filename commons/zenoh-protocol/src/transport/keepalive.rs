@@ -49,7 +49,7 @@
 ///
 /// NOTE: In order to consider eventual packet loss, transmission latency and jitter, the time
 ///       interval between two subsequent [`KeepAlive`] messages SHOULD be set to one fourth of
-///       the lease time. This is in-line with the ITU-T G.8013/Y.1731 specification on continous
+///       the lease time. This is in-line with the ITU-T G.8013/Y.1731 specification on continuous
 ///       connectivity check which considers a link as failed when no messages are received in
 ///       3.5 times the target keep alive interval.
 ///

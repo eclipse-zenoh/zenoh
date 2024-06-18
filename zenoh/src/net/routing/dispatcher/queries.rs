@@ -43,13 +43,17 @@ use super::{
     resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
-use crate::net::routing::{hat::HatTrait, RoutingContext};
+use crate::net::routing::{
+    hat::{HatTrait, SendDeclare},
+    RoutingContext,
+};
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: RequestId,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
@@ -58,6 +62,7 @@ pub(crate) fn declare_queryable(
     expr: &WireExpr,
     qabl_info: &QueryableInfoType,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
     match rtables
@@ -93,7 +98,15 @@ pub(crate) fn declare_queryable(
                     (res, wtables)
                 };
 
-            hat_code.declare_queryable(&mut wtables, face, id, &mut res, qabl_info, node_id);
+            hat_code.declare_queryable(
+                &mut wtables,
+                face,
+                id,
+                &mut res,
+                qabl_info,
+                node_id,
+                send_declare,
+            );
 
             disable_matches_query_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -126,6 +139,7 @@ pub(crate) fn undeclare_queryable(
     id: QueryableId,
     expr: &WireExpr,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     let res = if expr.is_empty() {
         None
@@ -155,7 +169,9 @@ pub(crate) fn undeclare_queryable(
         }
     };
     let mut wtables = zwrite!(tables.tables);
-    if let Some(mut res) = hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id) {
+    if let Some(mut res) =
+        hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id, send_declare)
+    {
         tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
         disable_matches_query_routes(&mut wtables, &mut res);
         drop(wtables);
@@ -238,7 +254,7 @@ pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
 pub(crate) fn update_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     update_query_routes(tables, res);
     let res = get_mut_unchecked(res);
-    for child in res.childs.values_mut() {
+    for child in res.children.values_mut() {
         update_query_routes_from(tables, child);
     }
 }

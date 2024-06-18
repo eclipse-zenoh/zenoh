@@ -514,7 +514,7 @@ impl Session {
     /// pointer to it (`Arc<Session>`). This is equivalent to `Arc::new(session)`.
     ///
     /// This is useful to share ownership of the `Session` between several threads
-    /// and tasks. It also alows to create [`Subscriber`](Subscriber) and
+    /// and tasks. It also allows to create [`Subscriber`](Subscriber) and
     /// [`Queryable`](Queryable) with static lifetime that can be moved to several
     /// threads and tasks
     ///
@@ -630,7 +630,7 @@ impl Session {
     /// The returned configuration [`Notifier`](Notifier) can be used to read the current
     /// zenoh configuration through the `get` function or
     /// modify the zenoh configuration through the `insert`,
-    /// or `insert_json5` funtion.
+    /// or `insert_json5` function.
     ///
     /// # Examples
     /// ### Read current zenoh configuration
@@ -1675,7 +1675,7 @@ impl Session {
                     }
                 }
                 Err(err) => {
-                    tracing::error!("Received Data for unkown key_expr: {}", err);
+                    tracing::error!("Received Data for unknown key_expr: {}", err);
                     return;
                 }
             }
@@ -1923,7 +1923,7 @@ impl Session {
                     )
                 }
                 Err(err) => {
-                    error!("Received Query for unkown key_expr: {}", err);
+                    error!("Received Query for unknown key_expr: {}", err);
                     return;
                 }
             }
@@ -2159,7 +2159,7 @@ impl Primitives for Session {
                         }
                         Err(err) => {
                             tracing::error!(
-                                "Received DeclareSubscriber for unkown wire_expr: {}",
+                                "Received DeclareSubscriber for unknown wire_expr: {}",
                                 err
                             )
                         }
@@ -2174,7 +2174,7 @@ impl Primitives for Session {
                     if let Some(expr) = state.remote_subscribers.remove(&m.id) {
                         self.update_status_down(&state, &expr);
                     } else {
-                        tracing::error!("Received Undeclare Subscriber for unkown id: {}", m.id);
+                        tracing::error!("Received Undeclare Subscriber for unknown id: {}", m.id);
                     }
                 }
             }
@@ -2381,7 +2381,7 @@ impl Primitives for Session {
                         callback(new_reply);
                     }
                     None => {
-                        tracing::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                        tracing::warn!("Received ReplyData for unknown Query: {}", msg.rid);
                     }
                 }
             }
@@ -2390,7 +2390,7 @@ impl Primitives for Session {
                 let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
                     Ok(key) => key.into_owned(),
                     Err(e) => {
-                        error!("Received ReplyData for unkown key_expr: {}", e);
+                        error!("Received ReplyData for unknown key_expr: {}", e);
                         return;
                     }
                 };
@@ -2545,7 +2545,7 @@ impl Primitives for Session {
                         }
                     }
                     None => {
-                        tracing::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                        tracing::warn!("Received ReplyData for unknown Query: {}", msg.rid);
                     }
                 }
             }
@@ -2570,7 +2570,7 @@ impl Primitives for Session {
                 }
             }
             None => {
-                warn!("Received ResponseFinal for unkown Request: {}", msg.rid);
+                warn!("Received ResponseFinal for unknown Request: {}", msg.rid);
             }
         }
     }
@@ -2732,7 +2732,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// ```
     #[zenoh_macros::unstable]
     fn liveliness(&'s self) -> Liveliness<'a>;
-    /// Get informations about the zenoh [`Session`](Session).
+    /// Get information about the zenoh [`Session`](Session).
     ///
     /// # Examples
     /// ```

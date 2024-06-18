@@ -45,7 +45,7 @@
 //! ```
 //!
 //! ### Subscribe
-//! The example below shows how to consume values for a key expresison.
+//! The example below shows how to consume values for a key expressions.
 //! ```no_run
 //! use futures::prelude::*;
 //! use zenoh::prelude::*;

@@ -100,11 +100,17 @@ impl Router {
             tables: self.tables.clone(),
             state: newface,
         };
+        let mut declares = vec![];
         ctrl_lock
-            .new_local_face(&mut tables, &self.tables, &mut face)
+            .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m| {
+                declares.push((p.clone(), m))
+            })
             .unwrap();
         drop(tables);
         drop(ctrl_lock);
+        for (p, m) in declares {
+            p.send_declare(m);
+        }
         Arc::new(face)
     }
 
@@ -156,7 +162,19 @@ impl Router {
 
         let _ = mux.face.set(Face::downgrade(&face));
 
-        ctrl_lock.new_transport_unicast_face(&mut tables, &self.tables, &mut face, &transport)?;
+        let mut declares = vec![];
+        ctrl_lock.new_transport_unicast_face(
+            &mut tables,
+            &self.tables,
+            &mut face,
+            &transport,
+            &mut |p, m| declares.push((p.clone(), m)),
+        )?;
+        drop(tables);
+        drop(ctrl_lock);
+        for (p, m) in declares {
+            p.send_declare(m);
+        }
 
         Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
     }
