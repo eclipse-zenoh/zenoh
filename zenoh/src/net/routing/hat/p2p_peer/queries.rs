@@ -98,9 +98,12 @@ fn propagate_simple_queryable_to(
                 .remote_interests
                 .values()
                 .any(|(r, o)| o.queryables() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)))
-        && (src_face.is_none()
-            || src_face.as_ref().unwrap().whatami == WhatAmI::Client
-            || dst_face.whatami == WhatAmI::Client)
+        && src_face
+            .as_ref()
+            .map(|src_face| {
+                src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
+            })
+            .unwrap_or(true)
     {
         let id = current
             .map(|c| c.0)
