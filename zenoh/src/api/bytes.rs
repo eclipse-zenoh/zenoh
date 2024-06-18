@@ -22,7 +22,7 @@ use uhlc::Timestamp;
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
-    reader::HasReader,
+    reader::{HasReader, Reader},
     writer::HasWriter,
     ZBuf, ZBufReader, ZBufWriter, ZSlice,
 };
@@ -185,6 +185,16 @@ impl ZBytes {
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
 
 impl ZBytesReader<'_> {
+    /// Returns the number of bytes that can still be read
+    pub fn remaining(&self) -> usize {
+        self.0.remaining()
+    }
+
+    /// Returns true if no more bytes can be read
+    pub fn is_empty(&self) -> bool {
+        self.remaining() == 0
+    }
+
     /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
     pub fn deserialize<T>(&mut self) -> ZResult<T>
     where
