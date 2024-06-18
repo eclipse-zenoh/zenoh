@@ -17,25 +17,54 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-#![cfg_attr(not(feature = "std"), no_std)]
-extern crate alloc;
-#[cfg_attr(feature = "std", macro_use)]
-extern crate lazy_static;
+use lazy_static::lazy_static;
 
+pub mod ffi;
+mod lib_loader;
+pub mod net;
+pub mod time_range;
+
+pub use lib_loader::*;
+pub mod timer;
+pub use timer::*;
+pub mod log;
+pub use log::*;
+
+/// The "ZENOH_HOME" environement variable name
+pub const ZENOH_HOME_ENV_VAR: &str = "ZENOH_HOME";
+
+const DEFAULT_ZENOH_HOME_DIRNAME: &str = ".zenoh";
+
+/// Return the path to the ${ZENOH_HOME} directory (~/.zenoh by default).
+pub fn zenoh_home() -> &'static std::path::Path {
+    use std::path::PathBuf;
+    lazy_static! {
+        static ref ROOT: PathBuf = {
+            if let Some(dir) = std::env::var_os(ZENOH_HOME_ENV_VAR) {
+                PathBuf::from(dir)
+            } else {
+                match home::home_dir() {
+                    Some(mut dir) => {
+                        dir.push(DEFAULT_ZENOH_HOME_DIRNAME);
+                        dir
+                    }
+                    None => PathBuf::from(DEFAULT_ZENOH_HOME_DIRNAME),
+                }
+            }
+        };
+    }
+    ROOT.as_path()
+}
+
+#[doc(hidden)]
+pub use const_format::concatcp as __concatcp;
 #[macro_export]
 macro_rules! concat_enabled_features {
-    (prefix = $prefix:literal, features = [$($feature:literal),*]) => {
+    (prefix = $prefix:literal, features = [$($feature:literal),* $(,)?]) => {
         {
-            use const_format::concatcp;
-            concatcp!("" $(,
-                if cfg!(feature = $feature) { concatcp!(" ", concatcp!($prefix, "/", $feature)) } else { "" }
-            )*)
+            $crate::__concatcp!($(
+                if cfg!(feature = $feature) { $crate::__concatcp!(" ", $prefix, "/", $feature) } else { "" }
+            ),*)
         }
     };
 }
-
-#[cfg(feature = "std")]
-mod std_only;
-
-#[cfg(feature = "std")]
-pub use std_only::*;
