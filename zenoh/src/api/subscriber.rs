@@ -37,7 +37,6 @@ pub(crate) struct SubscriberState {
     pub(crate) id: Id,
     pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
-    pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,
     pub(crate) callback: Callback<'static, Sample>,
 }
@@ -380,7 +379,6 @@ where
         session
             .declare_subscriber_inner(
                 &key_expr,
-                None,
                 self.origin,
                 callback,
                 &SubscriberInfo {

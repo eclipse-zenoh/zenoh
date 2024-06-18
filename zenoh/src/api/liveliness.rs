@@ -545,7 +545,7 @@ where
         let session = self.session;
         let (callback, handler) = self.handler.into_handler();
         session
-            .declare_liveliness_subscriber_inner(&key_expr, None, Locality::default(), callback)
+            .declare_liveliness_subscriber_inner(&key_expr, Locality::default(), callback)
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
                     session,
