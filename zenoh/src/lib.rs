@@ -112,14 +112,16 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
 );
 
 #[doc(inline)]
-pub use {
-    crate::{
-        config::Config,
-        core::{Error, Result},
-        scouting::scout,
-        session::{open, Session},
-    },
-    zenoh_util::{init_log_from_env_or, try_init_log_from_env},
+pub use zenoh_util::{
+    init_log_from_env_or as init_logging_with, try_init_log_from_env as init_logging,
+};
+
+#[doc(inline)]
+pub use crate::{
+    config::Config,
+    core::{Error, Result},
+    scouting::scout,
+    session::{open, Session},
 };
 
 pub mod prelude;
@@ -402,6 +404,8 @@ pub mod internal {
             PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
         };
     }
+
+    pub use zenoh_util::init_log_with_callback;
 
     pub use crate::api::value::Value;
 }
