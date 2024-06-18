@@ -29,17 +29,19 @@ use zenoh::{
     bytes::ZBytes,
     encoding::Encoding,
     internal::{
+        bail,
         plugins::{RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
+        zerror,
     },
     key_expr::{keyexpr, KeyExpr},
+    prelude::*,
     query::{QueryConsolidation, Reply},
     sample::{EncodingBuilderTrait, Sample, SampleKind},
     selector::{Parameters, Selector, ZenohParameters},
     session::{Session, SessionDeclarations},
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
-use zenoh_result::{bail, zerror, ZResult};
 
 mod config;
 pub use config::Config;
@@ -226,7 +228,7 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -467,7 +469,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let zid = runtime.zid().to_string();
     let session = zenoh::session::init(runtime).await.unwrap();

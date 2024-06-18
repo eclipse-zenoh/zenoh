@@ -5137,10 +5137,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "zenoh",
- "zenoh-core",
  "zenoh-plugin-trait",
- "zenoh-result",
- "zenoh-util",
  "zenoh_backend_traits",
 ]
 
@@ -5551,9 +5548,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "zenoh",
- "zenoh-core",
  "zenoh-plugin-trait",
- "zenoh-result",
  "zenoh-util",
 ]
 
@@ -5580,8 +5575,6 @@ dependencies = [
  "tracing",
  "zenoh",
  "zenoh-plugin-trait",
- "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5607,7 +5600,6 @@ dependencies = [
  "urlencoding",
  "zenoh",
  "zenoh-plugin-trait",
- "zenoh-util",
  "zenoh_backend_traits",
 ]
 
