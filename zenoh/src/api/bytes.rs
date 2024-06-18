@@ -18,6 +18,7 @@ use std::{
     string::FromUtf8Error, sync::Arc,
 };
 
+use uhlc::Timestamp;
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
@@ -183,6 +184,22 @@ impl ZBytes {
 #[derive(Debug)]
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
 
+impl ZBytesReader<'_> {
+    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    pub fn deserialize<T>(&mut self) -> ZResult<T>
+    where
+        T: TryFrom<ZBytes>,
+        <T as TryFrom<ZBytes>>::Error: Debug,
+    {
+        let codec = Zenoh080::new();
+        let abuf: ZBuf = codec.read(&mut self.0).map_err(|e| zerror!("{:?}", e))?;
+        let apld = ZBytes::new(abuf);
+
+        let a = T::try_from(apld).map_err(|e| zerror!("{:?}", e))?;
+        Ok(a)
+    }
+}
+
 impl std::io::Read for ZBytesReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         std::io::Read::read(&mut self.0, buf)
@@ -199,6 +216,22 @@ impl std::io::Seek for ZBytesReader<'_> {
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesWriter<'a>(ZBufWriter<'a>);
+
+impl ZBytesWriter<'_> {
+    pub fn serialize<T>(&mut self, t: T) -> ZResult<()>
+    where
+        T: TryInto<ZBytes>,
+        <T as TryInto<ZBytes>>::Error: Debug,
+    {
+        let tpld: ZBytes = t.try_into().map_err(|e| zerror!("{:?}", e))?;
+        let codec = Zenoh080::new();
+        codec
+            .write(&mut self.0, &tpld.0)
+            .map_err(|e| zerror!("{:?}", e))?;
+
+        Ok(())
+    }
+}
 
 impl std::io::Write for ZBytesWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -1221,6 +1254,94 @@ impl<'s> TryFrom<&'s mut ZBytes> for Parameters<'s> {
     type Error = ZDeserializeError;
 
     fn try_from(value: &'s mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
+// Timestamp
+impl Serialize<Timestamp> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: Timestamp) -> Self::Output {
+        ZSerde.serialize(&s)
+    }
+}
+
+impl From<Timestamp> for ZBytes {
+    fn from(t: Timestamp) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&Timestamp> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: &Timestamp) -> Self::Output {
+        let codec = Zenoh080::new();
+        let mut buffer = ZBuf::empty();
+        let mut writer = buffer.writer();
+        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
+        //         fail unless we run out of memory. In that case, Rust memory allocator
+        //         will panic before the serializer has any chance to fail.
+        unsafe {
+            codec.write(&mut writer, s).unwrap_unchecked();
+        }
+        ZBytes::from(buffer)
+    }
+}
+
+impl From<&Timestamp> for ZBytes {
+    fn from(t: &Timestamp) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&mut Timestamp> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: &mut Timestamp) -> Self::Output {
+        ZSerde.serialize(&*s)
+    }
+}
+
+impl From<&mut Timestamp> for ZBytes {
+    fn from(t: &mut Timestamp) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl<'a> Deserialize<'a, Timestamp> for ZSerde {
+    type Input = &'a ZBytes;
+    type Error = zenoh_buffers::reader::DidntRead;
+
+    fn deserialize(self, v: Self::Input) -> Result<Timestamp, Self::Error> {
+        let codec = Zenoh080::new();
+        let mut reader = v.0.reader();
+        let e: Timestamp = codec.read(&mut reader)?;
+        Ok(e)
+    }
+}
+
+impl TryFrom<ZBytes> for Timestamp {
+    type Error = zenoh_buffers::reader::DidntRead;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl TryFrom<&ZBytes> for Timestamp {
+    type Error = zenoh_buffers::reader::DidntRead;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl TryFrom<&mut ZBytes> for Timestamp {
+    type Error = zenoh_buffers::reader::DidntRead;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
     }
 }
