@@ -2233,6 +2233,39 @@ mod tests {
         }
         basic();
 
+        // WARN: test function body produces stack overflow, so I split it into subroutines
+        #[inline(never)]
+        fn reader_writer() {
+            let mut bytes = ZBytes::empty();
+            let mut writer = bytes.writer();
+
+            let i1 = 1_u8;
+            let i2 = String::from("abcdef");
+            let i3 = vec![2u8; 64];
+
+            println!("Write: {:?}", i1);
+            writer.serialize(i1).unwrap();
+            println!("Write: {:?}", i2);
+            writer.serialize(&i2).unwrap();
+            println!("Write: {:?}", i3);
+            writer.serialize(&i3).unwrap();
+
+            let mut reader = bytes.reader();
+            let o1: u8 = reader.deserialize().unwrap();
+            println!("Read: {:?}", o1);
+            let o2: String = reader.deserialize().unwrap();
+            println!("Read: {:?}", o2);
+            let o3: Vec<u8> = reader.deserialize().unwrap();
+            println!("Read: {:?}", o3);
+
+            println!();
+
+            assert_eq!(i1, o1);
+            assert_eq!(i2, o2);
+            assert_eq!(i3, o3);
+        }
+        reader_writer();
+
         // SHM
         #[cfg(feature = "shared-memory")]
         {
