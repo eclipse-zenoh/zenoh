@@ -800,9 +800,9 @@ checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
 name = "concurrent-queue"
-version = "2.2.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62ec6771ecfa0762d24683ee5a32ad78487a3d3afdc0fb8cae19d2c5deb50b7c"
+checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1227,9 +1227,9 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
 name = "event-listener"
-version = "4.0.0"
+version = "5.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "770d968249b5d99410d61f5bf89057f3199a077a04d087092f58e7d10692baae"
+checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
 dependencies = [
  "concurrent-queue",
  "parking",
@@ -5194,7 +5194,7 @@ dependencies = [
  "ahash",
  "async-trait",
  "base64 0.22.1",
- "event-listener 4.0.0",
+ "event-listener 5.3.1",
  "flume",
  "form_urlencoded",
  "futures",
@@ -5802,7 +5802,7 @@ dependencies = [
 name = "zenoh-sync"
 version = "0.11.0-dev"
 dependencies = [
- "event-listener 4.0.0",
+ "event-listener 5.3.1",
  "futures",
  "tokio",
  "zenoh-buffers",

@@ -55,7 +55,7 @@ impl Condition {
     pub fn waiter<T>(&self, guard: MutexGuard<'_, T>) -> ConditionWaiter {
         let listener = self.event.listen();
         drop(guard);
-        listener
+        Box::pin(listener)
     }
 
     /// Notifies one pending listener
