@@ -137,7 +137,7 @@ ron = "0.8.1"
 ringbuffer-spsc = "0.1.9"
 rsa = "0.9"
 rustc_version = "0.4.0"
-rustls = "0.22.2"
+rustls = "0.23.0"
 rustls-native-certs = "0.7.0"
 rustls-pemfile = "2.0.0"
 rustls-webpki = "0.102.0"
@@ -163,7 +163,7 @@ token-cell = { version = "1.4.2", default-features = false }
 tokio = { version = "1.35.1", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-util = "0.7.10"
 tokio-tungstenite = "0.23.1"
-tokio-rustls = "0.25.0"
+tokio-rustls = "0.26.0"
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
 thread-priority = "1.1.0"
 typenum = "1.16.0"

@@ -45,7 +45,7 @@ impl ServerCertVerifier for WebPkiVerifierAnyServerName {
             message,
             cert,
             dss,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            &rustls::crypto::aws_lc_rs::default_provider().signature_verification_algorithms,
         )
     }
 
@@ -59,12 +59,12 @@ impl ServerCertVerifier for WebPkiVerifierAnyServerName {
             message,
             cert,
             dss,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            &rustls::crypto::aws_lc_rs::default_provider().signature_verification_algorithms,
         )
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        rustls::crypto::ring::default_provider()
+        rustls::crypto::aws_lc_rs::default_provider()
             .signature_verification_algorithms
             .supported_schemes()
     }
