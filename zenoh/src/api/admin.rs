@@ -31,6 +31,7 @@ use super::{
     queryable::Query,
     sample::{DataInfo, Locality, SampleKind},
     session::Session,
+    subscriber::SubscriberKind,
 };
 
 macro_rules! ke_for_sure {
@@ -162,11 +163,12 @@ impl TransportMulticastEventHandler for Handler {
                     encoding: Some(Encoding::APPLICATION_JSON),
                     ..Default::default()
                 };
-                self.session.handle_data(
+                self.session.execute_subscriber_callbacks(
                     true,
                     &expr,
                     Some(info),
                     serde_json::to_vec(&peer).unwrap().into(),
+                    SubscriberKind::Subscriber,
                     None,
                 );
                 Ok(Arc::new(PeerHandler {
@@ -207,7 +209,7 @@ impl TransportPeerEventHandler for PeerHandler {
             encoding: Some(Encoding::APPLICATION_JSON),
             ..Default::default()
         };
-        self.session.handle_data(
+        self.session.execute_subscriber_callbacks(
             true,
             &self
                 .expr
@@ -215,6 +217,7 @@ impl TransportPeerEventHandler for PeerHandler {
                 .with_suffix(&format!("/link/{}", s.finish())),
             Some(info),
             serde_json::to_vec(&link).unwrap().into(),
+            SubscriberKind::Subscriber,
             None,
         );
     }
@@ -226,7 +229,7 @@ impl TransportPeerEventHandler for PeerHandler {
             kind: SampleKind::Delete,
             ..Default::default()
         };
-        self.session.handle_data(
+        self.session.execute_subscriber_callbacks(
             true,
             &self
                 .expr
@@ -234,6 +237,7 @@ impl TransportPeerEventHandler for PeerHandler {
                 .with_suffix(&format!("/link/{}", s.finish())),
             Some(info),
             vec![0u8; 0].into(),
+            SubscriberKind::Subscriber,
             None,
         );
     }
@@ -245,8 +249,14 @@ impl TransportPeerEventHandler for PeerHandler {
             kind: SampleKind::Delete,
             ..Default::default()
         };
-        self.session
-            .handle_data(true, &self.expr, Some(info), vec![0u8; 0].into(), None);
+        self.session.execute_subscriber_callbacks(
+            true,
+            &self.expr,
+            Some(info),
+            vec![0u8; 0].into(),
+            SubscriberKind::Subscriber,
+            None,
+        );
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

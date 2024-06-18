@@ -19,14 +19,13 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::{any::Any, sync::Arc};
 
-use zenoh_buffers::ZBuf;
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
-    core::{WireExpr, ZenohIdProto},
+    core::ZenohIdProto,
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
-            SubscriberId,
+            SubscriberId, TokenId,
         },
         interest::{InterestId, InterestMode, InterestOptions},
         Oam,
@@ -73,7 +72,7 @@ impl Sources {
 }
 
 pub(crate) trait HatTrait:
-    HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait
+    HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {
 }
 
@@ -222,14 +221,6 @@ pub(crate) trait HatQueriesTrait {
     ) -> Arc<QueryTargetQablSet>;
 
     fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
-
-    fn compute_local_replies(
-        &self,
-        tables: &Tables,
-        prefix: &Arc<Resource>,
-        suffix: &str,
-        face: &Arc<FaceState>,
-    ) -> Vec<(WireExpr<'static>, ZBuf)>;
 }
 
 pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
@@ -244,6 +235,27 @@ pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + S
         }
         WhatAmI::Router => Box::new(router::HatCode {}),
     }
+}
+
+pub trait HatTokenTrait {
+    fn declare_token(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: TokenId,
+        res: &mut Arc<Resource>,
+        node_id: NodeId,
+        interest_id: Option<InterestId>,
+    );
+
+    fn undeclare_token(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: TokenId,
+        res: Option<Arc<Resource>>,
+        node_id: NodeId,
+    ) -> Option<Arc<Resource>>;
 }
 
 trait CurrentFutureTrait {

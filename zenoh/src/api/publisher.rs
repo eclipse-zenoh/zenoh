@@ -53,7 +53,10 @@ use super::{
     sample::{DataInfo, Locality, QoS, Sample, SampleFields, SampleKind},
     session::{SessionRef, Undeclarable},
 };
-use crate::{api::Id, net::primitives::Primitives};
+use crate::{
+    api::{subscriber::SubscriberKind, Id},
+    net::primitives::Primitives,
+};
 
 pub(crate) struct PublisherState {
     pub(crate) id: Id,
@@ -621,11 +624,12 @@ impl Publisher<'_> {
                 )),
             };
 
-            self.session.handle_data(
+            self.session.execute_subscriber_callbacks(
                 true,
                 &self.key_expr.to_wire(&self.session),
                 Some(data_info),
                 payload.into(),
+                SubscriberKind::Subscriber,
                 attachment,
             );
         }

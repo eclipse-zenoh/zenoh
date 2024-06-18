@@ -37,7 +37,7 @@ use crate::{
         },
         hat::{HatPubSubTrait, Sources},
         router::{update_data_routes_from, RoutesIndexes},
-        RoutingContext, PREFIX_LIVELINESS,
+        RoutingContext,
     },
 };
 
@@ -49,8 +49,7 @@ fn propagate_simple_subscription_to(
     sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
 ) {
-    if (src_face.id != dst_face.id
-        || (dst_face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)))
+    if src_face.id != dst_face.id
         && !face_hat!(dst_face).local_subs.contains_key(res)
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
     {
@@ -201,22 +200,20 @@ pub(super) fn undeclare_client_subscription(
         }
         if client_subs.len() == 1 {
             let face = &mut client_subs[0];
-            if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
-                if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr(),
-                    ));
-                }
+            if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+                face.primitives.send_declare(RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    res.expr(),
+                ));
             }
         }
     }

@@ -45,7 +45,7 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
     router::RoutesIndexes,
-    RoutingContext, PREFIX_LIVELINESS,
+    RoutingContext,
 };
 
 #[inline]
@@ -62,7 +62,10 @@ fn send_sourced_subscription_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                    if src_face
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -98,8 +101,7 @@ fn propagate_simple_subscription_to(
     src_face: &mut Arc<FaceState>,
     full_peer_net: bool,
 ) {
-    if (src_face.id != dst_face.id
-        || (dst_face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)))
+    if src_face.id != dst_face.id
         && !face_hat!(dst_face).local_subs.contains_key(res)
         && if full_peer_net {
             dst_face.whatami == WhatAmI::Client
@@ -368,7 +370,10 @@ fn send_forget_sourced_subscription_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                    if src_face
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -622,51 +627,49 @@ pub(super) fn undeclare_client_subscription(
 
         if client_subs.len() == 1 && !router_subs && !peer_subs {
             let mut face = &mut client_subs[0];
-            if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
-                if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr(),
-                    ));
-                }
-                for res in face_hat!(face)
-                    .local_subs
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<Arc<Resource>>>()
-                {
-                    if !res.context().matches.iter().any(|m| {
-                        m.upgrade().is_some_and(|m| {
-                            m.context.is_some()
-                                && (remote_client_subs(&m, face)
-                                    || remote_peer_subs(tables, &m)
-                                    || remote_router_subs(tables, &m))
-                        })
-                    }) {
-                        if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
-                            face.primitives.send_declare(RoutingContext::with_expr(
-                                Declare {
-                                    interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                        id,
-                                        ext_wire_expr: WireExprType::null(),
-                                    }),
-                                },
-                                res.expr(),
-                            ));
-                        }
+            if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+                face.primitives.send_declare(RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    res.expr(),
+                ));
+            }
+            for res in face_hat!(face)
+                .local_subs
+                .keys()
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>()
+            {
+                if !res.context().matches.iter().any(|m| {
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some()
+                            && (remote_client_subs(&m, face)
+                                || remote_peer_subs(tables, &m)
+                                || remote_router_subs(tables, &m))
+                    })
+                }) {
+                    if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            res.expr(),
+                        ));
                     }
                 }
             }
@@ -731,10 +734,16 @@ pub(super) fn pubsub_tree_change(
     new_childs: &[Vec<NodeIndex>],
     net_type: WhatAmI,
 ) {
+    let net = match hat!(tables).get_net(net_type) {
+        Some(net) => net,
+        None => {
+            tracing::error!("Error accessing net in pubsub_tree_change!");
+            return;
+        }
+    };
     // propagate subs to new childs
     for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
-            let net = hat!(tables).get_net(net_type).unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
                 let tree_id = net.graph[tree_idx].zid;

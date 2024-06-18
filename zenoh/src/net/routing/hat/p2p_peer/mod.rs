@@ -23,6 +23,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use token::{token_new_face, undeclare_client_token};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -30,7 +31,7 @@ use zenoh_protocol::{
         declare::{
             ext::{NodeIdType, QoSType},
             queryable::ext::QueryableInfoType,
-            QueryableId, SubscriberId,
+            QueryableId, SubscriberId, TokenId,
         },
         interest::{InterestId, InterestOptions},
         oam::id::OAM_LINKSTATE,
@@ -69,6 +70,7 @@ mod gossip;
 mod interests;
 mod pubsub;
 mod queries;
+mod token;
 
 macro_rules! hat_mut {
     ($t:expr) => {
@@ -150,6 +152,7 @@ impl HatBaseTrait for HatCode {
         interests_new_face(tables, &mut face.state);
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
+        token_new_face(tables, &mut face.state);
         Ok(())
     }
 
@@ -179,6 +182,7 @@ impl HatBaseTrait for HatCode {
         interests_new_face(tables, &mut face.state);
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
+        token_new_face(tables, &mut face.state);
 
         if face.state.whatami == WhatAmI::Peer {
             face.state
@@ -197,12 +201,20 @@ impl HatBaseTrait for HatCode {
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
-
-        face_hat_mut!(face).remote_interests.clear();
-        face_hat_mut!(face).local_subs.clear();
-        face_hat_mut!(face).local_qabls.clear();
-
         let face = get_mut_unchecked(face);
+        let hat_face = match face.hat.downcast_mut::<HatFace>() {
+            Some(hate_face) => hate_face,
+            None => {
+                tracing::error!("Error downcasting face hat in close_face!");
+                return;
+            }
+        };
+
+        hat_face.remote_interests.clear();
+        hat_face.local_subs.clear();
+        hat_face.local_qabls.clear();
+        hat_face.local_tokens.clear();
+
         for res in face.remote_mappings.values_mut() {
             get_mut_unchecked(res).session_ctxs.remove(&face.id);
             Resource::clean(res);
@@ -215,13 +227,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for (_id, mut res) in face
-            .hat
-            .downcast_mut::<HatFace>()
-            .unwrap()
-            .remote_subs
-            .drain()
-        {
+        for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
 
@@ -243,13 +249,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for (_id, mut res) in face
-            .hat
-            .downcast_mut::<HatFace>()
-            .unwrap()
-            .remote_qabls
-            .drain()
-        {
+        for (_id, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
 
@@ -268,6 +268,11 @@ impl HatBaseTrait for HatCode {
                     .disable_query_routes();
                 qabls_matches.push(res);
             }
+        }
+
+        for (_id, mut res) in hat_face.remote_tokens.drain() {
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            undeclare_client_token(&mut wtables, &mut face_clone, &mut res);
         }
         drop(wtables);
 
@@ -394,6 +399,8 @@ struct HatFace {
     remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
+    local_tokens: HashMap<Arc<Resource>, TokenId>,
+    remote_tokens: HashMap<TokenId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
 }
@@ -405,6 +412,8 @@ impl HatFace {
             remote_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
+            local_tokens: HashMap::new(),
+            remote_tokens: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),
         }

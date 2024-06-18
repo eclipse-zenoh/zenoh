@@ -23,6 +23,7 @@ use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
+pub(crate) use super::dispatcher::token::*;
 pub use super::dispatcher::{pubsub::*, queries::*, resource::*};
 use super::{
     dispatcher::{
@@ -60,7 +61,6 @@ impl Router {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn init_link_state(&mut self, runtime: Runtime) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);

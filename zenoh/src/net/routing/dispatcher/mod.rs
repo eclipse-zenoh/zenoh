@@ -23,3 +23,4 @@ pub mod pubsub;
 pub mod queries;
 pub mod resource;
 pub mod tables;
+pub mod token;

@@ -19,14 +19,13 @@ use std::{
 
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
-use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{
         key_expr::{
             include::{Includer, DEFAULT_INCLUDER},
             OwnedKeyExpr,
         },
-        WhatAmI, WireExpr, ZenohIdProto,
+        WhatAmI, ZenohIdProto,
     },
     network::{
         declare::{
@@ -51,7 +50,7 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatQueriesTrait, Sources},
     router::RoutesIndexes,
-    RoutingContext, PREFIX_LIVELINESS,
+    RoutingContext,
 };
 
 #[inline]
@@ -134,7 +133,11 @@ fn send_sourced_queryable_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.as_ref().unwrap().id {
+                    if src_face
+                        .as_ref()
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -170,7 +173,10 @@ fn propagate_simple_queryable(
     for mut dst_face in faces {
         let info = local_qabl_info(tables, res, &dst_face);
         let current = face_hat!(dst_face).local_qabls.get(res);
-        if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
+        if src_face
+            .as_ref()
+            .map(|src_face| dst_face.id != src_face.id)
+            .unwrap_or(true)
             && (current.is_none() || current.unwrap().1 != info)
             && dst_face.whatami == WhatAmI::Client
             && face_hat!(dst_face)
@@ -259,10 +265,8 @@ fn register_peer_queryable(
         propagate_sourced_queryable(tables, res, qabl_info, face.as_deref_mut(), &peer);
     }
 
-    if tables.whatami == WhatAmI::Peer {
-        // Propagate queryable to clients
-        propagate_simple_queryable(tables, res, face);
-    }
+    // Propagate queryable to clients
+    propagate_simple_queryable(tables, res, face);
 }
 
 fn declare_peer_queryable(
@@ -352,7 +356,10 @@ fn send_forget_sourced_queryable_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                    if src_face
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -470,9 +477,7 @@ fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer:
             .peer_qabls
             .retain(|qabl| !Arc::ptr_eq(qabl, res));
 
-        if tables.whatami == WhatAmI::Peer {
-            propagate_forget_simple_queryable(tables, res);
-        }
+        propagate_forget_simple_queryable(tables, res);
     }
 }
 
@@ -602,10 +607,16 @@ pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohIdProto) {
 }
 
 pub(super) fn queries_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeIndex>]) {
+    let net = match hat!(tables).peers_net.as_ref() {
+        Some(net) => net,
+        None => {
+            tracing::error!("Error accessing peers_net in queries_tree_change!");
+            return;
+        }
+    };
     // propagate qabls to new childs
     for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
-            let net = hat!(tables).peers_net.as_ref().unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
                 let tree_id = net.graph[tree_idx].zid;
@@ -937,48 +948,6 @@ impl HatQueriesTrait for HatCode {
         }
         route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
         Arc::new(route)
-    }
-
-    #[inline]
-    fn compute_local_replies(
-        &self,
-        tables: &Tables,
-        prefix: &Arc<Resource>,
-        suffix: &str,
-        face: &Arc<FaceState>,
-    ) -> Vec<(WireExpr<'static>, ZBuf)> {
-        let mut result = vec![];
-        // Only the first routing point in the query route
-        // should return the liveliness tokens
-        if face.whatami == WhatAmI::Client {
-            let key_expr = prefix.expr() + suffix;
-            let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-                Ok(ke) => ke,
-                Err(e) => {
-                    tracing::warn!("Invalid KE reached the system: {}", e);
-                    return result;
-                }
-            };
-            if key_expr.starts_with(PREFIX_LIVELINESS) {
-                let res = Resource::get_resource(prefix, suffix);
-                let matches = res
-                    .as_ref()
-                    .and_then(|res| res.context.as_ref())
-                    .map(|ctx| Cow::from(&ctx.matches))
-                    .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-                for mres in matches.iter() {
-                    let mres = mres.upgrade().unwrap();
-                    if (mres.context.is_some()
-                        && (!res_hat!(mres).router_subs.is_empty()
-                            || !res_hat!(mres).peer_subs.is_empty()))
-                        || mres.session_ctxs.values().any(|ctx| ctx.subs.is_some())
-                    {
-                        result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
-                    }
-                }
-            }
-        }
-        result
     }
 
     fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes {

@@ -287,10 +287,25 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
-                tracing::warn!("Received unsupported {m:?}")
+                declare_token(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                    &m.wire_expr,
+                    msg.ext_nodeid.node_id,
+                    msg.interest_id,
+                );
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
-                tracing::warn!("Received unsupported {m:?}")
+                undeclare_token(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                    &m.ext_wire_expr,
+                    msg.ext_nodeid.node_id,
+                );
             }
             zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
                 if let Some(id) = msg.interest_id {

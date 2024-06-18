@@ -32,8 +32,6 @@ use zenoh_protocol::{
 use self::{dispatcher::face::Face, router::Resource};
 use super::runtime;
 
-pub(crate) static PREFIX_LIVELINESS: &str = "@/liveliness";
-
 pub(crate) struct RoutingContext<Msg> {
     pub(crate) msg: Msg,
     pub(crate) inface: OnceCell<Face>,

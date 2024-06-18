@@ -45,7 +45,7 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
     router::RoutesIndexes,
-    RoutingContext, PREFIX_LIVELINESS,
+    RoutingContext,
 };
 
 #[inline]
@@ -62,7 +62,10 @@ fn send_sourced_subscription_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                    if src_face
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -97,7 +100,7 @@ fn propagate_simple_subscription_to(
     sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
 ) {
-    if (src_face.id != dst_face.id || res.expr().starts_with(PREFIX_LIVELINESS))
+    if (src_face.id != dst_face.id)
         && !face_hat!(dst_face).local_subs.contains_key(res)
         && dst_face.whatami == WhatAmI::Client
     {
@@ -230,10 +233,8 @@ fn register_peer_subscription(
         propagate_sourced_subscription(tables, res, sub_info, Some(face), &peer);
     }
 
-    if tables.whatami == WhatAmI::Peer {
-        // Propagate subscription to clients
-        propagate_simple_subscription(tables, res, sub_info, face);
-    }
+    // Propagate subscription to clients
+    propagate_simple_subscription(tables, res, sub_info, face);
 }
 
 fn declare_peer_subscription(
@@ -329,7 +330,10 @@ fn send_forget_sourced_subscription_to_net_childs(
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                    if src_face
+                        .map(|src_face| someface.id != src_face.id)
+                        .unwrap_or(true)
+                    {
                         let wire_expr = Resource::decl_key(res, &mut someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -447,9 +451,7 @@ fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, pe
             .peer_subs
             .retain(|sub| !Arc::ptr_eq(sub, res));
 
-        if tables.whatami == WhatAmI::Peer {
-            propagate_forget_simple_subscription(tables, res);
-        }
+        propagate_forget_simple_subscription(tables, res);
     }
 }
 
@@ -492,7 +494,7 @@ pub(super) fn undeclare_client_subscription(
 
         if client_subs.len() == 1 && !peer_subs {
             let mut face = &mut client_subs[0];
-            if !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS)) {
+            if face.whatami != WhatAmI::Client {
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
@@ -571,10 +573,16 @@ pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohIdProto) {
 }
 
 pub(super) fn pubsub_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeIndex>]) {
+    let net = match hat!(tables).peers_net.as_ref() {
+        Some(net) => net,
+        None => {
+            tracing::error!("Error accessing peers_net in pubsub_tree_change!");
+            return;
+        }
+    };
     // propagate subs to new childs
     for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
-            let net = hat!(tables).peers_net.as_ref().unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
                 let tree_id = net.graph[tree_idx].zid;

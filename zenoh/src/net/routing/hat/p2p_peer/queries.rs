@@ -18,14 +18,13 @@ use std::{
 };
 
 use ordered_float::OrderedFloat;
-use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{
         key_expr::{
             include::{Includer, DEFAULT_INCLUDER},
             OwnedKeyExpr,
         },
-        WhatAmI, WireExpr,
+        WhatAmI,
     },
     network::{
         declare::{
@@ -46,7 +45,7 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatQueriesTrait, Sources},
     router::{update_query_routes_from, RoutesIndexes},
-    RoutingContext, PREFIX_LIVELINESS,
+    RoutingContext,
 };
 
 #[inline]
@@ -89,7 +88,10 @@ fn propagate_simple_queryable_to(
 ) {
     let info = local_qabl_info(tables, res, dst_face);
     let current = face_hat!(dst_face).local_qabls.get(res);
-    if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
+    if src_face
+        .as_ref()
+        .map(|src_face| dst_face.id != src_face.id)
+        .unwrap_or(true)
         && (current.is_none() || current.unwrap().1 != info)
         && (dst_face.whatami != WhatAmI::Client
             || face_hat!(dst_face)
@@ -597,44 +599,6 @@ impl HatQueriesTrait for HatCode {
         }
         route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
         Arc::new(route)
-    }
-
-    #[inline]
-    fn compute_local_replies(
-        &self,
-        tables: &Tables,
-        prefix: &Arc<Resource>,
-        suffix: &str,
-        face: &Arc<FaceState>,
-    ) -> Vec<(WireExpr<'static>, ZBuf)> {
-        let mut result = vec![];
-        // Only the first routing point in the query route
-        // should return the liveliness tokens
-        if face.whatami == WhatAmI::Client {
-            let key_expr = prefix.expr() + suffix;
-            let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-                Ok(ke) => ke,
-                Err(e) => {
-                    tracing::warn!("Invalid KE reached the system: {}", e);
-                    return result;
-                }
-            };
-            if key_expr.starts_with(PREFIX_LIVELINESS) {
-                let res = Resource::get_resource(prefix, suffix);
-                let matches = res
-                    .as_ref()
-                    .and_then(|res| res.context.as_ref())
-                    .map(|ctx| Cow::from(&ctx.matches))
-                    .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-                for mres in matches.iter() {
-                    let mres = mres.upgrade().unwrap();
-                    if mres.session_ctxs.values().any(|ctx| ctx.subs.is_some()) {
-                        result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
-                    }
-                }
-            }
-        }
-        result
     }
 
     fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {

@@ -25,12 +25,13 @@ use std::{
     time::Duration,
 };
 
+use token::{token_linkstate_change, token_remove_node, undeclare_client_token};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     common::ZExtBody,
     core::ZenohIdProto,
     network::{
-        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
         interest::{InterestId, InterestOptions},
         oam::id::OAM_LINKSTATE,
         Oam,
@@ -68,6 +69,7 @@ mod interests;
 mod network;
 mod pubsub;
 mod queries;
+mod token;
 
 macro_rules! hat {
     ($t:expr) => {
@@ -118,6 +120,8 @@ use face_hat_mut;
 struct HatTables {
     router_subs: HashSet<Arc<Resource>>,
     peer_subs: HashSet<Arc<Resource>>,
+    router_tokens: HashSet<Arc<Resource>>,
+    peer_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
     peer_qabls: HashSet<Arc<Resource>>,
     routers_net: Option<Network>,
@@ -148,6 +152,8 @@ impl HatTables {
             peer_subs: HashSet::new(),
             router_qabls: HashSet::new(),
             peer_qabls: HashSet::new(),
+            router_tokens: HashSet::new(),
+            peer_tokens: HashSet::new(),
             routers_net: None,
             peers_net: None,
             shared_nodes: vec![],
@@ -278,6 +284,7 @@ impl HatTables {
                     tracing::trace!("Compute routes");
                     pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
                     queries::queries_tree_change(&mut tables, &new_childs, net_type);
+                    token::token_tree_change(&mut tables, &new_childs, net_type);
 
                     tracing::trace!("Computations completed");
                     match net_type {
@@ -419,12 +426,20 @@ impl HatBaseTrait for HatCode {
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
-
-        face_hat_mut!(face).remote_interests.clear();
-        face_hat_mut!(face).local_subs.clear();
-        face_hat_mut!(face).local_qabls.clear();
-
         let face = get_mut_unchecked(face);
+        let hat_face = match face.hat.downcast_mut::<HatFace>() {
+            Some(hate_face) => hate_face,
+            None => {
+                tracing::error!("Error downcasting face hat in close_face!");
+                return;
+            }
+        };
+
+        hat_face.remote_interests.clear();
+        hat_face.local_subs.clear();
+        hat_face.local_qabls.clear();
+        hat_face.local_tokens.clear();
+
         for res in face.remote_mappings.values_mut() {
             get_mut_unchecked(res).session_ctxs.remove(&face.id);
             Resource::clean(res);
@@ -437,13 +452,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for (_id, mut res) in face
-            .hat
-            .downcast_mut::<HatFace>()
-            .unwrap()
-            .remote_subs
-            .drain()
-        {
+        for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
 
@@ -465,13 +474,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for (_, mut res) in face
-            .hat
-            .downcast_mut::<HatFace>()
-            .unwrap()
-            .remote_qabls
-            .drain()
-        {
+        for (_, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
 
@@ -490,6 +493,11 @@ impl HatBaseTrait for HatCode {
                     .disable_query_routes();
                 qabls_matches.push(res);
             }
+        }
+
+        for (_id, mut res) in hat_face.remote_tokens.drain() {
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            undeclare_client_token(&mut wtables, &mut face_clone, &mut res);
         }
         drop(wtables);
 
@@ -550,6 +558,7 @@ impl HatBaseTrait for HatCode {
                             {
                                 pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Router);
                                 queries_remove_node(tables, &removed_node.zid, WhatAmI::Router);
+                                token_remove_node(tables, &removed_node.zid, WhatAmI::Router);
                             }
 
                             if hat!(tables).full_net(WhatAmI::Peer) {
@@ -577,6 +586,7 @@ impl HatBaseTrait for HatCode {
                                             &removed_node.zid,
                                             WhatAmI::Peer,
                                         );
+                                        token_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
                                     }
 
                                     hat_mut!(tables).shared_nodes = shared_nodes(
@@ -594,6 +604,11 @@ impl HatBaseTrait for HatCode {
                                             &updated_node.links,
                                         );
                                         queries_linkstate_change(
+                                            tables,
+                                            &updated_node.zid,
+                                            &updated_node.links,
+                                        );
+                                        token_linkstate_change(
                                             tables,
                                             &updated_node.zid,
                                             &updated_node.links,
@@ -657,6 +672,7 @@ impl HatBaseTrait for HatCode {
                         {
                             pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Router);
                             queries_remove_node(tables, &removed_node.zid, WhatAmI::Router);
+                            token_remove_node(tables, &removed_node.zid, WhatAmI::Router);
                         }
 
                         if hat!(tables).full_net(WhatAmI::Peer) {
@@ -679,6 +695,7 @@ impl HatBaseTrait for HatCode {
                             {
                                 pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
                                 queries_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
+                                token_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
                             }
 
                             hat_mut!(tables).shared_nodes = shared_nodes(
@@ -766,6 +783,8 @@ struct HatContext {
     peer_subs: HashSet<ZenohIdProto>,
     router_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
     peer_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
+    router_tokens: HashSet<ZenohIdProto>,
+    peer_tokens: HashSet<ZenohIdProto>,
 }
 
 impl HatContext {
@@ -775,6 +794,8 @@ impl HatContext {
             peer_subs: HashSet::new(),
             router_qabls: HashMap::new(),
             peer_qabls: HashMap::new(),
+            router_tokens: HashSet::new(),
+            peer_tokens: HashSet::new(),
         }
     }
 }
@@ -787,6 +808,8 @@ struct HatFace {
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    local_tokens: HashMap<Arc<Resource>, TokenId>,
+    remote_tokens: HashMap<TokenId, Arc<Resource>>,
 }
 
 impl HatFace {
@@ -799,6 +822,8 @@ impl HatFace {
             remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),
+            local_tokens: HashMap::new(),
+            remote_tokens: HashMap::new(),
         }
     }
 }

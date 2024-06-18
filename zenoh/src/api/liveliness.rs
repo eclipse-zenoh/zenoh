@@ -21,29 +21,16 @@ use std::{
 
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
-use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::{
-    core::Parameters,
-    network::{declare::subscriber::ext::SubscriberInfo, request},
-};
 
 use super::{
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
-    query::{QueryConsolidation, QueryTarget, Reply},
-    sample::{Locality, Sample, SourceInfo},
+    query::Reply,
+    sample::{Locality, Sample},
     session::{Session, SessionRef, Undeclarable},
     subscriber::{Subscriber, SubscriberInner},
     Id,
 };
-
-#[zenoh_macros::unstable]
-pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;
-
-#[zenoh_macros::unstable]
-lazy_static::lazy_static!(
-    pub(crate) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
-);
 
 /// A structure with functions to declare a
 /// [`LivelinessToken`](LivelinessToken), query
@@ -552,21 +539,18 @@ where
 {
     #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
+        use super::subscriber::SubscriberKind;
+
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, handler) = self.handler.into_handler();
         session
-            .declare_subscriber_inner(
-                &key_expr,
-                &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
-                Locality::default(),
-                callback,
-                &SubscriberInfo::DEFAULT,
-            )
+            .declare_liveliness_subscriber_inner(&key_expr, None, Locality::default(), callback)
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
+                    kind: SubscriberKind::LivelinessSubscriber,
                     undeclare_on_drop: true,
                 },
                 handler,
@@ -755,20 +739,7 @@ where
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
         self.session
-            .query(
-                &self.key_expr?,
-                &Parameters::empty(),
-                &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
-                QueryTarget::DEFAULT,
-                QueryConsolidation::DEFAULT,
-                request::ext::QoSType::REQUEST.into(),
-                Locality::default(),
-                self.timeout,
-                None,
-                None,
-                SourceInfo::empty(),
-                callback,
-            )
+            .liveliness_query(&self.key_expr?, self.timeout, callback)
             .map(|_| receiver)
     }
 }
