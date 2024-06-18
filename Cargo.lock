@@ -530,6 +530,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ba43ea6f343b788c8764558649e08df62f86c6ef251fdaeb1ffd010a9ae50a2"
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5187,7 +5193,7 @@ version = "0.11.0-dev"
 dependencies = [
  "ahash",
  "async-trait",
- "base64 0.21.4",
+ "base64 0.22.1",
  "event-listener 4.0.0",
  "flume",
  "form_urlencoded",
@@ -5421,7 +5427,7 @@ name = "zenoh-link-commons"
 version = "0.11.0-dev"
 dependencies = [
  "async-trait",
- "base64 0.21.4",
+ "base64 0.22.1",
  "flume",
  "futures",
  "rustls 0.22.4",
@@ -5446,7 +5452,7 @@ name = "zenoh-link-quic"
 version = "0.11.0-dev"
 dependencies = [
  "async-trait",
- "base64 0.21.4",
+ "base64 0.22.1",
  "futures",
  "quinn",
  "rustls 0.21.7",
@@ -5515,7 +5521,7 @@ name = "zenoh-link-tls"
 version = "0.11.0-dev"
 dependencies = [
  "async-trait",
- "base64 0.21.4",
+ "base64 0.22.1",
  "futures",
  "rustls 0.22.4",
  "rustls-pemfile 2.0.0",
@@ -5671,7 +5677,7 @@ version = "0.11.0-dev"
 dependencies = [
  "anyhow",
  "async-std",
- "base64 0.21.4",
+ "base64 0.22.1",
  "clap",
  "const_format",
  "flume",
