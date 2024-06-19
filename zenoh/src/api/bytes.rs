@@ -59,6 +59,79 @@ pub trait Deserialize<T> {
 }
 
 /// ZBytes contains the serialized bytes of user data.
+///
+/// ZBytes provides convenient methods to the user for serialization/deserialization based on the default
+/// Zenoh serializer: [`ZSerde`]. Please not that [`ZSerde`] is provided as convenience but data serialization/deserialization
+/// is not limited to it. Users are free to serialize and deserialize data as they please before sending and after receiving data.
+///
+/// ZBytes can be used to serialize a single type:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// let start = String::from("abc");
+/// let bytes = ZBytes::serialize(start.clone());
+/// let end: String = bytes.deserialize().unwrap();
+/// assert_eq!(start, end);
+/// ```
+///
+/// A tuple of serializable types:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// let start = (String::from("abc"), String::from("def"));
+/// let bytes = ZBytes::serialize(start.clone());
+/// let end: (String, String) = bytes.deserialize().unwrap();
+/// assert_eq!(start, end);
+/// ``````
+///
+/// An iterator of serializable types:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// let start = vec![String::from("abc"), String::from("def")];
+/// let bytes = ZBytes::from_iter(start.iter());
+///
+/// let mut i = 0;
+/// let mut iter = bytes.iter::<String>();
+/// while let Some(Ok(t)) = iter.next() {
+///     assert_eq!(start[i], t);
+///     i += 1;
+/// }
+/// ```
+///
+/// A writer and a reader of serializable types:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// #[derive(Debug, PartialEq)]
+/// struct Foo {
+///     one: usize,
+///     two: String,
+///     three: Vec<u8>,
+/// }
+///
+/// let start = Foo {
+///     one: 42,
+///     two: String::from("Forty-Two"),
+///     three: vec![42u8; 42],
+/// };
+///
+/// let mut bytes = ZBytes::empty();
+/// let mut writer = bytes.writer();
+///
+/// writer.serialize(&start.one);
+/// writer.serialize(&start.two);
+/// writer.serialize(&start.three);
+///
+/// let mut reader = bytes.reader();
+/// let end = Foo {
+///     one: reader.deserialize().unwrap(),
+///     two: reader.deserialize().unwrap(),
+///     three: reader.deserialize().unwrap(),
+/// };
+/// assert_eq!(start, end);
+/// ```
+///
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZBytes(ZBuf);
@@ -140,14 +213,28 @@ impl ZBytes {
     /// Try serializing an object of type `T` as a [`ZBytes`] using the [`ZSerde`].
     ///
     /// ```rust
+    /// use serde_json::Value;
     /// use zenoh::bytes::ZBytes;
     ///
-    /// let start = String::from("abc");
-    /// let bytes = ZBytes::serialize(start.clone());
-    /// let end: String = bytes.deserialize().unwrap();
+    /// // Some JSON input data as a &str. Maybe this comes from the user.
+    /// let data = r#"
+    /// {
+    ///     "name": "John Doe",
+    ///     "age": 43,
+    ///     "phones": [
+    ///         "+44 1234567",
+    ///         "+44 2345678"
+    ///     ]
+    /// }"#;
+    ///
+    /// // Parse the string of data into serde_json::Value.
+    /// let start: Value = serde_json::from_str(data).unwrap();
+    /// // The serialization of a serde_json::Value is faillable (see serde_json::to_string()).
+    /// let bytes = ZBytes::try_serialize(start.clone()).unwrap();
+    /// let end: Value = bytes.deserialize().unwrap();
     /// assert_eq!(start, end);
     /// ```
-    pub fn try_serialize<T>(&mut self, t: T) -> Result<Self, <T as TryInto<ZBytes>>::Error>
+    pub fn try_serialize<T>(t: T) -> Result<Self, <T as TryInto<ZBytes>>::Error>
     where
         ZSerde: Serialize<T, Output = Result<Self, <T as TryInto<ZBytes>>::Error>>,
         T: TryInto<ZBytes>,
