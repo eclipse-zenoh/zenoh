@@ -3,7 +3,7 @@
 retries = 1
 slow-timeout = { period = "60s", terminate-after = 2 }
 
-# Run the following tests on windows without concurrency from other tests
+# Run the following tests on windows with longer timeout
 [[profile.default.overrides]]
 filter = """
 test(=downsampling_by_keyexpr) |
@@ -12,6 +12,7 @@ test(=authenticator_quic) |
 test(=transport_tcp_concurrent)
 """
 platform = 'cfg(target_os = "windows")'
+slow-timeout = { period = "60s", terminate-after = 6 }
 threads-required = 'num-cpus'
 
 # Run the following tests exclusively with longer timeout
