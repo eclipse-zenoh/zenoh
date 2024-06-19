@@ -21,11 +21,11 @@ use std::{
         atomic::{AtomicU16, Ordering},
         Arc, RwLock,
     },
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use tracing::{error, trace, warn};
-use uhlc::HLC;
+use uhlc::{Timestamp, HLC};
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
@@ -630,7 +630,7 @@ impl Session {
     /// The returned configuration [`Notifier`](Notifier) can be used to read the current
     /// zenoh configuration through the `get` function or
     /// modify the zenoh configuration through the `insert`,
-    /// or `insert_json5` funtion.
+    /// or `insert_json5` function.
     ///
     /// # Examples
     /// ### Read current zenoh configuration
@@ -656,6 +656,28 @@ impl Session {
     /// ```
     pub fn config(&self) -> &Notifier<Config> {
         self.runtime.config()
+    }
+
+    /// Get a new Timestamp from a Zenoh session [`Session`](Session).
+    ///
+    /// The returned timestamp has the current time, with the Session's runtime ZenohID
+    ///
+    /// # Examples
+    /// ### Read current zenoh configuration
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let timestamp = session.new_timestamp();
+    /// # }
+    /// ```
+    pub fn new_timestamp(&self) -> Timestamp {
+        let id = self.runtime.zid();
+        // TODO: Should we make this an Result return type ?
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
+        Timestamp::new(now, id.into())
     }
 }
 
