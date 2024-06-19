@@ -2400,6 +2400,195 @@ where
     }
 }
 
+// Tuple (a, b, c, d)
+macro_rules! impl_tuple4 {
+    ($t:expr) => {{
+        let (a, b, c, d) = $t;
+
+        let codec = Zenoh080::new();
+        let mut buffer: ZBuf = ZBuf::empty();
+        let mut writer = buffer.writer();
+        let apld: ZBytes = a.into();
+        let bpld: ZBytes = b.into();
+        let cpld: ZBytes = c.into();
+        let dpld: ZBytes = d.into();
+
+        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
+        //         fail unless we run out of memory. In that case, Rust memory allocator
+        //         will panic before the serializer has any chance to fail.
+        unsafe {
+            codec.write(&mut writer, &apld.0).unwrap_unchecked();
+            codec.write(&mut writer, &bpld.0).unwrap_unchecked();
+            codec.write(&mut writer, &cpld.0).unwrap_unchecked();
+            codec.write(&mut writer, &dpld.0).unwrap_unchecked();
+        }
+
+        ZBytes::new(buffer)
+    }};
+}
+
+impl<A, B, C, D> Serialize<(A, B, C, D)> for ZSerde
+where
+    A: Into<ZBytes>,
+    B: Into<ZBytes>,
+    C: Into<ZBytes>,
+    D: Into<ZBytes>,
+{
+    type Output = ZBytes;
+
+    fn serialize(self, t: (A, B, C, D)) -> Self::Output {
+        impl_tuple4!(t)
+    }
+}
+
+impl<A, B, C, D> Serialize<&(A, B, C, D)> for ZSerde
+where
+    for<'a> &'a A: Into<ZBytes>,
+    for<'b> &'b B: Into<ZBytes>,
+    for<'b> &'b C: Into<ZBytes>,
+    for<'b> &'b D: Into<ZBytes>,
+{
+    type Output = ZBytes;
+
+    fn serialize(self, t: &(A, B, C, D)) -> Self::Output {
+        impl_tuple4!(t)
+    }
+}
+
+impl<A, B, C, D> From<(A, B, C, D)> for ZBytes
+where
+    A: Into<ZBytes>,
+    B: Into<ZBytes>,
+    C: Into<ZBytes>,
+    D: Into<ZBytes>,
+{
+    fn from(value: (A, B, C, D)) -> Self {
+        ZSerde.serialize(value)
+    }
+}
+
+#[derive(Debug)]
+pub enum ZBytesReadErrorTuple4<A, B, C, D>
+where
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+    D: TryFrom<ZBytes>,
+    <D as TryFrom<ZBytes>>::Error: Debug,
+{
+    One(ZBytesReadError<A>),
+    Two(ZBytesReadError<B>),
+    Three(ZBytesReadError<C>),
+    Four(ZBytesReadError<D>),
+}
+
+impl<A, B, C, D> Deserialize<(A, B, C, D)> for ZSerde
+where
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+    D: TryFrom<ZBytes>,
+    <D as TryFrom<ZBytes>>::Error: Debug,
+{
+    type Input<'a> = &'a ZBytes;
+    type Error = ZBytesReadErrorTuple4<A, B, C, D>;
+
+    fn deserialize(self, bytes: Self::Input<'_>) -> Result<(A, B, C, D), Self::Error> {
+        let codec = Zenoh080::new();
+        let mut reader = bytes.0.reader();
+
+        let abuf: ZBuf = codec
+            .read(&mut reader)
+            .map_err(|e| ZBytesReadErrorTuple4::One(ZBytesReadError::Read(e)))?;
+        let apld = ZBytes::new(abuf);
+        let a = A::try_from(apld)
+            .map_err(|e| ZBytesReadErrorTuple4::One(ZBytesReadError::Deserialize(e)))?;
+
+        let bbuf: ZBuf = codec
+            .read(&mut reader)
+            .map_err(|e| ZBytesReadErrorTuple4::Two(ZBytesReadError::Read(e)))?;
+        let bpld = ZBytes::new(bbuf);
+        let b = B::try_from(bpld)
+            .map_err(|e| ZBytesReadErrorTuple4::Two(ZBytesReadError::Deserialize(e)))?;
+
+        let cbuf: ZBuf = codec
+            .read(&mut reader)
+            .map_err(|e| ZBytesReadErrorTuple4::Three(ZBytesReadError::Read(e)))?;
+        let cpld = ZBytes::new(cbuf);
+        let c = C::try_from(cpld)
+            .map_err(|e| ZBytesReadErrorTuple4::Three(ZBytesReadError::Deserialize(e)))?;
+
+        let dbuf: ZBuf = codec
+            .read(&mut reader)
+            .map_err(|e| ZBytesReadErrorTuple4::Four(ZBytesReadError::Read(e)))?;
+        let dpld = ZBytes::new(dbuf);
+        let d = D::try_from(dpld)
+            .map_err(|e| ZBytesReadErrorTuple4::Four(ZBytesReadError::Deserialize(e)))?;
+
+        Ok((a, b, c, d))
+    }
+}
+
+impl<A, B, C, D> TryFrom<ZBytes> for (A, B, C, D)
+where
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+    D: TryFrom<ZBytes>,
+    <D as TryFrom<ZBytes>>::Error: Debug,
+{
+    type Error = ZBytesReadErrorTuple4<A, B, C, D>;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl<A, B, C, D> TryFrom<&ZBytes> for (A, B, C, D)
+where
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+    D: TryFrom<ZBytes>,
+    <D as TryFrom<ZBytes>>::Error: Debug,
+{
+    type Error = ZBytesReadErrorTuple4<A, B, C, D>;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl<A, B, C, D> TryFrom<&mut ZBytes> for (A, B, C, D)
+where
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+    D: TryFrom<ZBytes>,
+    <D as TryFrom<ZBytes>>::Error: Debug,
+{
+    type Error = ZBytesReadErrorTuple4<A, B, C, D>;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
 // HashMap
 impl<A, B> Serialize<HashMap<A, B>> for ZSerde
 where
