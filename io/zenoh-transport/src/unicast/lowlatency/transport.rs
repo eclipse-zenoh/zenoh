@@ -32,6 +32,7 @@ use zenoh_result::{zerror, ZResult};
 use crate::stats::TransportStats;
 use crate::{
     unicast::{
+        authentication::AuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicast},
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         TransportConfigUnicast,
@@ -185,6 +186,21 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     fn get_zid(&self) -> ZenohIdProto {
         self.config.zid
+    }
+
+    fn get_auth_ids(&self) -> Vec<AuthId> {
+        // Convert LinkUnicast auth id to AuthId
+        let mut auth_ids: Vec<AuthId> = vec![];
+        let handle = tokio::runtime::Handle::current();
+        let guard =
+            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
+        if let Some(val) = guard.as_ref() {
+            auth_ids.push(val.link.get_auth_id().to_owned().into());
+        }
+        // Convert usrpwd auth id to AuthId
+        #[cfg(feature = "auth_usrpwd")]
+        auth_ids.push(self.config.auth_id.clone().into());
+        auth_ids
     }
 
     fn get_whatami(&self) -> WhatAmI {

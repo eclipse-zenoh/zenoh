@@ -196,8 +196,17 @@
   //       "key_exprs": [
   //         "test/demo"
   //       ],
+  //       /// Subjects can be interfaces
   //       "interfaces": [
   //         "lo0"
+  //       ],
+  //       /// Subjects can be cert_common_names when using TLS or Quic 
+  //       "cert_common_names": [
+  //         "example.zenoh.io"
+  //       ],
+  //       /// Subjects can be usernames when using user/password authentication
+  //       "usernames": [
+  //         "zenoh-example"
   //       ]
   //     },
   //  ]

@@ -28,11 +28,10 @@ name = "zenoh_plugin_trait"
 
 [dependencies]
 libloading = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-keyexpr = { workspace = true, features = ["internal", "unstable"] }
-const_format = { workspace = true }

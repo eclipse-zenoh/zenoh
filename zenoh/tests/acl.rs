@@ -47,7 +47,7 @@ mod test {
     async fn get_basic_router_config() -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
+        config.listen.endpoints = vec!["tcp/127.0.0.1:27447".parse().unwrap()];
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
     }
@@ -59,9 +59,9 @@ mod test {
 
     async fn get_client_sessions() -> (Session, Session) {
         println!("Opening client sessions");
-        let config = config::client(["tcp/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
+        let config = config::client(["tcp/127.0.0.1:27447".parse::<EndPoint>().unwrap()]);
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let config = config::client(["tcp/127.0.0.1:7447".parse::<EndPoint>().unwrap()]);
+        let config = config::client(["tcp/127.0.0.1:27447".parse::<EndPoint>().unwrap()]);
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
     }

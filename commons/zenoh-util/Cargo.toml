@@ -32,9 +32,7 @@ description = "Internal crate for zenoh."
 maintenance = { status = "actively-developed" }
 
 [features]
-std = []
 test = []
-default = ["std"]
 
 [dependencies]
 async-std = { workspace = true, features = ["default", "unstable"] }
@@ -45,11 +43,12 @@ home = { workspace = true }
 humantime = { workspace = true }
 lazy_static = { workspace = true }
 libloading = { workspace = true }
-tracing = {workspace = true}
-tracing-subscriber = {workspace = true}
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 shellexpand = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-result = { workspace = true, features = ["default"] }
+const_format = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { workspace = true }

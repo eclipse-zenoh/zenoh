@@ -53,8 +53,6 @@ zenoh = { workspace = true, features = [
     "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
-zenoh-result = { workspace = true }
-zenoh-util = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }

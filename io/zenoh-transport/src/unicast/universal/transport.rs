@@ -33,6 +33,7 @@ use crate::stats::TransportStats;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
+        authentication::AuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection},
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         universal::link::TransportLinkUnicastUniversal,
@@ -383,6 +384,19 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     fn get_links(&self) -> Vec<Link> {
         zread!(self.links).iter().map(|l| l.link.link()).collect()
+    }
+
+    fn get_auth_ids(&self) -> Vec<AuthId> {
+        // Convert LinkUnicast auth ids to AuthId
+        #[allow(unused_mut)]
+        let mut auth_ids: Vec<AuthId> = zread!(self.links)
+            .iter()
+            .map(|l| l.link.link.get_auth_id().to_owned().into())
+            .collect();
+        // Convert usrpwd auth id to AuthId
+        #[cfg(feature = "auth_usrpwd")]
+        auth_ids.push(self.config.auth_id.clone().into());
+        auth_ids
     }
 
     /*************************************/

@@ -47,6 +47,4 @@ zenoh = { workspace = true, features = [
     "internal",
     "unstable",
 ] }
-zenoh-core = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
-zenoh-result = { workspace = true }
