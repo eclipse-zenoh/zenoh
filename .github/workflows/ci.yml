@@ -99,21 +99,21 @@ jobs:
         os: [windows-latest]
 
     steps:
-    #   - name: Clone this repository
-    #     uses: actions/checkout@v4
+      - name: Clone this repository
+        uses: actions/checkout@v4
 
-    #   - name: Install latest Rust toolchain
-    #     run: rustup show
+      - name: Install latest Rust toolchain
+        run: rustup show
 
-    #   - name: Setup rust-cache
-    #     uses: Swatinem/rust-cache@v2
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
 
-    #   - name: Set rustflags
-    #     shell: bash
-    #     run: |
-    #       case ${{ matrix.os }} in
-    #         *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
-    #       esac
+      - name: Set rustflags
+        shell: bash
+        run: |
+          case ${{ matrix.os }} in
+            *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
+          esac
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
