@@ -1200,6 +1200,7 @@ impl_int!(u8);
 impl_int!(u16);
 impl_int!(u32);
 impl_int!(u64);
+impl_int!(u128);
 impl_int!(usize);
 
 // Zenoh signed integers
@@ -1207,6 +1208,7 @@ impl_int!(i8);
 impl_int!(i16);
 impl_int!(i32);
 impl_int!(i64);
+impl_int!(i128);
 impl_int!(isize);
 
 // Zenoh floats
