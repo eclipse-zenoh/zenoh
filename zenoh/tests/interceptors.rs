@@ -92,7 +92,6 @@ fn downsampling_test<F>(
                 counters
                     .get(sample.key_expr())
                     .map(|ctr| ctr.fetch_add(1, Ordering::SeqCst));
-                // panic!("Hurray, received a message from the publisher!");
             }
         })
         .wait()
