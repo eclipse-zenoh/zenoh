@@ -287,6 +287,7 @@
         /// Each zenoh link has a transmission queue that can be configured
         queue: {
           /// The size of each priority queue indicates the number of batches a given queue can contain.
+          /// NOTE: the maximum number of batches in each priority is 16. Larger values will yield an error.
           /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
           /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
           /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
