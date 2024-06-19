@@ -95,8 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # os: [ubuntu-latest, windows-latest, macos-13, macos-14]
-        os: [windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
 
     steps:
       - name: Clone this repository
@@ -121,7 +120,7 @@ jobs:
       - name: Run tests
         # run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         # run: cargo nextest run downsampling_by_keyexpr
-        run: cargo nextest run -F shared-memory -F unstable transport_tcp_concurrent --nocapture
+        run: RUST_BACKTRACE=1 cargo nextest run -F shared-memory -F unstable transport_tcp_concurrent --nocapture
 
     #   - name: Run tests with SHM
     #     if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
