@@ -192,7 +192,7 @@ impl RuntimeBuilder {
                 start_conditions: Arc::new(StartConditions::default()),
             }),
         };
-        *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
+        *to_zresult!(handler.runtime.write())? = Runtime::downgrade(&runtime);
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
         // Admin space
@@ -281,17 +281,13 @@ impl Runtime {
             .terminate_all(Duration::from_secs(10));
         self.manager().close().await;
         // clean up to break cyclic reference of self.state to itself
-        self.state.transport_handlers.write().unwrap().clear();
+        to_zresult!(self.state.transport_handlers.write())?.clear();
         // TODO: the call below is needed to prevent intermittent leak
         // due to not freed resource Arc, that apparently happens because
         // the task responsible for resource clean up was aborted earlier than expected.
         // This should be resolved by identfying correspodning task, and placing
         // cancellation token manually inside it.
-        self.router()
-            .tables
-            .tables
-            .write()
-            .unwrap()
+        to_zresult!(self.router().tables.tables.write())?
             .root_res
             .close();
         Ok(())
@@ -386,11 +382,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
                     endpoint: std::sync::RwLock::new(None),
-                    main_handler: runtime
-                        .state
-                        .router
-                        .new_transport_unicast(transport)
-                        .unwrap(),
+                    main_handler: runtime.state.router.new_transport_unicast(transport)?,
                     slave_handlers,
                 }))
             }

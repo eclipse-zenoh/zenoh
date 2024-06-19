@@ -236,7 +236,7 @@ impl Router {
             peer.zid,
             WhatAmI::Client, // Quick hack
             #[cfg(feature = "stats")]
-            Some(transport.get_stats().unwrap()),
+            Some(transport.get_stats()?),
             Arc::new(DummyPrimitives),
             Some(transport),
             Some(interceptor.clone()),

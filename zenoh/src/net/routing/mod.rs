@@ -157,14 +157,16 @@ impl RoutingContext<NetworkMessage> {
     #[inline]
     #[allow(dead_code)]
     pub(crate) fn full_expr(&self) -> Option<&str> {
-        if self.full_expr.get().is_some() {
-            return Some(self.full_expr.get().as_ref().unwrap());
+        if let Some(full_expr) = self.full_expr.get() {
+            return Some(full_expr);
         }
         if let Some(prefix) = self.prefix() {
-            let _ = self
-                .full_expr
-                .set(prefix.expr() + self.wire_expr().unwrap().suffix.as_ref());
-            return Some(self.full_expr.get().as_ref().unwrap());
+            if let Some(wire_expr) = self.wire_expr() {
+                let _ = self
+                    .full_expr
+                    .set(prefix.expr() + wire_expr.suffix.as_ref());
+            }
+            return self.full_expr.get().map(|s| s.as_str());
         }
         None
     }

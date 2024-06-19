@@ -177,10 +177,10 @@ pub(crate) fn undeclare_subscription(
 fn compute_data_routes_(tables: &Tables, routes: &mut DataRoutes, expr: &mut RoutingExpr) {
     let indexes = tables.hat_code.get_data_routes_entries(tables);
 
-    let max_idx = indexes.routers.iter().max().unwrap();
+    let size = indexes.routers.iter().max().map(|i| i + 1).unwrap_or(0) as usize;
     routes
         .routers
-        .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
+        .resize_with(size, || Arc::new(HashMap::new()));
 
     for idx in indexes.routers {
         routes.routers[idx as usize] =
@@ -189,10 +189,8 @@ fn compute_data_routes_(tables: &Tables, routes: &mut DataRoutes, expr: &mut Rou
                 .compute_data_route(tables, expr, idx, WhatAmI::Router);
     }
 
-    let max_idx = indexes.peers.iter().max().unwrap();
-    routes
-        .peers
-        .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
+    let size = indexes.peers.iter().max().map(|i| i + 1).unwrap_or(0) as usize;
+    routes.peers.resize_with(size, || Arc::new(HashMap::new()));
 
     for idx in indexes.peers {
         routes.peers[idx as usize] =
@@ -201,10 +199,10 @@ fn compute_data_routes_(tables: &Tables, routes: &mut DataRoutes, expr: &mut Rou
                 .compute_data_route(tables, expr, idx, WhatAmI::Peer);
     }
 
-    let max_idx = indexes.clients.iter().max().unwrap();
+    let size = indexes.clients.iter().max().map(|i| i + 1).unwrap_or(0) as usize;
     routes
         .clients
-        .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
+        .resize_with(size, || Arc::new(HashMap::new()));
 
     for idx in indexes.clients {
         routes.clients[idx as usize] =

@@ -196,10 +196,10 @@ pub(crate) fn undeclare_queryable(
 fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut RoutingExpr) {
     let indexes = tables.hat_code.get_query_routes_entries(tables);
 
-    let max_idx = indexes.routers.iter().max().unwrap();
-    routes.routers.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
+    let size = indexes.routers.iter().max().map(|i| i + 1).unwrap_or(0) as usize;
+    routes
+        .routers
+        .resize_with(size, || Arc::new(QueryTargetQablSet::new()));
 
     for idx in indexes.routers {
         routes.routers[idx as usize] =
@@ -208,10 +208,10 @@ fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut R
                 .compute_query_route(tables, expr, idx, WhatAmI::Router);
     }
 
-    let max_idx = indexes.peers.iter().max().unwrap();
-    routes.peers.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
+    let size = indexes.peers.iter().max().map(|i| i + 1).unwrap_or(0) as usize;
+    routes
+        .peers
+        .resize_with(size, || Arc::new(QueryTargetQablSet::new()));
 
     for idx in indexes.peers {
         routes.peers[idx as usize] =
@@ -220,10 +220,10 @@ fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut R
                 .compute_query_route(tables, expr, idx, WhatAmI::Peer);
     }
 
-    let max_idx = indexes.clients.iter().max().unwrap();
-    routes.clients.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
+    let size = indexes.clients.iter().max().map(|i| i + 1).unwrap_or(0) as usize;
+    routes
+        .clients
+        .resize_with(size, || Arc::new(QueryTargetQablSet::new()));
 
     for idx in indexes.clients {
         routes.clients[idx as usize] =

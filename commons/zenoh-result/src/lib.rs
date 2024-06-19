@@ -341,6 +341,20 @@ macro_rules! bail{
 #[macro_export]
 macro_rules! to_zerror {
     ($kind:ident, $descr:expr) => {
-        |e| Err(zerror!($kind, $descr, e))
+        |e| zerror!($kind, $descr, e)
+    };
+    ($t: literal) => {
+        |e| zerror!($t, e)
+    };
+    () => {
+        |e| zerror!(e)
+    };
+}
+
+// This macro is a shorthand for the conversion of any Result into a ZResult
+#[macro_export]
+macro_rules! to_zresult {
+    ($t: expr) => {
+        $t.map_err(to_zerror!("{}"))
     };
 }

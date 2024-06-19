@@ -904,13 +904,13 @@ impl Network {
 
     pub(super) fn compute_trees(&mut self) -> Vec<Vec<NodeIndex>> {
         let indexes = self.graph.node_indices().collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
+        let size = indexes.iter().max().map(|i| i.index() + 1).unwrap_or(0);
 
         let old_children: Vec<Vec<NodeIndex>> =
             self.trees.iter().map(|t| t.children.clone()).collect();
 
         self.trees.clear();
-        self.trees.resize_with(max_idx.index() + 1, || Tree {
+        self.trees.resize_with(size, || Tree {
             parent: None,
             children: vec![],
             directions: vec![],
@@ -953,7 +953,7 @@ impl Network {
 
             self.trees[tree_root_idx.index()]
                 .directions
-                .resize_with(max_idx.index() + 1, || None);
+                .resize_with(size, || None);
             let mut dfs = petgraph::algo::DfsSpace::new(&self.graph);
             for destination in &indexes {
                 if self.idx != *destination
