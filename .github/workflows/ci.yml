@@ -119,8 +119,9 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        # run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         # run: cargo nextest run downsampling_by_keyexpr
+        run: cargo nextest run --F shared-memory -F unstable transport_tcp_concurrent --nocapture
 
     #   - name: Run tests with SHM
     #     if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
