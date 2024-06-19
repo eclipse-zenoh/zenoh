@@ -9,7 +9,9 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 # Run the following tests without cuncurrency from other tests
 [[profile.default.overrides]]
 filter = """
-test(=downsampling_by_keyexpr)
+test(=downsampling_by_keyexpr) |
+test(=header_alloc_concurrent) |
+test(=transport_tcp_concurrent)
 """
 platform = 'cfg(target_os = "windows")'
 test-group = "sequential"
