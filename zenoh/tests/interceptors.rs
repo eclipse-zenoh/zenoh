@@ -92,6 +92,7 @@ fn downsampling_test<F>(
                 counters
                     .get(sample.key_expr())
                     .map(|ctr| ctr.fetch_add(1, Ordering::SeqCst));
+                panic!("Hurray, received a message from the publisher!");
             }
         })
         .wait()
@@ -180,7 +181,6 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     downsampling_test(pub_config, sub_config, ke_prefix, ke_of_rates, rate_check);
 }
 
-#[cfg(unix)]
 #[test]
 fn downsampling_by_keyexpr() {
     zenoh::try_init_log_from_env();
