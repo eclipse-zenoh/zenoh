@@ -30,7 +30,7 @@ pub use timer::*;
 pub mod log;
 pub use log::*;
 
-/// The "ZENOH_HOME" environement variable name
+/// The "ZENOH_HOME" environment variable name
 pub const ZENOH_HOME_ENV_VAR: &str = "ZENOH_HOME";
 
 const DEFAULT_ZENOH_HOME_DIRNAME: &str = ".zenoh";
