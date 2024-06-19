@@ -25,6 +25,7 @@ env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_PROFILE_DEV_DEBUG: false
   RUSTUP_WINDOWS_PATH_ADD_BIN: 1
+  RUST_BACKTRACE: 1
 
 jobs:
   # check:
@@ -120,7 +121,7 @@ jobs:
       - name: Run tests
         # run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         # run: cargo nextest run downsampling_by_keyexpr
-        run: RUST_BACKTRACE=1 cargo nextest run -F shared-memory -F unstable transport_tcp_concurrent --nocapture
+        run: cargo nextest run -F shared-memory -F unstable transport_tcp_concurrent --nocapture
 
     #   - name: Run tests with SHM
     #     if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
