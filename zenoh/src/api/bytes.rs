@@ -42,6 +42,50 @@ use zenoh_shm::{
 
 use super::{encoding::Encoding, value::Value};
 
+/// Wrapper type for API ergonomicity to allow any type `T` to be converted into `Option<ZBytes>` where `T` implements `Into<ZBytes>`.
+#[repr(transparent)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OptionZBytes(Option<ZBytes>);
+
+impl<T> From<T> for OptionZBytes
+where
+    T: Into<ZBytes>,
+{
+    fn from(value: T) -> Self {
+        Self(Some(value.into()))
+    }
+}
+
+impl<T> From<Option<T>> for OptionZBytes
+where
+    T: Into<ZBytes>,
+{
+    fn from(mut value: Option<T>) -> Self {
+        match value.take() {
+            Some(v) => Self(Some(v.into())),
+            None => Self(None),
+        }
+    }
+}
+
+impl<T> From<&Option<T>> for OptionZBytes
+where
+    for<'a> &'a T: Into<ZBytes>,
+{
+    fn from(value: &Option<T>) -> Self {
+        match value.as_ref() {
+            Some(v) => Self(Some(v.into())),
+            None => Self(None),
+        }
+    }
+}
+
+impl From<OptionZBytes> for Option<ZBytes> {
+    fn from(value: OptionZBytes) -> Self {
+        value.0
+    }
+}
+
 /// Trait to encode a type `T` into a [`Value`].
 pub trait Serialize<T> {
     type Output;
@@ -183,8 +227,7 @@ impl ZBytes {
     /// Get a [`ZBytesReader`] implementing [`std::io::Read`] trait.
     pub fn iter<T>(&self) -> ZBytesIterator<'_, T>
     where
-        T: for<'b> TryFrom<&'b ZBytes>,
-        for<'b> ZSerde: Deserialize<T>,
+        for<'b> ZSerde: Deserialize<T, Input<'b> = &'b ZBytes>,
         for<'b> <ZSerde as Deserialize<T>>::Error: Debug,
     {
         ZBytesIterator {
@@ -205,7 +248,7 @@ impl ZBytes {
     /// ```
     pub fn serialize<T>(t: T) -> Self
     where
-        ZSerde: Serialize<T, Output = ZBytes>,
+        ZSerde: Serialize<T, Output = Self>,
     {
         ZSerde.serialize(t)
     }
@@ -234,11 +277,9 @@ impl ZBytes {
     /// let end: Value = bytes.deserialize().unwrap();
     /// assert_eq!(start, end);
     /// ```
-    pub fn try_serialize<T>(t: T) -> Result<Self, <T as TryInto<ZBytes>>::Error>
+    pub fn try_serialize<T, E>(t: T) -> Result<Self, E>
     where
-        ZSerde: Serialize<T, Output = Result<Self, <T as TryInto<ZBytes>>::Error>>,
-        T: TryInto<ZBytes>,
-        <T as TryInto<ZBytes>>::Error: Debug,
+        ZSerde: Serialize<T, Output = Result<Self, E>>,
     {
         ZSerde.serialize(t)
     }
@@ -307,18 +348,16 @@ impl ZBytesReader<'_> {
     }
 
     /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
-    pub fn deserialize<T>(&mut self) -> Result<T, ZBytesReadError<T>>
+    pub fn deserialize<T>(&mut self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
     where
-        T: TryFrom<ZBytes>,
-        <T as TryFrom<ZBytes>>::Error: Debug,
+        for<'a> ZSerde: Deserialize<T, Input<'a> = &'a ZBytes>,
+        <ZSerde as Deserialize<T>>::Error: Debug,
     {
         let codec = Zenoh080::new();
-        let abuf: ZBuf = codec
-            .read(&mut self.0)
-            .map_err(|e| ZBytesReadError::Read(e))?;
+        let abuf: ZBuf = codec.read(&mut self.0).unwrap();
         let apld = ZBytes::new(abuf);
 
-        let a = T::try_from(apld).map_err(|e| ZBytesReadError::Deserialize(e))?;
+        let a = ZSerde.deserialize(&apld)?;
         Ok(a)
     }
 }
@@ -351,18 +390,17 @@ impl ZBytesWriter<'_> {
 
     pub fn serialize<T>(&mut self, t: T)
     where
-        T: Into<ZBytes>,
+        ZSerde: Serialize<T, Output = ZBytes>,
     {
-        let tpld: ZBytes = t.into();
+        let tpld = ZSerde.serialize(t);
         self.write(&tpld.0);
     }
 
-    pub fn try_serialize<T>(&mut self, t: T) -> Result<(), <T as TryInto<ZBytes>>::Error>
+    pub fn try_serialize<T, E>(&mut self, t: T) -> Result<(), E>
     where
-        T: TryInto<ZBytes>,
-        <T as TryInto<ZBytes>>::Error: Debug,
+        ZSerde: Serialize<T, Output = Result<ZBytes, E>>,
     {
-        let tpld: ZBytes = t.try_into()?;
+        let tpld = ZSerde.serialize(t)?;
         self.write(&tpld.0);
         Ok(())
     }
@@ -423,50 +461,6 @@ where
         }
 
         ZBytes::new(buffer)
-    }
-}
-
-/// Wrapper type for API ergonomicity to allow any type `T` to be converted into `Option<ZBytes>` where `T` implements `Into<ZBytes>`.
-#[repr(transparent)]
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct OptionZBytes(Option<ZBytes>);
-
-impl<T> From<T> for OptionZBytes
-where
-    T: Into<ZBytes>,
-{
-    fn from(value: T) -> Self {
-        Self(Some(value.into()))
-    }
-}
-
-impl<T> From<Option<T>> for OptionZBytes
-where
-    T: Into<ZBytes>,
-{
-    fn from(mut value: Option<T>) -> Self {
-        match value.take() {
-            Some(v) => Self(Some(v.into())),
-            None => Self(None),
-        }
-    }
-}
-
-impl<T> From<&Option<T>> for OptionZBytes
-where
-    for<'a> &'a T: Into<ZBytes>,
-{
-    fn from(value: &Option<T>) -> Self {
-        match value.as_ref() {
-            Some(v) => Self(Some(v.into())),
-            None => Self(None),
-        }
-    }
-}
-
-impl From<OptionZBytes> for Option<ZBytes> {
-    fn from(value: OptionZBytes) -> Self {
-        value.0
     }
 }
 
