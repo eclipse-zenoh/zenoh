@@ -115,8 +115,8 @@ jobs:
     #         *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
     #       esac
 
-    #   - name: Install latest nextest
-    #     uses: taiki-e/install-action@nextest
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
 
       - name: Run tests
         # run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
