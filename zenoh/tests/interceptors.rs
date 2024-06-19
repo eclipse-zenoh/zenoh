@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(unix)]
+
 use std::{
     collections::HashMap,
     sync::{
@@ -180,7 +182,6 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     downsampling_test(pub_config, sub_config, ke_prefix, ke_of_rates, rate_check);
 }
 
-#[cfg(unix)]
 #[test]
 fn downsampling_by_keyexpr() {
     zenoh::try_init_log_from_env();
