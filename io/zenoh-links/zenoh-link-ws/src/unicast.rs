@@ -307,7 +307,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_url = get_ws_url(endpoint.address()).await?;
 
-        let (stream, _) = tokio_tungstenite::connect_async(&dst_url)
+        let (stream, _) = tokio_tungstenite::connect_async(dst_url.as_str())
             .await
             .map_err(|e| {
                 zerror!(
