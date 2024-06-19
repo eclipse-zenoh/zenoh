@@ -447,20 +447,13 @@ where
     ZSerde: Serialize<A, Output = ZBytes>,
 {
     fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
-        let codec = Zenoh080::new();
-        let mut buffer: ZBuf = ZBuf::empty();
-        let mut writer = buffer.writer();
+        let mut bytes = ZBytes::empty();
+        let mut writer = bytes.writer();
         for t in iter {
-            let tpld = ZSerde.serialize(t);
-            // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-            //         fail unless we run out of memory. In that case, Rust memory allocator
-            //         will panic before the serializer has any chance to fail.
-            unsafe {
-                codec.write(&mut writer, &tpld.0).unwrap_unchecked();
-            }
+            writer.serialize(t);
         }
 
-        ZBytes::new(buffer)
+        ZBytes::new(bytes)
     }
 }
 
