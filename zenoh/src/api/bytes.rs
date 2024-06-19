@@ -2085,10 +2085,10 @@ where
 
 impl<A, B> Deserialize<(A, B)> for ZSerde
 where
-    A: TryFrom<ZBytes> + 'static,
-    <A as TryFrom<ZBytes>>::Error: Debug + 'static,
-    B: TryFrom<ZBytes> + 'static,
-    <B as TryFrom<ZBytes>>::Error: Debug + 'static,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
 {
     type Input<'a> = &'a ZBytes;
     type Error = ZBytesTupleReadError<A, B>;
@@ -2117,10 +2117,10 @@ where
 
 impl<A, B> TryFrom<ZBytes> for (A, B)
 where
-    A: TryFrom<ZBytes> + 'static,
-    <A as TryFrom<ZBytes>>::Error: Debug + 'static,
-    B: TryFrom<ZBytes> + 'static,
-    <B as TryFrom<ZBytes>>::Error: Debug + 'static,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
 {
     type Error = ZBytesTupleReadError<A, B>;
 
@@ -2131,10 +2131,10 @@ where
 
 impl<A, B> TryFrom<&ZBytes> for (A, B)
 where
-    A: TryFrom<ZBytes> + 'static,
-    <A as TryFrom<ZBytes>>::Error: Debug + 'static,
-    B: TryFrom<ZBytes> + 'static,
-    <B as TryFrom<ZBytes>>::Error: Debug + 'static,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
 {
     type Error = ZBytesTupleReadError<A, B>;
 
@@ -2145,10 +2145,10 @@ where
 
 impl<A, B> TryFrom<&mut ZBytes> for (A, B)
 where
-    A: TryFrom<ZBytes> + 'static,
-    <A as TryFrom<ZBytes>>::Error: Debug + 'static,
-    B: TryFrom<ZBytes> + 'static,
-    <B as TryFrom<ZBytes>>::Error: Debug + 'static,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
 {
     type Error = ZBytesTupleReadError<A, B>;
 
